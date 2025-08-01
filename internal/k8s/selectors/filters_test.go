@@ -52,10 +52,10 @@ func TestFilterPods(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		options      PodFilterOptions
-		expectedLen  int
-		expectError  bool
+		name        string
+		options     PodFilterOptions
+		expectedLen int
+		expectError bool
 	}{
 		{
 			name:        "no filters",
@@ -118,19 +118,19 @@ func TestFilterPods(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := FilterPods(pods, tt.options)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if len(result) != tt.expectedLen {
 				t.Errorf("expected %d pods, got %d", tt.expectedLen, len(result))
 			}
@@ -171,10 +171,10 @@ func TestFilterNodes(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		options      NodeFilterOptions
-		expectedLen  int
-		expectError  bool
+		name        string
+		options     NodeFilterOptions
+		expectedLen int
+		expectError bool
 	}{
 		{
 			name:        "no filters",
@@ -208,19 +208,19 @@ func TestFilterNodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := FilterNodes(nodes, tt.options)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if len(result) != tt.expectedLen {
 				t.Errorf("expected %d nodes, got %d", tt.expectedLen, len(result))
 			}
@@ -263,7 +263,7 @@ func TestBuildSelectors(t *testing.T) {
 			} else {
 				result = BuildFieldSelector(tt.input)
 			}
-			
+
 			// Since map iteration order is not guaranteed, we need to check if the result contains the expected parts
 			if len(result) == 0 && len(tt.expected) > 0 {
 				t.Errorf("expected non-empty result")

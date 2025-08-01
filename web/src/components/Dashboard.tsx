@@ -1,13 +1,90 @@
 import React, { useState } from 'react';
+import NodesTable from './NodesTable';
+import PodsTable from './PodsTable';
+
+type TabType = 'overview' | 'nodes' | 'pods' | 'apply' | 'events';
 
 interface DashboardProps { }
 
 const Dashboard: React.FC<DashboardProps> = () => {
 	const [darkMode, setDarkMode] = useState(false);
+	const [activeTab, setActiveTab] = useState<TabType>('overview');
 
 	const toggleTheme = () => {
 		setDarkMode(!darkMode);
 		document.documentElement.classList.toggle('dark');
+	};
+
+	const renderContent = () => {
+		switch (activeTab) {
+			case 'nodes':
+				return <NodesTable className="mt-6" />;
+			case 'pods':
+				return <PodsTable className="mt-6" />;
+			case 'apply':
+				return (
+					<div className="mt-6 bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-6">
+						<h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+							Apply YAML
+						</h3>
+						<p className="text-gray-600 dark:text-gray-300">YAML editor coming in Milestone M3...</p>
+					</div>
+				);
+			case 'events':
+				return (
+					<div className="mt-6 bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-6">
+						<h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+							Cluster Events
+						</h3>
+						<p className="text-gray-600 dark:text-gray-300">Events view coming soon...</p>
+					</div>
+				);
+			default:
+				return (
+					<div className="mt-6">
+						<div className="border-4 border-dashed border-gray-200 dark:border-gray-700 rounded-lg h-96 flex items-center justify-center">
+							<div className="text-center">
+								<h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+									Welcome to Kubernetes Admin Dashboard
+								</h2>
+								<p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
+									Monitor and manage your Kubernetes cluster with ease
+								</p>
+								<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
+									<button
+										onClick={() => setActiveTab('nodes')}
+										className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
+									>
+										<h3 className="text-lg font-semibold mb-2">Nodes</h3>
+										<p className="text-gray-600 dark:text-gray-300">View and manage cluster nodes</p>
+									</button>
+									<button
+										onClick={() => setActiveTab('pods')}
+										className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
+									>
+										<h3 className="text-lg font-semibold mb-2">Pods</h3>
+										<p className="text-gray-600 dark:text-gray-300">Monitor running workloads</p>
+									</button>
+									<button
+										onClick={() => setActiveTab('apply')}
+										className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
+									>
+										<h3 className="text-lg font-semibold mb-2">Apply YAML</h3>
+										<p className="text-gray-600 dark:text-gray-300">Deploy resources declaratively</p>
+									</button>
+									<button
+										onClick={() => setActiveTab('events')}
+										className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
+									>
+										<h3 className="text-lg font-semibold mb-2">Events</h3>
+										<p className="text-gray-600 dark:text-gray-300">View cluster events</p>
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				);
+		}
 	};
 
 	return (
@@ -45,36 +122,51 @@ const Dashboard: React.FC<DashboardProps> = () => {
 				<nav className="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
 					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 						<div className="flex space-x-8">
-							<a
-								href="#"
-								className="inline-flex items-center px-1 pt-1 border-b-2 border-blue-500 text-sm font-medium text-blue-600 dark:text-blue-400"
+							<button
+								onClick={() => setActiveTab('overview')}
+								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'overview'
+										? 'border-blue-500 text-blue-600 dark:text-blue-400'
+										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									}`}
 							>
 								Cluster Status
-							</a>
-							<a
-								href="#"
-								className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200"
+							</button>
+							<button
+								onClick={() => setActiveTab('nodes')}
+								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'nodes'
+										? 'border-blue-500 text-blue-600 dark:text-blue-400'
+										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									}`}
 							>
 								Nodes
-							</a>
-							<a
-								href="#"
-								className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200"
+							</button>
+							<button
+								onClick={() => setActiveTab('pods')}
+								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'pods'
+										? 'border-blue-500 text-blue-600 dark:text-blue-400'
+										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									}`}
 							>
 								Pods
-							</a>
-							<a
-								href="#"
-								className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200"
+							</button>
+							<button
+								onClick={() => setActiveTab('apply')}
+								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'apply'
+										? 'border-blue-500 text-blue-600 dark:text-blue-400'
+										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									}`}
 							>
 								Apply YAML
-							</a>
-							<a
-								href="#"
-								className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200"
+							</button>
+							<button
+								onClick={() => setActiveTab('events')}
+								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'events'
+										? 'border-blue-500 text-blue-600 dark:text-blue-400'
+										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									}`}
 							>
 								Events
-							</a>
+							</button>
 						</div>
 					</div>
 				</nav>
@@ -82,34 +174,7 @@ const Dashboard: React.FC<DashboardProps> = () => {
 				{/* Main Content */}
 				<main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
 					<div className="px-4 py-6 sm:px-0">
-						<div className="border-4 border-dashed border-gray-200 dark:border-gray-700 rounded-lg h-96 flex items-center justify-center">
-							<div className="text-center">
-								<h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-									Welcome to Kubernetes Admin Dashboard
-								</h2>
-								<p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
-									Monitor and manage your Kubernetes cluster with ease
-								</p>
-								<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
-									<div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-										<h3 className="text-lg font-semibold mb-2">Nodes</h3>
-										<p className="text-gray-600 dark:text-gray-300">View and manage cluster nodes</p>
-									</div>
-									<div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-										<h3 className="text-lg font-semibold mb-2">Pods</h3>
-										<p className="text-gray-600 dark:text-gray-300">Monitor running workloads</p>
-									</div>
-									<div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-										<h3 className="text-lg font-semibold mb-2">Apply YAML</h3>
-										<p className="text-gray-600 dark:text-gray-300">Deploy resources declaratively</p>
-									</div>
-									<div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-										<h3 className="text-lg font-semibold mb-2">Events</h3>
-										<p className="text-gray-600 dark:text-gray-300">View cluster events</p>
-									</div>
-								</div>
-							</div>
-						</div>
+						{renderContent()}
 					</div>
 				</main>
 			</div>

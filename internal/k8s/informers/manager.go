@@ -16,11 +16,11 @@ type Manager struct {
 	logger  *zap.Logger
 	client  kubernetes.Interface
 	factory informers.SharedInformerFactory
-	
+
 	// Individual informers
 	NodesInformer cache.SharedIndexInformer
 	PodsInformer  cache.SharedIndexInformer
-	
+
 	// Context for cancellation
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -29,10 +29,10 @@ type Manager struct {
 // NewManager creates a new informer manager
 func NewManager(logger *zap.Logger, client kubernetes.Interface) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Create shared informer factory with default resync period
 	factory := informers.NewSharedInformerFactory(client, 30*time.Second)
-	
+
 	return &Manager{
 		logger:        logger,
 		client:        client,
@@ -47,22 +47,22 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface) *Manager {
 // Start starts all informers and waits for cache sync
 func (m *Manager) Start() error {
 	m.logger.Info("Starting informers")
-	
+
 	// Start the informer factory
 	go m.factory.Start(m.ctx.Done())
-	
+
 	// Wait for cache to sync
 	m.logger.Info("Waiting for caches to sync")
-	
+
 	cacheSyncs := []cache.InformerSynced{
 		m.NodesInformer.HasSynced,
 		m.PodsInformer.HasSynced,
 	}
-	
+
 	if !cache.WaitForCacheSync(m.ctx.Done(), cacheSyncs...) {
 		return fmt.Errorf("failed to sync caches")
 	}
-	
+
 	m.logger.Info("All caches synced successfully")
 	return nil
 }
@@ -78,7 +78,7 @@ func (m *Manager) AddNodeEventHandler(handler cache.ResourceEventHandler) {
 	m.NodesInformer.AddEventHandler(handler)
 }
 
-// AddPodEventHandler adds an event handler for pod events  
+// AddPodEventHandler adds an event handler for pod events
 func (m *Manager) AddPodEventHandler(handler cache.ResourceEventHandler) {
 	m.PodsInformer.AddEventHandler(handler)
 }

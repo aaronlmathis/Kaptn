@@ -100,7 +100,7 @@ users:
 			if tt.skipTest {
 				t.Skip("Skipping test that depends on environment")
 			}
-			
+
 			_, err := buildKubeconfigFromPath(tt.kubeconfigPath)
 			if tt.expectError && err == nil {
 				t.Errorf("expected error but got none")

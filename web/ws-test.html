@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>WebSocket Test</title>
+</head>
+
+<body>
+	<h1>WebSocket Test</h1>
+	<div id="status">Connecting...</div>
+	<div id="messages"></div>
+
+	<script>
+		const wsUrl = `ws://${window.location.host}/api/v1/stream/nodes`;
+		console.log('Connecting to:', wsUrl);
+
+		const ws = new WebSocket(wsUrl);
+		const statusDiv = document.getElementById('status');
+		const messagesDiv = document.getElementById('messages');
+
+		ws.onopen = function (event) {
+			statusDiv.textContent = 'Connected';
+			statusDiv.style.color = 'green';
+			console.log('WebSocket connected');
+		};
+
+		ws.onmessage = function (event) {
+			const messageDiv = document.createElement('div');
+			messageDiv.textContent = new Date().toISOString() + ': ' + event.data;
+			messagesDiv.appendChild(messageDiv);
+			console.log('Received:', event.data);
+		};
+
+		ws.onerror = function (error) {
+			statusDiv.textContent = 'Error: ' + error;
+			statusDiv.style.color = 'red';
+			console.error('WebSocket error:', error);
+		};
+
+		ws.onclose = function (event) {
+			statusDiv.textContent = 'Disconnected (code: ' + event.code + ')';
+			statusDiv.style.color = 'orange';
+			console.log('WebSocket closed:', event);
+		};
+	</script>
+</body>
+
+</html>

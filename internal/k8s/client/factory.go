@@ -106,7 +106,7 @@ func buildKubeconfigFromPath(kubeconfigPath string) (*rest.Config, error) {
 // ValidateConnection tests the connection to the Kubernetes API server
 func (f *Factory) ValidateConnection() error {
 	f.logger.Info("Validating Kubernetes connection")
-	
+
 	// Try to get server version
 	version, err := f.client.Discovery().ServerVersion()
 	if err != nil {

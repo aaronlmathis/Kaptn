@@ -3,7 +3,7 @@ package informers
 import (
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
-	
+
 	"github.com/acme/kad/internal/k8s/ws"
 )
 
@@ -28,9 +28,9 @@ func (h *NodeEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		h.logger.Error("Unexpected object type in OnAdd", zap.String("type", "node"))
 		return
 	}
-	
+
 	h.logger.Debug("Node added", zap.String("name", node.Name))
-	
+
 	// Convert to summary and broadcast
 	summary := h.nodeToSummary(node)
 	h.hub.BroadcastToRoom("nodes", "node_added", summary)
@@ -43,9 +43,9 @@ func (h *NodeEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		h.logger.Error("Unexpected object type in OnUpdate", zap.String("type", "node"))
 		return
 	}
-	
+
 	h.logger.Debug("Node updated", zap.String("name", newNode.Name))
-	
+
 	// Convert to summary and broadcast
 	summary := h.nodeToSummary(newNode)
 	h.hub.BroadcastToRoom("nodes", "node_updated", summary)
@@ -58,9 +58,9 @@ func (h *NodeEventHandler) OnDelete(obj interface{}) {
 		h.logger.Error("Unexpected object type in OnDelete", zap.String("type", "node"))
 		return
 	}
-	
+
 	h.logger.Debug("Node deleted", zap.String("name", node.Name))
-	
+
 	// Broadcast deletion event
 	h.hub.BroadcastToRoom("nodes", "node_deleted", map[string]string{"name": node.Name})
 }
@@ -78,7 +78,7 @@ func (h *NodeEventHandler) nodeToSummary(node *v1.Node) map[string]interface{} {
 	if len(roles) == 0 {
 		roles = append(roles, "worker")
 	}
-	
+
 	// Check if node is ready
 	ready := false
 	for _, condition := range node.Status.Conditions {
@@ -87,7 +87,7 @@ func (h *NodeEventHandler) nodeToSummary(node *v1.Node) map[string]interface{} {
 			break
 		}
 	}
-	
+
 	// Extract taints
 	taints := []map[string]string{}
 	for _, taint := range node.Spec.Taints {
@@ -97,16 +97,16 @@ func (h *NodeEventHandler) nodeToSummary(node *v1.Node) map[string]interface{} {
 			"effect": string(taint.Effect),
 		})
 	}
-	
+
 	return map[string]interface{}{
-		"name":            node.Name,
-		"roles":           roles,
-		"kubeletVersion":  node.Status.NodeInfo.KubeletVersion,
-		"ready":           ready,
-		"unschedulable":   node.Spec.Unschedulable,
-		"taints":          taints,
-		"capacity":        node.Status.Capacity,
-		"allocatable":     node.Status.Allocatable,
+		"name":              node.Name,
+		"roles":             roles,
+		"kubeletVersion":    node.Status.NodeInfo.KubeletVersion,
+		"ready":             ready,
+		"unschedulable":     node.Spec.Unschedulable,
+		"taints":            taints,
+		"capacity":          node.Status.Capacity,
+		"allocatable":       node.Status.Allocatable,
 		"creationTimestamp": node.CreationTimestamp.Time,
 	}
 }
