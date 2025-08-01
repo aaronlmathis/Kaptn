@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import NodesTable from './NodesTable';
 import PodsTable from './PodsTable';
+import ApplyPage from '../pages/ApplyPage';
+import { UserProfile } from './UserProfile';
 
 type TabType = 'overview' | 'nodes' | 'pods' | 'apply' | 'events';
 
@@ -22,14 +24,7 @@ const Dashboard: React.FC<DashboardProps> = () => {
 			case 'pods':
 				return <PodsTable className="mt-6" />;
 			case 'apply':
-				return (
-					<div className="mt-6 bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-6">
-						<h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
-							Apply YAML
-						</h3>
-						<p className="text-gray-600 dark:text-gray-300">YAML editor coming in Milestone M3...</p>
-					</div>
-				);
+				return <ApplyPage />;
 			case 'events':
 				return (
 					<div className="mt-6 bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-lg p-6">
@@ -98,6 +93,7 @@ const Dashboard: React.FC<DashboardProps> = () => {
 								<h1 className="text-2xl font-bold">Kubernetes Admin Dashboard</h1>
 							</div>
 							<div className="flex items-center space-x-4">
+								<UserProfile />
 								<button
 									onClick={toggleTheme}
 									className="p-2 rounded-lg bg-blue-700 hover:bg-blue-800 dark:bg-blue-900 dark:hover:bg-blue-800 transition-colors"
@@ -125,8 +121,8 @@ const Dashboard: React.FC<DashboardProps> = () => {
 							<button
 								onClick={() => setActiveTab('overview')}
 								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'overview'
-										? 'border-blue-500 text-blue-600 dark:text-blue-400'
-										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									? 'border-blue-500 text-blue-600 dark:text-blue-400'
+									: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
 									}`}
 							>
 								Cluster Status
@@ -134,8 +130,8 @@ const Dashboard: React.FC<DashboardProps> = () => {
 							<button
 								onClick={() => setActiveTab('nodes')}
 								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'nodes'
-										? 'border-blue-500 text-blue-600 dark:text-blue-400'
-										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									? 'border-blue-500 text-blue-600 dark:text-blue-400'
+									: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
 									}`}
 							>
 								Nodes
@@ -143,8 +139,8 @@ const Dashboard: React.FC<DashboardProps> = () => {
 							<button
 								onClick={() => setActiveTab('pods')}
 								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'pods'
-										? 'border-blue-500 text-blue-600 dark:text-blue-400'
-										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									? 'border-blue-500 text-blue-600 dark:text-blue-400'
+									: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
 									}`}
 							>
 								Pods
@@ -152,8 +148,8 @@ const Dashboard: React.FC<DashboardProps> = () => {
 							<button
 								onClick={() => setActiveTab('apply')}
 								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'apply'
-										? 'border-blue-500 text-blue-600 dark:text-blue-400'
-										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									? 'border-blue-500 text-blue-600 dark:text-blue-400'
+									: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
 									}`}
 							>
 								Apply YAML
@@ -161,8 +157,8 @@ const Dashboard: React.FC<DashboardProps> = () => {
 							<button
 								onClick={() => setActiveTab('events')}
 								className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${activeTab === 'events'
-										? 'border-blue-500 text-blue-600 dark:text-blue-400'
-										: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+									? 'border-blue-500 text-blue-600 dark:text-blue-400'
+									: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
 									}`}
 							>
 								Events

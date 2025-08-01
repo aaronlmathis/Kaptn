@@ -10,8 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@types/js-cookie": "^3.0.6",
+    "js-cookie": "^3.0.5",
+    "monaco-editor": "^0.52.2",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "yaml": "^2.8.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

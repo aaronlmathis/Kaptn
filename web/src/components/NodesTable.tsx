@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import ConfirmationDialog from './ConfirmationDialog';
 import JobProgressModal from './JobProgressModal';
 import { useToast } from './Toast';
+import { useAuth } from '../contexts/AuthContext';
+import { apiClient, endpoints, createAuthenticatedWebSocket } from '../utils/api';
 
 interface Node {
 	name: string;
@@ -34,7 +36,8 @@ const NodesTable: React.FC<NodesTableProps> = ({ className = '' }) => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
-	
+	const { canWrite } = useAuth();
+
 	// Action states
 	const [confirmationDialog, setConfirmationDialog] = useState<{
 		isOpen: boolean;
@@ -49,7 +52,7 @@ const NodesTable: React.FC<NodesTableProps> = ({ className = '' }) => {
 		title: '',
 		message: '',
 	});
-	
+
 	const [jobProgress, setJobProgress] = useState<{
 		isOpen: boolean;
 		jobId: string | null;
@@ -57,7 +60,7 @@ const NodesTable: React.FC<NodesTableProps> = ({ className = '' }) => {
 		isOpen: false,
 		jobId: null,
 	});
-	
+
 	const [actionLoading, setActionLoading] = useState<string | null>(null);
 	const { addToast } = useToast();
 
@@ -65,7 +68,7 @@ const NodesTable: React.FC<NodesTableProps> = ({ className = '' }) => {
 	useEffect(() => {
 		const fetchNodes = async () => {
 			try {
-				const response = await fetch('/api/v1/nodes');
+				const response = await apiClient.get(endpoints.nodes);
 				if (!response.ok) {
 					throw new Error(`HTTP error! status: ${response.status}`);
 				}
@@ -85,15 +88,12 @@ const NodesTable: React.FC<NodesTableProps> = ({ className = '' }) => {
 
 	// WebSocket connection for real-time updates
 	useEffect(() => {
-		const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-		const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/stream/nodes`;
-
 		let ws: WebSocket;
 		let reconnectTimeout: NodeJS.Timeout;
 
 		const connect = () => {
 			try {
-				ws = new WebSocket(wsUrl);
+				ws = createAuthenticatedWebSocket(endpoints.streamNodes);
 				setWsStatus('connecting');
 
 				ws.onopen = () => {
@@ -223,26 +223,22 @@ This operation may take several minutes to complete.`,
 
 	const performAction = async (action: 'cordon' | 'uncordon' | 'drain', nodeName: string) => {
 		setActionLoading(nodeName);
-		
+
 		try {
 			let response: Response;
-			
+
 			switch (action) {
 				case 'cordon':
-					response = await fetch(`/api/v1/nodes/${nodeName}/cordon`, { method: 'POST' });
+					response = await apiClient.post(endpoints.nodeCordon(nodeName));
 					break;
 				case 'uncordon':
-					response = await fetch(`/api/v1/nodes/${nodeName}/uncordon`, { method: 'POST' });
+					response = await apiClient.post(endpoints.nodeUncordon(nodeName));
 					break;
 				case 'drain':
-					response = await fetch(`/api/v1/nodes/${nodeName}/drain`, {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({
-							timeoutSeconds: 300,
-							force: false,
-							ignoreDaemonSets: true,
-						}),
+					response = await apiClient.post(endpoints.nodeDrain(nodeName), {
+						timeoutSeconds: 300,
+						force: false,
+						ignoreDaemonSets: true,
 					});
 					break;
 			}
@@ -326,8 +322,8 @@ This operation may take several minutes to complete.`,
 			{/* Status indicator */}
 			<div className="mb-4 flex items-center space-x-2">
 				<div className={`w-3 h-3 rounded-full ${wsStatus === 'connected' ? 'bg-green-400' :
-						wsStatus === 'connecting' ? 'bg-yellow-400' :
-							'bg-red-400'
+					wsStatus === 'connecting' ? 'bg-yellow-400' :
+						'bg-red-400'
 					}`}></div>
 				<span className="text-sm text-gray-600 dark:text-gray-300">
 					WebSocket: {wsStatus}
@@ -414,39 +410,45 @@ This operation may take several minutes to complete.`,
 										</td>
 										<td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
 											<div className="flex space-x-2">
-												{node.unschedulable ? (
-													<button
-														onClick={() => handleUncordonClick(node.name)}
-														disabled={actionLoading === node.name}
-														className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
-													>
-														{actionLoading === node.name ? (
-															<div className="animate-spin rounded-full h-3 w-3 border-b border-green-700 mr-1"></div>
-														) : null}
-														Uncordon
-													</button>
+												{canWrite() ? (
+													<>
+														{node.unschedulable ? (
+															<button
+																onClick={() => handleUncordonClick(node.name)}
+																disabled={actionLoading === node.name}
+																className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+															>
+																{actionLoading === node.name ? (
+																	<div className="animate-spin rounded-full h-3 w-3 border-b border-green-700 mr-1"></div>
+																) : null}
+																Uncordon
+															</button>
+														) : (
+															<button
+																onClick={() => handleCordonClick(node.name)}
+																disabled={actionLoading === node.name}
+																className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-yellow-700 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
+															>
+																{actionLoading === node.name ? (
+																	<div className="animate-spin rounded-full h-3 w-3 border-b border-yellow-700 mr-1"></div>
+																) : null}
+																Cordon
+															</button>
+														)}
+														<button
+															onClick={() => handleDrainClick(node.name)}
+															disabled={actionLoading === node.name}
+															className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+														>
+															{actionLoading === node.name ? (
+																<div className="animate-spin rounded-full h-3 w-3 border-b border-red-700 mr-1"></div>
+															) : null}
+															Drain
+														</button>
+													</>
 												) : (
-													<button
-														onClick={() => handleCordonClick(node.name)}
-														disabled={actionLoading === node.name}
-														className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-yellow-700 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed"
-													>
-														{actionLoading === node.name ? (
-															<div className="animate-spin rounded-full h-3 w-3 border-b border-yellow-700 mr-1"></div>
-														) : null}
-														Cordon
-													</button>
+													<span className="text-xs text-gray-500">No write permissions</span>
 												)}
-												<button
-													onClick={() => handleDrainClick(node.name)}
-													disabled={actionLoading === node.name}
-													className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-												>
-													{actionLoading === node.name ? (
-														<div className="animate-spin rounded-full h-3 w-3 border-b border-red-700 mr-1"></div>
-													) : null}
-													Drain
-												</button>
 											</div>
 										</td>
 									</tr>

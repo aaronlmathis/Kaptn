@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config represents the application configuration
@@ -33,14 +34,25 @@ type CORSConfig struct {
 type SecurityConfig struct {
 	AuthMode string     `yaml:"auth_mode"`
 	OIDC     OIDCConfig `yaml:"oidc"`
+	TLS      TLSConfig  `yaml:"tls"`
 }
 
 // OIDCConfig represents the OIDC configuration
 type OIDCConfig struct {
-	Issuer   string `yaml:"issuer"`
-	ClientID string `yaml:"client_id"`
-	Audience string `yaml:"audience"`
-	JWKSURL  string `yaml:"jwks_url"`
+	Issuer       string   `yaml:"issuer"`
+	ClientID     string   `yaml:"client_id"`
+	ClientSecret string   `yaml:"client_secret"`
+	RedirectURL  string   `yaml:"redirect_url"`
+	Scopes       []string `yaml:"scopes"`
+	Audience     string   `yaml:"audience"`
+	JWKSURL      string   `yaml:"jwks_url"`
+}
+
+// TLSConfig represents TLS configuration
+type TLSConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
 }
 
 // KubernetesConfig represents the Kubernetes configuration
@@ -80,6 +92,19 @@ func Load() (*Config, error) {
 		},
 		Security: SecurityConfig{
 			AuthMode: getEnv("KAD_AUTH_MODE", "none"),
+			OIDC: OIDCConfig{
+				Issuer:       getEnv("KAD_OIDC_ISSUER", ""),
+				ClientID:     getEnv("KAD_OIDC_CLIENT_ID", ""),
+				ClientSecret: getEnv("KAD_OIDC_CLIENT_SECRET", ""),
+				RedirectURL:  getEnv("KAD_OIDC_REDIRECT_URL", ""),
+				Audience:     getEnv("KAD_OIDC_AUDIENCE", ""),
+				Scopes:       getEnvStringSlice("KAD_OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
+			},
+			TLS: TLSConfig{
+				Enabled:  getEnvBool("KAD_TLS_ENABLED", false),
+				CertFile: getEnv("KAD_TLS_CERT_FILE", ""),
+				KeyFile:  getEnv("KAD_TLS_KEY_FILE", ""),
+			},
 		},
 		Kubernetes: KubernetesConfig{
 			Mode:             getEnv("KAD_KUBE_MODE", "kubeconfig"),
@@ -132,6 +157,21 @@ func getEnvInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
+func getEnvStringSlice(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		parts := strings.Split(value, ",")
+		var result []string
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		return result
+	}
+	return defaultValue
+}
+
 // Validate validates the configuration
 func (c *Config) Validate() error {
 	if c.Server.Addr == "" {
@@ -143,5 +183,26 @@ func (c *Config) Validate() error {
 	if c.Security.AuthMode != "none" && c.Security.AuthMode != "header" && c.Security.AuthMode != "oidc" {
 		return fmt.Errorf("auth mode must be 'none', 'header', or 'oidc'")
 	}
+
+	// Validate OIDC configuration if OIDC auth mode is enabled
+	if c.Security.AuthMode == "oidc" {
+		if c.Security.OIDC.Issuer == "" {
+			return fmt.Errorf("OIDC issuer is required when auth mode is 'oidc'")
+		}
+		if c.Security.OIDC.ClientID == "" {
+			return fmt.Errorf("OIDC client ID is required when auth mode is 'oidc'")
+		}
+	}
+
+	// Validate TLS configuration
+	if c.Security.TLS.Enabled {
+		if c.Security.TLS.CertFile == "" {
+			return fmt.Errorf("TLS cert file is required when TLS is enabled")
+		}
+		if c.Security.TLS.KeyFile == "" {
+			return fmt.Errorf("TLS key file is required when TLS is enabled")
+		}
+	}
+
 	return nil
 }

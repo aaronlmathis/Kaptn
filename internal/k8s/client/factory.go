@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 
 	"go.uber.org/zap"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -24,9 +26,11 @@ const (
 
 // Factory creates Kubernetes clients
 type Factory struct {
-	logger *zap.Logger
-	config *rest.Config
-	client kubernetes.Interface
+	logger          *zap.Logger
+	config          *rest.Config
+	client          kubernetes.Interface
+	dynamicClient   dynamic.Interface
+	discoveryClient discovery.DiscoveryInterface
 }
 
 // NewFactory creates a new client factory
@@ -57,12 +61,26 @@ func NewFactory(logger *zap.Logger, mode ClientMode, kubeconfigPath string) (*Fa
 		return nil, fmt.Errorf("failed to create Kubernetes clientset: %w", err)
 	}
 
+	// Create dynamic client
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
+	// Create discovery client
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create discovery client: %w", err)
+	}
+
 	logger.Info("Kubernetes client factory created successfully")
 
 	return &Factory{
-		logger: logger,
-		config: config,
-		client: clientset,
+		logger:          logger,
+		config:          config,
+		client:          clientset,
+		dynamicClient:   dynamicClient,
+		discoveryClient: discoveryClient,
 	}, nil
 }
 
@@ -74,6 +92,16 @@ func (f *Factory) Client() kubernetes.Interface {
 // Config returns the REST config
 func (f *Factory) Config() *rest.Config {
 	return f.config
+}
+
+// DynamicClient returns the dynamic client
+func (f *Factory) DynamicClient() dynamic.Interface {
+	return f.dynamicClient
+}
+
+// DiscoveryClient returns the discovery client
+func (f *Factory) DiscoveryClient() discovery.DiscoveryInterface {
+	return f.discoveryClient
 }
 
 // buildKubeconfigFromPath builds a kubeconfig from the given path

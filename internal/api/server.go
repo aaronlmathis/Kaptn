@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/acme/kad/internal/auth"
 	"github.com/acme/kad/internal/config"
 	"github.com/acme/kad/internal/k8s/actions"
 	"github.com/acme/kad/internal/k8s/client"
@@ -30,6 +32,9 @@ type Server struct {
 	informerManager *informers.Manager
 	wsHub           *ws.Hub
 	actionsService  *actions.NodeActionsService
+	applyService    *actions.ApplyService
+	authMiddleware  *auth.Middleware
+	oidcClient      *auth.OIDCClient
 }
 
 // NewServer creates a new API server
@@ -54,6 +59,11 @@ func NewServer(logger *zap.Logger, cfg *config.Config) (*Server, error) {
 	// Initialize actions service
 	s.actionsService = actions.NewNodeActionsService(s.kubeClient, s.logger)
 
+	// Initialize authentication
+	if err := s.initAuth(); err != nil {
+		return nil, err
+	}
+
 	s.setupMiddleware()
 	s.setupRoutes()
 
@@ -70,6 +80,14 @@ func (s *Server) initKubernetesClient() error {
 	}
 
 	s.kubeClient = factory.Client()
+
+	// Initialize apply service
+	s.applyService = actions.NewApplyService(
+		factory.Client(),
+		factory.DynamicClient(),
+		factory.DiscoveryClient(),
+		s.logger,
+	)
 
 	// Validate connection
 	if err := factory.ValidateConnection(); err != nil {
@@ -90,6 +108,36 @@ func (s *Server) initInformers() error {
 
 	podHandler := informers.NewPodEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddPodEventHandler(podHandler)
+
+	return nil
+}
+
+func (s *Server) initAuth() error {
+	authMode := auth.AuthMode(s.config.Security.AuthMode)
+
+	// Initialize OIDC client if auth mode is OIDC
+	if authMode == auth.AuthModeOIDC {
+		oidcConfig := auth.OIDCConfig{
+			Issuer:       s.config.Security.OIDC.Issuer,
+			ClientID:     s.config.Security.OIDC.ClientID,
+			ClientSecret: s.config.Security.OIDC.ClientSecret,
+			RedirectURL:  s.config.Security.OIDC.RedirectURL,
+			Scopes:       s.config.Security.OIDC.Scopes,
+			Audience:     s.config.Security.OIDC.Audience,
+			JWKSURL:      s.config.Security.OIDC.JWKSURL,
+		}
+
+		var err error
+		s.oidcClient, err = auth.NewOIDCClient(s.logger, oidcConfig)
+		if err != nil {
+			return err
+		}
+
+		s.logger.Info("OIDC authentication initialized")
+	}
+
+	// Initialize authentication middleware
+	s.authMiddleware = auth.NewMiddleware(s.logger, authMode, s.oidcClient)
 
 	return nil
 }
@@ -132,6 +180,12 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Timeout(60 * time.Second))
 
+	// Security headers middleware
+	s.router.Use(s.authMiddleware.SecureHeaders)
+
+	// Authentication middleware (always applied, handles different auth modes)
+	s.router.Use(s.authMiddleware.Authenticate)
+
 	// CORS middleware
 	s.router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +213,7 @@ func (s *Server) setupRoutes() {
 
 	// API routes
 	s.router.Route("/api/v1", func(r chi.Router) {
-		// Basic info endpoint
+		// Basic info endpoint (public)
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{
@@ -168,21 +222,50 @@ func (s *Server) setupRoutes() {
 			})
 		})
 
-		// Nodes endpoints
-		r.Get("/nodes", s.handleListNodes)
-		r.Post("/nodes/{nodeName}/cordon", s.handleCordonNode)
-		r.Post("/nodes/{nodeName}/uncordon", s.handleUncordonNode)
-		r.Post("/nodes/{nodeName}/drain", s.handleDrainNode)
+		// Authentication endpoints (public)
+		r.Post("/auth/login", s.handleLogin)
+		r.Post("/auth/callback", s.handleAuthCallback)
+		r.Post("/auth/logout", s.handleLogout)
+		r.Get("/auth/me", s.handleMe)
 
-		// Jobs endpoints
-		r.Get("/jobs/{jobId}", s.handleGetJob)
+		// Read-only endpoints (require read permissions)
+		r.Group(func(r chi.Router) {
+			if s.config.Security.AuthMode != "none" {
+				r.Use(s.authMiddleware.RequireAuth)
+			}
 
-		// Pods endpoints
-		r.Get("/pods", s.handleListPods)
+			r.Get("/nodes", s.handleListNodes)
+			r.Get("/pods", s.handleListPods)
+			r.Get("/jobs/{jobId}", s.handleGetJob)
 
-		// WebSocket endpoints
-		r.Get("/stream/nodes", s.handleNodesWebSocket)
-		r.Get("/stream/pods", s.handlePodsWebSocket)
+			// WebSocket endpoints (require authentication for real-time data)
+			r.Get("/stream/nodes", s.handleNodesWebSocket)
+			r.Get("/stream/pods", s.handlePodsWebSocket)
+		})
+
+		// Write endpoints (require write permissions)
+		r.Group(func(r chi.Router) {
+			if s.config.Security.AuthMode != "none" {
+				r.Use(s.authMiddleware.RequireAuth)
+				r.Use(s.authMiddleware.RequireWrite)
+			}
+			r.Use(s.authMiddleware.RateLimit(s.config.RateLimits.ActionsPerMinute))
+
+			r.Post("/nodes/{nodeName}/cordon", s.handleCordonNode)
+			r.Post("/nodes/{nodeName}/uncordon", s.handleUncordonNode)
+			r.Post("/nodes/{nodeName}/drain", s.handleDrainNode)
+		})
+
+		// Apply endpoints (require write permissions with higher rate limits)
+		r.Group(func(r chi.Router) {
+			if s.config.Security.AuthMode != "none" {
+				r.Use(s.authMiddleware.RequireAuth)
+				r.Use(s.authMiddleware.RequireWrite)
+			}
+			r.Use(s.authMiddleware.RateLimit(s.config.RateLimits.ApplyPerMinute))
+
+			r.Post("/namespaces/{namespace}/apply", s.handleApplyYAML)
+		})
 	})
 
 	// Serve static files from web/dist directory
@@ -403,14 +486,14 @@ func (s *Server) handleCordonNode(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetReqID(r.Context())
 	user := s.getUserFromContext(r.Context())
 
-	s.logger.Info("Received cordon request", 
+	s.logger.Info("Received cordon request",
 		zap.String("requestId", requestID),
 		zap.String("user", user),
 		zap.String("node", nodeName))
 
 	err := s.actionsService.CordonNode(r.Context(), requestID, user, nodeName)
 	if err != nil {
-		s.logger.Error("Failed to cordon node", 
+		s.logger.Error("Failed to cordon node",
 			zap.String("node", nodeName),
 			zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -425,14 +508,14 @@ func (s *Server) handleUncordonNode(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetReqID(r.Context())
 	user := s.getUserFromContext(r.Context())
 
-	s.logger.Info("Received uncordon request", 
+	s.logger.Info("Received uncordon request",
 		zap.String("requestId", requestID),
 		zap.String("user", user),
 		zap.String("node", nodeName))
 
 	err := s.actionsService.UncordonNode(r.Context(), requestID, user, nodeName)
 	if err != nil {
-		s.logger.Error("Failed to uncordon node", 
+		s.logger.Error("Failed to uncordon node",
 			zap.String("node", nodeName),
 			zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -447,7 +530,7 @@ func (s *Server) handleDrainNode(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetReqID(r.Context())
 	user := s.getUserFromContext(r.Context())
 
-	s.logger.Info("Received drain request", 
+	s.logger.Info("Received drain request",
 		zap.String("requestId", requestID),
 		zap.String("user", user),
 		zap.String("node", nodeName))
@@ -464,7 +547,7 @@ func (s *Server) handleDrainNode(w http.ResponseWriter, r *http.Request) {
 
 	jobID, err := s.actionsService.DrainNode(r.Context(), requestID, user, nodeName, opts)
 	if err != nil {
-		s.logger.Error("Failed to start drain operation", 
+		s.logger.Error("Failed to start drain operation",
 			zap.String("node", nodeName),
 			zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -489,8 +572,216 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(job)
 }
 
-// getUserFromContext extracts user from request context (placeholder for future OIDC integration)
+// getUserFromContext extracts user from request context and returns user ID string
 func (s *Server) getUserFromContext(ctx context.Context) string {
-	// For now, return empty string. In the future, this will extract user from OIDC token
+	if user, ok := auth.UserFromContext(ctx); ok && user != nil {
+		if user.Email != "" {
+			return user.Email
+		}
+		return user.ID
+	}
 	return ""
+}
+
+// Authentication handlers
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	// If auth mode is none, provide a development response
+	if s.config.Security.AuthMode == "none" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"authMode": "none",
+			"message":  "Authentication disabled in development mode",
+			"devMode":  true,
+		})
+		return
+	}
+
+	if s.oidcClient == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "OIDC not configured",
+			"code":  "OIDC_NOT_CONFIGURED",
+		})
+		return
+	}
+
+	// Generate state parameter for security
+	state := "kad_" + middleware.GetReqID(r.Context())
+
+	// Get authorization URL
+	authURL := s.oidcClient.GetAuthURL(state)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"authUrl": authURL,
+		"state":   state,
+	})
+}
+
+func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
+	if s.oidcClient == nil {
+		http.Error(w, "OIDC not configured", http.StatusBadRequest)
+		return
+	}
+
+	// Parse callback parameters
+	var callbackData struct {
+		Code  string `json:"code"`
+		State string `json:"state"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&callbackData); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Exchange code for tokens
+	token, err := s.oidcClient.ExchangeCode(r.Context(), callbackData.Code)
+	if err != nil {
+		s.logger.Error("Failed to exchange code for token", zap.Error(err))
+		http.Error(w, "Failed to exchange code", http.StatusBadRequest)
+		return
+	}
+
+	// Extract ID token
+	idToken, ok := token.Extra("id_token").(string)
+	if !ok {
+		http.Error(w, "No ID token in response", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the ID token and get user info
+	user, err := s.oidcClient.VerifyToken(r.Context(), idToken)
+	if err != nil {
+		s.logger.Error("Failed to verify ID token", zap.Error(err))
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	s.logger.Info("User authenticated via OIDC",
+		zap.String("userId", user.ID),
+		zap.String("email", user.Email),
+		zap.Strings("groups", user.Groups))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":      true,
+		"user":         user,
+		"access_token": token.AccessToken,
+		"id_token":     idToken,
+		"expires_at":   token.Expiry,
+	})
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	// For stateless JWT tokens, logout is handled client-side
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"success": "true",
+		"message": "Logged out successfully",
+	})
+}
+
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user == nil {
+		http.Error(w, "Not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"authenticated": true,
+		"user":          user,
+	})
+}
+
+// handleApplyYAML handles YAML apply operations
+func (s *Server) handleApplyYAML(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	requestID := middleware.GetReqID(r.Context())
+	user := s.getUserFromContext(r.Context())
+
+	// Parse query parameters
+	dryRun := r.URL.Query().Get("dryRun") == "true"
+	force := r.URL.Query().Get("force") == "true"
+
+	s.logger.Info("Received apply request",
+		zap.String("requestId", requestID),
+		zap.String("user", user),
+		zap.String("namespace", namespace),
+		zap.Bool("dryRun", dryRun),
+		zap.Bool("force", force))
+
+	// Read YAML content from request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.logger.Error("Failed to read request body", zap.Error(err))
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	yamlContent := string(body)
+	if yamlContent == "" {
+		s.logger.Error("Empty YAML content")
+		http.Error(w, "Empty YAML content", http.StatusBadRequest)
+		return
+	}
+
+	// Validate content type
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/yaml" && contentType != "text/yaml" {
+		s.logger.Warn("Unexpected content type", zap.String("contentType", contentType))
+	}
+
+	// Create apply options
+	opts := actions.ApplyOptions{
+		DryRun:    dryRun,
+		Force:     force,
+		Namespace: namespace,
+	}
+
+	// Apply the YAML
+	result, err := s.applyService.ApplyYAML(r.Context(), requestID, user, yamlContent, opts)
+	if err != nil {
+		s.logger.Error("Failed to apply YAML",
+			zap.String("requestId", requestID),
+			zap.Error(err))
+
+		// Check if it's a validation error (return 400) or server error (return 500)
+		statusCode := http.StatusInternalServerError
+		if result != nil && len(result.Errors) > 0 {
+			// If we have structured errors, it's likely a validation issue
+			statusCode = http.StatusBadRequest
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+
+		if result != nil {
+			json.NewEncoder(w).Encode(result)
+		} else {
+			json.NewEncoder(w).Encode(map[string]string{
+				"error":   err.Error(),
+				"success": "false",
+			})
+		}
+		return
+	}
+
+	// Return successful result
+	w.Header().Set("Content-Type", "application/json")
+	if dryRun {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		if result.Success {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}
+
+	json.NewEncoder(w).Encode(result)
 }

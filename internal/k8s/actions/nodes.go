@@ -15,8 +15,8 @@ import (
 
 // NodeActionsService handles node operations
 type NodeActionsService struct {
-	client    kubernetes.Interface
-	logger    *zap.Logger
+	client     kubernetes.Interface
+	logger     *zap.Logger
 	jobTracker *JobTracker
 }
 
@@ -31,22 +31,22 @@ func NewNodeActionsService(client kubernetes.Interface, logger *zap.Logger) *Nod
 
 // DrainOptions contains options for node drain operation
 type DrainOptions struct {
-	TimeoutSeconds int  `json:"timeoutSeconds,omitempty"`
-	Force          bool `json:"force,omitempty"`
-	DeleteLocalData bool `json:"deleteLocalData,omitempty"`
+	TimeoutSeconds   int  `json:"timeoutSeconds,omitempty"`
+	Force            bool `json:"force,omitempty"`
+	DeleteLocalData  bool `json:"deleteLocalData,omitempty"`
 	IgnoreDaemonSets bool `json:"ignoreDaemonSets,omitempty"`
 }
 
 // AuditLog represents an audit log entry
 type AuditLog struct {
-	RequestID   string    `json:"requestId"`
-	User        string    `json:"user,omitempty"`
-	Action      string    `json:"action"`
-	Resource    string    `json:"resource"`
-	Timestamp   time.Time `json:"timestamp"`
-	Success     bool      `json:"success"`
-	Error       string    `json:"error,omitempty"`
-	Details     map[string]interface{} `json:"details,omitempty"`
+	RequestID string                 `json:"requestId"`
+	User      string                 `json:"user,omitempty"`
+	Action    string                 `json:"action"`
+	Resource  string                 `json:"resource"`
+	Timestamp time.Time              `json:"timestamp"`
+	Success   bool                   `json:"success"`
+	Error     string                 `json:"error,omitempty"`
+	Details   map[string]interface{} `json:"details,omitempty"`
 }
 
 // CordonNode cordons a node (makes it unschedulable)
@@ -59,8 +59,8 @@ func (s *NodeActionsService) CordonNode(ctx context.Context, requestID, user, no
 		Timestamp: time.Now(),
 	}
 
-	s.logger.Info("Cordoning node", 
-		zap.String("requestId", requestID), 
+	s.logger.Info("Cordoning node",
+		zap.String("requestId", requestID),
 		zap.String("user", user),
 		zap.String("node", nodeName))
 
@@ -104,8 +104,8 @@ func (s *NodeActionsService) UncordonNode(ctx context.Context, requestID, user, 
 		Timestamp: time.Now(),
 	}
 
-	s.logger.Info("Uncordoning node", 
-		zap.String("requestId", requestID), 
+	s.logger.Info("Uncordoning node",
+		zap.String("requestId", requestID),
 		zap.String("user", user),
 		zap.String("node", nodeName))
 
@@ -150,8 +150,8 @@ func (s *NodeActionsService) DrainNode(ctx context.Context, requestID, user, nod
 		Details:   map[string]interface{}{"options": opts},
 	}
 
-	s.logger.Info("Starting node drain", 
-		zap.String("requestId", requestID), 
+	s.logger.Info("Starting node drain",
+		zap.String("requestId", requestID),
 		zap.String("user", user),
 		zap.String("node", nodeName),
 		zap.Any("options", opts))
@@ -163,7 +163,7 @@ func (s *NodeActionsService) DrainNode(ctx context.Context, requestID, user, nod
 
 	// Create async job
 	job := s.jobTracker.CreateJob(fmt.Sprintf("drain-node-%s", nodeName), "drain")
-	
+
 	// Start drain operation in background
 	go func() {
 		err := s.drainNodeAsync(context.Background(), job, nodeName, opts)
@@ -247,7 +247,7 @@ func (s *NodeActionsService) drainNodeAsync(ctx context.Context, job *Job, nodeN
 	// Evict pods
 	evictedCount := 0
 	errorCount := 0
-	
+
 	for _, pod := range podsToEvict {
 		select {
 		case <-timeoutCtx.Done():
@@ -257,7 +257,7 @@ func (s *NodeActionsService) drainNodeAsync(ctx context.Context, job *Job, nodeN
 
 		err := s.evictPod(timeoutCtx, &pod, opts.Force)
 		if err != nil {
-			s.logger.Warn("Failed to evict pod", 
+			s.logger.Warn("Failed to evict pod",
 				zap.String("pod", fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)),
 				zap.Error(err))
 			errorCount++
@@ -291,17 +291,17 @@ func (s *NodeActionsService) evictPod(ctx context.Context, pod *v1.Pod, force bo
 		if !force {
 			return err
 		}
-		
+
 		// If forcing, try to delete the pod directly
-		s.logger.Warn("Eviction failed, attempting force delete", 
+		s.logger.Warn("Eviction failed, attempting force delete",
 			zap.String("pod", fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)),
 			zap.Error(err))
-		
+
 		gracePeriodSeconds := int64(0)
 		deleteOptions := metav1.DeleteOptions{
 			GracePeriodSeconds: &gracePeriodSeconds,
 		}
-		
+
 		return s.client.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, deleteOptions)
 	}
 
