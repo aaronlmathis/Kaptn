@@ -71,6 +71,21 @@ func NewServer(logger *zap.Logger, cfg *config.Config) (*Server, error) {
 	// Initialize actions service
 	s.actionsService = actions.NewNodeActionsService(s.kubeClient, s.logger)
 
+	// Set WebSocket broadcaster for job progress streaming
+	s.actionsService.SetWebSocketBroadcaster(s.wsHub)
+
+	// Enable job persistence if configured
+	if s.config.Jobs.PersistenceEnabled {
+		if err := s.actionsService.EnableJobPersistence(s.config.Jobs.StorePath); err != nil {
+			s.logger.Error("Failed to enable job persistence, continuing without persistence",
+				zap.Error(err),
+				zap.String("storePath", s.config.Jobs.StorePath))
+		} else {
+			s.logger.Info("Job persistence enabled",
+				zap.String("storePath", s.config.Jobs.StorePath))
+		}
+	}
+
 	// Initialize authentication
 	if err := s.initAuth(); err != nil {
 		return nil, err
@@ -356,6 +371,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/stream/nodes", s.handleNodesWebSocket)
 			r.Get("/stream/pods", s.handlePodsWebSocket)
 			r.Get("/stream/overview", s.handleOverviewWebSocket)
+			r.Get("/stream/jobs/{jobId}", s.handleJobWebSocket)
 			r.Get("/stream/logs/{streamId}", s.handleLogsWebSocket)
 		})
 

@@ -29,6 +29,16 @@ func NewNodeActionsService(client kubernetes.Interface, logger *zap.Logger) *Nod
 	}
 }
 
+// SetWebSocketBroadcaster sets the WebSocket broadcaster for job progress updates
+func (s *NodeActionsService) SetWebSocketBroadcaster(broadcaster WebSocketBroadcaster) {
+	s.jobTracker.SetBroadcaster(broadcaster)
+}
+
+// EnableJobPersistence enables job persistence to disk
+func (s *NodeActionsService) EnableJobPersistence(storePath string) error {
+	return s.jobTracker.EnablePersistence(storePath)
+}
+
 // DrainOptions contains options for node drain operation
 type DrainOptions struct {
 	TimeoutSeconds   int  `json:"timeoutSeconds,omitempty"`

@@ -52,6 +52,22 @@ func (s *Server) handleStopLogStream(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"error": "Not implemented"})
 }
 
+func (s *Server) handleJobWebSocket(w http.ResponseWriter, r *http.Request) {
+	jobID := chi.URLParam(r, "jobId")
+	if jobID == "" {
+		http.Error(w, "Job ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if job exists
+	if _, exists := s.actionsService.GetJob(jobID); !exists {
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+
+	s.wsHub.ServeWS(w, r, "job:"+jobID)
+}
+
 func (s *Server) handleExecWebSocket(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
 	if sessionID == "" {

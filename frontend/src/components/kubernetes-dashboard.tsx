@@ -56,6 +56,7 @@ import { toast } from "sonner"
 import { z } from "zod"
 
 import { useIsMobile } from "@/hooks/use-mobile"
+import { usePods, useNodes, useServices, useDeployments } from "@/hooks/use-k8s-data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -115,6 +116,28 @@ export const podSchema = z.object({
 	image: z.string(),
 })
 
+export const nodeSchema = z.object({
+	id: z.number(),
+	name: z.string(),
+	status: z.string(),
+	roles: z.string(),
+	version: z.string(),
+	cpu: z.string(),
+	memory: z.string(),
+	age: z.string(),
+})
+
+export const serviceSchema = z.object({
+	id: z.number(),
+	name: z.string(),
+	namespace: z.string(),
+	type: z.string(),
+	clusterIP: z.string(),
+	externalIP: z.string(),
+	ports: z.string(),
+	age: z.string(),
+})
+
 // Create a separate component for the drag handle
 function DragHandle({ id }: { id: number }) {
 	const { attributes, listeners } = useSortable({
@@ -153,6 +176,31 @@ function getStatusBadge(status: string) {
 			)
 		case "CrashLoopBackOff":
 		case "Failed":
+			return (
+				<Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
+					<IconAlertTriangle className="size-3 text-red-600 mr-1" />
+					{status}
+				</Badge>
+			)
+		default:
+			return (
+				<Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
+					{status}
+				</Badge>
+			)
+	}
+}
+
+function getNodeStatusBadge(status: string) {
+	switch (status) {
+		case "Ready":
+			return (
+				<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+					<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+					{status}
+				</Badge>
+			)
+		case "NotReady":
 			return (
 				<Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
 					<IconAlertTriangle className="size-3 text-red-600 mr-1" />
@@ -306,6 +354,246 @@ const columns: ColumnDef<z.infer<typeof podSchema>>[] = [
 	},
 ]
 
+const nodeColumns: ColumnDef<z.infer<typeof nodeSchema>>[] = [
+	{
+		id: "drag",
+		header: () => null,
+		cell: ({ row }) => <DragHandle id={row.original.id} />,
+	},
+	{
+		id: "select",
+		header: ({ table }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={
+						table.getIsAllPageRowsSelected() ||
+						(table.getIsSomePageRowsSelected() && "indeterminate")
+					}
+					onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+					aria-label="Select all"
+				/>
+			</div>
+		),
+		cell: ({ row }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={row.getIsSelected()}
+					onCheckedChange={(value) => row.toggleSelected(!!value)}
+					aria-label="Select row"
+				/>
+			</div>
+		),
+		enableSorting: false,
+		enableHiding: false,
+	},
+	{
+		accessorKey: "name",
+		header: "Node Name",
+		cell: ({ row }) => (
+			<div className="font-medium">{row.original.name}</div>
+		),
+		enableHiding: false,
+	},
+	{
+		accessorKey: "status",
+		header: "Status",
+		cell: ({ row }) => getNodeStatusBadge(row.original.status),
+	},
+	{
+		accessorKey: "roles",
+		header: "Roles",
+		cell: ({ row }) => (
+			<Badge variant="outline" className="text-muted-foreground px-1.5">
+				{row.original.roles}
+			</Badge>
+		),
+	},
+	{
+		accessorKey: "version",
+		header: "Version",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.version}</div>
+		),
+	},
+	{
+		accessorKey: "cpu",
+		header: "CPU",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.cpu}</div>
+		),
+	},
+	{
+		accessorKey: "memory",
+		header: "Memory",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.memory}</div>
+		),
+	},
+	{
+		accessorKey: "age",
+		header: "Age",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.age}</div>
+		),
+	},
+	{
+		id: "actions",
+		cell: ({ row }) => (
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						variant="ghost"
+						className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+						size="icon"
+					>
+						<IconDotsVertical />
+						<span className="sr-only">Open menu</span>
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-40">
+					<DropdownMenuItem>
+						<IconEye className="size-4 mr-2" />
+						View Details
+					</DropdownMenuItem>
+					<DropdownMenuItem>
+						<IconEdit className="size-4 mr-2" />
+						Cordon
+					</DropdownMenuItem>
+					<DropdownMenuItem>
+						<IconEdit className="size-4 mr-2" />
+						Drain
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem className="text-red-600">
+						<IconTrash className="size-4 mr-2" />
+						Delete
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		),
+	},
+]
+
+const serviceColumns: ColumnDef<z.infer<typeof serviceSchema>>[] = [
+	{
+		id: "drag",
+		header: () => null,
+		cell: ({ row }) => <DragHandle id={row.original.id} />,
+	},
+	{
+		id: "select",
+		header: ({ table }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={
+						table.getIsAllPageRowsSelected() ||
+						(table.getIsSomePageRowsSelected() && "indeterminate")
+					}
+					onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+					aria-label="Select all"
+				/>
+			</div>
+		),
+		cell: ({ row }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={row.getIsSelected()}
+					onCheckedChange={(value) => row.toggleSelected(!!value)}
+					aria-label="Select row"
+				/>
+			</div>
+		),
+		enableSorting: false,
+		enableHiding: false,
+	},
+	{
+		accessorKey: "name",
+		header: "Service Name",
+		cell: ({ row }) => (
+			<div className="font-medium">{row.original.name}</div>
+		),
+		enableHiding: false,
+	},
+	{
+		accessorKey: "namespace",
+		header: "Namespace",
+		cell: ({ row }) => (
+			<Badge variant="outline" className="text-muted-foreground px-1.5">
+				{row.original.namespace}
+			</Badge>
+		),
+	},
+	{
+		accessorKey: "type",
+		header: "Type",
+		cell: ({ row }) => (
+			<Badge variant="outline" className="text-blue-600 border-border bg-transparent px-1.5">
+				{row.original.type}
+			</Badge>
+		),
+	},
+	{
+		accessorKey: "clusterIP",
+		header: "Cluster IP",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.clusterIP}</div>
+		),
+	},
+	{
+		accessorKey: "externalIP",
+		header: "External IP",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.externalIP}</div>
+		),
+	},
+	{
+		accessorKey: "ports",
+		header: "Ports",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.ports}</div>
+		),
+	},
+	{
+		accessorKey: "age",
+		header: "Age",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.age}</div>
+		),
+	},
+	{
+		id: "actions",
+		cell: ({ row }) => (
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						variant="ghost"
+						className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+						size="icon"
+					>
+						<IconDotsVertical />
+						<span className="sr-only">Open menu</span>
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-40">
+					<DropdownMenuItem>
+						<IconEye className="size-4 mr-2" />
+						View Details
+					</DropdownMenuItem>
+					<DropdownMenuItem>
+						<IconEdit className="size-4 mr-2" />
+						Edit YAML
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem className="text-red-600">
+						<IconTrash className="size-4 mr-2" />
+						Delete
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		),
+	},
+]
+
 function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 	const { transform, transition, setNodeRef, isDragging } = useSortable({
 		id: row.original.id,
@@ -331,12 +619,33 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 	)
 }
 
-export function KubernetesDashboard({
-	data: initialData,
-}: {
-	data: z.infer<typeof podSchema>[]
-}) {
-	const [data, setData] = React.useState(() => initialData)
+export function KubernetesDashboard() {
+	// Fetch live data using hooks
+	const { data: podsData, loading: podsLoading, error: podsError, refetch: refetchPods } = usePods()
+	const { data: nodesData, loading: nodesLoading, error: nodesError, refetch: refetchNodes } = useNodes()
+	const { data: servicesData, loading: servicesLoading, error: servicesError, refetch: refetchServices } = useServices()
+	const { data: deploymentsData, loading: deploymentsLoading, error: deploymentsError, refetch: refetchDeployments } = useDeployments()
+
+	// Tab state management
+	const [activeTab, setActiveTab] = React.useState("pods")
+	
+	// Get current data and columns based on active tab
+	const getCurrentData = () => {
+		switch (activeTab) {
+			case "nodes":
+				return { data: nodesData, columns: nodeColumns, loading: nodesLoading, error: nodesError, refetch: refetchNodes }
+			case "services":
+				return { data: servicesData, columns: serviceColumns, loading: servicesLoading, error: servicesError, refetch: refetchServices }
+			case "deployments":
+				return { data: deploymentsData, columns: columns, loading: deploymentsLoading, error: deploymentsError, refetch: refetchDeployments }
+			default:
+				return { data: podsData, columns: columns, loading: podsLoading, error: podsError, refetch: refetchPods }
+		}
+	}
+
+	const currentData = getCurrentData()
+
+	const [data, setData] = React.useState<any[]>(() => currentData.data)
 	const [rowSelection, setRowSelection] = React.useState({})
 	const [columnVisibility, setColumnVisibility] =
 		React.useState<VisibilityState>({})
@@ -348,6 +657,16 @@ export function KubernetesDashboard({
 		pageIndex: 0,
 		pageSize: 10,
 	})
+
+	// Update local data when current data changes
+	React.useEffect(() => {
+		setData(currentData.data)
+		// Reset table state when switching tabs
+		setRowSelection({})
+		setColumnFilters([])
+		setSorting([])
+		setPagination({ pageIndex: 0, pageSize: 10 })
+	}, [currentData.data, activeTab])
 	const sortableId = React.useId()
 	const sensors = useSensors(
 		useSensor(MouseSensor, {}),
@@ -361,8 +680,8 @@ export function KubernetesDashboard({
 	)
 
 	const table = useReactTable({
-		data,
-		columns,
+		data: data as any,
+		columns: currentData.columns as any,
 		state: {
 			sorting,
 			columnVisibility,
@@ -370,7 +689,7 @@ export function KubernetesDashboard({
 			columnFilters,
 			pagination,
 		},
-		getRowId: (row) => row.id.toString(),
+		getRowId: (row: any) => row.id.toString(),
 		enableRowSelection: true,
 		onRowSelectionChange: setRowSelection,
 		onSortingChange: setSorting,
@@ -388,7 +707,7 @@ export function KubernetesDashboard({
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
 		if (active && over && active.id !== over.id) {
-			setData((data) => {
+			setData((data: any) => {
 				const oldIndex = dataIds.indexOf(active.id)
 				const newIndex = dataIds.indexOf(over.id)
 				return arrayMove(data, oldIndex, newIndex)
@@ -396,13 +715,41 @@ export function KubernetesDashboard({
 		}
 	}
 
-	const runningPods = data.filter(pod => pod.status === "Running").length
-	const totalPods = data.length
-	const failedPods = data.filter(pod => pod.status === "CrashLoopBackOff" || pod.status === "Failed").length
+	const runningCount = React.useMemo(() => {
+		if (activeTab === "pods") {
+			return (data as any[]).filter(item => item.status === "Running").length
+		}
+		if (activeTab === "nodes") {
+			return (data as any[]).filter(item => item.status === "Ready").length
+		}
+		return 0
+	}, [data, activeTab])
+	
+	const totalCount = data.length
+	
+	const failedCount = React.useMemo(() => {
+		if (activeTab === "pods") {
+			return (data as any[]).filter(item => item.status === "CrashLoopBackOff" || item.status === "Failed").length
+		}
+		if (activeTab === "nodes") {
+			return (data as any[]).filter(item => item.status === "NotReady").length
+		}
+		return 0
+	}, [data, activeTab])
+
+	const getResourceName = () => {
+		switch (activeTab) {
+			case "nodes": return "node"
+			case "services": return "service"  
+			case "deployments": return "deployment"
+			default: return "pod"
+		}
+	}
 
 	return (
 		<Tabs
-			defaultValue="pods"
+			value={activeTab}
+			onValueChange={setActiveTab}
 			className="w-full flex-col justify-start gap-6"
 		>
 			<div className="flex items-center justify-between px-4 lg:px-6">
@@ -426,15 +773,17 @@ export function KubernetesDashboard({
 				</Select>
 				<TabsList className="**:data-[slot=badge]:bg-muted-foreground/30 hidden **:data-[slot=badge]:size-5 **:data-[slot=badge]:rounded-full **:data-[slot=badge]:px-1 @4xl/main:flex">
 					<TabsTrigger value="pods">
-						Pods <Badge variant="secondary">{totalPods}</Badge>
+						Pods <Badge variant="secondary">{podsData.length}</Badge>
 					</TabsTrigger>
 					<TabsTrigger value="deployments">
-						Deployments <Badge variant="secondary">12</Badge>
+						Deployments <Badge variant="secondary">{deploymentsData.length}</Badge>
 					</TabsTrigger>
 					<TabsTrigger value="services">
-						Services <Badge variant="secondary">8</Badge>
+						Services <Badge variant="secondary">{servicesData.length}</Badge>
 					</TabsTrigger>
-					<TabsTrigger value="nodes">Nodes</TabsTrigger>
+					<TabsTrigger value="nodes">
+						Nodes <Badge variant="secondary">{nodesData.length}</Badge>
+					</TabsTrigger>
 				</TabsList>
 				<div className="flex items-center gap-2">
 					<DropdownMenu>
@@ -470,8 +819,8 @@ export function KubernetesDashboard({
 								})}
 						</DropdownMenuContent>
 					</DropdownMenu>
-					<Button variant="outline" size="sm">
-						<IconRefresh />
+					<Button variant="outline" size="sm" onClick={refetchPods} disabled={podsLoading}>
+						<IconRefresh className={podsLoading ? "animate-spin" : ""} />
 						<span className="hidden lg:inline">Refresh</span>
 					</Button>
 				</div>
@@ -517,6 +866,27 @@ export function KubernetesDashboard({
 											<DraggableRow key={row.id} row={row} />
 										))}
 									</SortableContext>
+								) : podsLoading ? (
+									<TableRow>
+										<TableCell
+											colSpan={columns.length}
+											className="h-24 text-center"
+										>
+											<div className="flex items-center justify-center gap-2">
+												<IconLoader className="h-4 w-4 animate-spin" />
+												Loading pods...
+											</div>
+										</TableCell>
+									</TableRow>
+								) : podsError ? (
+									<TableRow>
+										<TableCell
+											colSpan={columns.length}
+											className="h-24 text-center text-red-600"
+										>
+											Error loading pods: {podsError}
+										</TableCell>
+									</TableRow>
 								) : (
 									<TableRow>
 										<TableCell
@@ -620,22 +990,308 @@ export function KubernetesDashboard({
 					</div>
 				</div>
 			</TabsContent>
-			<TabsContent value="services" className="flex flex-col px-4 lg:px-6">
-				<div className="aspect-video w-full flex-1 rounded-lg border border-dashed flex items-center justify-center">
-					<div className="text-center">
-						<h3 className="text-lg font-semibold">Services View</h3>
-						<p className="text-muted-foreground">Coming soon...</p>
+			<TabsContent value="services" className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6">
+				<div className="overflow-hidden rounded-lg border">
+					<DndContext
+						collisionDetection={closestCenter}
+						modifiers={[restrictToVerticalAxis]}
+						onDragEnd={handleDragEnd}
+						sensors={sensors}
+						id={sortableId}
+					>
+						<Table>
+							<TableHeader className="bg-muted sticky top-0 z-10">
+								{table.getHeaderGroups().map((headerGroup) => (
+									<TableRow key={headerGroup.id}>
+										{headerGroup.headers.map((header) => {
+											return (
+												<TableHead key={header.id} colSpan={header.colSpan}>
+													{header.isPlaceholder
+														? null
+														: flexRender(
+															header.column.columnDef.header,
+															header.getContext()
+														)}
+												</TableHead>
+											)
+										})}
+									</TableRow>
+								))}
+							</TableHeader>
+							<TableBody className="**:data-[slot=table-cell]:first:w-8">
+								{table.getRowModel().rows?.length ? (
+									<SortableContext
+										items={dataIds}
+										strategy={verticalListSortingStrategy}
+									>
+										{table.getRowModel().rows.map((row) => (
+											<DraggableRow key={row.id} row={row} />
+										))}
+									</SortableContext>
+								) : servicesLoading ? (
+									<TableRow>
+										<TableCell
+											colSpan={serviceColumns.length}
+											className="h-24 text-center"
+										>
+											<div className="flex items-center justify-center gap-2">
+												<IconLoader className="h-4 w-4 animate-spin" />
+												Loading services...
+											</div>
+										</TableCell>
+									</TableRow>
+								) : servicesError ? (
+									<TableRow>
+										<TableCell
+											colSpan={serviceColumns.length}
+											className="h-24 text-center text-red-600"
+										>
+											Error loading services: {servicesError}
+										</TableCell>
+									</TableRow>
+								) : (
+									<TableRow>
+										<TableCell
+											colSpan={serviceColumns.length}
+											className="h-24 text-center"
+										>
+											No services found.
+										</TableCell>
+									</TableRow>
+								)}
+							</TableBody>
+						</Table>
+					</DndContext>
+				</div>
+				<div className="flex items-center justify-between px-4">
+					<div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
+						{table.getFilteredSelectedRowModel().rows.length} of{" "}
+						{table.getFilteredRowModel().rows.length} service(s) selected.
+					</div>
+					<div className="flex w-full items-center gap-8 lg:w-fit">
+						<div className="hidden items-center gap-2 lg:flex">
+							<Label htmlFor="rows-per-page" className="text-sm font-medium">
+								Rows per page
+							</Label>
+							<Select
+								value={`${table.getState().pagination.pageSize}`}
+								onValueChange={(value) => {
+									table.setPageSize(Number(value))
+								}}
+							>
+								<SelectTrigger size="sm" className="w-20" id="rows-per-page">
+									<SelectValue
+										placeholder={table.getState().pagination.pageSize}
+									/>
+								</SelectTrigger>
+								<SelectContent side="top">
+									{[10, 20, 30, 40, 50].map((pageSize) => (
+										<SelectItem key={pageSize} value={`${pageSize}`}>
+											{pageSize}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="flex w-fit items-center justify-center text-sm font-medium">
+							Page {table.getState().pagination.pageIndex + 1} of{" "}
+							{table.getPageCount()}
+						</div>
+						<div className="ml-auto flex items-center gap-2 lg:ml-0">
+							<Button
+								variant="outline"
+								className="hidden h-8 w-8 p-0 lg:flex"
+								onClick={() => table.setPageIndex(0)}
+								disabled={!table.getCanPreviousPage()}
+							>
+								<span className="sr-only">Go to first page</span>
+								<IconChevronsLeft />
+							</Button>
+							<Button
+								variant="outline"
+								className="size-8"
+								size="icon"
+								onClick={() => table.previousPage()}
+								disabled={!table.getCanPreviousPage()}
+							>
+								<span className="sr-only">Go to previous page</span>
+								<IconChevronLeft />
+							</Button>
+							<Button
+								variant="outline"
+								className="size-8"
+								size="icon"
+								onClick={() => table.nextPage()}
+								disabled={!table.getCanNextPage()}
+							>
+								<span className="sr-only">Go to next page</span>
+								<IconChevronRight />
+							</Button>
+							<Button
+								variant="outline"
+								className="hidden size-8 lg:flex"
+								size="icon"
+								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+								disabled={!table.getCanNextPage()}
+							>
+								<span className="sr-only">Go to last page</span>
+								<IconChevronsRight />
+							</Button>
+						</div>
 					</div>
 				</div>
 			</TabsContent>
 			<TabsContent
 				value="nodes"
-				className="flex flex-col px-4 lg:px-6"
+				className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6"
 			>
-				<div className="aspect-video w-full flex-1 rounded-lg border border-dashed flex items-center justify-center">
-					<div className="text-center">
-						<h3 className="text-lg font-semibold">Nodes View</h3>
-						<p className="text-muted-foreground">Coming soon...</p>
+				<div className="overflow-hidden rounded-lg border">
+					<DndContext
+						collisionDetection={closestCenter}
+						modifiers={[restrictToVerticalAxis]}
+						onDragEnd={handleDragEnd}
+						sensors={sensors}
+						id={sortableId}
+					>
+						<Table>
+							<TableHeader className="bg-muted sticky top-0 z-10">
+								{table.getHeaderGroups().map((headerGroup) => (
+									<TableRow key={headerGroup.id}>
+										{headerGroup.headers.map((header) => {
+											return (
+												<TableHead key={header.id} colSpan={header.colSpan}>
+													{header.isPlaceholder
+														? null
+														: flexRender(
+															header.column.columnDef.header,
+															header.getContext()
+														)}
+												</TableHead>
+											)
+										})}
+									</TableRow>
+								))}
+							</TableHeader>
+							<TableBody className="**:data-[slot=table-cell]:first:w-8">
+								{table.getRowModel().rows?.length ? (
+									<SortableContext
+										items={dataIds}
+										strategy={verticalListSortingStrategy}
+									>
+										{table.getRowModel().rows.map((row) => (
+											<DraggableRow key={row.id} row={row} />
+										))}
+									</SortableContext>
+								) : nodesLoading ? (
+									<TableRow>
+										<TableCell
+											colSpan={nodeColumns.length}
+											className="h-24 text-center"
+										>
+											<div className="flex items-center justify-center gap-2">
+												<IconLoader className="h-4 w-4 animate-spin" />
+												Loading nodes...
+											</div>
+										</TableCell>
+									</TableRow>
+								) : nodesError ? (
+									<TableRow>
+										<TableCell
+											colSpan={nodeColumns.length}
+											className="h-24 text-center text-red-600"
+										>
+											Error loading nodes: {nodesError}
+										</TableCell>
+									</TableRow>
+								) : (
+									<TableRow>
+										<TableCell
+											colSpan={nodeColumns.length}
+											className="h-24 text-center"
+										>
+											No nodes found.
+										</TableCell>
+									</TableRow>
+								)}
+							</TableBody>
+						</Table>
+					</DndContext>
+				</div>
+				<div className="flex items-center justify-between px-4">
+					<div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
+						{table.getFilteredSelectedRowModel().rows.length} of{" "}
+						{table.getFilteredRowModel().rows.length} node(s) selected.
+					</div>
+					<div className="flex w-full items-center gap-8 lg:w-fit">
+						<div className="hidden items-center gap-2 lg:flex">
+							<Label htmlFor="rows-per-page" className="text-sm font-medium">
+								Rows per page
+							</Label>
+							<Select
+								value={`${table.getState().pagination.pageSize}`}
+								onValueChange={(value) => {
+									table.setPageSize(Number(value))
+								}}
+							>
+								<SelectTrigger size="sm" className="w-20" id="rows-per-page">
+									<SelectValue
+										placeholder={table.getState().pagination.pageSize}
+									/>
+								</SelectTrigger>
+								<SelectContent side="top">
+									{[10, 20, 30, 40, 50].map((pageSize) => (
+										<SelectItem key={pageSize} value={`${pageSize}`}>
+											{pageSize}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="flex w-fit items-center justify-center text-sm font-medium">
+							Page {table.getState().pagination.pageIndex + 1} of{" "}
+							{table.getPageCount()}
+						</div>
+						<div className="ml-auto flex items-center gap-2 lg:ml-0">
+							<Button
+								variant="outline"
+								className="hidden h-8 w-8 p-0 lg:flex"
+								onClick={() => table.setPageIndex(0)}
+								disabled={!table.getCanPreviousPage()}
+							>
+								<span className="sr-only">Go to first page</span>
+								<IconChevronsLeft />
+							</Button>
+							<Button
+								variant="outline"
+								className="size-8"
+								size="icon"
+								onClick={() => table.previousPage()}
+								disabled={!table.getCanPreviousPage()}
+							>
+								<span className="sr-only">Go to previous page</span>
+								<IconChevronLeft />
+							</Button>
+							<Button
+								variant="outline"
+								className="size-8"
+								size="icon"
+								onClick={() => table.nextPage()}
+								disabled={!table.getCanNextPage()}
+							>
+								<span className="sr-only">Go to next page</span>
+								<IconChevronRight />
+							</Button>
+							<Button
+								variant="outline"
+								className="hidden size-8 lg:flex"
+								size="icon"
+								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+								disabled={!table.getCanNextPage()}
+							>
+								<span className="sr-only">Go to last page</span>
+								<IconChevronsRight />
+							</Button>
+						</div>
 					</div>
 				</div>
 			</TabsContent>

@@ -1,0 +1,159 @@
+import { useState, useEffect, useCallback } from 'react';
+import {
+	k8sService,
+	type DashboardPod,
+	type NodeTableRow,
+	type ServiceTableRow,
+	type DashboardDeployment,
+	transformPodsToUI,
+	transformNodesToUI,
+	transformServicesToUI,
+	transformDeploymentsToUI
+} from '@/lib/k8s-api';
+
+interface UseK8sDataResult<T> {
+	data: T[];
+	loading: boolean;
+	error: string | null;
+	refetch: () => Promise<void>;
+}
+
+export function usePods(namespace?: string): UseK8sDataResult<DashboardPod> {
+	const [data, setData] = useState<DashboardPod[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const pods = await k8sService.getPods(namespace);
+			const transformedPods = transformPodsToUI(pods);
+			setData(transformedPods);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch pods');
+			console.error('Error fetching pods:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [namespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useNodes(): UseK8sDataResult<NodeTableRow> {
+	const [data, setData] = useState<NodeTableRow[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const nodes = await k8sService.getNodes();
+			const transformedNodes = transformNodesToUI(nodes);
+			setData(transformedNodes);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch nodes');
+			console.error('Error fetching nodes:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useServices(namespace?: string): UseK8sDataResult<ServiceTableRow> {
+	const [data, setData] = useState<ServiceTableRow[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const services = await k8sService.getServices(namespace);
+			const transformedServices = transformServicesToUI(services);
+			setData(transformedServices);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch services');
+			console.error('Error fetching services:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [namespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useDeployments(namespace?: string): UseK8sDataResult<DashboardDeployment> {
+	const [data, setData] = useState<DashboardDeployment[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const deployments = await k8sService.getDeployments(namespace);
+			const transformedDeployments = transformDeploymentsToUI(deployments);
+			setData(transformedDeployments);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch deployments');
+			console.error('Error fetching deployments:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [namespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+// Generic hook for any K8s resource with refresh functionality
+export function useK8sData<T>(
+	fetchFn: () => Promise<T[]>,
+	transformFn: (data: T[]) => any[],
+	deps: any[] = []
+) {
+	const [data, setData] = useState<any[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const result = await fetchFn();
+			const transformed = transformFn(result);
+			setData(transformed);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch data');
+			console.error('Error fetching data:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, deps); // eslint-disable-line react-hooks/exhaustive-deps
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}

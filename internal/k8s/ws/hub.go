@@ -39,6 +39,12 @@ type Hub struct {
 
 	// Authentication middleware for WebSocket connections
 	authMiddleware *auth.Middleware
+
+	// Connection limits and backpressure
+	maxConnections    int
+	maxRoomSize       int
+	broadcastTimeout  time.Duration
+	clientSendTimeout time.Duration
 }
 
 // Client represents a WebSocket client
@@ -93,13 +99,17 @@ var upgrader = websocket.Upgrader{
 func NewHub(logger *zap.Logger) *Hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Hub{
-		logger:     logger,
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
-		ctx:        ctx,
-		cancel:     cancel,
+		logger:            logger,
+		broadcast:         make(chan []byte),
+		register:          make(chan *Client),
+		unregister:        make(chan *Client),
+		clients:           make(map[*Client]bool),
+		ctx:               ctx,
+		cancel:            cancel,
+		maxConnections:    1000,            // Maximum total connections
+		maxRoomSize:       100,             // Maximum connections per room
+		broadcastTimeout:  time.Second,     // Timeout for broadcast operations
+		clientSendTimeout: 5 * time.Second, // Timeout for sending to individual clients
 	}
 }
 
@@ -185,17 +195,58 @@ func (h *Hub) BroadcastToRoom(room string, messageType string, data interface{})
 	}
 
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
+	roomClients := make([]*Client, 0)
 	for client := range h.clients {
 		if client.room == room {
-			select {
-			case client.send <- msgBytes:
-			default:
-				delete(h.clients, client)
-				close(client.send)
-			}
+			roomClients = append(roomClients, client)
 		}
+	}
+	h.mu.RUnlock()
+
+	// Send to all room clients with timeout and backpressure handling
+	dropped := 0
+	sent := 0
+
+	for _, client := range roomClients {
+		select {
+		case client.send <- msgBytes:
+			sent++
+		case <-time.After(h.clientSendTimeout):
+			// Client send timeout - remove slow client
+			h.logger.Warn("Removing slow WebSocket client",
+				zap.String("clientId", client.id),
+				zap.String("room", room))
+			h.removeClient(client)
+			dropped++
+		default:
+			// Channel full - remove unresponsive client
+			h.logger.Warn("Removing unresponsive WebSocket client",
+				zap.String("clientId", client.id),
+				zap.String("room", room))
+			h.removeClient(client)
+			dropped++
+		}
+	}
+
+	if dropped > 0 {
+		h.logger.Info("WebSocket broadcast completed with dropped clients",
+			zap.String("room", room),
+			zap.Int("sent", sent),
+			zap.Int("dropped", dropped))
+	}
+}
+
+// removeClient safely removes a client from the hub
+func (h *Hub) removeClient(client *Client) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, exists := h.clients[client]; exists {
+		delete(h.clients, client)
+		close(client.send)
+
+		// Record disconnection metrics
+		metrics.RecordWebSocketDisconnection(client.room)
 	}
 }
 
@@ -213,6 +264,34 @@ func (h *Hub) ClientCount() int {
 
 // ServeWS handles websocket requests from the peer
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, room string) {
+	// Check connection limits
+	h.mu.RLock()
+	totalConnections := len(h.clients)
+	roomConnections := 0
+	for client := range h.clients {
+		if client.room == room {
+			roomConnections++
+		}
+	}
+	h.mu.RUnlock()
+
+	if totalConnections >= h.maxConnections {
+		h.logger.Warn("WebSocket connection rejected - total connection limit reached",
+			zap.Int("current", totalConnections),
+			zap.Int("limit", h.maxConnections))
+		http.Error(w, "Connection limit reached", http.StatusServiceUnavailable)
+		return
+	}
+
+	if roomConnections >= h.maxRoomSize {
+		h.logger.Warn("WebSocket connection rejected - room connection limit reached",
+			zap.String("room", room),
+			zap.Int("current", roomConnections),
+			zap.Int("limit", h.maxRoomSize))
+		http.Error(w, "Room connection limit reached", http.StatusServiceUnavailable)
+		return
+	}
+
 	// Perform authentication if middleware is configured
 	var user *auth.User
 	if h.authMiddleware != nil {

@@ -17,6 +17,7 @@ type Config struct {
 	Logging      LoggingConfig      `yaml:"logging"`
 	Integrations IntegrationsConfig `yaml:"integrations"`
 	Caching      CachingConfig      `yaml:"caching"`
+	Jobs         JobsConfig         `yaml:"jobs"`
 }
 
 // ServerConfig represents the server configuration
@@ -101,6 +102,14 @@ type CachingConfig struct {
 	AnalyticsTTL string `yaml:"analytics_ttl"`
 }
 
+// JobsConfig represents job management configuration
+type JobsConfig struct {
+	PersistenceEnabled bool   `yaml:"persistence_enabled"`
+	StorePath          string `yaml:"store_path"`
+	CleanupInterval    string `yaml:"cleanup_interval"`
+	MaxAge             string `yaml:"max_age"`
+}
+
 // Load loads the configuration from environment variables and defaults
 func Load() (*Config, error) {
 	cfg := &Config{
@@ -156,6 +165,12 @@ func Load() (*Config, error) {
 		Caching: CachingConfig{
 			OverviewTTL:  getEnv("KAD_OVERVIEW_TTL", "2s"),
 			AnalyticsTTL: getEnv("KAD_ANALYTICS_TTL", "60s"),
+		},
+		Jobs: JobsConfig{
+			PersistenceEnabled: getEnvBool("KAD_JOBS_PERSISTENCE_ENABLED", true),
+			StorePath:          getEnv("KAD_JOBS_STORE_PATH", "./data/jobs"),
+			CleanupInterval:    getEnv("KAD_JOBS_CLEANUP_INTERVAL", "1h"),
+			MaxAge:             getEnv("KAD_JOBS_MAX_AGE", "24h"),
 		},
 	}
 

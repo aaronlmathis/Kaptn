@@ -10,8 +10,6 @@ import {
 	SidebarProvider,
 } from "@/components/ui/sidebar"
 
-import podsData from "@/data/pods.json"
-
 export function DashboardContainer() {
 	return (
 		<ThemeProvider defaultTheme="system" storageKey="k8s-dashboard-theme">
@@ -33,7 +31,7 @@ export function DashboardContainer() {
 									<div className="px-4 lg:px-6">
 										<ChartAreaInteractive />
 									</div>
-									<KubernetesDashboard data={podsData} />
+									<KubernetesDashboard />
 								</div>
 							</div>
 						</div>
