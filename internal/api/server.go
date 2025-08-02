@@ -16,6 +16,7 @@ import (
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/informers"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/logs"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/metrics"
+	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/overview"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/resources"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/selectors"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/ws"
@@ -46,6 +47,7 @@ type Server struct {
 	logsService     *logs.StreamManager
 	execService     *exec.ExecManager
 	metricsService  *metrics.MetricsService
+	overviewService *overview.OverviewService
 	resourceManager *resources.ResourceManager
 	authMiddleware  *auth.Middleware
 	oidcClient      *auth.OIDCClient
@@ -121,6 +123,10 @@ func (s *Server) initKubernetesClient() error {
 	}
 	s.metricsService = metrics.NewMetricsService(s.logger, s.kubeClient, metricsInterface)
 
+	// Initialize overview service
+	s.overviewService = overview.NewOverviewService(s.logger, s.kubeClient, s.metricsService)
+	s.overviewService.SetWebSocketHub(s.wsHub)
+
 	// Initialize resource manager
 	s.resourceManager = resources.NewResourceManager(s.logger, s.kubeClient, factory.DynamicClient())
 
@@ -185,6 +191,9 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start WebSocket hub
 	go s.wsHub.Run()
 
+	// Start overview streaming
+	s.overviewService.StartStreaming()
+
 	// Start informers
 	if err := s.informerManager.Start(); err != nil {
 		return err
@@ -196,6 +205,10 @@ func (s *Server) Start(ctx context.Context) error {
 // Stop stops the server components
 func (s *Server) Stop() {
 	s.logger.Info("Stopping server components")
+
+	if s.overviewService != nil {
+		s.overviewService.StopStreaming()
+	}
 
 	if s.informerManager != nil {
 		s.informerManager.Stop()
@@ -281,6 +294,7 @@ func (s *Server) setupRoutes() {
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/pods", s.handleListPods)
+			r.Get("/overview", s.handleGetOverview)
 			r.Get("/jobs/{jobId}", s.handleGetJob)
 
 			// M5: Advanced read-only endpoints
@@ -296,6 +310,7 @@ func (s *Server) setupRoutes() {
 			// WebSocket endpoints (require authentication for real-time data)
 			r.Get("/stream/nodes", s.handleNodesWebSocket)
 			r.Get("/stream/pods", s.handlePodsWebSocket)
+			r.Get("/stream/overview", s.handleOverviewWebSocket)
 			r.Get("/stream/logs/{streamId}", s.handleLogsWebSocket)
 		})
 
@@ -354,6 +369,28 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(version.Get())
+}
+
+// handleGetOverview handles cluster overview requests
+func (s *Server) handleGetOverview(w http.ResponseWriter, r *http.Request) {
+	overview, err := s.overviewService.GetOverview(r.Context())
+	if err != nil {
+		s.logger.Error("Failed to get cluster overview", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   overview,
+		"status": "success",
+	})
 }
 
 func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
@@ -458,6 +495,10 @@ func (s *Server) handleNodesWebSocket(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePodsWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.wsHub.ServeWS(w, r, "pods")
+}
+
+func (s *Server) handleOverviewWebSocket(w http.ResponseWriter, r *http.Request) {
+	s.wsHub.ServeWS(w, r, "overview")
 }
 
 func (s *Server) nodeToSummary(node *v1.Node) map[string]interface{} {
