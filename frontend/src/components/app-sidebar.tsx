@@ -13,6 +13,7 @@ import {
   Settings2,
   SquareTerminal,
 } from "lucide-react"
+
 import {
   IconDashboard,
   IconDatabase,
@@ -25,8 +26,11 @@ import {
   IconCloudComputing,
   IconCloud,
 } from "@tabler/icons-react"
+
 import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
+import { NavSecondary } from "@/components/nav-secondary"
+
 import { NavUser } from "@/components/nav-user"
 import { TeamSwitcher } from "@/components/team-switcher"
 import {
@@ -259,6 +263,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <NavMain items={data.navMain} />
         <NavProjects projects={data.projects} />
+        <NavSecondary items={data.navSecondary} className="mt-auto" />
+
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />
