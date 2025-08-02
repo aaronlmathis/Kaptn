@@ -31,6 +31,9 @@ type NodeFilterOptions struct {
 	FieldSelector string
 	Page          int
 	PageSize      int
+	Sort          string // Field to sort by (name, roles, status, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, labels
 }
 
 // DeploymentFilterOptions represents filtering options for deployments
@@ -191,11 +194,97 @@ func FilterNodes(nodes []v1.Node, options NodeFilterOptions) ([]v1.Node, error) 
 			}
 		}
 
+		// Apply text search
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			nameMatch := strings.Contains(strings.ToLower(node.Name), searchLower)
+			labelMatch := false
+
+			// Search in labels
+			for key, value := range node.Labels {
+				if strings.Contains(strings.ToLower(key), searchLower) ||
+					strings.Contains(strings.ToLower(value), searchLower) {
+					labelMatch = true
+					break
+				}
+			}
+
+			if !nameMatch && !labelMatch {
+				continue
+			}
+		}
+
 		filtered = append(filtered, node)
+	}
+
+	// Apply sorting
+	if options.Sort != "" {
+		sortNodes(filtered, options.Sort, options.Order)
 	}
 
 	// Apply pagination
 	return paginateSlice(filtered, options.Page, options.PageSize), nil
+}
+
+// sortNodes sorts nodes by the specified field and order
+func sortNodes(nodes []v1.Node, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(nodes, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = nodes[i].Name < nodes[j].Name
+		case "roles":
+			rolesI := getNodeRoles(&nodes[i])
+			rolesJ := getNodeRoles(&nodes[j])
+			less = strings.Join(rolesI, ",") < strings.Join(rolesJ, ",")
+		case "status":
+			statusI := isNodeReady(&nodes[i])
+			statusJ := isNodeReady(&nodes[j])
+			// Ready nodes first
+			less = statusI && !statusJ
+		case "age":
+			less = nodes[i].CreationTimestamp.Time.After(nodes[j].CreationTimestamp.Time)
+		default:
+			less = nodes[i].Name < nodes[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// getNodeRoles extracts node roles from labels
+func getNodeRoles(node *v1.Node) []string {
+	roles := []string{}
+	if _, isMaster := node.Labels["node-role.kubernetes.io/master"]; isMaster {
+		roles = append(roles, "master")
+	}
+	if _, isControlPlane := node.Labels["node-role.kubernetes.io/control-plane"]; isControlPlane {
+		roles = append(roles, "control-plane")
+	}
+	if len(roles) == 0 {
+		roles = append(roles, "worker")
+	}
+	return roles
+}
+
+// isNodeReady checks if a node is ready
+func isNodeReady(node *v1.Node) bool {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady && condition.Status == v1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 // PodToFieldSet converts a pod to a field set for field selector matching
