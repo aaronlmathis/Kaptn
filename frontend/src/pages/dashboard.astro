@@ -1,0 +1,11 @@
+---
+import { DashboardContainer } from "@/components/dashboard-container";
+import Layout from "@/layouts/main.astro";
+import data from "../app/dashboard/data.json";
+
+const title = "Dashboard";
+---
+
+<Layout title={title}>
+	<DashboardContainer data={data} client:load />
+</Layout>

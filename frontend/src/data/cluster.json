@@ -1,0 +1,101 @@
+{
+	"cluster": {
+		"name": "production-cluster",
+		"version": "v1.28.2",
+		"provider": "AWS EKS",
+		"region": "us-west-2",
+		"status": "Ready"
+	},
+	"nodes": [
+		{
+			"name": "worker-node-1",
+			"role": "worker",
+			"status": "Ready",
+			"cpu": "2/4",
+			"memory": "6Gi/8Gi",
+			"pods": "12/110",
+			"age": "14d"
+		},
+		{
+			"name": "worker-node-2",
+			"role": "worker",
+			"status": "Ready",
+			"cpu": "3/4",
+			"memory": "5Gi/8Gi",
+			"pods": "15/110",
+			"age": "14d"
+		},
+		{
+			"name": "worker-node-3",
+			"role": "worker",
+			"status": "Ready",
+			"cpu": "1/4",
+			"memory": "4Gi/8Gi",
+			"pods": "8/110",
+			"age": "14d"
+		},
+		{
+			"name": "worker-node-4",
+			"role": "worker",
+			"status": "NotReady",
+			"cpu": "0/4",
+			"memory": "0Gi/8Gi",
+			"pods": "0/110",
+			"age": "14d"
+		}
+	],
+	"metrics": {
+		"totalPods": 45,
+		"runningPods": 38,
+		"pendingPods": 1,
+		"failedPods": 6,
+		"cpuUsage": "65%",
+		"memoryUsage": "72%",
+		"diskUsage": "45%",
+		"networkIO": "2.5 MB/s"
+	},
+	"namespaces": [
+		{
+			"name": "default",
+			"status": "Active",
+			"pods": 8,
+			"age": "14d"
+		},
+		{
+			"name": "production",
+			"status": "Active",
+			"pods": 12,
+			"age": "14d"
+		},
+		{
+			"name": "monitoring",
+			"status": "Active",
+			"pods": 6,
+			"age": "14d"
+		},
+		{
+			"name": "logging",
+			"status": "Active",
+			"pods": 4,
+			"age": "14d"
+		},
+		{
+			"name": "cert-manager",
+			"status": "Active",
+			"pods": 3,
+			"age": "14d"
+		},
+		{
+			"name": "database",
+			"status": "Active",
+			"pods": 2,
+			"age": "14d"
+		},
+		{
+			"name": "cache",
+			"status": "Active",
+			"pods": 1,
+			"age": "14d"
+		}
+	]
+}
