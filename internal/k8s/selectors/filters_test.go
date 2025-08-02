@@ -113,6 +113,50 @@ func TestFilterPods(t *testing.T) {
 			},
 			expectError: true,
 		},
+		{
+			name: "filter by phase",
+			options: PodFilterOptions{
+				Phase: "Running",
+			},
+			expectedLen: 2,
+		},
+		{
+			name: "text search by name",
+			options: PodFilterOptions{
+				Search: "test-pod-1",
+			},
+			expectedLen: 1,
+		},
+		{
+			name: "text search by namespace",
+			options: PodFilterOptions{
+				Search: "kube-system",
+			},
+			expectedLen: 1,
+		},
+		{
+			name: "text search by label",
+			options: PodFilterOptions{
+				Search: "system",
+			},
+			expectedLen: 1,
+		},
+		{
+			name: "sort by name ascending",
+			options: PodFilterOptions{
+				Sort:  "name",
+				Order: "asc",
+			},
+			expectedLen: 3,
+		},
+		{
+			name: "sort by name descending",
+			options: PodFilterOptions{
+				Sort:  "name",
+				Order: "desc",
+			},
+			expectedLen: 3,
+		},
 	}
 
 	for _, tt := range tests {

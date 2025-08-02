@@ -2,6 +2,7 @@ package selectors
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -17,6 +18,10 @@ type PodFilterOptions struct {
 	FieldSelector string
 	Page          int
 	PageSize      int
+	Sort          string // Field to sort by (name, namespace, node, age, restarts, cpu, memory)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+	Phase         string // Filter by pod phase
 }
 
 // NodeFilterOptions represents filtering options for nodes
@@ -62,6 +67,42 @@ func FilterPods(pods []v1.Pod, options PodFilterOptions) ([]v1.Pod, error) {
 			continue
 		}
 
+		// Filter by phase
+		if options.Phase != "" && string(pod.Status.Phase) != options.Phase {
+			continue
+		}
+
+		// Filter by text search (name, namespace, labels)
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in pod name
+			if strings.Contains(strings.ToLower(pod.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(pod.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range pod.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
 		// Filter by label selector
 		if labelSelector != nil && !labelSelector.Matches(labels.Set(pod.Labels)) {
 			continue
@@ -76,6 +117,11 @@ func FilterPods(pods []v1.Pod, options PodFilterOptions) ([]v1.Pod, error) {
 		}
 
 		filtered = append(filtered, pod)
+	}
+
+	// Apply sorting
+	if options.Sort != "" {
+		sortPods(filtered, options.Sort, options.Order)
 	}
 
 	// Apply pagination
@@ -146,6 +192,45 @@ func NodeToFieldSet(node *v1.Node) fields.Set {
 		"metadata.name":      node.Name,
 		"spec.unschedulable": fmt.Sprintf("%t", node.Spec.Unschedulable),
 	}
+}
+
+// sortPods sorts a slice of pods based on the given field and order
+func sortPods(pods []v1.Pod, sortField, order string) {
+	less := func(i, j int) bool {
+		var result bool
+		switch sortField {
+		case "name":
+			result = pods[i].Name < pods[j].Name
+		case "namespace":
+			result = pods[i].Namespace < pods[j].Namespace
+		case "node":
+			result = pods[i].Spec.NodeName < pods[j].Spec.NodeName
+		case "age":
+			result = pods[i].CreationTimestamp.Time.After(pods[j].CreationTimestamp.Time) // Newer first for age
+		case "restarts":
+			restartsI := getTotalRestarts(&pods[i])
+			restartsJ := getTotalRestarts(&pods[j])
+			result = restartsI < restartsJ
+		default:
+			result = pods[i].Name < pods[j].Name // Default to name
+		}
+
+		if order == "desc" {
+			return !result
+		}
+		return result
+	}
+
+	sort.Slice(pods, less)
+}
+
+// getTotalRestarts calculates the total restart count for a pod
+func getTotalRestarts(pod *v1.Pod) int32 {
+	var total int32
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		total += containerStatus.RestartCount
+	}
+	return total
 }
 
 // paginateSlice applies pagination to a slice

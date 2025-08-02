@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -451,22 +452,41 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Apply filters
+	// Parse query parameters for enhanced filtering
 	namespace := r.URL.Query().Get("namespace")
 	nodeName := r.URL.Query().Get("node")
+	phase := r.URL.Query().Get("phase")
 	labelSelector := r.URL.Query().Get("labelSelector")
 	fieldSelector := r.URL.Query().Get("fieldSelector")
+	search := r.URL.Query().Get("search")
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
 	pageStr := r.URL.Query().Get("page")
 	pageSizeStr := r.URL.Query().Get("pageSize")
 
 	page, _ := strconv.Atoi(pageStr)
 	pageSize, _ := strconv.Atoi(pageSizeStr)
 
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Total count before filtering for pagination metadata
+	totalBeforeFilter := len(pods)
+
 	filterOpts := selectors.PodFilterOptions{
 		Namespace:     namespace,
 		NodeName:      nodeName,
+		Phase:         phase,
 		LabelSelector: labelSelector,
 		FieldSelector: fieldSelector,
+		Search:        search,
+		Sort:          sort,
+		Order:         order,
 		Page:          page,
 		PageSize:      pageSize,
 	}
@@ -478,15 +498,38 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to summaries
-	var summaries []map[string]interface{}
+	// Get pod metrics for enrichment
+	podMetricsMap := make(map[string]map[string]interface{})
+	if metrics, err := s.metricsService.GetClusterMetrics(r.Context()); err == nil {
+		for _, podMetric := range metrics.PodMetrics {
+			key := podMetric.Namespace + "/" + podMetric.Name
+			podMetricsMap[key] = map[string]interface{}{
+				"cpu":    calculatePodCPUUsage(podMetric),
+				"memory": calculatePodMemoryUsage(podMetric),
+			}
+		}
+	}
+
+	// Convert to enhanced summaries
+	var items []map[string]interface{}
 	for _, pod := range filteredPods {
-		summary := s.podToSummary(&pod)
-		summaries = append(summaries, summary)
+		summary := s.enhancedPodToSummary(&pod, podMetricsMap)
+		items = append(items, summary)
+	}
+
+	// Prepare response with pagination metadata
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    items,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(summaries)
+	json.NewEncoder(w).Encode(response)
 }
 
 func (s *Server) handleNodesWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -583,6 +626,138 @@ func (s *Server) podToSummary(pod *v1.Pod) map[string]interface{} {
 		"deletionTimestamp": pod.DeletionTimestamp,
 		"restartPolicy":     string(pod.Spec.RestartPolicy),
 	}
+}
+
+// enhancedPodToSummary creates an enhanced pod summary with metrics integration
+func (s *Server) enhancedPodToSummary(pod *v1.Pod, podMetricsMap map[string]map[string]interface{}) map[string]interface{} {
+	// Start with basic summary
+	summary := s.podToSummary(pod)
+
+	// Calculate restart count
+	var restartCount int32
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		restartCount += containerStatus.RestartCount
+	}
+
+	// Format ready as "x/y"
+	readyContainers := summary["readyContainers"].(int)
+	totalContainers := summary["totalContainers"].(int)
+	readyStr := fmt.Sprintf("%d/%d", readyContainers, totalContainers)
+
+	// Calculate age
+	age := calculateAge(pod.CreationTimestamp.Time)
+
+	// Get status reason
+	statusReason := getStatusReason(pod)
+
+	// Get metrics if available
+	key := pod.Namespace + "/" + pod.Name
+	var cpuMetrics, memoryMetrics map[string]interface{}
+	if metrics, exists := podMetricsMap[key]; exists {
+		cpuMetrics = metrics["cpu"].(map[string]interface{})
+		memoryMetrics = metrics["memory"].(map[string]interface{})
+	} else {
+		// Default metrics when not available
+		cpuMetrics = map[string]interface{}{
+			"milli":          0,
+			"ofLimitPercent": nil,
+		}
+		memoryMetrics = map[string]interface{}{
+			"bytes":          0,
+			"ofLimitPercent": nil,
+		}
+	}
+
+	// Create enhanced summary
+	return map[string]interface{}{
+		"name":         pod.Name,
+		"namespace":    pod.Namespace,
+		"phase":        string(pod.Status.Phase),
+		"ready":        readyStr,
+		"restartCount": restartCount,
+		"age":          age,
+		"node":         pod.Spec.NodeName,
+		"cpu":          cpuMetrics,
+		"memory":       memoryMetrics,
+		"statusReason": statusReason,
+		// Additional fields for compatibility
+		"podIP":             pod.Status.PodIP,
+		"labels":            pod.Labels,
+		"creationTimestamp": pod.CreationTimestamp.Time,
+	}
+}
+
+// calculatePodCPUUsage calculates CPU usage metrics for a pod
+func calculatePodCPUUsage(podMetric metrics.PodMetrics) map[string]interface{} {
+	var totalCPUMilli int64
+	for _, container := range podMetric.Containers {
+		totalCPUMilli += container.CPU.UsedBytes
+	}
+
+	return map[string]interface{}{
+		"milli":          totalCPUMilli,
+		"ofLimitPercent": nil, // TODO: Calculate against limits when available
+	}
+}
+
+// calculatePodMemoryUsage calculates memory usage metrics for a pod
+func calculatePodMemoryUsage(podMetric metrics.PodMetrics) map[string]interface{} {
+	var totalMemoryBytes int64
+	for _, container := range podMetric.Containers {
+		totalMemoryBytes += container.Memory.UsedBytes
+	}
+
+	return map[string]interface{}{
+		"bytes":          totalMemoryBytes,
+		"ofLimitPercent": nil, // TODO: Calculate against limits when available
+	}
+}
+
+// calculateAge calculates a human-readable age string
+func calculateAge(creationTime time.Time) string {
+	duration := time.Since(creationTime)
+
+	days := int(duration.Hours() / 24)
+	if days > 0 {
+		return fmt.Sprintf("%dd", days)
+	}
+
+	hours := int(duration.Hours())
+	if hours > 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+
+	minutes := int(duration.Minutes())
+	if minutes > 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+
+	return fmt.Sprintf("%ds", int(duration.Seconds()))
+}
+
+// getStatusReason gets the reason for a pod's current status
+func getStatusReason(pod *v1.Pod) *string {
+	// Check for container states that indicate issues
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.State.Waiting != nil {
+			reason := containerStatus.State.Waiting.Reason
+			return &reason
+		}
+		if containerStatus.State.Terminated != nil && containerStatus.State.Terminated.Reason != "Completed" {
+			reason := containerStatus.State.Terminated.Reason
+			return &reason
+		}
+	}
+
+	// Check pod conditions for issues
+	for _, condition := range pod.Status.Conditions {
+		if condition.Status == v1.ConditionFalse && condition.Reason != "" {
+			reason := condition.Reason
+			return &reason
+		}
+	}
+
+	return nil
 }
 
 // Node action handlers
