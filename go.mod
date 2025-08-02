@@ -1,4 +1,4 @@
-module github.com/acme/kad
+module github.com/aaronlmathis/k8s-admin-dash
 
 go 1.24.3
 

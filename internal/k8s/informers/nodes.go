@@ -4,7 +4,7 @@ import (
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 
-	"github.com/acme/kad/internal/k8s/ws"
+	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/ws"
 )
 
 // NodeEventHandler handles node events and broadcasts them via WebSocket

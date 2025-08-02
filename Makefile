@@ -9,9 +9,9 @@ BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 GO_VERSION := $(shell go version | cut -d ' ' -f 3)
 
 # Go build flags
-LDFLAGS := -X github.com/acme/kad/internal/version.Version=$(VERSION) \
-           -X github.com/acme/kad/internal/version.GitCommit=$(GIT_COMMIT) \
-           -X github.com/acme/kad/internal/version.BuildDate=$(BUILD_DATE)
+LDFLAGS := -X github.com/aaronlmathis/k8s-admin-dash/internal/version.Version=$(VERSION) \
+           -X github.com/aaronlmathis/k8s-admin-dash/internal/version.GitCommit=$(GIT_COMMIT) \
+           -X github.com/aaronlmathis/k8s-admin-dash/internal/version.BuildDate=$(BUILD_DATE)
 
 .PHONY: all dev fmt lint test web build docker kind-up kind-down clean help
 

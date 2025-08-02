@@ -1,7 +1,7 @@
 # Kubernetes Admin Dashboard
 
-[![CI](https://github.com/acme/kad/workflows/CI/badge.svg)](https://github.com/acme/kad/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/acme/kad)](https://goreportcard.com/report/github.com/acme/kad)
+[![CI](https://github.com/aaronlmathis/k8s-admin-dash/workflows/CI/badge.svg)](https://github.com/aaronlmathis/k8s-admin-dash/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/aaronlmathis/k8s-admin-dash)](https://goreportcard.com/report/github.com/aaronlmathis/k8s-admin-dash)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A secure, production-ready **Kubernetes admin dashboard** that can observe cluster state and perform safe operational actions. Built with Go backend (client-go + WebSockets) and React frontend (TypeScript + Tailwind CSS).
@@ -29,7 +29,7 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 
 1. **Clone and setup**:
    ```bash
-   git clone https://github.com/acme/kad.git
+   git clone https://github.com/aaronlmathis/k8s-admin-dash.git
    cd kad
    make install-deps
    ```

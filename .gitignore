@@ -388,3 +388,7 @@ $RECYCLE.BIN/
 !.env.example
 .github
 bin/
+prompts/
+.vscode/
+scripts/
+config.yaml
