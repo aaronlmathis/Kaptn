@@ -1,9 +1,9 @@
 # Build stage for frontend
-FROM node:20-alpine AS web
-WORKDIR /web
-COPY web/package*.json ./
+FROM node:20-alpine AS frontend
+WORKDIR /frontend
+COPY frontend/package*.json ./
 RUN npm ci --only=production
-COPY web/ ./
+COPY frontend/ ./
 RUN npm run build
 
 # Build stage for backend
@@ -21,7 +21,7 @@ RUN go mod download
 COPY . .
 
 # Copy built frontend
-COPY --from=web /web/dist ./web/dist
+COPY --from=frontend /frontend/dist ./frontend/dist
 
 # Build binary with version info
 ARG VERSION=dev
