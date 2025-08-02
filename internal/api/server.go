@@ -19,10 +19,12 @@ import (
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/resources"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/selectors"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/ws"
+	apimiddleware "github.com/aaronlmathis/k8s-admin-dash/internal/middleware"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/version"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -172,6 +174,9 @@ func (s *Server) initAuth() error {
 	// Initialize authentication middleware
 	s.authMiddleware = auth.NewMiddleware(s.logger, authMode, s.oidcClient)
 
+	// Set authentication middleware on WebSocket hub
+	s.wsHub.SetAuthMiddleware(s.authMiddleware)
+
 	return nil
 }
 
@@ -208,10 +213,14 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestID)
+	s.router.Use(apimiddleware.RequestIDResponseMiddleware) // Add request ID to response headers
 	s.router.Use(middleware.RealIP)
 	s.router.Use(middleware.Logger)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Timeout(60 * time.Second))
+
+	// Prometheus metrics middleware
+	s.router.Use(apimiddleware.PrometheusMiddleware)
 
 	// Security headers middleware
 	s.router.Use(s.authMiddleware.SecureHeaders)
@@ -243,6 +252,9 @@ func (s *Server) setupRoutes() {
 
 	// Version endpoint
 	s.router.Get("/version", s.handleVersion)
+
+	// Prometheus metrics endpoint
+	s.router.Handle("/metrics", promhttp.Handler())
 
 	// API routes
 	s.router.Route("/api/v1", func(r chi.Router) {
