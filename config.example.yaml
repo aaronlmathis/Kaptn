@@ -41,3 +41,9 @@ integrations:
 caching:
   overview_ttl: "2s"
   analytics_ttl: "60s"
+
+jobs:
+  persistence_enabled: true
+  store_path: "./data/jobs"
+  cleanup_interval: "1h"
+  max_age: "24h"

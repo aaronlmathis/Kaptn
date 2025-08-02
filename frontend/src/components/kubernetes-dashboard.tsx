@@ -138,6 +138,17 @@ export const serviceSchema = z.object({
 	age: z.string(),
 })
 
+export const deploymentSchema = z.object({
+	id: z.number(),
+	name: z.string(),
+	namespace: z.string(),
+	ready: z.string(),
+	upToDate: z.number(),
+	available: z.number(),
+	age: z.string(),
+	image: z.string(),
+})
+
 // Create a separate component for the drag handle
 function DragHandle({ id }: { id: number }) {
 	const { attributes, listeners } = useSortable({
@@ -594,6 +605,124 @@ const serviceColumns: ColumnDef<z.infer<typeof serviceSchema>>[] = [
 	},
 ]
 
+const deploymentColumns: ColumnDef<z.infer<typeof deploymentSchema>>[] = [
+	{
+		id: "drag",
+		header: () => null,
+		cell: ({ row }) => <DragHandle id={row.original.id} />,
+	},
+	{
+		id: "select",
+		header: ({ table }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={
+						table.getIsAllPageRowsSelected() ||
+						(table.getIsSomePageRowsSelected() && "indeterminate")
+					}
+					onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+					aria-label="Select all"
+				/>
+			</div>
+		),
+		cell: ({ row }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={row.getIsSelected()}
+					onCheckedChange={(value) => row.toggleSelected(!!value)}
+					aria-label="Select row"
+				/>
+			</div>
+		),
+		enableSorting: false,
+		enableHiding: false,
+	},
+	{
+		accessorKey: "name",
+		header: "Deployment Name",
+		cell: ({ row }) => (
+			<div className="font-medium">{row.original.name}</div>
+		),
+		enableHiding: false,
+	},
+	{
+		accessorKey: "namespace",
+		header: "Namespace",
+		cell: ({ row }) => (
+			<Badge variant="outline" className="text-muted-foreground px-1.5">
+				{row.original.namespace}
+			</Badge>
+		),
+	},
+	{
+		accessorKey: "ready",
+		header: "Ready",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.ready}</div>
+		),
+	},
+	{
+		accessorKey: "upToDate",
+		header: "Up-to-date",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.upToDate}</div>
+		),
+	},
+	{
+		accessorKey: "available",
+		header: "Available",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.available}</div>
+		),
+	},
+	{
+		accessorKey: "age",
+		header: "Age",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.age}</div>
+		),
+	},
+	{
+		accessorKey: "image",
+		header: "Image",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm truncate max-w-48">{row.original.image}</div>
+		),
+	},
+	{
+		id: "actions",
+		cell: ({ row }) => (
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						variant="ghost"
+						className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+						size="icon"
+					>
+						<IconDotsVertical />
+						<span className="sr-only">Open menu</span>
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-40">
+					<DropdownMenuItem>
+						<IconEye className="size-4 mr-2" />
+						View Details
+					</DropdownMenuItem>
+					<DropdownMenuItem>
+						<IconEdit className="size-4 mr-2" />
+						Edit YAML
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem className="text-red-600">
+						<IconTrash className="size-4 mr-2" />
+						Delete
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		),
+	},
+]
+
 function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 	const { transform, transition, setNodeRef, isDragging } = useSortable({
 		id: row.original.id,
@@ -628,7 +757,7 @@ export function KubernetesDashboard() {
 
 	// Tab state management
 	const [activeTab, setActiveTab] = React.useState("pods")
-	
+
 	// Get current data and columns based on active tab
 	const getCurrentData = () => {
 		switch (activeTab) {
@@ -637,7 +766,7 @@ export function KubernetesDashboard() {
 			case "services":
 				return { data: servicesData, columns: serviceColumns, loading: servicesLoading, error: servicesError, refetch: refetchServices }
 			case "deployments":
-				return { data: deploymentsData, columns: columns, loading: deploymentsLoading, error: deploymentsError, refetch: refetchDeployments }
+				return { data: deploymentsData, columns: deploymentColumns, loading: deploymentsLoading, error: deploymentsError, refetch: refetchDeployments }
 			default:
 				return { data: podsData, columns: columns, loading: podsLoading, error: podsError, refetch: refetchPods }
 		}
@@ -724,9 +853,9 @@ export function KubernetesDashboard() {
 		}
 		return 0
 	}, [data, activeTab])
-	
+
 	const totalCount = data.length
-	
+
 	const failedCount = React.useMemo(() => {
 		if (activeTab === "pods") {
 			return (data as any[]).filter(item => item.status === "CrashLoopBackOff" || item.status === "Failed").length
@@ -740,7 +869,7 @@ export function KubernetesDashboard() {
 	const getResourceName = () => {
 		switch (activeTab) {
 			case "nodes": return "node"
-			case "services": return "service"  
+			case "services": return "service"
 			case "deployments": return "deployment"
 			default: return "pod"
 		}
@@ -981,12 +1110,155 @@ export function KubernetesDashboard() {
 			</TabsContent>
 			<TabsContent
 				value="deployments"
-				className="flex flex-col px-4 lg:px-6"
+				className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6"
 			>
-				<div className="aspect-video w-full flex-1 rounded-lg border border-dashed flex items-center justify-center">
-					<div className="text-center">
-						<h3 className="text-lg font-semibold">Deployments View</h3>
-						<p className="text-muted-foreground">Coming soon...</p>
+				<div className="overflow-hidden rounded-lg border">
+					<DndContext
+						collisionDetection={closestCenter}
+						modifiers={[restrictToVerticalAxis]}
+						onDragEnd={handleDragEnd}
+						sensors={sensors}
+						id={sortableId}
+					>
+						<Table>
+							<TableHeader className="bg-muted sticky top-0 z-10">
+								{table.getHeaderGroups().map((headerGroup) => (
+									<TableRow key={headerGroup.id}>
+										{headerGroup.headers.map((header) => {
+											return (
+												<TableHead key={header.id} colSpan={header.colSpan}>
+													{header.isPlaceholder
+														? null
+														: flexRender(
+															header.column.columnDef.header,
+															header.getContext()
+														)}
+												</TableHead>
+											)
+										})}
+									</TableRow>
+								))}
+							</TableHeader>
+							<TableBody className="**:data-[slot=table-cell]:first:w-8">
+								{table.getRowModel().rows?.length ? (
+									<SortableContext
+										items={dataIds}
+										strategy={verticalListSortingStrategy}
+									>
+										{table.getRowModel().rows.map((row) => (
+											<DraggableRow key={row.id} row={row} />
+										))}
+									</SortableContext>
+								) : deploymentsLoading ? (
+									<TableRow>
+										<TableCell
+											colSpan={deploymentColumns.length}
+											className="h-24 text-center"
+										>
+											<div className="flex items-center justify-center gap-2">
+												<IconLoader className="h-4 w-4 animate-spin" />
+												Loading deployments...
+											</div>
+										</TableCell>
+									</TableRow>
+								) : deploymentsError ? (
+									<TableRow>
+										<TableCell
+											colSpan={deploymentColumns.length}
+											className="h-24 text-center text-red-600"
+										>
+											Error loading deployments: {deploymentsError}
+										</TableCell>
+									</TableRow>
+								) : (
+									<TableRow>
+										<TableCell
+											colSpan={deploymentColumns.length}
+											className="h-24 text-center"
+										>
+											No deployments found.
+										</TableCell>
+									</TableRow>
+								)}
+							</TableBody>
+						</Table>
+					</DndContext>
+				</div>
+				<div className="flex items-center justify-between px-4">
+					<div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
+						{table.getFilteredSelectedRowModel().rows.length} of{" "}
+						{table.getFilteredRowModel().rows.length} deployment(s) selected.
+					</div>
+					<div className="flex w-full items-center gap-8 lg:w-fit">
+						<div className="hidden items-center gap-2 lg:flex">
+							<Label htmlFor="rows-per-page" className="text-sm font-medium">
+								Rows per page
+							</Label>
+							<Select
+								value={`${table.getState().pagination.pageSize}`}
+								onValueChange={(value) => {
+									table.setPageSize(Number(value))
+								}}
+							>
+								<SelectTrigger size="sm" className="w-20" id="rows-per-page">
+									<SelectValue
+										placeholder={table.getState().pagination.pageSize}
+									/>
+								</SelectTrigger>
+								<SelectContent side="top">
+									{[10, 20, 30, 40, 50].map((pageSize) => (
+										<SelectItem key={pageSize} value={`${pageSize}`}>
+											{pageSize}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="flex w-fit items-center justify-center text-sm font-medium">
+							Page {table.getState().pagination.pageIndex + 1} of{" "}
+							{table.getPageCount()}
+						</div>
+						<div className="ml-auto flex items-center gap-2 lg:ml-0">
+							<Button
+								variant="outline"
+								className="hidden h-8 w-8 p-0 lg:flex"
+								onClick={() => table.setPageIndex(0)}
+								disabled={!table.getCanPreviousPage()}
+							>
+								<span className="sr-only">Go to first page</span>
+								<IconChevronsLeft />
+							</Button>
+							<Button
+								variant="outline"
+								className="size-8"
+								size="icon"
+								onClick={() => table.previousPage()}
+								disabled={!table.getCanPreviousPage()}
+							>
+								<span className="sr-only">Go to previous page</span>
+								<IconChevronLeft />
+							</Button>
+							<Button
+								variant="outline"
+								className="size-8"
+								size="icon"
+								onClick={() => table.nextPage()}
+								disabled={!table.getCanNextPage()}
+							>
+								<span className="sr-only">Go to next page</span>
+								<IconChevronRight />
+							</Button>
+							<Button
+								variant="outline"
+								className="hidden size-8 lg:flex"
+								size="icon"
+								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+								disabled={!table.getCanNextPage()}
+							>
+								<span className="sr-only">Go to last page</span>
+								<IconChevronsRight />
+							</Button>
+						</div>
 					</div>
 				</div>
 			</TabsContent>
