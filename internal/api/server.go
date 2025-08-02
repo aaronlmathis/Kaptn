@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/aaronlmathis/k8s-admin-dash/internal/analytics"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/auth"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/config"
 	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/actions"
@@ -29,21 +31,22 @@ import (
 
 // Server represents the API server
 type Server struct {
-	logger          *zap.Logger
-	config          *config.Config
-	router          chi.Router
-	kubeClient      kubernetes.Interface
-	informerManager *informers.Manager
-	wsHub           *ws.Hub
-	actionsService  *actions.NodeActionsService
-	applyService    *actions.ApplyService
-	logsService     *logs.StreamManager
-	execService     *exec.ExecManager
-	metricsService  *metrics.MetricsService
-	overviewService *overview.OverviewService
-	resourceManager *resources.ResourceManager
-	authMiddleware  *auth.Middleware
-	oidcClient      *auth.OIDCClient
+	logger           *zap.Logger
+	config           *config.Config
+	router           chi.Router
+	kubeClient       kubernetes.Interface
+	informerManager  *informers.Manager
+	wsHub            *ws.Hub
+	actionsService   *actions.NodeActionsService
+	applyService     *actions.ApplyService
+	logsService      *logs.StreamManager
+	execService      *exec.ExecManager
+	metricsService   *metrics.MetricsService
+	overviewService  *overview.OverviewService
+	resourceManager  *resources.ResourceManager
+	analyticsService *analytics.AnalyticsService
+	authMiddleware   *auth.Middleware
+	oidcClient       *auth.OIDCClient
 }
 
 // NewServer creates a new API server
@@ -123,6 +126,11 @@ func (s *Server) initKubernetesClient() error {
 	// Initialize resource manager
 	s.resourceManager = resources.NewResourceManager(s.logger, s.kubeClient, factory.DynamicClient())
 
+	// Initialize analytics service
+	if err := s.initAnalytics(); err != nil {
+		return err
+	}
+
 	// Validate connection
 	if err := factory.ValidateConnection(); err != nil {
 		return err
@@ -175,6 +183,45 @@ func (s *Server) initAuth() error {
 
 	// Set authentication middleware on WebSocket hub
 	s.wsHub.SetAuthMiddleware(s.authMiddleware)
+
+	return nil
+}
+
+func (s *Server) initAnalytics() error {
+	s.logger.Info("Initializing analytics service")
+
+	// Parse cache TTL
+	cacheTTL, err := time.ParseDuration(s.config.Caching.AnalyticsTTL)
+	if err != nil {
+		return fmt.Errorf("invalid analytics cache TTL: %w", err)
+	}
+
+	// Initialize Prometheus client
+	prometheusConfig := analytics.PrometheusConfig{
+		URL:     s.config.Integrations.Prometheus.URL,
+		Timeout: s.config.Integrations.Prometheus.Timeout,
+		Enabled: s.config.Integrations.Prometheus.Enabled && s.config.Features.EnablePrometheusAnalytics,
+	}
+
+	prometheusClient, err := analytics.NewPrometheusClient(s.logger, prometheusConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create prometheus client: %w", err)
+	}
+
+	// Test connection if enabled
+	if prometheusClient.IsEnabled() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := prometheusClient.TestConnection(ctx); err != nil {
+			s.logger.Warn("Prometheus connection test failed, analytics will use mock data", zap.Error(err))
+		} else {
+			s.logger.Info("Prometheus connection successful")
+		}
+	}
+
+	// Initialize analytics service
+	s.analyticsService = analytics.NewAnalyticsService(s.logger, prometheusClient, cacheTTL)
 
 	return nil
 }
@@ -301,6 +348,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/ingresses/{namespace}", s.handleListIngresses)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
 			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
+
+			// Analytics endpoints
+			r.Get("/analytics/visitors", s.handleGetVisitors)
 
 			// WebSocket endpoints (require authentication for real-time data)
 			r.Get("/stream/nodes", s.handleNodesWebSocket)

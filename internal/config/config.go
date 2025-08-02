@@ -9,12 +9,14 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Server     ServerConfig     `yaml:"server"`
-	Security   SecurityConfig   `yaml:"security"`
-	Kubernetes KubernetesConfig `yaml:"kubernetes"`
-	Features   FeaturesConfig   `yaml:"features"`
-	RateLimits RateLimitsConfig `yaml:"rate_limits"`
-	Logging    LoggingConfig    `yaml:"logging"`
+	Server       ServerConfig       `yaml:"server"`
+	Security     SecurityConfig     `yaml:"security"`
+	Kubernetes   KubernetesConfig   `yaml:"kubernetes"`
+	Features     FeaturesConfig     `yaml:"features"`
+	RateLimits   RateLimitsConfig   `yaml:"rate_limits"`
+	Logging      LoggingConfig      `yaml:"logging"`
+	Integrations IntegrationsConfig `yaml:"integrations"`
+	Caching      CachingConfig      `yaml:"caching"`
 }
 
 // ServerConfig represents the server configuration
@@ -64,8 +66,10 @@ type KubernetesConfig struct {
 
 // FeaturesConfig represents the features configuration
 type FeaturesConfig struct {
-	EnableApply       bool `yaml:"enable_apply"`
-	EnableNodeActions bool `yaml:"enable_nodes_actions"`
+	EnableApply               bool `yaml:"enable_apply"`
+	EnableNodeActions         bool `yaml:"enable_nodes_actions"`
+	EnableOverview            bool `yaml:"enable_overview"`
+	EnablePrometheusAnalytics bool `yaml:"enable_prometheus_analytics"`
 }
 
 // RateLimitsConfig represents the rate limits configuration
@@ -77,6 +81,24 @@ type RateLimitsConfig struct {
 // LoggingConfig represents the logging configuration
 type LoggingConfig struct {
 	Level string `yaml:"level"`
+}
+
+// IntegrationsConfig represents external integrations configuration
+type IntegrationsConfig struct {
+	Prometheus PrometheusConfig `yaml:"prometheus"`
+}
+
+// PrometheusConfig represents Prometheus integration configuration
+type PrometheusConfig struct {
+	URL     string `yaml:"url"`
+	Timeout string `yaml:"timeout"`
+	Enabled bool   `yaml:"enabled"`
+}
+
+// CachingConfig represents caching configuration
+type CachingConfig struct {
+	OverviewTTL  string `yaml:"overview_ttl"`
+	AnalyticsTTL string `yaml:"analytics_ttl"`
 }
 
 // Load loads the configuration from environment variables and defaults
@@ -112,8 +134,10 @@ func Load() (*Config, error) {
 			NamespaceDefault: getEnv("KAD_NAMESPACE_DEFAULT", "default"),
 		},
 		Features: FeaturesConfig{
-			EnableApply:       getEnvBool("KAD_ENABLE_APPLY", true),
-			EnableNodeActions: getEnvBool("KAD_ENABLE_NODE_ACTIONS", true),
+			EnableApply:               getEnvBool("KAD_ENABLE_APPLY", true),
+			EnableNodeActions:         getEnvBool("KAD_ENABLE_NODE_ACTIONS", true),
+			EnableOverview:            getEnvBool("KAD_ENABLE_OVERVIEW", true),
+			EnablePrometheusAnalytics: getEnvBool("KAD_ENABLE_PROMETHEUS_ANALYTICS", true),
 		},
 		RateLimits: RateLimitsConfig{
 			ApplyPerMinute:   getEnvInt("KAD_APPLY_PER_MINUTE", 10),
@@ -121,6 +145,17 @@ func Load() (*Config, error) {
 		},
 		Logging: LoggingConfig{
 			Level: getEnv("LOG_LEVEL", "info"),
+		},
+		Integrations: IntegrationsConfig{
+			Prometheus: PrometheusConfig{
+				URL:     getEnv("KAD_PROMETHEUS_URL", "http://prometheus.monitoring.svc:9090"),
+				Timeout: getEnv("KAD_PROMETHEUS_TIMEOUT", "5s"),
+				Enabled: getEnvBool("KAD_PROMETHEUS_ENABLED", true),
+			},
+		},
+		Caching: CachingConfig{
+			OverviewTTL:  getEnv("KAD_OVERVIEW_TTL", "2s"),
+			AnalyticsTTL: getEnv("KAD_ANALYTICS_TTL", "60s"),
 		},
 	}
 

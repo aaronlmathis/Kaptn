@@ -22,6 +22,8 @@ kubernetes:
 features:
   enable_apply: true
   enable_nodes_actions: true
+  enable_overview: true
+  enable_prometheus_analytics: true
 
 rate_limits:
   apply_per_minute: 10
@@ -29,3 +31,13 @@ rate_limits:
 
 logging:
   level: "info"             # debug, info, warn, error
+
+integrations:
+  prometheus:
+    url: "http://prometheus.monitoring.svc:9090"
+    timeout: "5s"
+    enabled: true
+
+caching:
+  overview_ttl: "2s"
+  analytics_ttl: "60s"
