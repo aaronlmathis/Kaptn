@@ -8,13 +8,17 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 
 ## Features
 
-- 🚀 **Real-time cluster monitoring** - Live updates via WebSockets
-- 🔧 **Safe node operations** - Cordon, uncordon, and drain with safeguards
-- 📝 **Declarative deployments** - Server-side apply with dry-run support
-- 🎨 **Modern UI** - React + TypeScript + Tailwind CSS with dark mode
-- 🔒 **Security-first** - RBAC integration, audit logs, rate limiting
-- 📦 **Easy deployment** - Helm chart for in-cluster deployment
-- 🖥️ **Multiple modes** - Container deployment or desktop app (Wails2)
+- **Real-time cluster monitoring** - Live updates via WebSockets
+- **Safe node operations** - Cordon, uncordon, and drain with safeguards
+- **Declarative deployments** - Server-side apply with dry-run support
+- **Modern UI** - React + TypeScript + Tailwind CSS + ShadCN with dark mode
+- **Security-first** - RBAC integration, audit logs, rate limiting
+- **Easy deployment** - Helm chart for in-cluster deployment
+- **Multiple modes** - Container deployment or desktop app (Wails2)
+
+![Kubernetes Admin Dashboard Screenshot](images/dashboard-current.png)
+
+---
 
 ## Quick Start
 
@@ -44,13 +48,10 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
    # Terminal 1: Start backend
    make build && ./bin/server
    
-   # Terminal 2: Start frontend (in development mode)
-   cd web && npm run dev
    ```
 
 4. **Access the dashboard**:
-   - Backend API: http://localhost:8080
-   - Frontend (dev): http://localhost:5173
+   - http://localhost:8080/dashboard
 
 ### Build and Deploy
 
@@ -68,6 +69,8 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
    ```bash
    helm install kad ./deploy/helm -n kube-system
    ```
+
+---
 
 ## Project Structure
 
@@ -90,6 +93,8 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 └── docs/               # Documentation
 ```
 
+---
+
 ## Configuration
 
 The application can be configured via environment variables or a config file:
@@ -110,6 +115,9 @@ Key environment variables:
 - `KUBECONFIG` - Path to kubeconfig file
 - `KAD_CONFIG_PATH` - Path to config file
 
+---
+
+
 ## API Endpoints
 
 ### Health & Status
@@ -122,6 +130,8 @@ Key environment variables:
 - `GET /api/v1/pods` - List pods with filtering
 - `WS /api/v1/stream/nodes` - Real-time node updates
 - `WS /api/v1/stream/pods` - Real-time pod updates
+
+---
 
 ## Development
 
@@ -148,15 +158,8 @@ The application follows a clean architecture pattern:
 - **Communication**: REST APIs + WebSocket for live data
 - **Deployment**: Container-first with Helm chart
 
-## Roadmap
 
-- **M0 ✅ Bootstrap**: Project setup, basic server, React app, CI
-- **M1 🚧 Read-only**: Nodes/pods listing, WebSocket updates
-- **M2 📋 Node Actions**: Cordon/uncordon/drain operations  
-- **M3 📋 Apply YAML**: Server-side apply with Monaco editor
-- **M4 📋 Security**: RBAC, auth, rate limiting
-- **M5 📋 Packaging**: Helm chart, container images
-- **M6 📋 Observability**: Metrics, structured logs
+---
 
 ## Contributing
 
@@ -165,6 +168,8 @@ The application follows a clean architecture pattern:
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+---
 
 ## Security
 
