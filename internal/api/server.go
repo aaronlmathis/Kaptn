@@ -842,7 +842,7 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 // deploymentToResponse converts a Kubernetes deployment to response format
 func (s *Server) deploymentToResponse(deployment appsv1.Deployment) map[string]interface{} {
 	// Calculate age
-	age := s.calculateAge(deployment.CreationTimestamp.Time)
+	age := calculateAge(deployment.CreationTimestamp.Time)
 
 	// Prepare replica counts
 	desired := int32(0)
