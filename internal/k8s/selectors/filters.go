@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -30,6 +31,30 @@ type NodeFilterOptions struct {
 	FieldSelector string
 	Page          int
 	PageSize      int
+}
+
+// DeploymentFilterOptions represents filtering options for deployments
+type DeploymentFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, replicas, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+}
+
+// ServiceFilterOptions represents filtering options for services
+type ServiceFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, type, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
 }
 
 // FilterPods filters a list of pods based on the given options
@@ -276,4 +301,272 @@ func BuildFieldSelector(fieldMap map[string]string) string {
 		selectors = append(selectors, fmt.Sprintf("%s=%s", key, value))
 	}
 	return strings.Join(selectors, ",")
+}
+
+// FilterDeployments filters a list of deployments based on the given options
+func FilterDeployments(deployments []appsv1.Deployment, options DeploymentFilterOptions) ([]appsv1.Deployment, error) {
+	var filtered []appsv1.Deployment
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, deployment := range deployments {
+		// Filter by namespace
+		if options.Namespace != "" && deployment.Namespace != options.Namespace {
+			continue
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(deployment.Labels)) {
+			continue
+		}
+
+		// Apply field selector
+		if fieldSelector != nil {
+			fields := fields.Set{
+				"metadata.name":      deployment.Name,
+				"metadata.namespace": deployment.Namespace,
+			}
+			if !fieldSelector.Matches(fields) {
+				continue
+			}
+		}
+
+		// Apply text search
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(deployment.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(deployment.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range deployment.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, deployment)
+	}
+
+	// Sort deployments
+	sortDeployments(filtered, options.Sort, options.Order)
+
+	// Apply pagination
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []appsv1.Deployment{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// FilterServices filters a list of services based on the given options
+func FilterServices(services []v1.Service, options ServiceFilterOptions) ([]v1.Service, error) {
+	var filtered []v1.Service
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, service := range services {
+		// Filter by namespace
+		if options.Namespace != "" && service.Namespace != options.Namespace {
+			continue
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(service.Labels)) {
+			continue
+		}
+
+		// Apply field selector
+		if fieldSelector != nil {
+			fields := fields.Set{
+				"metadata.name":      service.Name,
+				"metadata.namespace": service.Namespace,
+			}
+			if !fieldSelector.Matches(fields) {
+				continue
+			}
+		}
+
+		// Apply text search
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(service.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(service.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range service.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, service)
+	}
+
+	// Sort services
+	sortServices(filtered, options.Sort, options.Order)
+
+	// Apply pagination
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []v1.Service{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// sortDeployments sorts deployments by the specified field and order
+func sortDeployments(deployments []appsv1.Deployment, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(deployments, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = deployments[i].Name < deployments[j].Name
+		case "namespace":
+			less = deployments[i].Namespace < deployments[j].Namespace
+		case "replicas":
+			replicasI := int32(0)
+			replicasJ := int32(0)
+			if deployments[i].Spec.Replicas != nil {
+				replicasI = *deployments[i].Spec.Replicas
+			}
+			if deployments[j].Spec.Replicas != nil {
+				replicasJ = *deployments[j].Spec.Replicas
+			}
+			less = replicasI < replicasJ
+		case "age":
+			less = deployments[i].CreationTimestamp.Time.After(deployments[j].CreationTimestamp.Time)
+		default:
+			less = deployments[i].Name < deployments[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// sortServices sorts services by the specified field and order
+func sortServices(services []v1.Service, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(services, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = services[i].Name < services[j].Name
+		case "namespace":
+			less = services[i].Namespace < services[j].Namespace
+		case "type":
+			less = string(services[i].Spec.Type) < string(services[j].Spec.Type)
+		case "age":
+			less = services[i].CreationTimestamp.Time.After(services[j].CreationTimestamp.Time)
+		default:
+			less = services[i].Name < services[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
 }

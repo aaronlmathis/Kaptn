@@ -272,6 +272,15 @@ func (rm *ResourceManager) ListServices(ctx context.Context, namespace string) (
 	return services.Items, nil
 }
 
+// ListDeployments lists all deployments in a namespace or across all namespaces
+func (rm *ResourceManager) ListDeployments(ctx context.Context, namespace string) ([]appsv1.Deployment, error) {
+	deployments, err := rm.kubeClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return deployments.Items, nil
+}
+
 // ListIngresses lists all ingresses in a namespace
 func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) ([]interface{}, error) {
 	// Try networking.k8s.io/v1 first, then fall back to extensions/v1beta1

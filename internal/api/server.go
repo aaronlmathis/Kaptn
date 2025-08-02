@@ -28,6 +28,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -295,6 +296,7 @@ func (s *Server) setupRoutes() {
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/pods", s.handleListPods)
+			r.Get("/deployments", s.handleListDeployments)
 			r.Get("/overview", s.handleGetOverview)
 			r.Get("/jobs/{jobId}", s.handleGetJob)
 
@@ -758,6 +760,123 @@ func getStatusReason(pod *v1.Pod) *string {
 	}
 
 	return nil
+}
+
+// handleListDeployments handles deployment listing requests
+func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	labelSelector := r.URL.Query().Get("labelSelector")
+	fieldSelector := r.URL.Query().Get("fieldSelector")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get deployments from resource manager
+	deployments, err := s.resourceManager.ListDeployments(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list deployments", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(deployments)
+
+	// Apply filters
+	filterOpts := selectors.DeploymentFilterOptions{
+		Namespace:     namespace,
+		LabelSelector: labelSelector,
+		FieldSelector: fieldSelector,
+		Search:        search,
+		Sort:          sort,
+		Order:         order,
+		Page:          page,
+		PageSize:      pageSize,
+	}
+
+	filteredDeployments, err := selectors.FilterDeployments(deployments, filterOpts)
+	if err != nil {
+		s.logger.Error("Failed to filter deployments", zap.Error(err))
+		http.Error(w, "Failed to filter deployments", http.StatusBadRequest)
+		return
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, deployment := range filteredDeployments {
+		responses = append(responses, s.deploymentToResponse(deployment))
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+// deploymentToResponse converts a Kubernetes deployment to response format
+func (s *Server) deploymentToResponse(deployment appsv1.Deployment) map[string]interface{} {
+	// Calculate age
+	age := s.calculateAge(deployment.CreationTimestamp.Time)
+
+	// Prepare replica counts
+	desired := int32(0)
+	if deployment.Spec.Replicas != nil {
+		desired = *deployment.Spec.Replicas
+	}
+
+	replicas := map[string]int32{
+		"desired":   desired,
+		"ready":     deployment.Status.ReadyReplicas,
+		"updated":   deployment.Status.UpdatedReplicas,
+		"available": deployment.Status.AvailableReplicas,
+	}
+
+	// Convert conditions
+	var conditions []map[string]string
+	for _, condition := range deployment.Status.Conditions {
+		conditions = append(conditions, map[string]string{
+			"type":    string(condition.Type),
+			"status":  string(condition.Status),
+			"reason":  condition.Reason,
+			"message": condition.Message,
+		})
+	}
+
+	return map[string]interface{}{
+		"name":              deployment.Name,
+		"namespace":         deployment.Namespace,
+		"replicas":          replicas,
+		"conditions":        conditions,
+		"age":               age,
+		"labels":            deployment.Labels,
+		"creationTimestamp": deployment.CreationTimestamp.Time,
+	}
 }
 
 // Node action handlers
