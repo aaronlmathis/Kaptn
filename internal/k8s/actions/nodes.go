@@ -313,6 +313,11 @@ func (s *NodeActionsService) GetJob(jobID string) (*JobSafe, bool) {
 	return s.jobTracker.GetJob(jobID)
 }
 
+// ListJobs returns all jobs
+func (s *NodeActionsService) ListJobs() []JobSafe {
+	return s.jobTracker.ListJobs()
+}
+
 // logAudit logs an audit entry
 func (s *NodeActionsService) logAudit(audit *AuditLog) {
 	s.logger.Info("audit_log",

@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/aaronlmathis/k8s-admin-dash/internal/auth"
+	"github.com/aaronlmathis/k8s-admin-dash/internal/metrics"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -33,6 +36,9 @@ type Hub struct {
 
 	// Mutex for thread-safety
 	mu sync.RWMutex
+
+	// Authentication middleware for WebSocket connections
+	authMiddleware *auth.Middleware
 }
 
 // Client represents a WebSocket client
@@ -50,6 +56,9 @@ type Client struct {
 
 	// Room/topic the client is subscribed to
 	room string
+
+	// User information (optional, for authenticated connections)
+	user *auth.User
 }
 
 // Message represents a WebSocket message
@@ -94,6 +103,11 @@ func NewHub(logger *zap.Logger) *Hub {
 	}
 }
 
+// SetAuthMiddleware sets the authentication middleware for WebSocket connections
+func (h *Hub) SetAuthMiddleware(authMiddleware *auth.Middleware) {
+	h.authMiddleware = authMiddleware
+}
+
 // Run starts the hub
 func (h *Hub) Run() {
 	defer h.cancel()
@@ -108,7 +122,18 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			h.logger.Info("Client registered", zap.String("id", client.id), zap.String("room", client.room))
+
+			// Record WebSocket connection metrics
+			metrics.RecordWebSocketConnection(client.room)
+
+			userInfo := "anonymous"
+			if client.user != nil {
+				userInfo = client.user.ID
+			}
+			h.logger.Info("Client registered",
+				zap.String("id", client.id),
+				zap.String("room", client.room),
+				zap.String("user", userInfo))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -117,7 +142,18 @@ func (h *Hub) Run() {
 				close(client.send)
 			}
 			h.mu.Unlock()
-			h.logger.Info("Client unregistered", zap.String("id", client.id), zap.String("room", client.room))
+
+			// Record WebSocket disconnection metrics
+			metrics.RecordWebSocketDisconnection(client.room)
+
+			userInfo := "anonymous"
+			if client.user != nil {
+				userInfo = client.user.ID
+			}
+			h.logger.Info("Client unregistered",
+				zap.String("id", client.id),
+				zap.String("room", client.room),
+				zap.String("user", userInfo))
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
@@ -177,6 +213,44 @@ func (h *Hub) ClientCount() int {
 
 // ServeWS handles websocket requests from the peer
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, room string) {
+	// Perform authentication if middleware is configured
+	var user *auth.User
+	if h.authMiddleware != nil {
+		// Check for authentication token in query parameter or Authorization header
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			// Fallback to Authorization header
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimPrefix(authHeader, "Bearer ")
+			}
+		}
+
+		if token != "" {
+			// Create a temporary request with the token for authentication
+			tempReq := r.Clone(r.Context())
+			tempReq.Header.Set("Authorization", "Bearer "+token)
+
+			// Try to authenticate using the middleware
+			var authenticated bool
+			tempHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if u, ok := auth.UserFromContext(r.Context()); ok && u != nil {
+					user = u
+					authenticated = true
+				}
+			})
+
+			// Apply authentication middleware
+			h.authMiddleware.Authenticate(tempHandler).ServeHTTP(&noopResponseWriter{}, tempReq)
+
+			if !authenticated && token != "" {
+				h.logger.Warn("WebSocket authentication failed", zap.String("room", room))
+				http.Error(w, "Authentication failed", http.StatusUnauthorized)
+				return
+			}
+		}
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.Error("Failed to upgrade connection", zap.Error(err))
@@ -190,6 +264,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, room string) {
 		send: make(chan []byte, 256),
 		id:   clientID,
 		room: room,
+		user: user,
 	}
 
 	client.hub.register <- client
@@ -198,6 +273,21 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, room string) {
 	// new goroutines
 	go client.writePump()
 	go client.readPump()
+}
+
+// noopResponseWriter is a no-op response writer for authentication middleware
+type noopResponseWriter struct{}
+
+func (nw *noopResponseWriter) Header() http.Header {
+	return make(http.Header)
+}
+
+func (nw *noopResponseWriter) Write([]byte) (int, error) {
+	return 0, nil
+}
+
+func (nw *noopResponseWriter) WriteHeader(statusCode int) {
+	// no-op
 }
 
 // readPump pumps messages from the websocket connection to the hub

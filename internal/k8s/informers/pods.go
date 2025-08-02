@@ -1,6 +1,9 @@
 package informers
 
 import (
+	"fmt"
+	"time"
+
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 
@@ -31,9 +34,12 @@ func (h *PodEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 
 	h.logger.Debug("Pod added", zap.String("name", pod.Name), zap.String("namespace", pod.Namespace))
 
-	// Convert to summary and broadcast
+	// Convert to summary and broadcast in Stage 2 format
 	summary := h.podToSummary(pod)
-	h.hub.BroadcastToRoom("pods", "pod_added", summary)
+	h.hub.BroadcastToRoom("pods", "podUpdate", map[string]interface{}{
+		"action": "added",
+		"data":   summary,
+	})
 }
 
 // OnUpdate handles pod update events
@@ -46,9 +52,12 @@ func (h *PodEventHandler) OnUpdate(oldObj, newObj interface{}) {
 
 	h.logger.Debug("Pod updated", zap.String("name", newPod.Name), zap.String("namespace", newPod.Namespace))
 
-	// Convert to summary and broadcast
+	// Convert to summary and broadcast in Stage 2 format
 	summary := h.podToSummary(newPod)
-	h.hub.BroadcastToRoom("pods", "pod_updated", summary)
+	h.hub.BroadcastToRoom("pods", "podUpdate", map[string]interface{}{
+		"action": "modified",
+		"data":   summary,
+	})
 }
 
 // OnDelete handles pod deletion events
@@ -61,29 +70,21 @@ func (h *PodEventHandler) OnDelete(obj interface{}) {
 
 	h.logger.Debug("Pod deleted", zap.String("name", pod.Name), zap.String("namespace", pod.Namespace))
 
-	// Broadcast deletion event
-	h.hub.BroadcastToRoom("pods", "pod_deleted", map[string]string{
-		"name":      pod.Name,
-		"namespace": pod.Namespace,
+	// Broadcast deletion event in Stage 2 format
+	h.hub.BroadcastToRoom("pods", "podUpdate", map[string]interface{}{
+		"action": "deleted",
+		"data": map[string]interface{}{
+			"name":      pod.Name,
+			"namespace": pod.Namespace,
+		},
 	})
 }
 
-// podToSummary converts a pod to a summary representation
+// podToSummary converts a pod to a summary representation matching Stage 2 format
 func (h *PodEventHandler) podToSummary(pod *v1.Pod) map[string]interface{} {
-	// Determine pod status
-	phase := string(pod.Status.Phase)
-	ready := false
-
 	// Check if all containers are ready
 	readyContainers := 0
 	totalContainers := len(pod.Spec.Containers)
-
-	for _, condition := range pod.Status.Conditions {
-		if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
-			ready = true
-			break
-		}
-	}
 
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.Ready {
@@ -91,19 +92,88 @@ func (h *PodEventHandler) podToSummary(pod *v1.Pod) map[string]interface{} {
 		}
 	}
 
+	// Calculate restart count
+	var restartCount int32
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		restartCount += containerStatus.RestartCount
+	}
+
+	// Format ready as "x/y"
+	readyStr := fmt.Sprintf("%d/%d", readyContainers, totalContainers)
+
+	// Calculate age
+	age := calculateAge(pod.CreationTimestamp.Time)
+
+	// Get status reason
+	statusReason := getStatusReason(pod)
+
 	return map[string]interface{}{
-		"name":              pod.Name,
-		"namespace":         pod.Namespace,
-		"phase":             phase,
-		"ready":             ready,
-		"readyContainers":   readyContainers,
-		"totalContainers":   totalContainers,
-		"nodeName":          pod.Spec.NodeName,
+		"name":         pod.Name,
+		"namespace":    pod.Namespace,
+		"phase":        string(pod.Status.Phase),
+		"ready":        readyStr,
+		"restartCount": restartCount,
+		"age":          age,
+		"node":         pod.Spec.NodeName,
+		"cpu": map[string]interface{}{
+			"milli":          0,
+			"ofLimitPercent": nil,
+		},
+		"memory": map[string]interface{}{
+			"bytes":          0,
+			"ofLimitPercent": nil,
+		},
+		"statusReason": statusReason,
+		// Additional fields for compatibility
 		"podIP":             pod.Status.PodIP,
-		"hostIP":            pod.Status.HostIP,
 		"labels":            pod.Labels,
 		"creationTimestamp": pod.CreationTimestamp.Time,
-		"deletionTimestamp": pod.DeletionTimestamp,
-		"restartPolicy":     string(pod.Spec.RestartPolicy),
 	}
+}
+
+// calculateAge calculates a human-readable age string
+func calculateAge(creationTime time.Time) string {
+	duration := time.Since(creationTime)
+
+	days := int(duration.Hours() / 24)
+	if days > 0 {
+		return fmt.Sprintf("%dd", days)
+	}
+
+	hours := int(duration.Hours())
+	if hours > 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+
+	minutes := int(duration.Minutes())
+	if minutes > 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+
+	return fmt.Sprintf("%ds", int(duration.Seconds()))
+}
+
+// getStatusReason gets the reason for a pod's current status
+func getStatusReason(pod *v1.Pod) *string {
+	// Check for container states that indicate issues
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.State.Waiting != nil {
+			reason := containerStatus.State.Waiting.Reason
+			return &reason
+		}
+		if containerStatus.State.Terminated != nil && containerStatus.State.Terminated.Reason != "Completed" {
+			reason := containerStatus.State.Terminated.Reason
+			return &reason
+		}
+	}
+
+	// Check pod conditions for issues
+	for _, condition := range pod.Status.Conditions {
+		if condition.Status == v1.ConditionFalse && condition.Reason != "" {
+			reason := condition.Reason
+			return &reason
+		}
+	}
+
+	return nil
 }
