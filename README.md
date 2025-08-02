@@ -79,7 +79,7 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 │   ├── config/          # Configuration management
 │   ├── logging/         # Structured logging
 │   └── version/         # Version information
-├── web/                 # React frontend application
+├── frontend/                 # React frontend application
 │   ├── src/
 │   │   ├── components/  # React components
 │   │   └── ...

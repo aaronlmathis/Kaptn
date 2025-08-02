@@ -321,8 +321,8 @@ func (s *Server) setupRoutes() {
 		})
 	})
 
-	// Serve static files from web/dist directory
-	filesDir := http.Dir("./web/dist/")
+	// Serve static files from frontend/dist directory
+	filesDir := http.Dir("./frontend/dist/")
 	s.router.Handle("/*", http.FileServer(filesDir))
 }
 
