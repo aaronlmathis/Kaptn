@@ -236,9 +236,9 @@ func (r *websocketReader) start(ctx context.Context) {
 
 // websocketWriter implements io.Writer for WebSocket stdout/stderr
 type websocketWriter struct {
-	conn     *websocket.Conn
-	msgType  string
-	mutex    sync.Mutex
+	conn    *websocket.Conn
+	msgType string
+	mutex   sync.Mutex
 }
 
 func newWebsocketWriter(conn *websocket.Conn, msgType string) *websocketWriter {

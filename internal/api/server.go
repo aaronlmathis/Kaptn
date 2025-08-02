@@ -12,15 +12,23 @@ import (
 	"github.com/acme/kad/internal/config"
 	"github.com/acme/kad/internal/k8s/actions"
 	"github.com/acme/kad/internal/k8s/client"
+	"github.com/acme/kad/internal/k8s/exec"
 	"github.com/acme/kad/internal/k8s/informers"
+	"github.com/acme/kad/internal/k8s/logs"
+	"github.com/acme/kad/internal/k8s/metrics"
+	"github.com/acme/kad/internal/k8s/resources"
 	"github.com/acme/kad/internal/k8s/selectors"
 	"github.com/acme/kad/internal/k8s/ws"
 	"github.com/acme/kad/internal/version"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned"
+	metricsv1beta1typed "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
 
 // Server represents the API server
@@ -33,6 +41,10 @@ type Server struct {
 	wsHub           *ws.Hub
 	actionsService  *actions.NodeActionsService
 	applyService    *actions.ApplyService
+	logsService     *logs.StreamManager
+	execService     *exec.ExecManager
+	metricsService  *metrics.MetricsService
+	resourceManager *resources.ResourceManager
 	authMiddleware  *auth.Middleware
 	oidcClient      *auth.OIDCClient
 }
@@ -88,6 +100,27 @@ func (s *Server) initKubernetesClient() error {
 		factory.DiscoveryClient(),
 		s.logger,
 	)
+
+	// Initialize logs service
+	s.logsService = logs.NewStreamManager(s.logger, s.kubeClient)
+
+	// Initialize exec service
+	s.execService = exec.NewExecManager(s.logger, s.kubeClient, factory.RESTConfig())
+
+	// Initialize metrics service (try to create metrics client, fallback gracefully)
+	var metricsClient *metricsv1beta1.Clientset
+	if metricsClient, err = metricsv1beta1.NewForConfig(factory.RESTConfig()); err != nil {
+		s.logger.Warn("Metrics server not available, metrics will be limited", zap.Error(err))
+	}
+
+	var metricsInterface metricsv1beta1typed.MetricsV1beta1Interface
+	if metricsClient != nil {
+		metricsInterface = metricsClient.MetricsV1beta1()
+	}
+	s.metricsService = metrics.NewMetricsService(s.logger, s.kubeClient, metricsInterface)
+
+	// Initialize resource manager
+	s.resourceManager = resources.NewResourceManager(s.logger, s.kubeClient, factory.DynamicClient())
 
 	// Validate connection
 	if err := factory.ValidateConnection(); err != nil {
@@ -238,9 +271,20 @@ func (s *Server) setupRoutes() {
 			r.Get("/pods", s.handleListPods)
 			r.Get("/jobs/{jobId}", s.handleGetJob)
 
+			// M5: Advanced read-only endpoints
+			r.Get("/metrics", s.handleGetMetrics)
+			r.Get("/metrics/namespace/{namespace}", s.handleGetNamespaceMetrics)
+			r.Get("/namespaces", s.handleListNamespaces)
+			r.Get("/services", s.handleListServices)
+			r.Get("/services/{namespace}", s.handleListServicesInNamespace)
+			r.Get("/ingresses/{namespace}", s.handleListIngresses)
+			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
+			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
+
 			// WebSocket endpoints (require authentication for real-time data)
 			r.Get("/stream/nodes", s.handleNodesWebSocket)
 			r.Get("/stream/pods", s.handlePodsWebSocket)
+			r.Get("/stream/logs/{streamId}", s.handleLogsWebSocket)
 		})
 
 		// Write endpoints (require write permissions)
@@ -254,6 +298,15 @@ func (s *Server) setupRoutes() {
 			r.Post("/nodes/{nodeName}/cordon", s.handleCordonNode)
 			r.Post("/nodes/{nodeName}/uncordon", s.handleUncordonNode)
 			r.Post("/nodes/{nodeName}/drain", s.handleDrainNode)
+
+			// M5: Advanced write endpoints
+			r.Post("/scale", s.handleScaleResource)
+			r.Delete("/resources", s.handleDeleteResource)
+			r.Post("/namespaces", s.handleCreateNamespace)
+			r.Delete("/namespaces/{namespace}", s.handleDeleteNamespace)
+			r.Get("/exec/{sessionId}", s.handleExecWebSocket)
+			r.Post("/logs/stream", s.handleStartLogStream)
+			r.Delete("/logs/stream/{streamId}", s.handleStopLogStream)
 		})
 
 		// Apply endpoints (require write permissions with higher rate limits)
@@ -784,4 +837,459 @@ func (s *Server) handleApplyYAML(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(result)
+}
+
+// M5 Advanced Features Handler Methods
+
+// handleGetMetrics handles cluster metrics requests
+func (s *Server) handleGetMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics, err := s.metricsService.GetClusterMetrics(r.Context())
+	if err != nil {
+		s.logger.Error("Failed to get cluster metrics", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(metrics)
+}
+
+// handleGetNamespaceMetrics handles namespace-specific metrics requests
+func (s *Server) handleGetNamespaceMetrics(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	if namespace == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace is required"})
+		return
+	}
+
+	metrics, err := s.metricsService.GetNamespaceMetrics(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to get namespace metrics",
+			zap.String("namespace", namespace),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(metrics)
+}
+
+// handleListNamespaces handles namespace listing requests
+func (s *Server) handleListNamespaces(w http.ResponseWriter, r *http.Request) {
+	namespaces, err := s.kubeClient.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
+	if err != nil {
+		s.logger.Error("Failed to list namespaces", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(namespaces.Items)
+}
+
+// handleListServices handles service listing requests (all namespaces)
+func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
+	services, err := s.resourceManager.ListServices(r.Context(), "")
+	if err != nil {
+		s.logger.Error("Failed to list services", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(services)
+}
+
+// handleListServicesInNamespace handles service listing requests for a specific namespace
+func (s *Server) handleListServicesInNamespace(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	if namespace == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace is required"})
+		return
+	}
+
+	services, err := s.resourceManager.ListServices(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list services",
+			zap.String("namespace", namespace),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(services)
+}
+
+// handleListIngresses handles ingress listing requests
+func (s *Server) handleListIngresses(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	if namespace == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace is required"})
+		return
+	}
+
+	ingresses, err := s.resourceManager.ListIngresses(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list ingresses",
+			zap.String("namespace", namespace),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(ingresses)
+}
+
+// handleExportResource handles resource export requests
+func (s *Server) handleExportResource(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	kind := chi.URLParam(r, "kind")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || kind == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace, kind, and name are required"})
+		return
+	}
+
+	export, err := s.resourceManager.ExportResource(r.Context(), namespace, name, kind)
+	if err != nil {
+		s.logger.Error("Failed to export resource",
+			zap.String("namespace", namespace),
+			zap.String("kind", kind),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(export)
+}
+
+// handleGetPodLogs handles pod logs retrieval requests
+func (s *Server) handleGetPodLogs(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	podName := chi.URLParam(r, "podName")
+	containerName := r.URL.Query().Get("container")
+
+	if namespace == "" || podName == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace and podName are required"})
+		return
+	}
+
+	var tailLines *int64
+	if tail := r.URL.Query().Get("tailLines"); tail != "" {
+		if lines, err := strconv.ParseInt(tail, 10, 64); err == nil {
+			tailLines = &lines
+		}
+	}
+
+	logs, err := s.resourceManager.GetPodLogs(r.Context(), namespace, podName, containerName, tailLines)
+	if err != nil {
+		s.logger.Error("Failed to get pod logs",
+			zap.String("namespace", namespace),
+			zap.String("pod", podName),
+			zap.String("container", containerName),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(logs))
+}
+
+// handleScaleResource handles resource scaling requests
+func (s *Server) handleScaleResource(w http.ResponseWriter, r *http.Request) {
+	var req resources.ScaleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	err := s.resourceManager.ScaleResource(r.Context(), req)
+	if err != nil {
+		s.logger.Error("Failed to scale resource",
+			zap.String("namespace", req.Namespace),
+			zap.String("name", req.Name),
+			zap.String("kind", req.Kind),
+			zap.Int32("replicas", req.Replicas),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"success": "true"})
+}
+
+// handleDeleteResource handles resource deletion requests
+func (s *Server) handleDeleteResource(w http.ResponseWriter, r *http.Request) {
+	var req resources.DeleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	err := s.resourceManager.DeleteResource(r.Context(), req)
+	if err != nil {
+		s.logger.Error("Failed to delete resource",
+			zap.String("namespace", req.Namespace),
+			zap.String("name", req.Name),
+			zap.String("kind", req.Kind),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"success": "true"})
+}
+
+// handleCreateNamespace handles namespace creation requests
+func (s *Server) handleCreateNamespace(w http.ResponseWriter, r *http.Request) {
+	var req resources.NamespaceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	err := s.resourceManager.CreateNamespace(r.Context(), req)
+	if err != nil {
+		s.logger.Error("Failed to create namespace",
+			zap.String("name", req.Name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{"success": "true"})
+}
+
+// handleDeleteNamespace handles namespace deletion requests
+func (s *Server) handleDeleteNamespace(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	if namespace == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace is required"})
+		return
+	}
+
+	err := s.resourceManager.DeleteNamespace(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to delete namespace",
+			zap.String("namespace", namespace),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"success": "true"})
+}
+
+// handleLogsWebSocket handles log streaming WebSocket connections
+func (s *Server) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
+	streamID := chi.URLParam(r, "streamId")
+	if streamID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("streamId is required"))
+		return
+	}
+
+	// Get the stream
+	stream, exists := s.logsService.GetStream(streamID)
+	if !exists {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("stream not found"))
+		return
+	}
+
+	// Create a simple WebSocket upgrader for logs
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // Allow all origins for now
+		},
+	}
+
+	// Upgrade to WebSocket
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		s.logger.Error("Failed to upgrade log stream connection", zap.Error(err))
+		return
+	}
+	defer conn.Close()
+
+	// Stream logs to WebSocket
+	for {
+		select {
+		case entry := <-stream.Events():
+			if err := conn.WriteJSON(entry); err != nil {
+				s.logger.Error("Failed to write log entry to WebSocket", zap.Error(err))
+				return
+			}
+		case err := <-stream.Errors():
+			s.logger.Error("Log stream error", zap.Error(err))
+			conn.WriteJSON(map[string]string{"error": err.Error()})
+			return
+		case <-stream.Done():
+			return
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+// handleStartLogStream handles log stream initiation requests
+func (s *Server) handleStartLogStream(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		StreamID  string         `json:"streamId"`
+		Namespace string         `json:"namespace"`
+		Pod       string         `json:"pod"`
+		Filter    logs.LogFilter `json:"filter"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	stream, err := s.logsService.StartStream(r.Context(), req.StreamID, req.Namespace, req.Pod, req.Filter)
+	if err != nil {
+		s.logger.Error("Failed to start log stream",
+			zap.String("streamId", req.StreamID),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"streamId": stream.ID,
+		"success":  true,
+	})
+}
+
+// handleStopLogStream handles log stream termination requests
+func (s *Server) handleStopLogStream(w http.ResponseWriter, r *http.Request) {
+	streamID := chi.URLParam(r, "streamId")
+	if streamID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "streamId is required"})
+		return
+	}
+
+	s.logsService.StopStream(streamID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"success": "true"})
+}
+
+// handleExecWebSocket handles pod exec WebSocket connections
+func (s *Server) handleExecWebSocket(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "sessionId")
+	if sessionID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("sessionId is required"))
+		return
+	}
+
+	// Parse exec request from query parameters
+	namespace := r.URL.Query().Get("namespace")
+	pod := r.URL.Query().Get("pod")
+	container := r.URL.Query().Get("container")
+	command := r.URL.Query()["command"] // Support multiple command parameters
+	tty := r.URL.Query().Get("tty") == "true"
+
+	if namespace == "" || pod == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("namespace and pod are required"))
+		return
+	}
+
+	if len(command) == 0 {
+		command = []string{"/bin/sh"} // Default command
+	}
+
+	execReq := exec.ExecRequest{
+		Namespace: namespace,
+		Pod:       pod,
+		Container: container,
+		Command:   command,
+		TTY:       tty,
+	}
+
+	err := s.execService.StartExecSession(w, r, sessionID, execReq)
+	if err != nil {
+		s.logger.Error("Failed to start exec session",
+			zap.String("sessionId", sessionID),
+			zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
 }

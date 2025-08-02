@@ -104,6 +104,11 @@ func (f *Factory) DiscoveryClient() discovery.DiscoveryInterface {
 	return f.discoveryClient
 }
 
+// RESTConfig returns the underlying REST config
+func (f *Factory) RESTConfig() *rest.Config {
+	return f.config
+}
+
 // buildKubeconfigFromPath builds a kubeconfig from the given path
 func buildKubeconfigFromPath(kubeconfigPath string) (*rest.Config, error) {
 	if kubeconfigPath == "" {

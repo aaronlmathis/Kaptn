@@ -13,11 +13,11 @@ import (
 
 // ClusterMetrics represents overall cluster health metrics
 type ClusterMetrics struct {
-	Timestamp       time.Time             `json:"timestamp"`
-	NodeMetrics     []NodeMetrics         `json:"nodeMetrics"`
-	PodMetrics      []PodMetrics          `json:"podMetrics"`
-	ClusterSummary  ClusterSummary        `json:"clusterSummary"`
-	ResourceQuotas  []NamespaceQuota      `json:"resourceQuotas"`
+	Timestamp      time.Time        `json:"timestamp"`
+	NodeMetrics    []NodeMetrics    `json:"nodeMetrics"`
+	PodMetrics     []PodMetrics     `json:"podMetrics"`
+	ClusterSummary ClusterSummary   `json:"clusterSummary"`
+	ResourceQuotas []NamespaceQuota `json:"resourceQuotas"`
 }
 
 // NodeMetrics represents resource usage for a node
@@ -31,12 +31,12 @@ type NodeMetrics struct {
 
 // PodMetrics represents resource usage for a pod
 type PodMetrics struct {
-	Name       string                   `json:"name"`
-	Namespace  string                   `json:"namespace"`
-	Node       string                   `json:"node"`
-	Containers []ContainerMetrics       `json:"containers"`
-	Timestamp  time.Time                `json:"timestamp"`
-	Labels     map[string]string        `json:"labels"`
+	Name       string             `json:"name"`
+	Namespace  string             `json:"namespace"`
+	Node       string             `json:"node"`
+	Containers []ContainerMetrics `json:"containers"`
+	Timestamp  time.Time          `json:"timestamp"`
+	Labels     map[string]string  `json:"labels"`
 }
 
 // ContainerMetrics represents resource usage for a container
@@ -55,18 +55,18 @@ type ResourceUsage struct {
 
 // ClusterSummary provides high-level cluster statistics
 type ClusterSummary struct {
-	TotalNodes      int     `json:"totalNodes"`
-	ReadyNodes      int     `json:"readyNodes"`
-	TotalPods       int     `json:"totalPods"`
-	RunningPods     int     `json:"runningPods"`
-	CPUUtilization  float64 `json:"cpuUtilization"`
+	TotalNodes        int     `json:"totalNodes"`
+	ReadyNodes        int     `json:"readyNodes"`
+	TotalPods         int     `json:"totalPods"`
+	RunningPods       int     `json:"runningPods"`
+	CPUUtilization    float64 `json:"cpuUtilization"`
 	MemoryUtilization float64 `json:"memoryUtilization"`
-	NamespaceCount  int     `json:"namespaceCount"`
+	NamespaceCount    int     `json:"namespaceCount"`
 }
 
 // NamespaceQuota represents resource quotas for a namespace
 type NamespaceQuota struct {
-	Namespace string                     `json:"namespace"`
+	Namespace string                       `json:"namespace"`
 	Quotas    map[string]ResourceQuotaSpec `json:"quotas"`
 }
 

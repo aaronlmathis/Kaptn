@@ -22,29 +22,29 @@ dev: ## Run backend in development mode with hot reload
 	@go run -ldflags "$(LDFLAGS)" ./cmd/server &
 	@echo "Backend PID: $$!"
 	@echo "Starting frontend development server..."
-	@cd web && npm run dev
+	@cd frontend && npm run dev
 
 fmt: ## Format code
 	@echo "Formatting Go code..."
 	@go fmt ./...
-	@echo "Formatting web code..."
-	@cd web && npm run format 2>/dev/null || echo "No format script found"
+	@echo "Formatting frontend code..."
+	@cd frontend && npm run format 2>/dev/null || echo "No format script found"
 
 lint: ## Lint code
 	@echo "Linting Go code..."
 	@go vet ./...
-	@echo "Linting web code..."
-	@cd web && npm run lint 2>/dev/null || echo "No lint script found"
+	@echo "Linting frontend code..."
+	@cd frontend && npm run lint 2>/dev/null || echo "No lint script found"
 
 test: ## Run tests
 	@echo "Running Go tests..."
 	@go test ./... -race -count=1 -v
-	@echo "Running web tests..."
-	@cd web && npm run test 2>/dev/null || echo "No test script found"
+	@echo "Running frontend tests..."
+	@cd frontend && npm run test 2>/dev/null || echo "No test script found"
 
 web: ## Build frontend
 	@echo "Building frontend..."
-	@cd web && npm run build
+	@cd frontend && npm run build
 	@echo "Frontend built successfully"
 
 build: web ## Build backend binary (embeds frontend)
@@ -72,14 +72,14 @@ kind-down: ## Delete Kind cluster
 clean: ## Clean build artifacts
 	@echo "Cleaning build artifacts..."
 	@rm -rf $(BUILD_DIR)
-	@cd web && rm -rf dist node_modules/.vite 2>/dev/null || true
+	@cd frontend && rm -rf dist node_modules/.vite 2>/dev/null || true
 	@echo "Clean complete"
 
 install-deps: ## Install all dependencies
 	@echo "Installing Go dependencies..."
 	@go mod download
-	@echo "Installing web dependencies..."
-	@cd web && npm install
+	@echo "Installing frontend dependencies..."
+	@cd frontend && npm install
 	@echo "Dependencies installed"
 
 help: ## Show this help
