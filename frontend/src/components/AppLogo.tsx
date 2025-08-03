@@ -2,25 +2,51 @@
 import * as React from "react"
 import { SiKubernetes } from "react-icons/si"
 
-export interface AppLogoProps {
-	href?: string
-	className?: string
-}
-
-export const AppLogo: React.FC<AppLogoProps> = ({
-	href = "/",
-	className = "",
-}) => (
-	<div className={`flex items-center ${className}`}>
+export const AppLogo: React.FC = () => (
+	<div
+		className="
+      flex items-center
+      pr-4 py-3
+      group-data-[state=collapsed]:px-0
+      group-data-[state=collapsed]:justify-center
+      transition-padding duration-200
+    "
+	>
 		<a
-			href={href}
+			href="/"
 			className="flex items-center hover:opacity-80 transition-opacity"
 		>
-			<SiKubernetes className="h-8 w-8 text-brand-600 mr-2" />
-			<span className="text-xl font-bold text-gray-900 dark:text-white">
-				DeepThought
+			<SiKubernetes
+				className="
+          h-8 w-8
+          text-primary
+          group-data-[state=collapsed]:mx-auto
+        "
+			/>
+
+			<span
+				className="
+          ml-2
+          text-xl font-bold text-gray-900 dark:text-white 
+          transition-all duration-200 ease-in-out
+          whitespace-nowrap overflow-hidden
+          group-data-[state=collapsed]:w-0
+          group-data-[state=collapsed]:opacity-0
+        "
+			>
+				Kaptain
 			</span>
-			<span className="text-xl font-normal text-brand-600">.sh</span>
+			<span
+				className="
+          text-xl font-normal text-primary 
+          transition-all duration-200 ease-in-out
+          whitespace-nowrap overflow-hidden
+          group-data-[state=collapsed]:w-0
+          group-data-[state=collapsed]:opacity-0
+        "
+			>
+				.dev
+			</span>
 		</a>
 	</div>
 )
