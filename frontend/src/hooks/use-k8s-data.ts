@@ -12,6 +12,7 @@ import {
 	transformDeploymentsToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
+import { useNamespace } from '@/contexts/namespace-context';
 
 interface UseK8sDataResult<T> {
 	data: T[];
@@ -20,15 +21,17 @@ interface UseK8sDataResult<T> {
 	refetch: () => Promise<void>;
 }
 
-export function usePods(namespace?: string): UseK8sDataResult<DashboardPod> {
+export function usePods(): UseK8sDataResult<DashboardPod> {
 	const [data, setData] = useState<DashboardPod[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
 
 	const fetchData = useCallback(async () => {
 		try {
 			setLoading(true);
 			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
 			const pods = await k8sService.getPods(namespace);
 			const transformedPods = transformPodsToUI(pods);
 			setData(transformedPods);
@@ -38,7 +41,7 @@ export function usePods(namespace?: string): UseK8sDataResult<DashboardPod> {
 		} finally {
 			setLoading(false);
 		}
-	}, [namespace]);
+	}, [selectedNamespace]);
 
 	useEffect(() => {
 		fetchData();
@@ -74,15 +77,17 @@ export function useNodes(): UseK8sDataResult<NodeTableRow> {
 	return { data, loading, error, refetch: fetchData };
 }
 
-export function useServices(namespace?: string): UseK8sDataResult<ServiceTableRow> {
+export function useServices(): UseK8sDataResult<ServiceTableRow> {
 	const [data, setData] = useState<ServiceTableRow[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
 
 	const fetchData = useCallback(async () => {
 		try {
 			setLoading(true);
 			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
 			const services = await k8sService.getServices(namespace);
 			const transformedServices = transformServicesToUI(services);
 			setData(transformedServices);
@@ -92,7 +97,7 @@ export function useServices(namespace?: string): UseK8sDataResult<ServiceTableRo
 		} finally {
 			setLoading(false);
 		}
-	}, [namespace]);
+	}, [selectedNamespace]);
 
 	useEffect(() => {
 		fetchData();
@@ -101,15 +106,17 @@ export function useServices(namespace?: string): UseK8sDataResult<ServiceTableRo
 	return { data, loading, error, refetch: fetchData };
 }
 
-export function useDeployments(namespace?: string): UseK8sDataResult<DashboardDeployment> {
+export function useDeployments(): UseK8sDataResult<DashboardDeployment> {
 	const [data, setData] = useState<DashboardDeployment[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
 
 	const fetchData = useCallback(async () => {
 		try {
 			setLoading(true);
 			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
 			const deployments = await k8sService.getDeployments(namespace);
 			const transformedDeployments = transformDeploymentsToUI(deployments);
 			setData(transformedDeployments);
@@ -119,7 +126,7 @@ export function useDeployments(namespace?: string): UseK8sDataResult<DashboardDe
 		} finally {
 			setLoading(false);
 		}
-	}, [namespace]);
+	}, [selectedNamespace]);
 
 	useEffect(() => {
 		fetchData();

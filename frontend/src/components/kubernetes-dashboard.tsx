@@ -57,6 +57,7 @@ import { z } from "zod"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { usePods, useNodes, useServices, useDeployments } from "@/hooks/use-k8s-data"
+import { useNamespace } from "@/contexts/namespace-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -749,6 +750,8 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 }
 
 export function KubernetesDashboard() {
+	const { selectedNamespace } = useNamespace()
+	
 	// Fetch live data using hooks
 	const { data: podsData, loading: podsLoading, error: podsError, refetch: refetchPods } = usePods()
 	const { data: nodesData, loading: nodesLoading, error: nodesError, refetch: refetchNodes } = useNodes()
@@ -757,6 +760,9 @@ export function KubernetesDashboard() {
 
 	// Tab state management
 	const [activeTab, setActiveTab] = React.useState("pods")
+
+	// Check if we should show namespace columns
+	const showNamespaceColumn = selectedNamespace === 'all'
 
 	// Get current data and columns based on active tab
 	const getCurrentData = () => {
@@ -777,7 +783,9 @@ export function KubernetesDashboard() {
 	const [data, setData] = React.useState<any[]>(() => currentData.data)
 	const [rowSelection, setRowSelection] = React.useState({})
 	const [columnVisibility, setColumnVisibility] =
-		React.useState<VisibilityState>({})
+		React.useState<VisibilityState>({
+			namespace: showNamespaceColumn
+		})
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
 		[]
 	)
@@ -795,7 +803,11 @@ export function KubernetesDashboard() {
 		setColumnFilters([])
 		setSorting([])
 		setPagination({ pageIndex: 0, pageSize: 10 })
-	}, [currentData.data, activeTab])
+		// Update namespace column visibility
+		setColumnVisibility({
+			namespace: showNamespaceColumn
+		})
+	}, [currentData.data, activeTab, showNamespaceColumn])
 	const sortableId = React.useId()
 	const sensors = useSensors(
 		useSensor(MouseSensor, {}),
@@ -948,8 +960,8 @@ export function KubernetesDashboard() {
 								})}
 						</DropdownMenuContent>
 					</DropdownMenu>
-					<Button variant="outline" size="sm" onClick={refetchPods} disabled={podsLoading}>
-						<IconRefresh className={podsLoading ? "animate-spin" : ""} />
+					<Button variant="outline" size="sm" onClick={currentData.refetch} disabled={currentData.loading}>
+						<IconRefresh className={currentData.loading ? "animate-spin" : ""} />
 						<span className="hidden lg:inline">Refresh</span>
 					</Button>
 				</div>
