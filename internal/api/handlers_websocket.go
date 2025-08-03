@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/exec"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // WebSocket handlers
@@ -75,6 +78,74 @@ func (s *Server) handleExecWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement exec WebSocket handler
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	podName := r.URL.Query().Get("pod")
+	containerName := r.URL.Query().Get("container")
+	commandStr := r.URL.Query().Get("command")
+	ttyStr := r.URL.Query().Get("tty")
+
+	if namespace == "" || podName == "" {
+		http.Error(w, "namespace and pod are required", http.StatusBadRequest)
+		return
+	}
+
+	// Default container name if not specified or auto-detect first container
+	if containerName == "" {
+		// Try to get the first container from the pod
+		pod, err := s.kubeClient.CoreV1().Pods(namespace).Get(r.Context(), podName, metav1.GetOptions{})
+		if err != nil {
+			s.logger.Error("Failed to get pod for container detection",
+				zap.String("namespace", namespace),
+				zap.String("pod", podName),
+				zap.Error(err))
+			http.Error(w, "Failed to get pod information for container detection", http.StatusInternalServerError)
+			return
+		} else if len(pod.Spec.Containers) > 0 {
+			containerName = pod.Spec.Containers[0].Name // use first container
+			s.logger.Info("Auto-detected container",
+				zap.String("pod", podName),
+				zap.String("container", containerName))
+		} else {
+			s.logger.Error("Pod has no containers",
+				zap.String("namespace", namespace),
+				zap.String("pod", podName))
+			http.Error(w, "Pod has no containers", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Default command if not specified - try multiple shell options
+	command := []string{"/bin/sh"}
+	if commandStr != "" {
+		command = []string{commandStr}
+	} else {
+		// Let the exec service handle shell detection
+		command = []string{}
+	}
+
+	// Parse TTY parameter
+	tty := ttyStr == "true"
+
+	// Create exec request
+	execReq := exec.ExecRequest{
+		Namespace: namespace,
+		Pod:       podName,
+		Container: containerName,
+		Command:   command,
+		TTY:       tty,
+	}
+
+	// Start exec session
+	err := s.execService.StartExecSession(w, r, sessionID, execReq)
+	if err != nil {
+		s.logger.Error("Failed to start exec session",
+			zap.String("sessionID", sessionID),
+			zap.String("namespace", namespace),
+			zap.String("pod", podName),
+			zap.String("container", containerName),
+			zap.Error(err))
+		http.Error(w, "Failed to start exec session", http.StatusInternalServerError)
+		return
+	}
 }

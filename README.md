@@ -1,6 +1,5 @@
 # Kaptain
 
-[![CI](https://github.com/aaronlmathis/k8s-admin-dash/workflows/CI/badge.svg)](https://github.com/aaronlmathis/k8s-admin-dash/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/aaronlmathis/k8s-admin-dash)](https://goreportcard.com/report/github.com/aaronlmathis/k8s-admin-dash)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,6 +22,10 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 **Edit YAML / Pod Details**
 
 ![Kubernetes Admin - Edit YAML / Pod Details](images/Kaptain_Edit_YAML.png)
+
+**Cloud Shell Exec**
+
+![Kubernetes Admin - Cloud Shell Exec](images/Kaptain_Shell_Exec.png)
 
 
 ---

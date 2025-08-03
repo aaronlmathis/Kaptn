@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { IconTerminal, IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconX } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useShell } from "@/hooks/use-shell"
 import {
 	Drawer,
 	DrawerClose,
@@ -66,9 +67,23 @@ interface PodDetailDrawerProps {
  */
 export function PodDetailDrawer({ item, open, onOpenChange }: PodDetailDrawerProps) {
 	const isMobile = useIsMobile()
+	const { openShell } = useShell()
 
 	// Fetch detailed pod information
 	const { data: podDetails, loading, error } = usePodDetails(item.namespace, item.name, open)
+
+	const handleExecShell = () => {
+		// Let the backend auto-detect the first container
+		// Or use the first container from pod details if available
+		let containerName = undefined
+		if (podDetails?.spec?.containers && podDetails.spec.containers.length > 0) {
+			containerName = podDetails.spec.containers[0].name
+		}
+
+		openShell(item.name, item.namespace, containerName)
+		// Optionally close the detail drawer
+		onOpenChange(false)
+	}
 
 	// Basic rows from summary data (available immediately)
 	const basicRows: Array<[string, React.ReactNode]> = [
@@ -154,7 +169,7 @@ export function PodDetailDrawer({ item, open, onOpenChange }: PodDetailDrawerPro
 
 	const actions = (
 		<>
-			<Button size="sm" className="w-full">
+			<Button size="sm" className="w-full" onClick={handleExecShell}>
 				<IconTerminal className="size-4 mr-2" />
 				Exec Shell
 			</Button>
