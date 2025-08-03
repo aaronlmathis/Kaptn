@@ -131,12 +131,12 @@ export function PodDetailDrawer({ item, open, onOpenChange }: PodDetailDrawerPro
 			if (readyCondition) {
 				additionalRows.push(["Ready Condition", (
 					<div className="flex items-center gap-2">
-						<Badge 
-							variant="outline" 
-							className={`px-1.5 ${readyCondition.status === 'True' 
-								? 'text-green-600 border-border bg-transparent' 
+						<Badge
+							variant="outline"
+							className={`px-1.5 ${readyCondition.status === 'True'
+								? 'text-green-600 border-border bg-transparent'
 								: 'text-red-600 border-border bg-transparent'
-							}`}
+								}`}
 						>
 							{readyCondition.status === 'True' ? 'Ready' : 'Not Ready'}
 						</Badge>

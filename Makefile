@@ -13,7 +13,7 @@ LDFLAGS := -X github.com/aaronlmathis/k8s-admin-dash/internal/version.Version=$(
            -X github.com/aaronlmathis/k8s-admin-dash/internal/version.GitCommit=$(GIT_COMMIT) \
            -X github.com/aaronlmathis/k8s-admin-dash/internal/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: all dev fmt lint test web build docker kind-up kind-down clean help
+.PHONY: all dev fmt lint test frontend build docker kind-up kind-down clean help
 
 all: build ## Build everything
 

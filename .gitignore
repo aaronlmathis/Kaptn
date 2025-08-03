@@ -392,3 +392,4 @@ prompts/
 .vscode/
 scripts/
 config.yaml
+docs/

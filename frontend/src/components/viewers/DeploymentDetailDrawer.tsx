@@ -87,12 +87,12 @@ export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentD
 			if (availableCondition) {
 				additionalRows.push(["Available Condition", (
 					<div className="flex items-center gap-2">
-						<Badge 
-							variant="outline" 
-							className={`px-1.5 ${availableCondition.status === 'True' 
-								? 'text-green-600 border-border bg-transparent' 
+						<Badge
+							variant="outline"
+							className={`px-1.5 ${availableCondition.status === 'True'
+								? 'text-green-600 border-border bg-transparent'
 								: 'text-red-600 border-border bg-transparent'
-							}`}
+								}`}
 						>
 							{availableCondition.status === 'True' ? 'Available' : 'Not Available'}
 						</Badge>
@@ -105,12 +105,12 @@ export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentD
 			if (progressingCondition) {
 				additionalRows.push(["Progressing Condition", (
 					<div className="flex items-center gap-2">
-						<Badge 
-							variant="outline" 
-							className={`px-1.5 ${progressingCondition.status === 'True' 
-								? 'text-green-600 border-border bg-transparent' 
+						<Badge
+							variant="outline"
+							className={`px-1.5 ${progressingCondition.status === 'True'
+								? 'text-green-600 border-border bg-transparent'
 								: 'text-red-600 border-border bg-transparent'
-							}`}
+								}`}
 						>
 							{progressingCondition.status === 'True' ? 'Progressing' : 'Not Progressing'}
 						</Badge>
