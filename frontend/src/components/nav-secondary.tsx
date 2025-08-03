@@ -39,7 +39,7 @@ export function NavSecondary({
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton tooltip={item.title} asChild>
-                <a 
+                <a
                   href={item.url}
                   onClick={(e) => {
                     e.preventDefault()

@@ -38,6 +38,7 @@ import {
 	IconEye,
 	IconX,
 } from "@tabler/icons-react"
+import { PodYamlEditor } from "@/components/PodYamlEditor"
 import {
 	flexRender,
 	getCoreRowModel,
@@ -1631,10 +1632,15 @@ export function PodDetailViewer({ item }: { item: z.infer<typeof podSchema> }) {
 						<IconTerminal className="size-4 mr-2" />
 						Exec Shell
 					</Button>
-					<Button variant="outline" size="sm" className="w-full">
-						<IconEdit className="size-4 mr-2" />
-						Edit YAML
-					</Button>
+					<PodYamlEditor
+						podName={item.name}
+						namespace={item.namespace}
+					>
+						<Button variant="outline" size="sm" className="w-full">
+							<IconEdit className="size-4 mr-2" />
+							Edit YAML
+						</Button>
+					</PodYamlEditor>
 					<DrawerClose asChild>
 						<Button variant="outline" size="sm" className="w-full">
 							Close

@@ -258,8 +258,9 @@ export class K8sService {
 	}
 
 	// Export operations
-	async exportResource(namespace: string, kind: string, name: string): Promise<string> {
-		return apiClient.get<string>(`/export/${namespace}/${kind}/${name}`);
+	async exportResource(namespace: string, kind: string, name: string): Promise<any> {
+		const response = await apiClient.get<any>(`/export/${namespace}/${kind}/${name}`);
+		return response;
 	}
 
 	// Overview operations
@@ -369,7 +370,10 @@ function formatPorts(ports?: Array<{ port: number; protocol: string; targetPort?
 	return `${Math.round(mi / 1024)}Gi`;
 }
 
-function getImageFromLabels(labels: Record<string, string>): string {
+function getImageFromLabels(labels: Record<string, string> | null | undefined): string {
+	// Handle null or undefined labels
+	if (!labels) return 'Unknown';
+
 	// Try to infer image from common labels
 	if (labels.app) return labels.app;
 	if (labels['k8s-app']) return labels['k8s-app'];

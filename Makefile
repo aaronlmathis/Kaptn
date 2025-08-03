@@ -80,7 +80,7 @@ frontend: ## Build frontend
 	@cd frontend && npm run build
 	@echo "Frontend built successfully"
 
-build: web ## Build backend binary (embeds frontend)
+build: frontend ## Build backend binary (embeds frontend)
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server

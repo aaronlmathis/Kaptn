@@ -52,7 +52,7 @@ export function NavMain({
           >
             <SidebarMenuItem>
               <CollapsibleTrigger asChild>
-                <SidebarMenuButton 
+                <SidebarMenuButton
                   tooltip={item.title}
                   onClick={() => item.url !== '#' && handleNavigation(item.url)}
                 >
@@ -66,7 +66,7 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton asChild>
-                        <a 
+                        <a
                           href={subItem.url}
                           onClick={(e) => {
                             e.preventDefault()

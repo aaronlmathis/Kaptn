@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -224,31 +225,51 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		if err != nil {
 			return nil, err
 		}
-		obj = rm.stripManagedFields(rm.convertToUnstructured(pod))
+		unstructuredPod := rm.convertToUnstructured(pod)
+		if unstructuredPod == nil {
+			return nil, fmt.Errorf("failed to convert Pod to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredPod)
 	case "Deployment":
 		deployment, err := rm.kubeClient.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
-		obj = rm.stripManagedFields(rm.convertToUnstructured(deployment))
+		unstructuredDeployment := rm.convertToUnstructured(deployment)
+		if unstructuredDeployment == nil {
+			return nil, fmt.Errorf("failed to convert Deployment to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredDeployment)
 	case "Service":
 		service, err := rm.kubeClient.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
-		obj = rm.stripManagedFields(rm.convertToUnstructured(service))
+		unstructuredService := rm.convertToUnstructured(service)
+		if unstructuredService == nil {
+			return nil, fmt.Errorf("failed to convert Service to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredService)
 	case "ConfigMap":
 		configMap, err := rm.kubeClient.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
-		obj = rm.stripManagedFields(rm.convertToUnstructured(configMap))
+		unstructuredConfigMap := rm.convertToUnstructured(configMap)
+		if unstructuredConfigMap == nil {
+			return nil, fmt.Errorf("failed to convert ConfigMap to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredConfigMap)
 	case "Secret":
 		secret, err := rm.kubeClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
-		obj = rm.stripManagedFields(rm.convertToUnstructured(secret))
+		unstructuredSecret := rm.convertToUnstructured(secret)
+		if unstructuredSecret == nil {
+			return nil, fmt.Errorf("failed to convert Secret to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredSecret)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -352,50 +373,34 @@ func (rm *ResourceManager) stripManagedFields(obj *unstructured.Unstructured) *u
 	return obj
 }
 
-// convertToUnstructured converts a typed object to unstructured
+// convertToUnstructured converts a typed object to unstructured using the proper runtime converter
 func (rm *ResourceManager) convertToUnstructured(obj interface{}) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{}
-	u.Object = make(map[string]interface{})
-
-	// This is a simplified conversion - in practice you'd use runtime.DefaultUnstructuredConverter
-	switch v := obj.(type) {
-	case *v1.Pod:
-		u.SetAPIVersion("v1")
-		u.SetKind("Pod")
-		u.SetNamespace(v.Namespace)
-		u.SetName(v.Name)
-		u.Object["metadata"] = v.ObjectMeta
-		u.Object["spec"] = v.Spec
-	case *appsv1.Deployment:
-		u.SetAPIVersion("apps/v1")
-		u.SetKind("Deployment")
-		u.SetNamespace(v.Namespace)
-		u.SetName(v.Name)
-		u.Object["metadata"] = v.ObjectMeta
-		u.Object["spec"] = v.Spec
-	case *v1.Service:
-		u.SetAPIVersion("v1")
-		u.SetKind("Service")
-		u.SetNamespace(v.Namespace)
-		u.SetName(v.Name)
-		u.Object["metadata"] = v.ObjectMeta
-		u.Object["spec"] = v.Spec
-	case *v1.ConfigMap:
-		u.SetAPIVersion("v1")
-		u.SetKind("ConfigMap")
-		u.SetNamespace(v.Namespace)
-		u.SetName(v.Name)
-		u.Object["metadata"] = v.ObjectMeta
-		u.Object["data"] = v.Data
-	case *v1.Secret:
-		u.SetAPIVersion("v1")
-		u.SetKind("Secret")
-		u.SetNamespace(v.Namespace)
-		u.SetName(v.Name)
-		u.Object["metadata"] = v.ObjectMeta
-		u.Object["data"] = v.Data
-		u.Object["type"] = v.Type
+	unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		rm.logger.Error("Failed to convert object to unstructured", zap.Error(err))
+		return nil
 	}
 
-	return u
+	result := &unstructured.Unstructured{Object: unstructuredObj}
+
+	// Manually set apiVersion and kind as they are stripped by the converter
+	switch obj.(type) {
+	case *v1.Pod:
+		result.SetAPIVersion("v1")
+		result.SetKind("Pod")
+	case *appsv1.Deployment:
+		result.SetAPIVersion("apps/v1")
+		result.SetKind("Deployment")
+	case *v1.Service:
+		result.SetAPIVersion("v1")
+		result.SetKind("Service")
+	case *v1.ConfigMap:
+		result.SetAPIVersion("v1")
+		result.SetKind("ConfigMap")
+	case *v1.Secret:
+		result.SetAPIVersion("v1")
+		result.SetKind("Secret")
+	}
+
+	return result
 }
