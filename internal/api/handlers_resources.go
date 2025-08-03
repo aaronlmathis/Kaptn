@@ -484,3 +484,122 @@ func (s *Server) handleGetOverview(w http.ResponseWriter, r *http.Request) {
 		"status": "success",
 	})
 }
+
+// Individual resource handlers
+
+func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get pod from Kubernetes API
+	pod, err := s.kubeClient.CoreV1().Pods(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get pod",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Get pod metrics for enrichment
+	podMetricsMap := make(map[string]map[string]interface{})
+	if metrics, err := s.metricsService.GetClusterMetrics(r.Context()); err == nil {
+		for _, podMetric := range metrics.PodMetrics {
+			key := podMetric.Namespace + "/" + podMetric.Name
+			if key == namespace+"/"+name {
+				podMetricsMap[key] = map[string]interface{}{
+					"cpu":    calculatePodCPUUsage(podMetric),
+					"memory": calculatePodMemoryUsage(podMetric),
+				}
+				break
+			}
+		}
+	}
+
+	// Convert to enhanced summary with full details
+	summary := s.enhancedPodToSummary(pod, podMetricsMap)
+
+	// Add full pod spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       pod.Spec,
+		"status":     pod.Status,
+		"metadata":   pod.ObjectMeta,
+		"kind":       "Pod",
+		"apiVersion": "v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleGetDeployment(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get deployment from Kubernetes API
+	deployment, err := s.kubeClient.AppsV1().Deployments(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get deployment",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.deploymentToResponse(*deployment)
+
+	// Add full deployment spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       deployment.Spec,
+		"status":     deployment.Status,
+		"metadata":   deployment.ObjectMeta,
+		"kind":       "Deployment",
+		"apiVersion": "apps/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}

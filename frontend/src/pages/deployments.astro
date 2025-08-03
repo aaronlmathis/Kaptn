@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { DeploymentsPageContainer } from "@/components/pages/DeploymentsPageContainer";
+
+const title = "Deployments";
+---
+
+<Layout title={title}>
+	<DeploymentsPageContainer client:load />
+</Layout>

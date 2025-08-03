@@ -349,7 +349,9 @@ func (s *Server) setupRoutes() {
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/pods", s.handleListPods)
+			r.Get("/pods/{namespace}/{name}", s.handleGetPod)
 			r.Get("/deployments", s.handleListDeployments)
+			r.Get("/deployments/{namespace}/{name}", s.handleGetDeployment)
 			r.Get("/overview", s.handleGetOverview)
 			r.Get("/jobs", s.handleListJobs)
 			r.Get("/jobs/{jobId}", s.handleGetJob)

@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { PodsPageContainer } from "@/components/pages/PodsPageContainer";
+
+const title = "Pods";
+---
+
+<Layout title={title}>
+	<PodsPageContainer client:load />
+</Layout>

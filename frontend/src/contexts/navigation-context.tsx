@@ -10,8 +10,11 @@ export interface BreadcrumbItem {
 export interface NavigationContextValue {
 	currentPath: string
 	breadcrumbs: BreadcrumbItem[]
+	expandedMenus: Record<string, boolean>
 	setCurrentPath: (path: string) => void
 	setBreadcrumbs: (breadcrumbs: BreadcrumbItem[]) => void
+	setMenuExpanded: (menuTitle: string, expanded: boolean) => void
+	isMenuExpanded: (menuTitle: string) => boolean
 }
 
 const NavigationContext = createContext<NavigationContextValue | undefined>(undefined)
@@ -55,6 +58,40 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		{ title: 'Kubernetes Admin', url: '/' },
 		{ title: 'Dashboard' }
 	])
+	const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({})
+
+	// Load expanded menu state from localStorage
+	useEffect(() => {
+		if (typeof window !== 'undefined') {
+			const savedExpandedMenus = localStorage.getItem('expandedMenus')
+			if (savedExpandedMenus) {
+				try {
+					setExpandedMenus(JSON.parse(savedExpandedMenus))
+				} catch (error) {
+					console.warn('Failed to parse saved menu state:', error)
+				}
+			}
+		}
+	}, [])
+
+	// Save expanded menu state to localStorage
+	useEffect(() => {
+		if (typeof window !== 'undefined') {
+			localStorage.setItem('expandedMenus', JSON.stringify(expandedMenus))
+		}
+	}, [expandedMenus])
+
+	// Menu state management functions
+	const setMenuExpanded = (menuTitle: string, expanded: boolean) => {
+		setExpandedMenus(prev => ({
+			...prev,
+			[menuTitle]: expanded
+		}))
+	}
+
+	const isMenuExpanded = (menuTitle: string): boolean => {
+		return expandedMenus[menuTitle] ?? false
+	}
 
 	// Update breadcrumbs when path changes
 	useEffect(() => {
@@ -80,11 +117,25 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		}
 	}, [])
 
+	// Enhanced setCurrentPath that actually navigates
+	const enhancedSetCurrentPath = (path: string) => {
+		setCurrentPath(path)
+		// Actually navigate to the new path
+		if (typeof window !== 'undefined' && window.location.pathname !== path) {
+			window.history.pushState({}, '', path)
+			// Trigger a page load for Astro routing
+			window.location.href = path
+		}
+	}
+
 	const contextValue: NavigationContextValue = {
 		currentPath,
 		breadcrumbs,
-		setCurrentPath,
+		expandedMenus,
+		setCurrentPath: enhancedSetCurrentPath,
 		setBreadcrumbs,
+		setMenuExpanded,
+		isMenuExpanded,
 	}
 
 	return (
