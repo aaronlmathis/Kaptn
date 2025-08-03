@@ -33,11 +33,7 @@ export function NavMain({
     }[]
   }[]
 }) {
-  const { setCurrentPath, setMenuExpanded, isMenuExpanded } = useNavigation()
-
-  const handleNavigation = (url: string) => {
-    setCurrentPath(url)
-  }
+  const { setMenuExpanded, isMenuExpanded } = useNavigation()
 
   const handleMenuToggle = (menuTitle: string, currentState: boolean) => {
     setMenuExpanded(menuTitle, !currentState)
@@ -48,6 +44,21 @@ export function NavMain({
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
+          // If item has no subitems and a real URL, render as a simple navigation link
+          if (!item.items || item.items.length === 0) {
+            return (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton tooltip={item.title} asChild>
+                  <a href={item.url}>
+                    {item.icon && <item.icon />}
+                    <span>{item.title}</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          }
+
+          // If item has subitems, render as collapsible
           const isExpanded = isMenuExpanded(item.title)
 
           return (
@@ -60,10 +71,7 @@ export function NavMain({
             >
               <SidebarMenuItem>
                 <CollapsibleTrigger asChild>
-                  <SidebarMenuButton
-                    tooltip={item.title}
-                    onClick={() => item.url !== '#' && handleNavigation(item.url)}
-                  >
+                  <SidebarMenuButton tooltip={item.title}>
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
                     <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
@@ -71,16 +79,10 @@ export function NavMain({
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <SidebarMenuSub>
-                    {item.items?.map((subItem) => (
+                    {item.items.map((subItem) => (
                       <SidebarMenuSubItem key={subItem.title}>
                         <SidebarMenuSubButton asChild>
-                          <a
-                            href={subItem.url}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              handleNavigation(subItem.url)
-                            }}
-                          >
+                          <a href={subItem.url}>
                             <span>{subItem.title}</span>
                           </a>
                         </SidebarMenuSubButton>

@@ -11,8 +11,6 @@ export interface NavigationContextValue {
 	currentPath: string
 	breadcrumbs: BreadcrumbItem[]
 	expandedMenus: Record<string, boolean>
-	setCurrentPath: (path: string) => void
-	setBreadcrumbs: (breadcrumbs: BreadcrumbItem[]) => void
 	setMenuExpanded: (menuTitle: string, expanded: boolean) => void
 	isMenuExpanded: (menuTitle: string) => boolean
 }
@@ -93,47 +91,59 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		return expandedMenus[menuTitle] ?? false
 	}
 
-	// Update breadcrumbs when path changes
-	useEffect(() => {
-		const newBreadcrumbs = navigationMap[currentPath] || [
+	// Generate breadcrumbs based on current URL path
+	const generateBreadcrumbs = (path: string): BreadcrumbItem[] => {
+		return navigationMap[path] || [
 			{ title: 'Kubernetes Admin', url: '/' },
 			{ title: 'Dashboard' }
 		]
+	}
+
+	// Update breadcrumbs when path changes
+	useEffect(() => {
+		const newBreadcrumbs = generateBreadcrumbs(currentPath)
 		setBreadcrumbs(newBreadcrumbs)
 	}, [currentPath])
 
-	// Initialize with current browser path
+	// Initialize with current browser path and listen for changes
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
-			setCurrentPath(window.location.pathname)
-
-			// Listen for navigation changes (for SPA-like behavior)
-			const handlePopState = () => {
+			const updatePath = () => {
 				setCurrentPath(window.location.pathname)
 			}
 
-			window.addEventListener('popstate', handlePopState)
-			return () => window.removeEventListener('popstate', handlePopState)
+			// Set initial path
+			updatePath()
+
+			// Listen for navigation changes
+			window.addEventListener('popstate', updatePath)
+
+			// Listen for pushstate/replacestate (for SPA navigation)
+			const originalPushState = window.history.pushState
+			const originalReplaceState = window.history.replaceState
+
+			window.history.pushState = function (...args) {
+				originalPushState.apply(window.history, args)
+				updatePath()
+			}
+
+			window.history.replaceState = function (...args) {
+				originalReplaceState.apply(window.history, args)
+				updatePath()
+			}
+
+			return () => {
+				window.removeEventListener('popstate', updatePath)
+				window.history.pushState = originalPushState
+				window.history.replaceState = originalReplaceState
+			}
 		}
 	}, [])
-
-	// Enhanced setCurrentPath that actually navigates
-	const enhancedSetCurrentPath = (path: string) => {
-		setCurrentPath(path)
-		// Actually navigate to the new path
-		if (typeof window !== 'undefined' && window.location.pathname !== path) {
-			window.history.pushState({}, '', path)
-			// Trigger a page load for Astro routing
-			window.location.href = path
-		}
-	}
 
 	const contextValue: NavigationContextValue = {
 		currentPath,
 		breadcrumbs,
 		expandedMenus,
-		setCurrentPath: enhancedSetCurrentPath,
-		setBreadcrumbs,
 		setMenuExpanded,
 		isMenuExpanded,
 	}

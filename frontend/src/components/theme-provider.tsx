@@ -47,17 +47,28 @@ export function ThemeProvider({
 	useEffect(() => {
 		const root = window.document.documentElement
 
-		root.classList.remove("light", "dark")
+		// Don't remove classes if they're already correct to prevent flash
+		const currentHasLight = root.classList.contains("light")
+		const currentHasDark = root.classList.contains("dark")
 
+		let targetTheme: string
 		if (theme === "system") {
-			const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-				.matches
-				? "dark"
-				: "light"
+			targetTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+		} else {
+			targetTheme = theme
+		}
 
-			root.classList.add(systemTheme)
+		// Only update classes if they need to change
+		if (
+			(targetTheme === "dark" && !currentHasDark) ||
+			(targetTheme === "light" && !currentHasLight)
+		) {
+			root.classList.remove("light", "dark")
+			root.classList.add(targetTheme)
+		}
 
-			// Listen for system theme changes
+		// Listen for system theme changes when using system theme
+		if (theme === "system") {
 			const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
 			const handleChange = () => {
 				root.classList.remove("light", "dark")
@@ -67,8 +78,6 @@ export function ThemeProvider({
 			mediaQuery.addEventListener("change", handleChange)
 			return () => mediaQuery.removeEventListener("change", handleChange)
 		}
-
-		root.classList.add(theme)
 	}, [theme])
 
 	const value = {
