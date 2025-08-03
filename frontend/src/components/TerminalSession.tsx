@@ -18,6 +18,19 @@ interface ExecMessage {
 	rows?: number
 }
 
+// Function to clean ANSI escape sequences and control characters
+const cleanTerminalOutput = (text: string): string => {
+	// Remove ANSI escape sequences (colors, cursor movements, etc.)
+	// eslint-disable-next-line no-control-regex
+	return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+		// Remove other control characters except newline, carriage return, and tab
+		// eslint-disable-next-line no-control-regex
+		.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+		// Handle carriage returns properly (move cursor to beginning of line)
+		.replace(/\r\n/g, '\n')
+		.replace(/\r/g, '\n')
+}
+
 export function TerminalSession({ pod, container, namespace, tabId }: TerminalSessionProps) {
 	const [isConnected, setIsConnected] = useState(false)
 	const [error, setError] = useState<string | null>(null)
@@ -25,9 +38,32 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 	const [input, setInput] = useState('')
 	const wsRef = useRef<WebSocket | null>(null)
 	const terminalRef = useRef<HTMLDivElement>(null)
+	const inputRef = useRef<HTMLInputElement>(null)
+	const outputBufferRef = useRef<string>('')
 	const { updateTabStatus } = useShell()
 
+	// Debounced output update to prevent too many renders
+	const flushOutputBuffer = useCallback(() => {
+		if (outputBufferRef.current) {
+			const cleanedData = cleanTerminalOutput(outputBufferRef.current)
+			if (cleanedData.trim()) {
+				setOutput(prev => {
+					// Split by lines and add each as a separate entry
+					const lines = cleanedData.split('\n')
+					const newLines = lines.filter(line => line.length > 0 || prev.length === 0)
+					return [...prev, ...newLines]
+				})
+			}
+			outputBufferRef.current = ''
+		}
+	}, [])
+
+	const debouncedFlushRef = useRef<number | null>(null)
+
 	const connect = useCallback(() => {
+		console.log('=== Starting shell connection ===')
+		console.log('Pod:', pod, 'Container:', container, 'Namespace:', namespace, 'TabId:', tabId)
+
 		try {
 			setError(null)
 			updateTabStatus(tabId, 'connecting')
@@ -38,59 +74,89 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 			// Use the same host as the current page (for production) but backend port for development
 			const isDev = window.location.port === '4321' || window.location.port === '4322'
 			const host = isDev ? `${window.location.hostname}:8080` : window.location.host
-			const wsUrl = `${protocol}//${host}/api/v1/exec/${sessionId}?namespace=${namespace}&pod=${pod}&container=${container}&command=/bin/sh&tty=true`
 
-			console.log('Connecting to WebSocket:', wsUrl)
+			// If no container specified, let backend auto-detect (pass empty string)
+			const containerParam = container || ''
+			const wsUrl = `${protocol}//${host}/api/v1/exec/${sessionId}?namespace=${namespace}&pod=${pod}&container=${containerParam}&command=/bin/sh&tty=true`
 
+			console.log('=== WebSocket Connection Details ===')
+			console.log('Protocol:', protocol)
+			console.log('Host:', host)
+			console.log('Session ID:', sessionId)
+			console.log('Is Dev Mode:', isDev)
+			console.log('Final WebSocket URL:', wsUrl)
+
+			// Validate required parameters (container can be empty for auto-detection)
+			if (!pod || !namespace) {
+				throw new Error(`Missing required parameters: pod=${pod}, namespace=${namespace}`)
+			}
+
+			console.log('Creating WebSocket...')
 			const ws = new WebSocket(wsUrl)
 			wsRef.current = ws
+			console.log('WebSocket created successfully')
 
 			ws.onopen = () => {
+				console.log('✅ WebSocket opened successfully')
 				setIsConnected(true)
 				updateTabStatus(tabId, 'connected')
 				setOutput(prev => [...prev, `Connected to ${pod}/${container} in ${namespace}`])
 			}
 
 			ws.onmessage = (event) => {
+				console.log('WebSocket message received:', event.data)
 				try {
 					const message: ExecMessage = JSON.parse(event.data)
+					console.log('Parsed message:', message)
 
 					switch (message.type) {
 						case 'stdout':
 						case 'stderr':
 							if (message.data) {
-								setOutput(prev => [...prev, message.data as string])
+								// Buffer the output to prevent too many rapid updates
+								outputBufferRef.current += message.data as string
+
+								// Clear existing timeout and set a new one
+								if (debouncedFlushRef.current) {
+									clearTimeout(debouncedFlushRef.current)
+								}
+								debouncedFlushRef.current = window.setTimeout(flushOutputBuffer, 50)
 							}
 							break
 						case 'error':
+							console.error('Received error message:', message.data)
 							setError(message.data || 'Unknown error occurred')
 							updateTabStatus(tabId, 'error', message.data)
 							break
 					}
 				} catch (err) {
-					console.error('Failed to parse WebSocket message:', err)
+					console.error('Failed to parse WebSocket message:', err, 'Raw data:', event.data)
 				}
 			}
 
 			ws.onclose = (event) => {
+				console.log('WebSocket closed:', event.code, event.reason)
 				setIsConnected(false)
 				updateTabStatus(tabId, 'closed')
 
 				if (event.code !== 1000) {
-					setError(`Connection closed unexpectedly (code: ${event.code})`)
+					setError(`Connection closed unexpectedly (code: ${event.code}, reason: ${event.reason})`)
 				}
 			}
 
-			ws.onerror = () => {
+			ws.onerror = (event) => {
+				console.error('WebSocket error:', event)
 				setError('WebSocket connection failed')
 				updateTabStatus(tabId, 'error', 'WebSocket connection failed')
 			}
 
 		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to connect')
-			updateTabStatus(tabId, 'error', 'Failed to connect')
+			console.error('❌ Error in connect function:', err)
+			const errorMessage = err instanceof Error ? err.message : 'Failed to connect'
+			setError(errorMessage)
+			updateTabStatus(tabId, 'error', errorMessage)
 		}
-	}, [pod, container, namespace, tabId, updateTabStatus])
+	}, [pod, container, namespace, tabId, updateTabStatus, flushOutputBuffer])
 
 	const disconnect = () => {
 		if (wsRef.current) {
@@ -126,16 +192,35 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 		connect()
 
 		return () => {
+			// Flush any remaining output before disconnecting
+			if (debouncedFlushRef.current) {
+				clearTimeout(debouncedFlushRef.current)
+				flushOutputBuffer()
+			}
 			disconnect()
 		}
-	}, [connect])
+	}, [connect, flushOutputBuffer])
 
-	// Focus on terminal when tab becomes active
+	// Focus when component mounts and is connected
+	useEffect(() => {
+		if (inputRef.current && isConnected) {
+			const timeoutId = setTimeout(() => {
+				inputRef.current?.focus()
+			}, 200)
+			return () => clearTimeout(timeoutId)
+		}
+	}, [isConnected]) // Focus when connection state changes
+
+	// Focus on terminal when tab becomes active (called whenever output updates)
 	useEffect(() => {
 		if (terminalRef.current) {
 			terminalRef.current.scrollTop = terminalRef.current.scrollHeight
 		}
-	}, [output])
+		// Also focus the input when content updates (tab might have just become active)
+		if (isConnected && inputRef.current && document.visibilityState === 'visible') {
+			inputRef.current.focus()
+		}
+	}, [output, isConnected])
 
 	if (error) {
 		return (
@@ -161,9 +246,9 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 	}
 
 	return (
-		<div className="flex flex-col h-full bg-black text-green-400 font-mono text-sm">
+		<div className="flex flex-col h-full bg-black text-green-400 font-mono text-sm max-h-full">
 			{/* Terminal Header */}
-			<div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
+			<div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
 				<div className="text-xs text-gray-300">
 					{pod}/{container} ({namespace})
 				</div>
@@ -178,25 +263,29 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 			{/* Terminal Output */}
 			<div
 				ref={terminalRef}
-				className="flex-1 p-3 overflow-y-auto"
-				style={{ fontFamily: 'ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace' }}
+				className="flex-1 p-3 overflow-y-auto min-h-0 text-sm leading-relaxed"
+				style={{
+					fontFamily: 'ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace',
+					maxHeight: 'calc(100% - 60px)' // Account for header height
+				}}
 			>
 				{output.map((line, index) => (
-					<div key={index} className="whitespace-pre-wrap break-words">
-						{line}
+					<div key={index} className="whitespace-pre-wrap break-words mb-0.5">
+						{line || '\u00A0'} {/* Use non-breaking space for empty lines */}
 					</div>
 				))}
 
 				{/* Current Input Line */}
 				{isConnected && (
-					<div className="flex items-center mt-2">
+					<div className="flex items-center mt-2 sticky bottom-0 bg-black">
 						<span className="text-yellow-400 mr-2">$</span>
 						<input
+							ref={inputRef}
 							type="text"
 							value={input}
 							onChange={(e) => setInput(e.target.value)}
 							onKeyPress={handleKeyPress}
-							className="flex-1 bg-transparent border-none outline-none text-green-400"
+							className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono"
 							placeholder="Type command and press Enter..."
 							autoFocus
 						/>

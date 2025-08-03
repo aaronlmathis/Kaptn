@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useShell } from '@/hooks/use-shell'
 import { TerminalSession } from '@/components/TerminalSession'
 import {
@@ -36,6 +36,21 @@ export function PodShellManager() {
 		setActiveTab
 	} = useShell()
 
+	// Focus the input field when drawer opens or tab changes
+	useEffect(() => {
+		if (isDrawerOpen && activeTabId) {
+			// Small delay to ensure the component is fully rendered
+			const timeoutId = setTimeout(() => {
+				// Find the input field in the active tab and focus it
+				const activeTabContent = document.querySelector(`[data-state="active"] input[type="text"]`) as HTMLInputElement
+				if (activeTabContent) {
+					activeTabContent.focus()
+				}
+			}, 150)
+			return () => clearTimeout(timeoutId)
+		}
+	}, [isDrawerOpen, activeTabId])
+
 	const getStatusIcon = (status: string) => {
 		switch (status) {
 			case 'connecting':
@@ -66,7 +81,7 @@ export function PodShellManager() {
 			open={isDrawerOpen}
 			onOpenChange={setDrawerOpen}
 		>
-			<DrawerContent className="h-[85vh] max-h-[85vh]">
+			<DrawerContent className="h-[80vh] max-h-[80vh] flex flex-col">
 				<DrawerHeader className="flex-shrink-0 pb-2">
 					<div className="flex items-center justify-between">
 						<DrawerTitle className="flex items-center gap-2">
@@ -86,10 +101,23 @@ export function PodShellManager() {
 					</div>
 				</DrawerHeader>
 
-				{/* Tabs Navigation */}
-				<div className="flex-shrink-0 px-6 pb-2">
-					<Tabs value={activeTabId || ''} onValueChange={setActiveTab}>
-						<div className="flex items-center justify-between">
+				{/* Tabs Navigation and Content */}
+				<div className="flex-1 px-6 pb-6 min-h-0 flex flex-col">
+					<Tabs
+						value={activeTabId || ''}
+						onValueChange={(value) => {
+							setActiveTab(value)
+							// Focus the input after a short delay to ensure tab content is rendered
+							setTimeout(() => {
+								const input = document.querySelector(`[data-state="active"] input[type="text"]`) as HTMLInputElement
+								if (input) {
+									input.focus()
+								}
+							}, 100)
+						}}
+						className="h-full flex flex-col"
+					>
+						<div className="flex items-center justify-between flex-shrink-0 mb-4">
 							<ScrollArea className="w-full">
 								<TabsList className="w-max h-10 p-1">
 									{tabs.map((tab) => (
@@ -102,17 +130,15 @@ export function PodShellManager() {
 											<span className="text-xs font-medium">
 												{getTabLabel(tab)}
 											</span>
-											<Button
-												variant="ghost"
-												size="sm"
-												className="h-4 w-4 p-0 hover:bg-red-100 hover:text-red-600"
+											<div
+												className="h-4 w-4 p-0 hover:bg-red-100 hover:text-red-600 rounded flex items-center justify-center cursor-pointer"
 												onClick={(e) => {
 													e.stopPropagation()
 													closeShell(tab.id)
 												}}
 											>
 												<IconX className="size-3" />
-											</Button>
+											</div>
 										</TabsTrigger>
 									))}
 								</TabsList>
@@ -132,12 +158,12 @@ export function PodShellManager() {
 						</div>
 
 						{/* Tabs Content */}
-						<div className="mt-4 flex-1 min-h-0">
+						<div className="flex-1 min-h-0">
 							{tabs.map((tab) => (
 								<TabsContent
 									key={tab.id}
 									value={tab.id}
-									className="h-[calc(85vh-140px)] mt-0 border rounded-lg overflow-hidden"
+									className="h-full mt-0 border rounded-lg overflow-hidden data-[state=active]:flex data-[state=active]:flex-col"
 								>
 									<TerminalSession
 										pod={tab.podName}

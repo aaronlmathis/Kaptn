@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -152,6 +153,21 @@ func (em *ExecManager) handleExecSession(session *ExecSession, tty bool) {
 		zap.String("pod", session.podName),
 		zap.String("container", session.container))
 
+	// If no command specified, try to detect available shell
+	command := session.command
+	if len(command) == 0 {
+		detectedShell, err := em.detectAvailableShell(session.namespace, session.podName, session.container)
+		if err != nil {
+			em.logger.Error("Failed to detect available shell", zap.String("sessionID", session.ID), zap.Error(err))
+			em.sendError(session.conn, fmt.Sprintf("Failed to detect available shell: %v", err))
+			return
+		}
+		command = []string{detectedShell}
+		em.logger.Info("Detected shell",
+			zap.String("sessionID", session.ID),
+			zap.String("shell", detectedShell))
+	}
+
 	// Create exec request
 	execReq := em.kubeClient.CoreV1().RESTClient().Post().
 		Resource("pods").
@@ -160,7 +176,7 @@ func (em *ExecManager) handleExecSession(session *ExecSession, tty bool) {
 		SubResource("exec").
 		VersionedParams(&v1.PodExecOptions{
 			Container: session.container,
-			Command:   session.command,
+			Command:   command,
 			Stdin:     true,
 			Stdout:    true,
 			Stderr:    !tty, // stderr is not used in TTY mode
@@ -201,6 +217,54 @@ func (em *ExecManager) handleExecSession(session *ExecSession, tty bool) {
 	}
 
 	em.logger.Info("Exec session completed", zap.String("sessionID", session.ID))
+}
+
+// detectAvailableShell tries to find an available shell in the container
+func (em *ExecManager) detectAvailableShell(namespace, podName, container string) (string, error) {
+	// List of shells to try in order of preference
+	shells := []string{"/bin/bash", "/bin/sh", "/usr/bin/bash", "/usr/bin/sh", "/bin/ash", "/usr/bin/ash"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, shell := range shells {
+		// Try to execute a simple command to test if the shell exists
+		testCmd := []string{shell, "-c", "echo test"}
+
+		execReq := em.kubeClient.CoreV1().RESTClient().Post().
+			Resource("pods").
+			Name(podName).
+			Namespace(namespace).
+			SubResource("exec").
+			VersionedParams(&v1.PodExecOptions{
+				Container: container,
+				Command:   testCmd,
+				Stdin:     false,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       false,
+			}, scheme.ParameterCodec)
+
+		executor, err := remotecommand.NewSPDYExecutor(em.restConfig, "POST", execReq.URL())
+		if err != nil {
+			continue
+		}
+
+		// Create simple readers/writers for the test
+		var stdout, stderr bytes.Buffer
+
+		err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+
+		if err == nil && stdout.String() == "test\n" {
+			em.logger.Info("Found working shell", zap.String("shell", shell))
+			return shell, nil
+		}
+	}
+
+	return "", fmt.Errorf("no available shell found")
 }
 
 // sendError sends an error message via WebSocket

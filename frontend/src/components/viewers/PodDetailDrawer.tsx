@@ -73,8 +73,14 @@ export function PodDetailDrawer({ item, open, onOpenChange }: PodDetailDrawerPro
 	const { data: podDetails, loading, error } = usePodDetails(item.namespace, item.name, open)
 
 	const handleExecShell = () => {
-		// Default to first container, or could detect from pod details
-		openShell(item.name, item.namespace, 'main')
+		// Let the backend auto-detect the first container
+		// Or use the first container from pod details if available
+		let containerName = undefined
+		if (podDetails?.spec?.containers && podDetails.spec.containers.length > 0) {
+			containerName = podDetails.spec.containers[0].name
+		}
+
+		openShell(item.name, item.namespace, containerName)
 		// Optionally close the detail drawer
 		onOpenChange(false)
 	}

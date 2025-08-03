@@ -37,8 +37,8 @@ export function ShellProvider({ children }: ShellProviderProps) {
 	const openShell = useCallback((pod: string, namespace: string, container?: string) => {
 		const tabId = crypto.randomUUID()
 
-		// Default to first container if not specified
-		const finalContainer = container || 'main'
+		// Don't default to 'main' - let the backend auto-detect the first container
+		const finalContainer = container || ''
 
 		const newTab: ShellTab = {
 			id: tabId,
