@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useShell } from '@/hooks/use-shell'
 import { Button } from '@/components/ui/button'
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { IconRefresh, IconAlertTriangle } from '@tabler/icons-react'
 
 // We'll need to install xterm for the actual terminal, but for now let's create a placeholder
@@ -59,6 +60,13 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 	}, [])
 
 	const debouncedFlushRef = useRef<number | null>(null)
+
+	// Handle clicking anywhere in the terminal to focus input
+	const handleTerminalClick = useCallback(() => {
+		if (inputRef.current && isConnected) {
+			inputRef.current.focus()
+		}
+	}, [isConnected])
 
 	const connect = useCallback(() => {
 		console.log('=== Starting shell connection ===')
@@ -214,7 +222,14 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 	// Focus on terminal when tab becomes active (called whenever output updates)
 	useEffect(() => {
 		if (terminalRef.current) {
-			terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+			// Find the ScrollArea viewport and scroll to bottom
+			const scrollArea = terminalRef.current.closest('[data-radix-scroll-area-viewport]') as HTMLElement
+			if (scrollArea) {
+				scrollArea.scrollTop = scrollArea.scrollHeight
+			} else {
+				// Fallback to the terminal ref itself
+				terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+			}
 		}
 		// Also focus the input when content updates (tab might have just become active)
 		if (isConnected && inputRef.current && document.visibilityState === 'visible') {
@@ -262,35 +277,37 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 
 			{/* Terminal Output */}
 			<div
-				ref={terminalRef}
-				className="flex-1 p-3 overflow-y-auto min-h-0 text-sm leading-relaxed"
-				style={{
-					fontFamily: 'ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace',
-					maxHeight: 'calc(100% - 60px)' // Account for header height
-				}}
+				className="flex-1 min-h-0 bg-black cursor-text"
+				onClick={handleTerminalClick}
+				style={{ fontFamily: 'ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace' }}
 			>
-				{output.map((line, index) => (
-					<div key={index} className="whitespace-pre-wrap break-words mb-0.5">
-						{line || '\u00A0'} {/* Use non-breaking space for empty lines */}
-					</div>
-				))}
+				<ScrollArea className="h-full">
+					<div ref={terminalRef} className="p-3 text-sm leading-relaxed">
+						{output.map((line, index) => (
+							<div key={index} className="whitespace-pre-wrap break-words mb-0.5">
+								{line || '\u00A0'} {/* Use non-breaking space for empty lines */}
+							</div>
+						))}
 
-				{/* Current Input Line */}
-				{isConnected && (
-					<div className="flex items-center mt-2 sticky bottom-0 bg-black">
-						<span className="text-yellow-400 mr-2">$</span>
-						<input
-							ref={inputRef}
-							type="text"
-							value={input}
-							onChange={(e) => setInput(e.target.value)}
-							onKeyPress={handleKeyPress}
-							className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono"
-							placeholder="Type command and press Enter..."
-							autoFocus
-						/>
+						{/* Current Input Line */}
+						{isConnected && (
+							<div className="flex items-center mt-2 sticky bottom-0 bg-black">
+								<span className="text-yellow-400 mr-2">$</span>
+								<input
+									ref={inputRef}
+									type="text"
+									value={input}
+									onChange={(e) => setInput(e.target.value)}
+									onKeyPress={handleKeyPress}
+									className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono"
+									placeholder="Type command and press Enter..."
+									autoFocus
+								/>
+							</div>
+						)}
 					</div>
-				)}
+					<ScrollBar orientation="vertical" />
+				</ScrollArea>
 			</div>
 		</div>
 	)
