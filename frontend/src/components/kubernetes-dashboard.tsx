@@ -751,7 +751,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 
 export function KubernetesDashboard() {
 	const { selectedNamespace } = useNamespace()
-	
+
 	// Fetch live data using hooks
 	const { data: podsData, loading: podsLoading, error: podsError, refetch: refetchPods } = usePods()
 	const { data: nodesData, loading: nodesLoading, error: nodesError, refetch: refetchNodes } = useNodes()

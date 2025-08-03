@@ -40,6 +40,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 
 const data = {
   user: {
@@ -90,24 +91,32 @@ const data = {
     },
     {
       title: "Services",
-      url: "#",
+      url: "/services",
       icon: IconDatabase,
       items: [
         {
-          title: "Services",
-          url: "/services",
+          title: "Endpoints",
+          url: "/endpoints",
+        },
+        {
+          title: "Endpoint Slices",
+          url: "/endpoint-slices",
         },
         {
           title: "Ingresses",
           url: "/ingresses",
         },
         {
+          title: "Ingress Classes",
+          url: "/ingress-classes",
+        },
+        {
           title: "NetworkPolicies",
           url: "/networkpolicies",
         },
         {
-          title: "Endpoints",
-          url: "/endpoints",
+          title: "Load Balancers",
+          url: "/load-balancers",
         },
       ],
     },
@@ -129,31 +138,83 @@ const data = {
           url: "/persistent-volumes",
         },
         {
+          title: "Persistent Volume Claims",
+          url: "/persistent-volume-claims",
+        },
+        {
           title: "Storage Classes",
           url: "/storage-classes",
+        },
+        {
+          title: "Volume Snapshots",
+          url: "/volume-snapshots",
+        },
+        {
+          title: "Volume Snapshot Classes",
+          url: "/volume-snapshot-classes",
+        },
+        {
+          title: "CSI Drivers",
+          url: "/csi-drivers",
         },
       ],
     },
     {
       title: "Cluster",
-      url: "#",
+      url: "/cluster",
       icon: IconDeviceDesktop,
       items: [
         {
+          title: "Cluster Overview",
+          url: "/cluster/overview",
+        },
+        {
           title: "Nodes",
-          url: "/nodes",
+          url: "/cluster/nodes",
         },
         {
           title: "Namespaces",
-          url: "/namespaces",
-        },
-        {
-          title: "Events",
-          url: "/events",
+          url: "/cluster/namespaces",
         },
         {
           title: "Resource Quotas",
-          url: "/resource-quotas",
+          url: "/cluster/resource-quotas",
+        },
+        {
+          title: "API Resources",
+          url: "/cluster/api-resources",
+        },
+        {
+          title: "Custom Resource Definitions",
+          url: "/cluster/crds",
+        },
+        {
+          title: "Roles & RoleBindings",
+          url: "/cluster/roles",
+        },
+        {
+          title: "ClusterRoles & Bindings",
+          url: "/cluster/cluster-roles",
+        },
+        {
+          title: "Events",
+          url: "/cluster/events",
+        },
+        {
+          title: "Component Status",
+          url: "/cluster/component-status",
+        },
+        {
+          title: "Certificates",
+          url: "/cluster/certificates",
+        },
+        {
+          title: "Version & Upgrades",
+          url: "/cluster/version-upgrades",
+        },
+        {
+          title: "Cluster Metrics",
+          url: "/cluster/metrics",
         },
       ],
     },
@@ -217,23 +278,7 @@ const data = {
       ],
     },
   ],
-  documents: [
-    {
-      name: "kubectl Cheat Sheet",
-      url: "/docs/kubectl",
-      icon: IconFileText,
-    },
-    {
-      name: "Kubernetes API Reference",
-      url: "/docs/api",
-      icon: IconFileText,
-    },
-    {
-      name: "Troubleshooting Guide",
-      url: "/docs/troubleshooting",
-      icon: IconFileText,
-    },
-  ],
+
 }
 
 
@@ -243,10 +288,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <NamespaceSwitcher />
       </SidebarHeader>
-      <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
-
+      <SidebarContent className="p-0">
+        <ScrollArea className="h-full">
+          <div className="flex flex-col h-full ">
+            <NavMain items={data.navMain} />
+            <NavSecondary items={data.navSecondary} className="mt-auto" />
+          </div>
+          <ScrollBar orientation="vertical" />
+        </ScrollArea>
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />

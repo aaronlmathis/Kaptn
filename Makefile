@@ -36,13 +36,46 @@ lint: ## Lint code
 	@echo "Linting frontend code..."
 	@cd frontend && npm run lint 2>/dev/null || echo "No lint script found"
 
+lint-fix: ## Fix linting issues
+	@echo "Fixing Go formatting..."
+	@go fmt ./...
+	@echo "Fixing frontend linting issues..."
+	@cd frontend && npm run lint:fix 2>/dev/null || echo "No lint:fix script found"
+
+type-check: ## Check TypeScript types
+	@echo "Checking TypeScript types..."
+	@cd frontend && npm run type-check
+
 test: ## Run tests
 	@echo "Running Go tests..."
 	@go test ./... -race -count=1 -v
 	@echo "Running frontend tests..."
-	@cd frontend && npm run test 2>/dev/null || echo "No test script found"
+	@cd frontend && npm run test:run 2>/dev/null || echo "No test script found"
 
-web: ## Build frontend
+test-go: ## Run only Go tests
+	@echo "Running Go tests..."
+	@go test ./... -race -count=1 -v
+
+test-frontend: ## Run only frontend tests
+	@echo "Running frontend unit tests..."
+	@cd frontend && npm run test:run
+
+test-e2e: ## Run end-to-end tests
+	@echo "Running E2E tests..."
+	@cd frontend && npm run test:e2e
+
+test-coverage: ## Run tests with coverage
+	@echo "Running Go tests with coverage..."
+	@go test ./... -race -count=1 -coverprofile=coverage.out
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "Running frontend tests with coverage..."
+	@cd frontend && npm run test:coverage
+
+test-watch: ## Run frontend tests in watch mode
+	@echo "Running frontend tests in watch mode..."
+	@cd frontend && npm run test:watch
+
+frontend: ## Build frontend
 	@echo "Building frontend..."
 	@cd frontend && npm run build
 	@echo "Frontend built successfully"
@@ -53,7 +86,7 @@ build: web ## Build backend binary (embeds frontend)
 	@CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 	@echo "Binary built: $(BUILD_DIR)/$(BINARY_NAME)"
 
-docker: web ## Build Docker image
+docker: frontend ## Build Docker image
 	@echo "Building Docker image..."
 	@docker build -t kad:$(VERSION) .
 	@docker tag kad:$(VERSION) kad:latest

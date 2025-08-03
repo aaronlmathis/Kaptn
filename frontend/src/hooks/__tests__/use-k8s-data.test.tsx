@@ -4,116 +4,154 @@ import { usePods, useServices, useDeployments } from '../use-k8s-data'
 import { NamespaceProvider } from '@/contexts/namespace-context'
 import React from 'react'
 
+// Mock the k8s-api module
+vi.mock('@/lib/k8s-api', () => ({
+	k8sService: {
+		getPods: vi.fn(),
+		getServices: vi.fn(),
+		getDeployments: vi.fn(),
+	}
+}))
+
 // Create a wrapper that provides the namespace context
 const createWrapper = (selectedNamespace = 'all') => {
-  return ({ children }: { children: React.ReactNode }) => (
-    <NamespaceProvider>{children}</NamespaceProvider>
-  )
+	return ({ children }: { children: React.ReactNode }) => (
+		<NamespaceProvider>{children}</NamespaceProvider>
+	)
 }
 
 describe('useK8sData hooks', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+	beforeEach(() => {
+		vi.clearAllMocks()
+		// Reset mocks to return successful responses by default
+		const { k8sService } = require('@/lib/k8s-api')
+		k8sService.getPods.mockResolvedValue({
+			data: {
+				items: [
+					{
+						name: 'test-pod',
+						namespace: 'default',
+						phase: 'Running',
+						ready: '1/1',
+						node: 'node-1',
+						podIP: '10.244.1.5',
+						age: '2h',
+					}
+				],
+				total: 1,
+			},
+			status: 'success',
+		})
 
-  describe('usePods', () => {
-    it('should fetch pods for all namespaces by default', async () => {
-      const { result } = renderHook(() => usePods(), {
-        wrapper: createWrapper()
-      })
+		k8sService.getServices.mockResolvedValue({
+			data: { items: [], total: 0 },
+			status: 'success',
+		})
 
-      expect(result.current.loading).toBe(true)
-      expect(result.current.data).toEqual([])
+		k8sService.getDeployments.mockResolvedValue({
+			data: { items: [], total: 0 },
+			status: 'success',
+		})
+	})
 
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false)
-      })
+	describe('usePods', () => {
+		it('should fetch pods for all namespaces by default', async () => {
+			const { result } = renderHook(() => usePods(), {
+				wrapper: createWrapper()
+			})
 
-      // Should have transformed the mock pods data
-      expect(result.current.data.length).toBeGreaterThan(0)
-      expect(result.current.error).toBeNull()
-    })
+			expect(result.current.loading).toBe(true)
+			expect(result.current.data).toEqual([])
 
-    it('should fetch pods for specific namespace when selected', async () => {
-      // This test would require more complex setup to change namespace
-      // and verify the API is called with the correct namespace parameter
-      const { result } = renderHook(() => usePods(), {
-        wrapper: createWrapper('default')
-      })
+			await waitFor(() => {
+				expect(result.current.loading).toBe(false)
+			})
 
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false)
-      })
+			// Should have transformed the mock pods data
+			expect(result.current.data.length).toBeGreaterThan(0)
+			expect(result.current.error).toBeNull()
+		})
 
-      expect(result.current.data).toBeDefined()
-    })
+		it('should fetch pods for specific namespace when selected', async () => {
+			// This test would require more complex setup to change namespace
+			// and verify the API is called with the correct namespace parameter
+			const { result } = renderHook(() => usePods(), {
+				wrapper: createWrapper('default')
+			})
 
-    it('should handle API errors gracefully', async () => {
-      // Mock the k8sService to return an error
-      const { k8sService } = await import('@/lib/k8s-api')
-      vi.mocked(k8sService.getPods).mockRejectedValue(new Error('API Error'))
+			await waitFor(() => {
+				expect(result.current.loading).toBe(false)
+			})
 
-      const { result } = renderHook(() => usePods(), {
-        wrapper: createWrapper()
-      })
+			expect(result.current.data).toBeDefined()
+		})
 
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false)
-      })
+		it('should handle API errors gracefully', async () => {
+			// Mock the k8sService to return an error
+			const { k8sService } = require('@/lib/k8s-api')
+			k8sService.getPods.mockRejectedValue(new Error('API Error'))
 
-      expect(result.current.error).toBe('API Error')
-      expect(result.current.data).toEqual([])
-    })
-  })
+			const { result } = renderHook(() => usePods(), {
+				wrapper: createWrapper()
+			})
 
-  describe('useServices', () => {
-    it('should fetch services and transform data correctly', async () => {
-      const { result } = renderHook(() => useServices(), {
-        wrapper: createWrapper()
-      })
+			await waitFor(() => {
+				expect(result.current.loading).toBe(false)
+			})
 
-      expect(result.current.loading).toBe(true)
+			expect(result.current.error).toBe('API Error')
+			expect(result.current.data).toEqual([])
+		})
+	})
 
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false)
-      })
+	describe('useServices', () => {
+		it('should fetch services and transform data correctly', async () => {
+			const { result } = renderHook(() => useServices(), {
+				wrapper: createWrapper()
+			})
 
-      expect(result.current.data).toBeDefined()
-      expect(result.current.error).toBeNull()
-    })
-  })
+			expect(result.current.loading).toBe(true)
 
-  describe('useDeployments', () => {
-    it('should fetch deployments and transform data correctly', async () => {
-      const { result } = renderHook(() => useDeployments(), {
-        wrapper: createWrapper()
-      })
+			await waitFor(() => {
+				expect(result.current.loading).toBe(false)
+			})
 
-      expect(result.current.loading).toBe(true)
+			expect(result.current.data).toBeDefined()
+			expect(result.current.error).toBeNull()
+		})
+	})
 
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false)
-      })
+	describe('useDeployments', () => {
+		it('should fetch deployments and transform data correctly', async () => {
+			const { result } = renderHook(() => useDeployments(), {
+				wrapper: createWrapper()
+			})
 
-      expect(result.current.data).toBeDefined()
-      expect(result.current.error).toBeNull()
-    })
-  })
+			expect(result.current.loading).toBe(true)
 
-  describe('namespace context integration', () => {
-    it('should refetch data when namespace changes', async () => {
-      // This test would require a more sophisticated setup
-      // to actually change the namespace and verify refetch behavior
-      const { result } = renderHook(() => usePods(), {
-        wrapper: createWrapper()
-      })
+			await waitFor(() => {
+				expect(result.current.loading).toBe(false)
+			})
 
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false)
-      })
+			expect(result.current.data).toBeDefined()
+			expect(result.current.error).toBeNull()
+		})
+	})
 
-      // Verify refetch function exists
-      expect(typeof result.current.refetch).toBe('function')
-    })
-  })
+	describe('namespace context integration', () => {
+		it('should refetch data when namespace changes', async () => {
+			// This test would require a more sophisticated setup
+			// to actually change the namespace and verify refetch behavior
+			const { result } = renderHook(() => usePods(), {
+				wrapper: createWrapper()
+			})
+
+			await waitFor(() => {
+				expect(result.current.loading).toBe(false)
+			})
+
+			// Verify refetch function exists
+			expect(typeof result.current.refetch).toBe('function')
+		})
+	})
 })
