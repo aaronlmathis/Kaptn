@@ -5,11 +5,13 @@ import {
 	type NodeTableRow,
 	type ServiceTableRow,
 	type DashboardDeployment,
+	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
 	transformServicesToUI,
 	transformDeploymentsToUI
 } from '@/lib/k8s-api';
+import { wsService } from '@/lib/websocket';
 
 interface UseK8sDataResult<T> {
 	data: T[];
@@ -156,4 +158,56 @@ export function useK8sData<T>(
 	}, [fetchData]);
 
 	return { data, loading, error, refetch: fetchData };
+}
+
+export function useOverview(): UseK8sDataResult<OverviewData> {
+	const [data, setData] = useState<OverviewData | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const overview = await k8sService.getOverview();
+			setData(overview);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch overview');
+			console.error('Error fetching overview:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		fetchData();
+
+		// Set up real-time WebSocket updates
+		console.log('Setting up WebSocket connection for overview...');
+		wsService.connect('/stream/overview');
+
+		const handleOverviewUpdate = (message: any) => {
+			console.log('Overview update received:', message);
+			if (message.type === 'overviewUpdate') {
+				console.log('Setting new overview data:', message.data);
+				setData(message.data);
+			}
+		};
+
+		wsService.on('overviewUpdate', handleOverviewUpdate);
+
+		return () => {
+			console.log('Cleaning up WebSocket connection...');
+			wsService.off('overviewUpdate', handleOverviewUpdate);
+			wsService.disconnect();
+		};
+	}, [fetchData]);
+
+	// Return data as an array to maintain compatibility with UseK8sDataResult interface
+	return {
+		data: data ? [data] : [],
+		loading,
+		error,
+		refetch: fetchData
+	} as UseK8sDataResult<OverviewData>;
 }

@@ -9,6 +9,7 @@ import {
 	SidebarInset,
 	SidebarProvider,
 } from "@/components/ui/sidebar"
+import { Toaster } from "@/components/ui/sonner"
 
 export function DashboardContainer() {
 	return (
@@ -38,6 +39,7 @@ export function DashboardContainer() {
 					</SidebarInset>
 				</SidebarProvider>
 			</div>
+			<Toaster />
 		</ThemeProvider>
 	)
 }

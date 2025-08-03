@@ -261,6 +261,12 @@ export class K8sService {
 	async exportResource(namespace: string, kind: string, name: string): Promise<string> {
 		return apiClient.get<string>(`/export/${namespace}/${kind}/${name}`);
 	}
+
+	// Overview operations
+	async getOverview(): Promise<OverviewData> {
+		const response = await apiClient.get<{ data: OverviewData; status: string }>('/overview');
+		return response.data;
+	}
 }
 
 // Utility functions to transform backend data to UI-compatible format
@@ -369,6 +375,27 @@ function getImageFromLabels(labels: Record<string, string>): string {
 	if (labels['k8s-app']) return labels['k8s-app'];
 	if (labels.component) return labels.component;
 	return 'Unknown';
+}
+
+// Overview data interface
+export interface OverviewData {
+	pods: {
+		running: number;
+		total: number;
+		pending: number;
+	};
+	nodes: {
+		ready: number;
+		total: number;
+	};
+	cpu: {
+		usagePercent: number;
+	};
+	memory: {
+		usagePercent: number;
+	};
+	advisories: string[];
+	asOf: string;
 }
 
 // Global K8s service instance

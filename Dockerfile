@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Build stage for backend
-FROM golang:1.22-alpine AS build
+FROM golang:1.24.3-alpine AS build
 WORKDIR /src
 
 # Install git for version info
@@ -37,12 +37,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM gcr.io/distroless/base-debian12
 COPY --from=build /server /server
 
-# Add metadata
 LABEL org.opencontainers.image.title="Kubernetes Admin Dashboard"
 LABEL org.opencontainers.image.description="A secure, production-ready Kubernetes admin dashboard"
 LABEL org.opencontainers.image.source="https://github.com/aaronlmathis/k8s-admin-dash"
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 	CMD ["/server", "--health-check"]
 
