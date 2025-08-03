@@ -1,0 +1,104 @@
+# 1. Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+# 2. ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kad-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    server:
+      addr: "0.0.0.0:8080"
+    kubernetes:
+      mode: "incluster"
+    integrations:
+      prometheus:
+        url: "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090"
+---
+# 3. Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-admin-dash
+  namespace: monitoring
+  labels:
+    app: k8s-admin-dash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-admin-dash
+  template:
+    metadata:
+      labels:
+        app: k8s-admin-dash
+    spec:
+      containers:
+      - name: k8s-admin-dash
+        image: docker.io/aaronlmathis/kad:latest
+        imagePullPolicy: IfNotPresent
+        args:
+          - "--config=/etc/kad/config.yaml"
+        ports:
+          - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        volumeMounts:
+          - name: config
+            mountPath: /etc/kad
+            readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: kad-config
+---
+# 4. Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-admin-dash
+  namespace: monitoring
+spec:
+  selector:
+    app: k8s-admin-dash
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: NodePort
+---
+# 5. Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8s-admin-dash
+  namespace: monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: kadd.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: k8s-admin-dash
+                port:
+                  number: 80
