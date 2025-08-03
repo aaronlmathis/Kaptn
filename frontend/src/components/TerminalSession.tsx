@@ -19,17 +19,149 @@ interface ExecMessage {
 	rows?: number
 }
 
-// Function to clean ANSI escape sequences and control characters
-const cleanTerminalOutput = (text: string): string => {
-	// Remove ANSI escape sequences (colors, cursor movements, etc.)
+// ANSI color codes to CSS classes mapping
+const ANSI_COLORS: Record<string, string> = {
+	// Standard colors
+	'30': 'text-black',
+	'31': 'text-red-400',
+	'32': 'text-green-400',
+	'33': 'text-yellow-400',
+	'34': 'text-blue-400',
+	'35': 'text-purple-400',
+	'36': 'text-cyan-400',
+	'37': 'text-gray-300',
+	// Bright colors
+	'90': 'text-gray-500',
+	'91': 'text-red-300',
+	'92': 'text-green-300',
+	'93': 'text-yellow-300',
+	'94': 'text-blue-300',
+	'95': 'text-purple-300',
+	'96': 'text-cyan-300',
+	'97': 'text-white',
+	// Background colors
+	'40': 'bg-black',
+	'41': 'bg-red-400',
+	'42': 'bg-green-400',
+	'43': 'bg-yellow-400',
+	'44': 'bg-blue-400',
+	'45': 'bg-purple-400',
+	'46': 'bg-cyan-400',
+	'47': 'bg-gray-300',
+}
+
+// Interface for parsed ANSI segments
+interface AnsiSegment {
+	text: string
+	classes: string[]
+	bold?: boolean
+	italic?: boolean
+	underline?: boolean
+}
+
+// Function to convert ANSI escape sequences to HTML with colors
+const parseAnsiToHtml = (text: string): AnsiSegment[] => {
+	const segments: AnsiSegment[] = []
+	let currentClasses: string[] = []
+	let currentStyles = {
+		bold: false,
+		italic: false,
+		underline: false
+	}
+
+	// Split by ANSI escape sequences while keeping them
 	// eslint-disable-next-line no-control-regex
-	return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-		// Remove other control characters except newline, carriage return, and tab
+	const parts = text.split(/(\x1b\[[0-9;]*[a-zA-Z])/)
+	
+	for (const part of parts) {
 		// eslint-disable-next-line no-control-regex
-		.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-		// Handle carriage returns properly (move cursor to beginning of line)
-		.replace(/\r\n/g, '\n')
-		.replace(/\r/g, '\n')
+		if (part.match(/\x1b\[[0-9;]*[a-zA-Z]/)) {
+			// This is an ANSI escape sequence
+			const codes = part.slice(2, -1).split(';')
+			
+			for (const code of codes) {
+				switch (code) {
+					case '0': // Reset
+						currentClasses = []
+						currentStyles = { bold: false, italic: false, underline: false }
+						break
+					case '1': // Bold
+						currentStyles.bold = true
+						break
+					case '3': // Italic
+						currentStyles.italic = true
+						break
+					case '4': // Underline
+						currentStyles.underline = true
+						break
+					case '22': // Normal intensity
+						currentStyles.bold = false
+						break
+					case '23': // Not italic
+						currentStyles.italic = false
+						break
+					case '24': // Not underlined
+						currentStyles.underline = false
+						break
+					default:
+						// Check if it's a color code
+						if (ANSI_COLORS[code]) {
+							// Remove any existing color class of the same type
+							if (code.startsWith('3') || code.startsWith('9')) {
+								// Foreground color
+								currentClasses = currentClasses.filter(c => !c.startsWith('text-'))
+							} else if (code.startsWith('4')) {
+								// Background color
+								currentClasses = currentClasses.filter(c => !c.startsWith('bg-'))
+							}
+							currentClasses.push(ANSI_COLORS[code])
+						}
+						break
+				}
+			}
+		} else if (part) {
+			// This is regular text
+			// Clean other control characters but preserve formatting
+			// eslint-disable-next-line no-control-regex
+			const cleanText = part.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+				.replace(/\r\n/g, '\n')
+				.replace(/\r/g, '\n')
+			
+			if (cleanText) {
+				segments.push({
+					text: cleanText,
+					classes: [...currentClasses],
+					bold: currentStyles.bold,
+					italic: currentStyles.italic,
+					underline: currentStyles.underline
+				})
+			}
+		}
+	}
+	
+	return segments
+}
+
+// Component to render a single line with ANSI formatting
+const AnsiLine: React.FC<{ segments: AnsiSegment[] }> = ({ segments }) => {
+	return (
+		<>
+			{segments.map((segment, index) => {
+				const className = [
+					...segment.classes,
+					segment.bold ? 'font-bold' : '',
+					segment.italic ? 'italic' : '',
+					segment.underline ? 'underline' : ''
+				].filter(Boolean).join(' ')
+
+				return (
+					<span key={index} className={className || undefined}>
+						{segment.text}
+					</span>
+				)
+			})}
+		</>
+	)
 }
 
 export function TerminalSession({ pod, container, namespace, tabId }: TerminalSessionProps) {
@@ -46,18 +178,27 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 	// Debounced output update to prevent too many renders
 	const flushOutputBuffer = useCallback(() => {
 		if (outputBufferRef.current) {
-			const cleanedData = cleanTerminalOutput(outputBufferRef.current)
-			if (cleanedData.trim()) {
+			const rawData = outputBufferRef.current
+			if (rawData.trim()) {
 				setOutput(prev => {
-					// Split by lines and add each as a separate entry
-					const lines = cleanedData.split('\n')
-					const newLines = lines.filter(line => line.length > 0 || prev.length === 0)
+					// Split by lines and add each with ANSI formatting preserved
+					const lines = rawData.split('\n')
+					const newLines = lines.filter((line: string) => line.length > 0 || prev.length === 0)
 					return [...prev, ...newLines]
 				})
 			}
 			outputBufferRef.current = ''
 		}
 	}, [])
+
+	// Store parsed output with ANSI formatting
+	const [parsedOutput, setParsedOutput] = useState<AnsiSegment[][]>([])
+
+	// Parse output when it changes
+	useEffect(() => {
+		const parsed = output.map(line => parseAnsiToHtml(line))
+		setParsedOutput(parsed)
+	}, [output])
 
 	const debouncedFlushRef = useRef<number | null>(null)
 
@@ -235,7 +376,7 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 		if (isConnected && inputRef.current && document.visibilityState === 'visible') {
 			inputRef.current.focus()
 		}
-	}, [output, isConnected])
+	}, [parsedOutput, isConnected])
 
 	if (error) {
 		return (
@@ -283,9 +424,13 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 			>
 				<ScrollArea className="h-full">
 					<div ref={terminalRef} className="p-3 text-sm leading-relaxed">
-						{output.map((line, index) => (
+						{parsedOutput.map((lineSegments, index) => (
 							<div key={index} className="whitespace-pre-wrap break-words mb-0.5">
-								{line || '\u00A0'} {/* Use non-breaking space for empty lines */}
+								{lineSegments.length > 0 ? (
+									<AnsiLine segments={lineSegments} />
+								) : (
+									'\u00A0' // Use non-breaking space for empty lines
+								)}
 							</div>
 						))}
 
