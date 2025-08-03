@@ -30,7 +30,7 @@ import {
 import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
-
+import { SiKubernetes } from "react-icons/si";
 import { NavUser } from "@/components/nav-user"
 import { NamespaceSwitcher } from "@/components/namespace-switcher"
 import {
@@ -41,6 +41,8 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { Separator } from "./ui/separator"
+import { AppLogo } from "@/components/AppLogo"
 
 const data = {
   user: {
@@ -286,6 +288,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
+        <AppLogo />
+        <Separator className="w-full" />
         <NamespaceSwitcher />
       </SidebarHeader>
       <SidebarContent className="p-0">

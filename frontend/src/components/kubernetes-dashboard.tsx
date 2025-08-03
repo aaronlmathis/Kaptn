@@ -36,6 +36,7 @@ import {
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconX,
 } from "@tabler/icons-react"
 import {
 	flexRender,
@@ -79,7 +80,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
+
 import { Label } from "@/components/ui/label"
 import {
 	Select,
@@ -1583,8 +1584,21 @@ export function KubernetesDashboard() {
 	)
 }
 
-function PodDetailViewer({ item }: { item: z.infer<typeof podSchema> }) {
+export function PodDetailViewer({ item }: { item: z.infer<typeof podSchema> }) {
 	const isMobile = useIsMobile()
+
+	const rows: Array<[string, React.ReactNode]> = [
+		["Pod Name", item.name],
+		["Namespace", item.namespace],
+		["Status", getStatusBadge(item.status)],
+		["Node", item.node],
+		["Ready", item.ready],
+		["Restarts", item.restarts],
+		["Age", item.age],
+		["CPU Usage", item.cpu],
+		["Memory Usage", item.memory],
+		["Container Image", item.image || "Unknown"],
+	]
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"}>
@@ -1593,80 +1607,38 @@ function PodDetailViewer({ item }: { item: z.infer<typeof podSchema> }) {
 					{item.name}
 				</Button>
 			</DrawerTrigger>
+
 			<DrawerContent>
-				<DrawerHeader className="gap-1">
+				{/* Header with title/description and close button */}
+				<DrawerHeader className="flex justify-between items-start">
 					<DrawerTitle>{item.name}</DrawerTitle>
-					<DrawerDescription>
-						Pod details and configuration
-					</DrawerDescription>
+					<DrawerDescription>Pod details and configuration</DrawerDescription>
 				</DrawerHeader>
-				<div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
-					<div className="grid gap-4">
-						<div className="grid grid-cols-2 gap-4">
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="name">Pod Name</Label>
-								<Input id="name" value={item.name} readOnly />
+
+				<div className="overflow-y-auto px-6 text-sm">
+					<dl className="divide-y divide-border rounded-md bg-muted/5">
+						{rows.map(([label, value], idx) => (
+							<div key={idx} className="flex items-center justify-between px-4 py-3">
+								<dt className="font-medium text-muted-foreground">{label}</dt>
+								<dd className="text-right">{value}</dd>
 							</div>
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="namespace">Namespace</Label>
-								<Input id="namespace" value={item.namespace} readOnly />
-							</div>
-						</div>
-						<div className="grid grid-cols-2 gap-4">
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="status">Status</Label>
-								<div className="flex items-center gap-2">
-									{getStatusBadge(item.status)}
-								</div>
-							</div>
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="node">Node</Label>
-								<Input id="node" value={item.node} readOnly />
-							</div>
-						</div>
-						<div className="grid grid-cols-3 gap-4">
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="ready">Ready</Label>
-								<Input id="ready" value={item.ready} readOnly className="font-mono" />
-							</div>
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="restarts">Restarts</Label>
-								<Input id="restarts" value={item.restarts.toString()} readOnly className="font-mono" />
-							</div>
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="age">Age</Label>
-								<Input id="age" value={item.age} readOnly className="font-mono" />
-							</div>
-						</div>
-						<div className="grid grid-cols-2 gap-4">
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="cpu">CPU Usage</Label>
-								<Input id="cpu" value={item.cpu} readOnly className="font-mono" />
-							</div>
-							<div className="flex flex-col gap-3">
-								<Label htmlFor="memory">Memory Usage</Label>
-								<Input id="memory" value={item.memory} readOnly className="font-mono" />
-							</div>
-						</div>
-						<div className="flex flex-col gap-3">
-							<Label htmlFor="image">Container Image</Label>
-							<Input id="image" value={item.image} readOnly className="font-mono text-sm" />
-						</div>
-					</div>
+						))}
+					</dl>
 				</div>
-				<DrawerFooter>
-					<div className="flex gap-2">
-						<Button size="sm">
-							<IconTerminal className="size-4 mr-2" />
-							Exec Shell
-						</Button>
-						<Button variant="outline" size="sm">
-							<IconEdit className="size-4 mr-2" />
-							Edit YAML
-						</Button>
-					</div>
+
+				<DrawerFooter className="flex flex-col gap-2 px-6 pb-6 pt-4">
+					<Button size="sm" className="w-full">
+						<IconTerminal className="size-4 mr-2" />
+						Exec Shell
+					</Button>
+					<Button variant="outline" size="sm" className="w-full">
+						<IconEdit className="size-4 mr-2" />
+						Edit YAML
+					</Button>
 					<DrawerClose asChild>
-						<Button variant="outline">Close</Button>
+						<Button variant="outline" size="sm" className="w-full">
+							Close
+						</Button>
 					</DrawerClose>
 				</DrawerFooter>
 			</DrawerContent>
