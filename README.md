@@ -1,6 +1,6 @@
 # Kaptain
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/aaronlmathis/k8s-admin-dash)](https://goreportcard.com/report/github.com/aaronlmathis/k8s-admin-dash)
+[![Go Report Card](https://goreportcard.com/badge/github.com/aaronlmathis/k8s-admin-dash/internal)](https://goreportcard.com/report/github.com/aaronlmathis/k8s-admin-dash/internal)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A secure, production-ready **Kubernetes admin dashboard** that can observe cluster state and perform safe operational actions. Built with Go backend (client-go + WebSockets) and Astro + React + Shadcn frontend (TypeScript + Tailwind CSS).
@@ -61,7 +61,8 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
    ```
 
 4. **Access the dashboard**:
-   - http://localhost:8080/dashboard
+   - http://localhost:8080/
+
 
 ### Build and Deploy
 
