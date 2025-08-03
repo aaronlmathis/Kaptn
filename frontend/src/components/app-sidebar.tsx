@@ -53,7 +53,7 @@ const data = {
   navMain: [
     {
       title: "Dashboard",
-      url: "/dashboard",
+      url: "/",
       icon: IconDashboard,
     },
     {
@@ -96,6 +96,10 @@ const data = {
       url: "/services",
       icon: IconDatabase,
       items: [
+        {
+          title: "Services",
+          url: "/services",
+        },
         {
           title: "Endpoints",
           url: "/endpoints",
@@ -187,7 +191,7 @@ const data = {
           url: "/cluster/api-resources",
         },
         {
-          title: "Custom Resource Definitions",
+          title: "CRDs",
           url: "/cluster/crds",
         },
         {

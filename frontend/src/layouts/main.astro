@@ -11,24 +11,28 @@ const { title } = Astro.props;
 
 <html lang="en">
 	<head>
-		<meta charset="utf-8" />		<meta name="viewport" content="width=device-width" />
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<title>{title}</title>
-		
+
 		<!-- Prevent theme flash by setting theme immediately -->
 		<script is:inline>
-			(function() {
+			(function () {
 				function getThemePreference() {
-					const stored = localStorage.getItem('vite-ui-theme');
-					if (stored && (stored === 'light' || stored === 'dark')) {
+					const stored = localStorage.getItem("vite-ui-theme");
+					if (stored && (stored === "light" || stored === "dark")) {
 						return stored;
 					}
-					if (stored === 'system' || !stored) {
-						return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+					if (stored === "system" || !stored) {
+						return window.matchMedia("(prefers-color-scheme: dark)")
+							.matches
+							? "dark"
+							: "light";
 					}
-					return 'light';
+					return "light";
 				}
-				
+
 				const theme = getThemePreference();
 				document.documentElement.classList.add(theme);
 			})();

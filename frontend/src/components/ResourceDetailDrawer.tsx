@@ -11,6 +11,7 @@ import {
 	DrawerTrigger,
 } from "@/components/ui/drawer"
 import { Button } from "@/components/ui/button"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { IconX } from "@tabler/icons-react"
 
 interface ResourceDetailDrawerProps {
@@ -47,22 +48,25 @@ export function ResourceDetailDrawer({
 				{trigger}
 			</DrawerTrigger>
 
-			<DrawerContent>
+			<DrawerContent className="flex flex-col h-full">
 				{/* Header with title/description */}
-				<DrawerHeader className="flex justify-between items-start">
+				<DrawerHeader className="flex justify-between items-start flex-shrink-0">
 					<div className="space-y-1">
 						<DrawerTitle>{title}</DrawerTitle>
 						<DrawerDescription>{description}</DrawerDescription>
 					</div>
 				</DrawerHeader>
 
-				{/* Content area with scrolling */}
-				<div className="overflow-y-auto px-6 text-sm">
-					{children}
-				</div>
+				{/* Content area with styled scrolling */}
+				<ScrollArea className="flex-1 min-h-0">
+					<div className="px-6 text-sm">
+						{children}
+					</div>
+					<ScrollBar orientation="vertical" />
+				</ScrollArea>
 
 				{/* Footer with actions */}
-				<DrawerFooter className="flex flex-col gap-2 px-6 pb-6 pt-4">
+				<DrawerFooter className="flex flex-col gap-2 px-6 pb-6 pt-4 flex-shrink-0">
 					{actions}
 					<DrawerClose asChild>
 						<Button variant="outline" size="sm" className="w-full">

@@ -14,6 +14,7 @@ import {
 	DrawerTitle,
 } from "@/components/ui/drawer"
 import { DetailRows } from "@/components/ResourceDetailDrawer"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useDeploymentDetails } from "@/hooks/use-resource-details"
 
@@ -85,8 +86,17 @@ export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentD
 			const availableCondition = deploymentDetails.status.conditions.find((c: any) => c.type === 'Available')
 			if (availableCondition) {
 				additionalRows.push(["Available Condition", (
-					<div className="text-sm">
-						{availableCondition.status === 'True' ? '✅' : '❌'} {availableCondition.reason || 'N/A'}
+					<div className="flex items-center gap-2">
+						<Badge 
+							variant="outline" 
+							className={`px-1.5 ${availableCondition.status === 'True' 
+								? 'text-green-600 border-border bg-transparent' 
+								: 'text-red-600 border-border bg-transparent'
+							}`}
+						>
+							{availableCondition.status === 'True' ? 'Available' : 'Not Available'}
+						</Badge>
+						<span className="text-sm text-muted-foreground">{availableCondition.reason || 'N/A'}</span>
 					</div>
 				)])
 			}
@@ -94,8 +104,17 @@ export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentD
 			const progressingCondition = deploymentDetails.status.conditions.find((c: any) => c.type === 'Progressing')
 			if (progressingCondition) {
 				additionalRows.push(["Progressing Condition", (
-					<div className="text-sm">
-						{progressingCondition.status === 'True' ? '✅' : '❌'} {progressingCondition.reason || 'N/A'}
+					<div className="flex items-center gap-2">
+						<Badge 
+							variant="outline" 
+							className={`px-1.5 ${progressingCondition.status === 'True' 
+								? 'text-green-600 border-border bg-transparent' 
+								: 'text-red-600 border-border bg-transparent'
+							}`}
+						>
+							{progressingCondition.status === 'True' ? 'Progressing' : 'Not Progressing'}
+						</Badge>
+						<span className="text-sm text-muted-foreground">{progressingCondition.reason || 'N/A'}</span>
 					</div>
 				)])
 			}
@@ -136,9 +155,9 @@ export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentD
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>
-			<DrawerContent>
+			<DrawerContent className="flex flex-col h-full">
 				{/* Header with title/description */}
-				<DrawerHeader className="flex justify-between items-start">
+				<DrawerHeader className="flex justify-between items-start flex-shrink-0">
 					<div className="space-y-1">
 						<DrawerTitle>{item.name}</DrawerTitle>
 						<DrawerDescription>
@@ -147,29 +166,32 @@ export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentD
 					</div>
 				</DrawerHeader>
 
-				{/* Content area with scrolling */}
-				<div className="overflow-y-auto px-6 text-sm">
-					{error ? (
-						<div className="text-red-600 p-4 text-sm">
-							⚠️ Failed to load detailed information: {error}
-							<div className="mt-2 text-muted-foreground">
-								Showing basic information from summary data.
+				{/* Content area with styled scrolling */}
+				<ScrollArea className="flex-1 min-h-0">
+					<div className="px-6 text-sm">
+						{error ? (
+							<div className="text-red-600 p-4 text-sm">
+								⚠️ Failed to load detailed information: {error}
+								<div className="mt-2 text-muted-foreground">
+									Showing basic information from summary data.
+								</div>
 							</div>
-						</div>
-					) : null}
+						) : null}
 
-					<DetailRows rows={allRows} />
+						<DetailRows rows={allRows} />
 
-					{loading && (
-						<div className="flex items-center justify-center py-4 text-muted-foreground">
-							<IconLoader className="size-4 animate-spin mr-2" />
-							Loading detailed information...
-						</div>
-					)}
-				</div>
+						{loading && (
+							<div className="flex items-center justify-center py-4 text-muted-foreground">
+								<IconLoader className="size-4 animate-spin mr-2" />
+								Loading detailed information...
+							</div>
+						)}
+					</div>
+					<ScrollBar orientation="vertical" />
+				</ScrollArea>
 
 				{/* Footer with actions */}
-				<DrawerFooter className="flex flex-col gap-2 px-6 pb-6 pt-4">
+				<DrawerFooter className="flex flex-col gap-2 px-6 pb-6 pt-4 flex-shrink-0">
 					{actions}
 					<DrawerClose asChild>
 						<Button variant="outline" size="sm" className="w-full">
