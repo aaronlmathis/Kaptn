@@ -6,23 +6,26 @@ import { SectionCards } from "@/components/section-cards"
 import { SiteHeader } from "@/components/site-header"
 import { ThemeProvider } from "@/components/theme-provider"
 import { NamespaceProvider } from "@/contexts/namespace-context"
+import { NavigationProvider } from "@/contexts/navigation-context"
 import {
 	SidebarInset,
 	SidebarProvider,
 } from "@/components/ui/sidebar"
+
 import { Toaster } from "@/components/ui/sonner"
 
 export function DashboardContainer() {
 	return (
 		<ThemeProvider defaultTheme="system" storageKey="k8s-dashboard-theme">
-			<NamespaceProvider>
-				<div
-					className="sidebar-layout"
-					style={{
-						"--sidebar-width": "calc(var(--spacing) * 72)",
-						"--header-height": "calc(var(--spacing) * 12)",
-					} as React.CSSProperties}
-				>
+			<NavigationProvider>
+				<NamespaceProvider>
+					<div
+						className="sidebar-layout"
+						style={{
+							"--sidebar-width": "calc(var(--spacing) * 72)",
+							"--header-height": "calc(var(--spacing) * 12)",
+						} as React.CSSProperties}
+					>
 					<SidebarProvider>
 						<AppSidebar variant="inset" />
 						<SidebarInset>
@@ -43,6 +46,7 @@ export function DashboardContainer() {
 				</div>
 				<Toaster />
 			</NamespaceProvider>
-		</ThemeProvider>
+		</NavigationProvider>
+	</ThemeProvider>
 	)
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { ChevronRight, type LucideIcon } from "lucide-react"
+import { useNavigation } from "@/contexts/navigation-context"
 
 import {
   Collapsible,
@@ -32,6 +33,12 @@ export function NavMain({
     }[]
   }[]
 }) {
+  const { setCurrentPath } = useNavigation()
+
+  const handleNavigation = (url: string) => {
+    setCurrentPath(url)
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -45,7 +52,10 @@ export function NavMain({
           >
             <SidebarMenuItem>
               <CollapsibleTrigger asChild>
-                <SidebarMenuButton tooltip={item.title}>
+                <SidebarMenuButton 
+                  tooltip={item.title}
+                  onClick={() => item.url !== '#' && handleNavigation(item.url)}
+                >
                   {item.icon && <item.icon />}
                   <span>{item.title}</span>
                   <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
@@ -56,7 +66,13 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton asChild>
-                        <a href={subItem.url}>
+                        <a 
+                          href={subItem.url}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handleNavigation(subItem.url)
+                          }}
+                        >
                           <span>{subItem.title}</span>
                         </a>
                       </SidebarMenuSubButton>
