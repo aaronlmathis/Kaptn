@@ -1,10 +1,10 @@
-# Kubernetes Admin Dashboard
+# Kaptain
 
 [![CI](https://github.com/aaronlmathis/k8s-admin-dash/workflows/CI/badge.svg)](https://github.com/aaronlmathis/k8s-admin-dash/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/aaronlmathis/k8s-admin-dash)](https://goreportcard.com/report/github.com/aaronlmathis/k8s-admin-dash)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A secure, production-ready **Kubernetes admin dashboard** that can observe cluster state and perform safe operational actions. Built with Go backend (client-go + WebSockets) and React frontend (TypeScript + Tailwind CSS).
+A secure, production-ready **Kubernetes admin dashboard** that can observe cluster state and perform safe operational actions. Built with Go backend (client-go + WebSockets) and Astro + React + Shadcn frontend (TypeScript + Tailwind CSS).
 
 ## Features
 
@@ -16,7 +16,14 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 - **Easy deployment** - Helm chart for in-cluster deployment
 - **Multiple modes** - Container deployment or desktop app (Wails2)
 
-![Kubernetes Admin Dashboard Screenshot](images/dashboard-current.png)
+**Current Dashboard**
+
+![Kubernetes Admin Dashboard Screenshot](images/Kaptain_Dashboard.png)
+
+**Edit YAML / Pod Details**
+
+![Kubernetes Admin - Edit YAML / Pod Details](images/Kaptain_Edit_YAML.png)
+
 
 ---
 
