@@ -77,7 +77,7 @@ import {
 	TableRow,
 } from "@/components/ui/table"
 
-import { PodDetailViewer } from "@/components/viewers/PodDetailViewer"
+import { useShell } from "@/hooks/use-shell"
 import { PodDetailDrawer } from "@/components/viewers/PodDetailDrawer"
 import { usePods } from "@/hooks/use-k8s-data"
 import { useNamespace } from "@/contexts/namespace-context"
@@ -154,7 +154,8 @@ function getStatusBadge(status: string) {
 
 // Column definitions for pods table
 const createColumns = (
-	onViewDetails: (pod: z.infer<typeof podSchema>) => void
+	onViewDetails: (pod: z.infer<typeof podSchema>) => void,
+	onExecShell?: (pod: z.infer<typeof podSchema>) => void
 ): ColumnDef<z.infer<typeof podSchema>>[] => [
 		{
 			id: "drag",
@@ -279,7 +280,10 @@ const createColumns = (
 							<IconEye className="size-4 mr-2" />
 							View Details
 						</DropdownMenuItem>
-						<DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => onExecShell?.(row.original)}
+							disabled={!onExecShell}
+						>
 							<IconTerminal className="size-4 mr-2" />
 							Exec Shell
 						</DropdownMenuItem>
@@ -337,6 +341,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 export function PodsDataTable() {
 	const { data: pods, loading, error, refetch } = usePods()
 	const { selectedNamespace } = useNamespace()
+	const { openShell } = useShell()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -351,10 +356,15 @@ export function PodsDataTable() {
 		setDetailDrawerOpen(true)
 	}, [])
 
+	// Handle exec shell
+	const handleExecShell = React.useCallback((pod: z.infer<typeof podSchema>) => {
+		openShell(pod.name, pod.namespace)
+	}, [openShell])
+
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
+		() => createColumns(handleViewDetails, handleExecShell),
+		[handleViewDetails, handleExecShell]
 	)
 
 	const table = useReactTable({

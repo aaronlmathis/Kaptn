@@ -1,51 +1,55 @@
 "use client"
 
 import * as React from "react"
-import { useEffect } from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { NavigationProvider } from "@/contexts/navigation-context"
 import { NamespaceProvider } from "@/contexts/namespace-context"
+import { ShellProvider } from "@/contexts/shell-context"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { Toaster } from "@/components/ui/sonner"
 import { PodsDataTable } from "@/components/pages/PodsDataTable"
+import { PodShellManager } from "@/components/PodShellManager"
 
 export function PodsPageContainer() {
 	return (
 		<ThemeProvider defaultTheme="system" storageKey="k8s-dashboard-theme">
 			<NavigationProvider>
 				<NamespaceProvider>
-					<div
-						className="sidebar-layout"
-						style={{
-							"--sidebar-width": "calc(var(--spacing) * 72)",
-							"--header-height": "calc(var(--spacing) * 12)",
-						} as React.CSSProperties}
-					>
-						<SidebarProvider>
-							<AppSidebar variant="inset" />
-							<SidebarInset>
-								<SiteHeader />
-								<div className="flex flex-1 flex-col">
-									<div className="@container/main flex flex-1 flex-col gap-2">
-										<div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-											<div className="px-4 lg:px-6">
-												<div className="space-y-2">
-													<h1 className="text-2xl font-bold tracking-tight">Pods</h1>
-													<p className="text-muted-foreground">
-														Manage and monitor pod resources in your Kubernetes cluster
-													</p>
+					<ShellProvider>
+						<div
+							className="sidebar-layout"
+							style={{
+								"--sidebar-width": "calc(var(--spacing) * 72)",
+								"--header-height": "calc(var(--spacing) * 12)",
+							} as React.CSSProperties}
+						>
+							<SidebarProvider>
+								<AppSidebar variant="inset" />
+								<SidebarInset>
+									<SiteHeader />
+									<div className="flex flex-1 flex-col">
+										<div className="@container/main flex flex-1 flex-col gap-2">
+											<div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+												<div className="px-4 lg:px-6">
+													<div className="space-y-2">
+														<h1 className="text-2xl font-bold tracking-tight">Pods</h1>
+														<p className="text-muted-foreground">
+															Manage and monitor pod resources in your Kubernetes cluster
+														</p>
+													</div>
 												</div>
+												<PodsDataTable />
 											</div>
-											<PodsDataTable />
 										</div>
 									</div>
-								</div>
-							</SidebarInset>
-						</SidebarProvider>
-					</div>
-					<Toaster />
+								</SidebarInset>
+							</SidebarProvider>
+						</div>
+						<Toaster />
+						<PodShellManager />
+					</ShellProvider>
 				</NamespaceProvider>
 			</NavigationProvider>
 		</ThemeProvider>

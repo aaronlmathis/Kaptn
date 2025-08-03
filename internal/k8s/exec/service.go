@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -60,10 +61,16 @@ type Message struct {
 
 // NewExecManager creates a new exec manager
 func NewExecManager(logger *zap.Logger, kubeClient kubernetes.Interface, restConfig *rest.Config) *ExecManager {
+	// Configure rest config for exec operations
+	config := rest.CopyConfig(restConfig)
+	if config.Timeout == 0 {
+		config.Timeout = 30 * time.Second // Set a reasonable timeout
+	}
+
 	return &ExecManager{
 		logger:     logger,
 		kubeClient: kubeClient,
-		restConfig: restConfig,
+		restConfig: config,
 		sessions:   make(map[string]*ExecSession),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -81,7 +88,9 @@ func (em *ExecManager) StartExecSession(w http.ResponseWriter, r *http.Request, 
 		return fmt.Errorf("failed to upgrade connection: %w", err)
 	}
 
-	ctx, cancel := context.WithCancel(r.Context())
+	// Use a background context instead of the request context
+	// The request context gets canceled after the HTTP upgrade
+	ctx, cancel := context.WithCancel(context.Background())
 
 	session := &ExecSession{
 		ID:        sessionID,
@@ -137,6 +146,12 @@ func (em *ExecManager) handleExecSession(session *ExecSession, tty bool) {
 		em.mutex.Unlock()
 	}()
 
+	em.logger.Info("Starting exec session handler",
+		zap.String("sessionID", session.ID),
+		zap.String("namespace", session.namespace),
+		zap.String("pod", session.podName),
+		zap.String("container", session.container))
+
 	// Create exec request
 	execReq := em.kubeClient.CoreV1().RESTClient().Post().
 		Resource("pods").
@@ -152,15 +167,24 @@ func (em *ExecManager) handleExecSession(session *ExecSession, tty bool) {
 			TTY:       tty,
 		}, scheme.ParameterCodec)
 
+	em.logger.Info("Created exec request",
+		zap.String("sessionID", session.ID),
+		zap.String("url", execReq.URL().String()))
+
 	// Create executor
 	executor, err := remotecommand.NewSPDYExecutor(em.restConfig, "POST", execReq.URL())
 	if err != nil {
+		em.logger.Error("Failed to create executor", zap.String("sessionID", session.ID), zap.Error(err))
 		em.sendError(session.conn, fmt.Sprintf("Failed to create executor: %v", err))
 		return
 	}
 
+	em.logger.Info("Created SPDY executor", zap.String("sessionID", session.ID))
+
 	// Start reading from WebSocket for stdin
 	go session.stdin.start(session.ctx)
+
+	em.logger.Info("Starting executor stream", zap.String("sessionID", session.ID))
 
 	// Execute the command
 	err = executor.StreamWithContext(session.ctx, remotecommand.StreamOptions{
@@ -171,6 +195,7 @@ func (em *ExecManager) handleExecSession(session *ExecSession, tty bool) {
 	})
 
 	if err != nil {
+		em.logger.Error("Exec failed", zap.String("sessionID", session.ID), zap.Error(err))
 		em.sendError(session.conn, fmt.Sprintf("Exec failed: %v", err))
 		return
 	}

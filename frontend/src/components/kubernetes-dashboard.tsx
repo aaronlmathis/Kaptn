@@ -65,6 +65,7 @@ import { z } from "zod"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { usePods, useNodes, useServices, useDeployments } from "@/hooks/use-k8s-data"
 import { useNamespace } from "@/contexts/namespace-context"
+import { useShell } from "@/hooks/use-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -257,7 +258,8 @@ function getNodeStatusBadge(status: string) {
 }
 
 const createPodColumns = (
-	onViewDetails?: (pod: z.infer<typeof podSchema>) => void
+	onViewDetails?: (pod: z.infer<typeof podSchema>) => void,
+	onExecShell?: (pod: z.infer<typeof podSchema>) => void
 ): ColumnDef<z.infer<typeof podSchema>>[] => [
 		{
 			id: "drag",
@@ -387,7 +389,10 @@ const createPodColumns = (
 								}
 							/>
 						)}
-						<DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => onExecShell?.(row.original)}
+							disabled={!onExecShell}
+						>
 							<IconTerminal className="size-4 mr-2" />
 							Exec Shell
 						</DropdownMenuItem>
@@ -801,6 +806,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 
 export function KubernetesDashboard() {
 	const { selectedNamespace } = useNamespace()
+	const { openShell } = useShell()
 
 	// Fetch live data using hooks
 	const { data: podsData, loading: podsLoading, error: podsError, refetch: refetchPods } = usePods()
@@ -835,8 +841,13 @@ export function KubernetesDashboard() {
 		setDrawerOpen(true)
 	}, [])
 
+	// Handle exec shell
+	const handleExecShell = React.useCallback((item: z.infer<typeof podSchema>) => {
+		openShell(item.name, item.namespace)
+	}, [openShell])
+
 	// Create columns for each resource type with callbacks
-	const podColumns = React.useMemo(() => createPodColumns(handleViewPodDetails), [handleViewPodDetails])
+	const podColumns = React.useMemo(() => createPodColumns(handleViewPodDetails, handleExecShell), [handleViewPodDetails, handleExecShell])
 	const nodeColumns = React.useMemo(() => createNodeColumns(handleViewNodeDetails), [handleViewNodeDetails])
 	const serviceColumns = React.useMemo(() => createServiceColumns(handleViewServiceDetails), [handleViewServiceDetails])
 	const deploymentColumns = React.useMemo(() => createDeploymentColumns(handleViewDeploymentDetails), [handleViewDeploymentDetails])
