@@ -110,7 +110,7 @@ func (s *Server) handleDrainNode(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"jobId": jobID})
 }
 
-func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListActionJobs(w http.ResponseWriter, r *http.Request) {
 	jobs := s.actionsService.ListJobs()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -124,7 +124,7 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetActionJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobId")
 
 	job, exists := s.actionsService.GetJob(jobID)

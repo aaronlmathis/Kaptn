@@ -176,6 +176,29 @@ export interface ReplicaSet {
 	selector: Record<string, unknown>;
 }
 
+// Job interfaces based on the actual backend API response
+export interface Job {
+	name: string;
+	namespace: string;
+	status: string;
+	completions: string;
+	duration: string;
+	age: string;
+	image: string;
+	labels: Record<string, string>;
+	creationTimestamp: string;
+	parallelism: number;
+	backoffLimit: number;
+	activeDeadlineSeconds?: number;
+	conditions: Array<{
+		type: string;
+		status: string;
+		lastTransitionTime: string;
+		reason: string;
+		message: string;
+	}>;
+}
+
 // Namespace interface
 export interface Namespace {
 	metadata: {
@@ -281,6 +304,17 @@ export interface DashboardReplicaSet {
 	age: string;
 }
 
+export interface DashboardJob {
+	id: number;
+	name: string;
+	namespace: string;
+	status: string;
+	completions: string;
+	duration: string;
+	age: string;
+	image: string;
+}
+
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
@@ -349,6 +383,17 @@ export class K8sService {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: ReplicaSet[] }; status: string }>(`/replicasets${query}`);
 		return response.data.items;
+	}
+
+	// Job operations
+	async getJobs(namespace?: string): Promise<Job[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: Job[] }; status: string }>(`/k8s-jobs${query}`);
+		return response.data.items;
+	}
+
+	async getJob(namespace: string, name: string): Promise<Job> {
+		return apiClient.get<Job>(`/k8s-jobs/${namespace}/${name}`);
 	}
 
 	// Namespace operations
@@ -497,6 +542,19 @@ export function transformReplicaSetsToUI(replicaSets: ReplicaSet[]): DashboardRe
 		current: replicaSet.replicas.available, // Using available as current
 		available: replicaSet.replicas.available,
 		age: replicaSet.age
+	}));
+}
+
+export function transformJobsToUI(jobs: Job[]): DashboardJob[] {
+	return jobs.map((job, index) => ({
+		id: index,
+		name: job.name,
+		namespace: job.namespace,
+		status: job.status,
+		completions: job.completions,
+		duration: job.duration,
+		age: job.age,
+		image: job.image
 	}));
 }
 

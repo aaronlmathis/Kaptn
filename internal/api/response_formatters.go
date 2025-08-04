@@ -6,6 +6,7 @@ import (
 
 	"github.com/aaronlmathis/kaptn/internal/k8s/metrics"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -466,9 +467,9 @@ func (s *Server) replicaSetToResponse(replicaSet appsv1.ReplicaSet) map[string]i
 	}
 
 	replicas := map[string]int32{
-		"desired":   desired,
-		"ready":     replicaSet.Status.ReadyReplicas,
-		"available": replicaSet.Status.AvailableReplicas,
+		"desired":      desired,
+		"ready":        replicaSet.Status.ReadyReplicas,
+		"available":    replicaSet.Status.AvailableReplicas,
 		"fullyLabeled": replicaSet.Status.FullyLabeledReplicas,
 	}
 
@@ -621,4 +622,87 @@ func getStatusReason(pod *v1.Pod) *string {
 	}
 
 	return nil
+}
+
+// jobToResponse converts a Kubernetes job to response format
+func (s *Server) jobToResponse(job batchv1.Job) map[string]interface{} {
+	// Calculate age
+	ageStr := calculateAge(job.CreationTimestamp.Time)
+
+	// Get job status
+	status := "Unknown"
+	if job.Status.CompletionTime != nil {
+		status = "Complete"
+	} else if job.Status.Failed > 0 {
+		status = "Failed"
+	} else if job.Status.Active > 0 {
+		status = "Running"
+	} else if job.Status.Succeeded > 0 {
+		status = "Complete"
+	}
+
+	// Calculate completions
+	completions := "0/1"
+	if job.Spec.Completions != nil {
+		completions = fmt.Sprintf("%d/%d", job.Status.Succeeded, *job.Spec.Completions)
+	} else {
+		completions = fmt.Sprintf("%d", job.Status.Succeeded)
+	}
+
+	// Calculate duration
+	duration := "N/A"
+	if job.Status.StartTime != nil {
+		var endTime time.Time
+		if job.Status.CompletionTime != nil {
+			endTime = job.Status.CompletionTime.Time
+		} else {
+			endTime = time.Now()
+		}
+		jobDuration := endTime.Sub(job.Status.StartTime.Time)
+		duration = calculateAge(time.Now().Add(-jobDuration))
+	}
+
+	// Get container image from job spec
+	image := "N/A"
+	if len(job.Spec.Template.Spec.Containers) > 0 {
+		image = job.Spec.Template.Spec.Containers[0].Image
+	}
+
+	return map[string]interface{}{
+		"name":              job.Name,
+		"namespace":         job.Namespace,
+		"status":            status,
+		"completions":       completions,
+		"duration":          duration,
+		"age":               ageStr,
+		"image":             image,
+		"labels":            job.Labels,
+		"creationTimestamp": job.CreationTimestamp.Format(time.RFC3339),
+		"parallelism": func() int32 {
+			if job.Spec.Parallelism != nil {
+				return *job.Spec.Parallelism
+			}
+			return 1
+		}(),
+		"backoffLimit": func() int32 {
+			if job.Spec.BackoffLimit != nil {
+				return *job.Spec.BackoffLimit
+			}
+			return 6
+		}(),
+		"activeDeadlineSeconds": job.Spec.ActiveDeadlineSeconds,
+		"conditions": func() []map[string]interface{} {
+			var conditions []map[string]interface{}
+			for _, condition := range job.Status.Conditions {
+				conditions = append(conditions, map[string]interface{}{
+					"type":               condition.Type,
+					"status":             condition.Status,
+					"lastTransitionTime": condition.LastTransitionTime.Format(time.RFC3339),
+					"reason":             condition.Reason,
+					"message":            condition.Message,
+				})
+			}
+			return conditions
+		}(),
+	}
 }

@@ -41,22 +41,22 @@ function getReadyBadge(ready: string) {
 }
 
 interface ReplicaSetDetailDrawerProps {
-	item: ReplicaSetTableRow | null
-	open: boolean
-	onOpenChange: (open: boolean) => void
+  item: ReplicaSetTableRow | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }/**
  * Controlled ReplicaSetDetailDrawer that can be opened programmatically.
  * This shows full ReplicaSet details from the detailed API endpoint instead of the condensed version.
  */
 export function ReplicaSetDetailDrawer({ item, open, onOpenChange }: ReplicaSetDetailDrawerProps) {
-	const isMobile = useIsMobile()
+  const isMobile = useIsMobile()
 
-	// Fetch detailed ReplicaSet information - always call hooks at top level
-	const { data: replicaSetDetails, loading, error } = useReplicaSetDetails(
-		item?.namespace || "",
-		item?.name || "",
-		open && !!item
-	)  // Additional detailed rows from API (when available) - moved to top to avoid conditional hook calls
+  // Fetch detailed ReplicaSet information - always call hooks at top level
+  const { data: replicaSetDetails, loading, error } = useReplicaSetDetails(
+    item?.namespace || "",
+    item?.name || "",
+    open && !!item
+  )  // Additional detailed rows from API (when available) - moved to top to avoid conditional hook calls
   const detailedRows: Array<[string, React.ReactNode]> = React.useMemo(() => {
     if (!replicaSetDetails) return []
 
@@ -106,22 +106,22 @@ export function ReplicaSetDetailDrawer({ item, open, onOpenChange }: ReplicaSetD
     return additionalRows
   }, [replicaSetDetails])
 
-	if (!item) return null
+  if (!item) return null
 
-	// Basic rows from summary data (available immediately)
-	const basicRows: Array<[string, React.ReactNode]> = [
-		["ReplicaSet Name", item.name],
-		["Namespace", (
-			<Badge variant="outline" className="text-muted-foreground px-1.5">
-				{item.namespace}
-			</Badge>
-		)],
-		["Ready Replicas", getReadyBadge(item.ready)],
-		["Current Replicas", <div className="font-mono text-sm">{item.current}</div>],
-		["Available Replicas", <div className="font-mono text-sm">{item.available}</div>],
-		["Desired Replicas", <div className="font-mono text-sm">{item.desired}</div>],
-		["Age", <div className="font-mono text-sm">{item.age}</div>],
-	]  // Combine basic and detailed rows
+  // Basic rows from summary data (available immediately)
+  const basicRows: Array<[string, React.ReactNode]> = [
+    ["ReplicaSet Name", item.name],
+    ["Namespace", (
+      <Badge variant="outline" className="text-muted-foreground px-1.5">
+        {item.namespace}
+      </Badge>
+    )],
+    ["Ready Replicas", getReadyBadge(item.ready)],
+    ["Current Replicas", <div className="font-mono text-sm">{item.current}</div>],
+    ["Available Replicas", <div className="font-mono text-sm">{item.available}</div>],
+    ["Desired Replicas", <div className="font-mono text-sm">{item.desired}</div>],
+    ["Age", <div className="font-mono text-sm">{item.age}</div>],
+  ]  // Combine basic and detailed rows
   const allRows = [...basicRows, ...detailedRows]
 
   const actions = (

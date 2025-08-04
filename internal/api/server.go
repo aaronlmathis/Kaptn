@@ -358,9 +358,11 @@ func (s *Server) setupRoutes() {
 			r.Get("/replicasets/{namespace}/{name}", s.handleGetReplicaSet)
 			r.Get("/daemonsets", s.handleListDaemonSets)
 			r.Get("/daemonsets/{namespace}/{name}", s.handleGetDaemonSet)
+			r.Get("/k8s-jobs", s.handleListJobs)
+			r.Get("/k8s-jobs/{namespace}/{name}", s.handleGetJob)
 			r.Get("/overview", s.handleGetOverview)
-			r.Get("/jobs", s.handleListJobs)
-			r.Get("/jobs/{jobId}", s.handleGetJob)
+			r.Get("/jobs", s.handleListActionJobs)
+			r.Get("/jobs/{jobId}", s.handleGetActionJob)
 
 			// M5: Advanced read-only endpoints
 			r.Get("/metrics", s.handleGetMetrics)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -92,6 +93,18 @@ type ServiceFilterOptions struct {
 	Page          int
 	PageSize      int
 	Sort          string // Field to sort by (name, namespace, type, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+}
+
+// JobFilterOptions represents filtering options for jobs
+type JobFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, completions, duration, age)
 	Order         string // Sort order (asc, desc)
 	Search        string // Text search across name, namespace, labels
 }
@@ -1097,6 +1110,144 @@ func sortReplicaSets(replicaSets []appsv1.ReplicaSet, sortField, order string) {
 			less = replicaSets[i].CreationTimestamp.Time.After(replicaSets[j].CreationTimestamp.Time)
 		default:
 			less = replicaSets[i].Name < replicaSets[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// FilterJobs filters a list of jobs based on the given options
+func FilterJobs(jobs []batchv1.Job, options JobFilterOptions) ([]batchv1.Job, error) {
+	var filtered []batchv1.Job
+
+	// Apply namespace filter
+	for _, job := range jobs {
+		if options.Namespace != "" && job.Namespace != options.Namespace {
+			continue
+		}
+
+		// Apply label selector
+		if options.LabelSelector != "" {
+			selector, err := labels.Parse(options.LabelSelector)
+			if err != nil {
+				return nil, fmt.Errorf("invalid label selector: %w", err)
+			}
+			if !selector.Matches(labels.Set(job.Labels)) {
+				continue
+			}
+		}
+
+		// Apply field selector
+		if options.FieldSelector != "" {
+			selector, err := fields.ParseSelector(options.FieldSelector)
+			if err != nil {
+				return nil, fmt.Errorf("invalid field selector: %w", err)
+			}
+			// Field selector support for basic fields
+			fieldSet := fields.Set{
+				"metadata.name":      job.Name,
+				"metadata.namespace": job.Namespace,
+			}
+			if !selector.Matches(fieldSet) {
+				continue
+			}
+		}
+
+		// Apply search filter
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(job.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if strings.Contains(strings.ToLower(job.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			for k, v := range job.Labels {
+				if strings.Contains(strings.ToLower(k), searchLower) ||
+					strings.Contains(strings.ToLower(v), searchLower) {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, job)
+	}
+
+	// Sort the results
+	sortJobs(filtered, options.Sort, options.Order)
+
+	// Apply pagination
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []batchv1.Job{}, nil
+		}
+
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// sortJobs sorts jobs by the specified field and order
+func sortJobs(jobs []batchv1.Job, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(jobs, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = jobs[i].Name < jobs[j].Name
+		case "namespace":
+			less = jobs[i].Namespace < jobs[j].Namespace
+		case "completions":
+			completionsI := int32(0)
+			completionsJ := int32(0)
+			if jobs[i].Spec.Completions != nil {
+				completionsI = *jobs[i].Spec.Completions
+			}
+			if jobs[j].Spec.Completions != nil {
+				completionsJ = *jobs[j].Spec.Completions
+			}
+			less = completionsI < completionsJ
+		case "duration":
+			var durationI, durationJ int64
+			if jobs[i].Status.StartTime != nil && jobs[i].Status.CompletionTime != nil {
+				durationI = jobs[i].Status.CompletionTime.Unix() - jobs[i].Status.StartTime.Unix()
+			}
+			if jobs[j].Status.StartTime != nil && jobs[j].Status.CompletionTime != nil {
+				durationJ = jobs[j].Status.CompletionTime.Unix() - jobs[j].Status.StartTime.Unix()
+			}
+			less = durationI < durationJ
+		case "age":
+			less = jobs[i].CreationTimestamp.Time.After(jobs[j].CreationTimestamp.Time)
+		default:
+			less = jobs[i].Name < jobs[j].Name
 		}
 
 		if order == "desc" {

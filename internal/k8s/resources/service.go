@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -166,6 +167,8 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.kubeClient.AppsV1().DaemonSets(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "Service":
 		return rm.kubeClient.CoreV1().Services(req.Namespace).Delete(ctx, req.Name, deleteOptions)
+	case "Job":
+		return rm.kubeClient.BatchV1().Jobs(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "ConfigMap":
 		return rm.kubeClient.CoreV1().ConfigMaps(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "Secret":
@@ -302,6 +305,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert ReplicaSet to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredReplicaSet)
+	case "Job":
+		job, err := rm.kubeClient.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredJob := rm.convertToUnstructured(job)
+		if unstructuredJob == nil {
+			return nil, fmt.Errorf("failed to convert Job to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredJob)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -359,6 +372,15 @@ func (rm *ResourceManager) ListReplicaSets(ctx context.Context, namespace string
 		return nil, err
 	}
 	return replicaSets.Items, nil
+}
+
+// ListJobs lists all jobs in a namespace or across all namespaces
+func (rm *ResourceManager) ListJobs(ctx context.Context, namespace string) ([]batchv1.Job, error) {
+	jobs, err := rm.kubeClient.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return jobs.Items, nil
 }
 
 // ListIngresses lists all ingresses in a namespace
@@ -456,6 +478,12 @@ func (rm *ResourceManager) convertToUnstructured(obj interface{}) *unstructured.
 	case *appsv1.DaemonSet:
 		result.SetAPIVersion("apps/v1")
 		result.SetKind("DaemonSet")
+	case *appsv1.ReplicaSet:
+		result.SetAPIVersion("apps/v1")
+		result.SetKind("ReplicaSet")
+	case *batchv1.Job:
+		result.SetAPIVersion("batch/v1")
+		result.SetKind("Job")
 	case *v1.Service:
 		result.SetAPIVersion("v1")
 		result.SetKind("Service")
