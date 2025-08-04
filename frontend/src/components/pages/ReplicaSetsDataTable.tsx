@@ -1,0 +1,1 @@
+// Replace with code modeled off of PodsDataTable.tsx or StatefulSetsDataTable.tsx, but for replica sets.
