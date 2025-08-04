@@ -342,6 +342,15 @@ func (rm *ResourceManager) ListDaemonSets(ctx context.Context, namespace string)
 	return daemonSets.Items, nil
 }
 
+// ListReplicaSets lists all replicasets in a namespace or across all namespaces
+func (rm *ResourceManager) ListReplicaSets(ctx context.Context, namespace string) ([]appsv1.ReplicaSet, error) {
+	replicaSets, err := rm.kubeClient.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return replicaSets.Items, nil
+}
+
 // ListIngresses lists all ingresses in a namespace
 func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) ([]interface{}, error) {
 	// Try networking.k8s.io/v1 first, then fall back to extensions/v1beta1
