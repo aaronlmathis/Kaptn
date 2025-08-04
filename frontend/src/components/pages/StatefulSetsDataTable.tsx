@@ -251,7 +251,7 @@ const createColumns = (
 						>
 							<button
 								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{ 
+								style={{
 									background: 'transparent',
 									border: 'none',
 									textAlign: 'left'

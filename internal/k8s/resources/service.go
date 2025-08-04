@@ -270,6 +270,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert Secret to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredSecret)
+	case "StatefulSet":
+		statefulSet, err := rm.kubeClient.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredStatefulSet := rm.convertToUnstructured(statefulSet)
+		if unstructuredStatefulSet == nil {
+			return nil, fmt.Errorf("failed to convert StatefulSet to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredStatefulSet)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
