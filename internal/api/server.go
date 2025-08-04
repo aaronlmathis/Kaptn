@@ -372,6 +372,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/namespaces", s.handleListNamespaces)
 			r.Get("/services", s.handleListServices)
 			r.Get("/services/{namespace}", s.handleListServicesInNamespace)
+			r.Get("/services/{namespace}/{name}", s.handleGetService)
 			r.Get("/ingresses", s.handleListAllIngresses)
 			r.Get("/ingresses/{namespace}", s.handleListIngresses)
 			r.Get("/ingresses/{namespace}/{name}", s.handleGetIngress)

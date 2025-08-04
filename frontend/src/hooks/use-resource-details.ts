@@ -100,6 +100,52 @@ export function usePodDetails(namespace: string, name: string, enabled: boolean 
 	return { data, loading, error }
 }
 
+interface ServiceDetails {
+	summary: Record<string, unknown>
+	spec: Record<string, unknown>
+	status: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+export function useServiceDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<ServiceDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchServiceDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/services/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch service details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchServiceDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}
+
 export function useDeploymentDetails(namespace: string, name: string, enabled: boolean = true) {
 	const [data, setData] = useState<DeploymentDetails | null>(null)
 	const [loading, setLoading] = useState(false)
