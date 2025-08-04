@@ -1,0 +1,49 @@
+server:
+  addr: "0.0.0.0:8080"
+  base_path: "/"
+  cors:
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+
+security:
+  # enable one of: "none", "header", "oidc"
+  auth_mode: "none"
+  oidc:
+    issuer: ""
+    client_id: ""
+    audience: ""
+    jwks_url: ""
+
+kubernetes:
+  mode: "incluster"        # or "incluster"
+  kubeconfig_path: ""       # used if mode=kubeconfig, defaults to $KUBECONFIG
+  namespace_default: "default"
+
+features:
+  enable_apply: true
+  enable_nodes_actions: true
+  enable_overview: true
+  enable_prometheus_analytics: true
+
+rate_limits:
+  apply_per_minute: 10
+  actions_per_minute: 20
+
+logging:
+  level: "info"             # debug, info, warn, error
+
+integrations:
+  prometheus:
+    url: "http://monitoring-stack-kube-prometheus-prometheus.monitoring.svc:9090"
+    timeout: "5s"
+    enabled: true
+
+caching:
+  overview_ttl: "2s"
+  analytics_ttl: "60s"
+
+jobs:
+  persistence_enabled: true
+  store_path: "./data/jobs"
+  cleanup_interval: "1h"
+  max_age: "24h"

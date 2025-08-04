@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/table"
 
 import { StatefulSetDetailDrawer } from "@/components/viewers/StatefulSetDetailDrawer"
+import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useStatefulSets } from "@/hooks/use-k8s-data"
 import { useNamespace } from "@/contexts/namespace-context"
 import { type StatefulSetTableRow } from "@/lib/schemas/statefulset"
@@ -243,10 +244,23 @@ const createColumns = (
 							<IconEye className="size-4 mr-2" />
 							View Details
 						</DropdownMenuItem>
-						<DropdownMenuItem>
-							<IconEdit className="size-4 mr-2" />
-							Edit YAML
-						</DropdownMenuItem>
+						<ResourceYamlEditor
+							resourceName={row.original.name}
+							namespace={row.original.namespace}
+							resourceKind="StatefulSet"
+						>
+							<button
+								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+								style={{ 
+									background: 'transparent',
+									border: 'none',
+									textAlign: 'left'
+								}}
+							>
+								<IconEdit className="size-4" />
+								Edit YAML
+							</button>
+						</ResourceYamlEditor>
 						<DropdownMenuItem>
 							<IconRefresh className="size-4 mr-2" />
 							Restart

@@ -1,0 +1,105 @@
+# 1. Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+# 2. ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    server:
+      addr: "0.0.0.0:8080"
+    kubernetes:
+      mode: "incluster"
+    integrations:
+      prometheus:
+        url: "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090"
+---
+# 3. Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kaptn
+  namespace: monitoring
+  labels:
+    app: kaptn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kaptn
+  template:
+    metadata:
+      labels:
+        app: kaptn
+    spec:
+      containers:
+      - name: kaptn
+        image: docker.io/aaronlmathis/kaptn:latest
+        imagePullPolicy: IfNotPresent
+        args:
+          - "--config=/etc/kaptn/config.yaml"
+        ports:
+          - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        volumeMounts:
+          - name: config
+            mountPath: /etc/kaptn
+            readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: kaptn-config
+---
+# 4. Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kaptn
+  namespace: monitoring
+spec:
+  selector:
+    app: kaptn
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: LoadBalancer
+
+---
+# 5. Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kaptn
+  namespace: monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: kaptn.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kaptn
+                port:
+                  number: 80

@@ -1,0 +1,42 @@
+# 1) ServiceAccount (no change)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kaptn-sa
+  namespace: monitoring
+
+---
+# 2) ClusterRole with expanded permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-metrics-role
+rules:
+  # core pods & nodes
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+  # metrics.k8s.io pods & nodes
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  # resourcequotas & namespaces for cluster summary
+  - apiGroups: [""]
+    resources: ["resourcequotas", "namespaces"]
+    verbs: ["get", "list", "watch"]
+
+---
+# 3) ClusterRoleBinding (no change)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-metrics-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-metrics-role
+subjects:
+  - kind: ServiceAccount
+    name: kaptn-sa
+    namespace: monitoring
+

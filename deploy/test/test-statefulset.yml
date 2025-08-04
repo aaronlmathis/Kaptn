@@ -1,0 +1,36 @@
+# statefulset-test.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-sts-svc
+  labels:
+    app: test-sts
+spec:
+  clusterIP: None  # Headless service
+  selector:
+    app: test-sts
+  ports:
+    - port: 80
+      name: web
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: test-sts
+spec:
+  serviceName: test-sts-svc
+  replicas: 3
+  selector:
+    matchLabels:
+      app: test-sts
+  template:
+    metadata:
+      labels:
+        app: test-sts
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+              name: web
