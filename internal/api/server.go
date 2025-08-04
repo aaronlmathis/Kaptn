@@ -7,19 +7,19 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/analytics"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/auth"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/config"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/actions"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/client"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/exec"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/informers"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/logs"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/metrics"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/overview"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/resources"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/ws"
-	apimiddleware "github.com/aaronlmathis/k8s-admin-dash/internal/middleware"
+	"github.com/aaronlmathis/kaptn/internal/analytics"
+	"github.com/aaronlmathis/kaptn/internal/auth"
+	"github.com/aaronlmathis/kaptn/internal/config"
+	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
+	"github.com/aaronlmathis/kaptn/internal/k8s/client"
+	"github.com/aaronlmathis/kaptn/internal/k8s/exec"
+	"github.com/aaronlmathis/kaptn/internal/k8s/informers"
+	"github.com/aaronlmathis/kaptn/internal/k8s/logs"
+	"github.com/aaronlmathis/kaptn/internal/k8s/metrics"
+	"github.com/aaronlmathis/kaptn/internal/k8s/overview"
+	"github.com/aaronlmathis/kaptn/internal/k8s/resources"
+	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
+	apimiddleware "github.com/aaronlmathis/kaptn/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -352,6 +352,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/pods/{namespace}/{name}", s.handleGetPod)
 			r.Get("/deployments", s.handleListDeployments)
 			r.Get("/deployments/{namespace}/{name}", s.handleGetDeployment)
+			r.Get("/statefulsets", s.handleListStatefulSets)
+			r.Get("/statefulsets/{namespace}/{name}", s.handleGetStatefulSet)
 			r.Get("/overview", s.handleGetOverview)
 			r.Get("/jobs", s.handleListJobs)
 			r.Get("/jobs/{jobId}", s.handleGetJob)

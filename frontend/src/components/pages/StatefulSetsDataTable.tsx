@@ -33,7 +33,6 @@ import {
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
-	IconTerminal,
 	IconTrash,
 	IconEdit,
 	IconEye,
@@ -75,26 +74,10 @@ import {
 	TableRow,
 } from "@/components/ui/table"
 
-import { useShell } from "@/hooks/use-shell"
-import { PodDetailDrawer } from "@/components/viewers/PodDetailDrawer"
-import { usePods } from "@/hooks/use-k8s-data"
+import { StatefulSetDetailDrawer } from "@/components/viewers/StatefulSetDetailDrawer"
+import { useStatefulSets } from "@/hooks/use-k8s-data"
 import { useNamespace } from "@/contexts/namespace-context"
-import { z } from "zod"
-
-// Pod schema from kubernetes-dashboard.tsx
-export const podSchema = z.object({
-	id: z.number(),
-	name: z.string(),
-	namespace: z.string(),
-	node: z.string(),
-	status: z.string(),
-	ready: z.string(),
-	restarts: z.number(),
-	age: z.string(),
-	cpu: z.string(),
-	memory: z.string(),
-	image: z.string(),
-})
+import { type StatefulSetTableRow } from "@/lib/schemas/statefulset"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -116,45 +99,32 @@ function DragHandle({ id }: { id: number }) {
 	)
 }
 
-// Status badge helper
-function getStatusBadge(status: string) {
-	switch (status) {
-		case "Running":
-			return (
-				<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
-					<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
-					{status}
-				</Badge>
-			)
-		case "Pending":
-			return (
-				<Badge variant="outline" className="text-yellow-600 border-border bg-transparent px-1.5">
-					<IconLoader className="size-3 text-yellow-600 mr-1" />
-					{status}
-				</Badge>
-			)
-		case "CrashLoopBackOff":
-		case "Failed":
-			return (
-				<Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
-					<IconAlertTriangle className="size-3 text-red-600 mr-1" />
-					{status}
-				</Badge>
-			)
-		default:
-			return (
-				<Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
-					{status}
-				</Badge>
-			)
+// Status badge helper for StatefulSets
+function getReadyBadge(ready: string) {
+	const [current, desired] = ready.split("/").map(Number)
+	const isReady = current === desired && desired > 0
+
+	if (isReady) {
+		return (
+			<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+				<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+				{ready}
+			</Badge>
+		)
+	} else {
+		return (
+			<Badge variant="outline" className="text-yellow-600 border-border bg-transparent px-1.5">
+				<IconLoader className="size-3 text-yellow-600 mr-1" />
+				{ready}
+			</Badge>
+		)
 	}
 }
 
-// Column definitions for pods table
+// Column definitions for statefulsets table
 const createColumns = (
-	onViewDetails: (pod: z.infer<typeof podSchema>) => void,
-	onExecShell?: (pod: z.infer<typeof podSchema>) => void
-): ColumnDef<z.infer<typeof podSchema>>[] => [
+	onViewDetails: (statefulSet: StatefulSetTableRow) => void
+): ColumnDef<StatefulSetTableRow>[] => [
 		{
 			id: "drag",
 			header: () => null,
@@ -188,7 +158,7 @@ const createColumns = (
 		},
 		{
 			accessorKey: "name",
-			header: "Pod Name",
+			header: "StatefulSet Name",
 			cell: ({ row }) => {
 				return (
 					<button
@@ -211,22 +181,38 @@ const createColumns = (
 			),
 		},
 		{
-			accessorKey: "status",
-			header: "Status",
-			cell: ({ row }) => getStatusBadge(row.original.status),
-		},
-		{
 			accessorKey: "ready",
 			header: "Ready",
+			cell: ({ row }) => getReadyBadge(row.original.ready),
+		},
+		{
+			accessorKey: "current",
+			header: "Current",
 			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.ready}</div>
+				<div className="font-mono text-sm">{row.original.current}</div>
 			),
 		},
 		{
-			accessorKey: "restarts",
-			header: "Restarts",
+			accessorKey: "updated",
+			header: "Updated",
 			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.restarts}</div>
+				<div className="font-mono text-sm">{row.original.updated}</div>
+			),
+		},
+		{
+			accessorKey: "serviceName",
+			header: "Service Name",
+			cell: ({ row }) => (
+				<div className="text-sm">{row.original.serviceName}</div>
+			),
+		},
+		{
+			accessorKey: "updateStrategy",
+			header: "Update Strategy",
+			cell: ({ row }) => (
+				<Badge variant="outline" className="text-muted-foreground px-1.5">
+					{row.original.updateStrategy}
+				</Badge>
 			),
 		},
 		{
@@ -234,27 +220,6 @@ const createColumns = (
 			header: "Age",
 			cell: ({ row }) => (
 				<div className="font-mono text-sm">{row.original.age}</div>
-			),
-		},
-		{
-			accessorKey: "node",
-			header: "Node",
-			cell: ({ row }) => (
-				<div className="text-sm">{row.original.node}</div>
-			),
-		},
-		{
-			accessorKey: "cpu",
-			header: "CPU",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.cpu}</div>
-			),
-		},
-		{
-			accessorKey: "memory",
-			header: "Memory",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.memory}</div>
 			),
 		},
 		{
@@ -278,13 +243,6 @@ const createColumns = (
 							<IconEye className="size-4 mr-2" />
 							View Details
 						</DropdownMenuItem>
-						<DropdownMenuItem
-							onClick={() => onExecShell?.(row.original)}
-							disabled={!onExecShell}
-						>
-							<IconTerminal className="size-4 mr-2" />
-							Exec Shell
-						</DropdownMenuItem>
 						<DropdownMenuItem>
 							<IconEdit className="size-4 mr-2" />
 							Edit YAML
@@ -305,7 +263,7 @@ const createColumns = (
 	]
 
 // Draggable row component
-function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
+function DraggableRow({ row }: { row: Row<StatefulSetTableRow> }) {
 	const {
 		transform,
 		transition,
@@ -336,37 +294,31 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 	)
 }
 
-export function PodsDataTable() {
-	const { data: pods, loading, error, refetch } = usePods()
+export function StatefulSetsDataTable() {
+	const { data: statefulSets, loading, error, refetch } = useStatefulSets()
 	const { selectedNamespace } = useNamespace()
-	const { openShell } = useShell()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
-	const [selectedPodForDetails, setSelectedPodForDetails] = React.useState<z.infer<typeof podSchema> | null>(null)
+	const [selectedStatefulSetForDetails, setSelectedStatefulSetForDetails] = React.useState<StatefulSetTableRow | null>(null)
 
 	// Handle opening detail drawer
-	const handleViewDetails = React.useCallback((pod: z.infer<typeof podSchema>) => {
-		setSelectedPodForDetails(pod)
+	const handleViewDetails = React.useCallback((statefulSet: StatefulSetTableRow) => {
+		setSelectedStatefulSetForDetails(statefulSet)
 		setDetailDrawerOpen(true)
 	}, [])
 
-	// Handle exec shell
-	const handleExecShell = React.useCallback((pod: z.infer<typeof podSchema>) => {
-		openShell(pod.name, pod.namespace)
-	}, [openShell])
-
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleExecShell),
-		[handleViewDetails, handleExecShell]
+		() => createColumns(handleViewDetails),
+		[handleViewDetails]
 	)
 
 	const table = useReactTable({
-		data: pods,
+		data: statefulSets,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -394,12 +346,12 @@ export function PodsDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		pods.map((pod) => pod.id)
+		statefulSets.map((statefulSet) => statefulSet.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(pods.map((pod) => pod.id))
-	}, [pods])
+		setSortableIds(statefulSets.map((statefulSet) => statefulSet.id))
+	}, [statefulSets])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -417,7 +369,7 @@ export function PodsDataTable() {
 			<div className="px-4 lg:px-6">
 				<div className="flex items-center justify-center py-10">
 					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading pods...</span>
+					<span className="ml-2">Loading StatefulSets...</span>
 				</div>
 			</div>
 		)
@@ -524,7 +476,7 @@ export function PodsDataTable() {
 												colSpan={columns.length}
 												className="h-24 text-center"
 											>
-												No pods found in {selectedNamespace === 'all' ? 'any namespace' : `namespace "${selectedNamespace}"`}.
+												No StatefulSets found in {selectedNamespace === 'all' ? 'any namespace' : `namespace "${selectedNamespace}"`}.
 											</TableCell>
 										</TableRow>
 									)}
@@ -606,15 +558,15 @@ export function PodsDataTable() {
 				</div>
 			</div>
 
-			{/* Controlled detail drawer for full pod details */}
-			{selectedPodForDetails && (
-				<PodDetailDrawer
-					item={selectedPodForDetails}
+			{/* Controlled detail drawer for full StatefulSet details */}
+			{selectedStatefulSetForDetails && (
+				<StatefulSetDetailDrawer
+					statefulSet={selectedStatefulSetForDetails}
 					open={detailDrawerOpen}
-					onOpenChange={(open) => {
+					onClose={(open: boolean) => {
 						setDetailDrawerOpen(open)
 						if (!open) {
-							setSelectedPodForDetails(null)
+							setSelectedStatefulSetForDetails(null)
 						}
 					}}
 				/>

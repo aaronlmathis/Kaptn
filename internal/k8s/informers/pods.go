@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/ws"
+	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
 )
 
 // PodEventHandler handles pod events and broadcasts them via WebSocket

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/metrics"
+	"github.com/aaronlmathis/kaptn/internal/k8s/metrics"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
@@ -362,6 +362,50 @@ func (s *Server) deploymentToResponse(deployment appsv1.Deployment) map[string]i
 		"age":               age,
 		"labels":            deployment.Labels,
 		"creationTimestamp": deployment.CreationTimestamp.Time,
+	}
+}
+
+// statefulSetToResponse converts a Kubernetes statefulset to response format
+func (s *Server) statefulSetToResponse(statefulSet appsv1.StatefulSet) map[string]interface{} {
+	// Calculate age
+	age := calculateAge(statefulSet.CreationTimestamp.Time)
+
+	// Prepare replica counts
+	desired := int32(0)
+	if statefulSet.Spec.Replicas != nil {
+		desired = *statefulSet.Spec.Replicas
+	}
+
+	replicas := map[string]int32{
+		"desired": desired,
+		"ready":   statefulSet.Status.ReadyReplicas,
+		"current": statefulSet.Status.CurrentReplicas,
+		"updated": statefulSet.Status.UpdatedReplicas,
+	}
+
+	// Convert conditions
+	var conditions []map[string]string
+	for _, condition := range statefulSet.Status.Conditions {
+		conditions = append(conditions, map[string]string{
+			"type":    string(condition.Type),
+			"status":  string(condition.Status),
+			"reason":  condition.Reason,
+			"message": condition.Message,
+		})
+	}
+
+	return map[string]interface{}{
+		"name":              statefulSet.Name,
+		"namespace":         statefulSet.Namespace,
+		"replicas":          replicas,
+		"conditions":        conditions,
+		"age":               age,
+		"labels":            statefulSet.Labels,
+		"creationTimestamp": statefulSet.CreationTimestamp.Time,
+		"serviceName":       statefulSet.Spec.ServiceName,
+		"updateStrategy":    statefulSet.Spec.UpdateStrategy.Type,
+		"currentRevision":   statefulSet.Status.CurrentRevision,
+		"updateRevision":    statefulSet.Status.UpdateRevision,
 	}
 }
 

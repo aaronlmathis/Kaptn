@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/actions"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/resources"
+	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
+	"github.com/aaronlmathis/kaptn/internal/k8s/resources"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"

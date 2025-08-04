@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/selectors"
+	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
@@ -241,6 +241,82 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 	var responses []map[string]interface{}
 	for _, deployment := range filteredDeployments {
 		responses = append(responses, s.deploymentToResponse(deployment))
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleListStatefulSets(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	labelSelector := r.URL.Query().Get("labelSelector")
+	fieldSelector := r.URL.Query().Get("fieldSelector")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get statefulsets from resource manager
+	statefulSets, err := s.resourceManager.ListStatefulSets(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list statefulsets", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(statefulSets)
+
+	// Apply filters
+	filterOpts := selectors.StatefulSetFilterOptions{
+		Namespace:     namespace,
+		LabelSelector: labelSelector,
+		FieldSelector: fieldSelector,
+		Search:        search,
+		Sort:          sort,
+		Order:         order,
+		Page:          page,
+		PageSize:      pageSize,
+	}
+
+	filteredStatefulSets, err := selectors.FilterStatefulSets(statefulSets, filterOpts)
+	if err != nil {
+		s.logger.Error("Failed to filter statefulsets", zap.Error(err))
+		http.Error(w, "Failed to filter statefulsets", http.StatusBadRequest)
+		return
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, statefulSet := range filteredStatefulSets {
+		responses = append(responses, s.statefulSetToResponse(statefulSet))
 	}
 
 	// Create paginated response
@@ -593,6 +669,57 @@ func (s *Server) handleGetDeployment(w http.ResponseWriter, r *http.Request) {
 		"status":     deployment.Status,
 		"metadata":   deployment.ObjectMeta,
 		"kind":       "Deployment",
+		"apiVersion": "apps/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleGetStatefulSet(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get statefulset from Kubernetes API
+	statefulSet, err := s.kubeClient.AppsV1().StatefulSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get statefulset",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.statefulSetToResponse(*statefulSet)
+
+	// Add full statefulset spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       statefulSet.Spec,
+		"status":     statefulSet.Status,
+		"metadata":   statefulSet.ObjectMeta,
+		"kind":       "StatefulSet",
 		"apiVersion": "apps/v1",
 	}
 

@@ -5,11 +5,13 @@ import {
 	type NodeTableRow,
 	type ServiceTableRow,
 	type DashboardDeployment,
+	type DashboardStatefulSet,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
 	transformServicesToUI,
-	transformDeploymentsToUI
+	transformDeploymentsToUI,
+	transformStatefulSetsToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -123,6 +125,35 @@ export function useDeployments(): UseK8sDataResult<DashboardDeployment> {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch deployments');
 			console.error('Error fetching deployments:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useStatefulSets(): UseK8sDataResult<DashboardStatefulSet> {
+	const [data, setData] = useState<DashboardStatefulSet[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const statefulSets = await k8sService.getStatefulSets(namespace);
+			const transformedStatefulSets = transformStatefulSetsToUI(statefulSets);
+			setData(transformedStatefulSets);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch statefulsets');
+			console.error('Error fetching statefulsets:', err);
 		} finally {
 			setLoading(false);
 		}

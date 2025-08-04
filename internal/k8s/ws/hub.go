@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/auth"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/metrics"
+	"github.com/aaronlmathis/kaptn/internal/auth"
+	"github.com/aaronlmathis/kaptn/internal/metrics"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )

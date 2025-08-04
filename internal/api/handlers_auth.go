@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/auth"
+	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )

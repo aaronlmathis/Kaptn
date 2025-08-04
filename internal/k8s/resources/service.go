@@ -302,6 +302,15 @@ func (rm *ResourceManager) ListDeployments(ctx context.Context, namespace string
 	return deployments.Items, nil
 }
 
+// ListStatefulSets lists all statefulsets in a namespace or across all namespaces
+func (rm *ResourceManager) ListStatefulSets(ctx context.Context, namespace string) ([]appsv1.StatefulSet, error) {
+	statefulSets, err := rm.kubeClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return statefulSets.Items, nil
+}
+
 // ListIngresses lists all ingresses in a namespace
 func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) ([]interface{}, error) {
 	// Try networking.k8s.io/v1 first, then fall back to extensions/v1beta1

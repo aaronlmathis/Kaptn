@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/exec"
+	"github.com/aaronlmathis/kaptn/internal/k8s/exec"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -115,12 +115,12 @@ func (s *Server) handleExecWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Default command if not specified - try multiple shell options
-	command := []string{"/bin/sh"}
+	// Default command if not specified - let the exec service handle shell detection
+	var command []string
 	if commandStr != "" {
 		command = []string{commandStr}
 	} else {
-		// Let the exec service handle shell detection
+		// Let the exec service handle shell detection by passing empty command
 		command = []string{}
 	}
 

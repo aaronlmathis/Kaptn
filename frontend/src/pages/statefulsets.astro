@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { StatefulSetsPageContainer } from "@/components/pages/StatefulSetsPageContainer";
+
+const title = "StatefulSets";
+---
+
+<Layout title={title}>
+	<StatefulSetsPageContainer client:load />
+</Layout>

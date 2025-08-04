@@ -105,6 +105,31 @@ export interface Deployment {
 	}>;
 }
 
+// StatefulSet interfaces based on the actual backend API response
+export interface StatefulSet {
+	name: string;
+	namespace: string;
+	age: string;
+	creationTimestamp: string;
+	labels: Record<string, string>;
+	replicas: {
+		desired: number;
+		ready: number;
+		current: number;
+		updated: number;
+	};
+	conditions: Array<{
+		type: string;
+		status: string;
+		reason: string;
+		message: string;
+	}>;
+	serviceName: string;
+	updateStrategy: string;
+	currentRevision?: string;
+	updateRevision?: string;
+}
+
 // Namespace interface
 export interface Namespace {
 	metadata: {
@@ -174,6 +199,18 @@ export interface DashboardDeployment {
 	image: string;
 }
 
+export interface DashboardStatefulSet {
+	id: number;
+	name: string;
+	namespace: string;
+	ready: string;
+	current: number;
+	updated: number;
+	age: string;
+	serviceName: string;
+	updateStrategy: string;
+}
+
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
@@ -220,6 +257,13 @@ export class K8sService {
 	async getDeployments(namespace?: string): Promise<Deployment[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: Deployment[] }; status: string }>(`/deployments${query}`);
+		return response.data.items;
+	}
+
+	// StatefulSet operations
+	async getStatefulSets(namespace?: string): Promise<StatefulSet[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: StatefulSet[] }; status: string }>(`/statefulsets${query}`);
 		return response.data.items;
 	}
 
@@ -327,6 +371,20 @@ export function transformDeploymentsToUI(deployments: Deployment[]): DashboardDe
 		available: deployment.replicas.available,
 		age: deployment.age,
 		image: 'Multiple' // Backend doesn't provide image info in this API
+	}));
+}
+
+export function transformStatefulSetsToUI(statefulSets: StatefulSet[]): DashboardStatefulSet[] {
+	return statefulSets.map((statefulSet, index) => ({
+		id: index,
+		name: statefulSet.name,
+		namespace: statefulSet.namespace,
+		ready: `${statefulSet.replicas.ready}/${statefulSet.replicas.desired}`,
+		current: statefulSet.replicas.current,
+		updated: statefulSet.replicas.updated,
+		age: statefulSet.age,
+		serviceName: statefulSet.serviceName || '<none>',
+		updateStrategy: statefulSet.updateStrategy || 'RollingUpdate'
 	}));
 }
 

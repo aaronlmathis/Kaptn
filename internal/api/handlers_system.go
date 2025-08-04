@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/version"
+	"github.com/aaronlmathis/kaptn/internal/version"
 )
 
 // System handlers (health, readiness, version)

@@ -122,6 +122,19 @@ export const server = setupServer(
 		})
 	}),
 
+	// StatefulSets endpoint
+	http.get('/api/v1/statefulsets', () => {
+		return HttpResponse.json({
+			data: {
+				items: [],
+				total: 0,
+				page: 1,
+				pageSize: 25,
+			},
+			status: 'success',
+		})
+	}),
+
 	// Nodes endpoint
 	http.get('/api/v1/nodes', () => {
 		return HttpResponse.json({

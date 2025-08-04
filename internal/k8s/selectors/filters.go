@@ -48,6 +48,18 @@ type DeploymentFilterOptions struct {
 	Search        string // Text search across name, namespace, labels
 }
 
+// StatefulSetFilterOptions represents filtering options for statefulsets
+type StatefulSetFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, replicas, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+}
+
 // ServiceFilterOptions represents filtering options for services
 type ServiceFilterOptions struct {
 	Namespace     string
@@ -491,6 +503,105 @@ func FilterDeployments(deployments []appsv1.Deployment, options DeploymentFilter
 	return filtered, nil
 }
 
+// FilterStatefulSets filters a list of statefulsets based on the given options
+func FilterStatefulSets(statefulSets []appsv1.StatefulSet, options StatefulSetFilterOptions) ([]appsv1.StatefulSet, error) {
+	var filtered []appsv1.StatefulSet
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, statefulSet := range statefulSets {
+		// Filter by namespace
+		if options.Namespace != "" && statefulSet.Namespace != options.Namespace {
+			continue
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(statefulSet.Labels)) {
+			continue
+		}
+
+		// Apply field selector
+		if fieldSelector != nil {
+			fields := fields.Set{
+				"metadata.name":      statefulSet.Name,
+				"metadata.namespace": statefulSet.Namespace,
+			}
+			if !fieldSelector.Matches(fields) {
+				continue
+			}
+		}
+
+		// Apply text search
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(statefulSet.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(statefulSet.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range statefulSet.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, statefulSet)
+	}
+
+	// Sort statefulsets
+	sortStatefulSets(filtered, options.Sort, options.Order)
+
+	// Apply pagination
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []appsv1.StatefulSet{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
 // FilterServices filters a list of services based on the given options
 func FilterServices(services []v1.Service, options ServiceFilterOptions) ([]v1.Service, error) {
 	var filtered []v1.Service
@@ -620,6 +731,45 @@ func sortDeployments(deployments []appsv1.Deployment, sortField, order string) {
 			less = deployments[i].CreationTimestamp.Time.After(deployments[j].CreationTimestamp.Time)
 		default:
 			less = deployments[i].Name < deployments[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// sortStatefulSets sorts statefulsets by the specified field and order
+func sortStatefulSets(statefulSets []appsv1.StatefulSet, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(statefulSets, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = statefulSets[i].Name < statefulSets[j].Name
+		case "namespace":
+			less = statefulSets[i].Namespace < statefulSets[j].Namespace
+		case "replicas":
+			replicasI := int32(0)
+			replicasJ := int32(0)
+			if statefulSets[i].Spec.Replicas != nil {
+				replicasI = *statefulSets[i].Spec.Replicas
+			}
+			if statefulSets[j].Spec.Replicas != nil {
+				replicasJ = *statefulSets[j].Spec.Replicas
+			}
+			less = replicasI < replicasJ
+		case "age":
+			less = statefulSets[i].CreationTimestamp.Time.After(statefulSets[j].CreationTimestamp.Time)
+		default:
+			less = statefulSets[i].Name < statefulSets[j].Name
 		}
 
 		if order == "desc" {

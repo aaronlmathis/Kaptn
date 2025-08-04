@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/metrics"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/k8s/ws"
-	internalmetrics "github.com/aaronlmathis/k8s-admin-dash/internal/metrics"
+	"github.com/aaronlmathis/kaptn/internal/k8s/metrics"
+	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
+	internalmetrics "github.com/aaronlmathis/kaptn/internal/metrics"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

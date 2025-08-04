@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/auth"
+	"github.com/aaronlmathis/kaptn/internal/auth"
 )
 
 // Utility functions

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { IconTerminal, IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle } from "@tabler/icons-react"
 import { ResourceDetailDrawer, DetailRows } from "@/components/ResourceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { useShell } from "@/hooks/use-shell"
 
 // Import the pod schema and status badge function from the main dashboard component
 import { podSchema } from "@/components/kubernetes-dashboard"
@@ -54,11 +55,17 @@ interface PodDetailViewerProps {
  * Provides actions for exec shell and YAML editing.
  */
 export function PodDetailViewer({ item, trigger }: PodDetailViewerProps) {
+	const { openShell } = useShell()
+
 	const defaultTrigger = (
 		<Button variant="link" className="text-foreground w-fit px-0 text-left">
 			{item.name}
 		</Button>
 	)
+
+	const handleExecShell = () => {
+		openShell(item.name, item.namespace)
+	}
 
 	const rows: Array<[string, React.ReactNode]> = [
 		["Pod Name", item.name],
@@ -75,7 +82,7 @@ export function PodDetailViewer({ item, trigger }: PodDetailViewerProps) {
 
 	const actions = (
 		<>
-			<Button size="sm" className="w-full">
+			<Button size="sm" className="w-full" onClick={handleExecShell}>
 				<IconTerminal className="size-4 mr-2" />
 				Exec Shell
 			</Button>

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/metrics"
+	"github.com/aaronlmathis/kaptn/internal/metrics"
 	"github.com/go-chi/chi/v5/middleware"
 )
 

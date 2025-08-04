@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config represents the application configuration
@@ -112,6 +114,16 @@ type JobsConfig struct {
 
 // Load loads the configuration from environment variables and defaults
 func Load() (*Config, error) {
+	return loadWithDefaults("")
+}
+
+// LoadFromFile loads configuration from a YAML file, with environment variable overrides
+func LoadFromFile(configPath string) (*Config, error) {
+	return loadWithDefaults(configPath)
+}
+
+// loadWithDefaults loads configuration with defaults, optionally from a file
+func loadWithDefaults(configPath string) (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
 			Addr:     getEnv("KAD_SERVER_ADDR", "0.0.0.0:8080"),
@@ -174,6 +186,16 @@ func Load() (*Config, error) {
 		},
 	}
 
+	// If a config file path is provided, load and merge it
+	if configPath != "" {
+		fileConfig, err := loadFromYAMLFile(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config from file %s: %w", configPath, err)
+		}
+		// Merge file config with defaults, environment variables take precedence
+		cfg = mergeConfigs(cfg, fileConfig)
+	}
+
 	// Override port if PORT env var is set
 	if port := getEnv("PORT", ""); port != "" {
 		cfg.Server.Addr = "0.0.0.0:" + port
@@ -220,6 +242,119 @@ func getEnvStringSlice(key string, defaultValue []string) []string {
 		return result
 	}
 	return defaultValue
+}
+
+// loadFromYAMLFile loads configuration from a YAML file
+func loadFromYAMLFile(configPath string) (*Config, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal YAML: %w", err)
+	}
+
+	return &config, nil
+}
+
+// mergeConfigs merges file config with environment-based config
+// Environment variables take precedence over file values
+func mergeConfigs(envConfig, fileConfig *Config) *Config {
+	// Start with file config as base
+	result := *fileConfig
+
+	// Override with environment values if they are not defaults
+	if envValue := os.Getenv("KAD_SERVER_ADDR"); envValue != "" {
+		result.Server.Addr = envValue
+	}
+	if envValue := os.Getenv("KAD_BASE_PATH"); envValue != "" {
+		result.Server.BasePath = envValue
+	}
+	if envValue := os.Getenv("KAD_AUTH_MODE"); envValue != "" {
+		result.Security.AuthMode = envValue
+	}
+	if envValue := os.Getenv("KAD_KUBE_MODE"); envValue != "" {
+		result.Kubernetes.Mode = envValue
+	}
+	if envValue := os.Getenv("KUBECONFIG"); envValue != "" {
+		result.Kubernetes.KubeconfigPath = envValue
+	}
+	if envValue := os.Getenv("KAD_NAMESPACE_DEFAULT"); envValue != "" {
+		result.Kubernetes.NamespaceDefault = envValue
+	}
+	if envValue := os.Getenv("LOG_LEVEL"); envValue != "" {
+		result.Logging.Level = envValue
+	}
+	if envValue := os.Getenv("PORT"); envValue != "" {
+		result.Server.Addr = "0.0.0.0:" + envValue
+	}
+
+	// Handle boolean environment variables
+	if envValue := os.Getenv("KAD_ENABLE_APPLY"); envValue != "" {
+		if parsed, err := strconv.ParseBool(envValue); err == nil {
+			result.Features.EnableApply = parsed
+		}
+	}
+	if envValue := os.Getenv("KAD_ENABLE_NODE_ACTIONS"); envValue != "" {
+		if parsed, err := strconv.ParseBool(envValue); err == nil {
+			result.Features.EnableNodeActions = parsed
+		}
+	}
+	if envValue := os.Getenv("KAD_ENABLE_OVERVIEW"); envValue != "" {
+		if parsed, err := strconv.ParseBool(envValue); err == nil {
+			result.Features.EnableOverview = parsed
+		}
+	}
+	if envValue := os.Getenv("KAD_ENABLE_PROMETHEUS_ANALYTICS"); envValue != "" {
+		if parsed, err := strconv.ParseBool(envValue); err == nil {
+			result.Features.EnablePrometheusAnalytics = parsed
+		}
+	}
+
+	// Handle Prometheus configuration
+	if envValue := os.Getenv("KAD_PROMETHEUS_URL"); envValue != "" {
+		result.Integrations.Prometheus.URL = envValue
+	}
+	if envValue := os.Getenv("KAD_PROMETHEUS_TIMEOUT"); envValue != "" {
+		result.Integrations.Prometheus.Timeout = envValue
+	}
+	if envValue := os.Getenv("KAD_PROMETHEUS_ENABLED"); envValue != "" {
+		if parsed, err := strconv.ParseBool(envValue); err == nil {
+			result.Integrations.Prometheus.Enabled = parsed
+		}
+	}
+
+	// Handle OIDC configuration
+	if envValue := os.Getenv("KAD_OIDC_ISSUER"); envValue != "" {
+		result.Security.OIDC.Issuer = envValue
+	}
+	if envValue := os.Getenv("KAD_OIDC_CLIENT_ID"); envValue != "" {
+		result.Security.OIDC.ClientID = envValue
+	}
+	if envValue := os.Getenv("KAD_OIDC_CLIENT_SECRET"); envValue != "" {
+		result.Security.OIDC.ClientSecret = envValue
+	}
+	if envValue := os.Getenv("KAD_OIDC_REDIRECT_URL"); envValue != "" {
+		result.Security.OIDC.RedirectURL = envValue
+	}
+	if envValue := os.Getenv("KAD_OIDC_AUDIENCE"); envValue != "" {
+		result.Security.OIDC.Audience = envValue
+	}
+	if envValue := os.Getenv("KAD_OIDC_SCOPES"); envValue != "" {
+		parts := strings.Split(envValue, ",")
+		var scopes []string
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				scopes = append(scopes, trimmed)
+			}
+		}
+		result.Security.OIDC.Scopes = scopes
+	}
+
+	return &result
 }
 
 // Validate validates the configuration
