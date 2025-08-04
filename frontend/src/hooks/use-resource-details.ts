@@ -331,6 +331,14 @@ interface IngressDetails {
 	apiVersion: string
 }
 
+interface EndpointsDetails {
+	summary: Record<string, unknown>
+	subsets: Record<string, unknown>[]
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
 export function useIngressDetails(namespace: string, name: string, enabled: boolean = true) {
 	const [data, setData] = useState<IngressDetails | null>(null)
 	const [loading, setLoading] = useState(false)
@@ -363,6 +371,43 @@ export function useIngressDetails(namespace: string, name: string, enabled: bool
 		}
 
 		fetchIngressDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}
+
+export function useEndpointsDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<EndpointsDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchEndpointsDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/endpoints/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch endpoints details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchEndpointsDetails()
 	}, [namespace, name, enabled])
 
 	return { data, loading, error }

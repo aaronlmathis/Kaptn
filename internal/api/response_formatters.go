@@ -894,3 +894,75 @@ func (s *Server) ingressToResponse(ingress interface{}) map[string]interface{} {
 		"annotations":        annotations,
 	}
 }
+
+// endpointsToResponse converts a Kubernetes endpoints to response format
+func (s *Server) endpointsToResponse(endpoint v1.Endpoints) map[string]interface{} {
+	age := calculateAge(endpoint.CreationTimestamp.Time)
+
+	// Calculate total addresses across all subsets
+	totalAddresses := 0
+	totalPorts := 0
+	var addresses []string
+	var ports []string
+
+	for _, subset := range endpoint.Subsets {
+		totalAddresses += len(subset.Addresses) + len(subset.NotReadyAddresses)
+		totalPorts += len(subset.Ports)
+
+		// Collect unique addresses
+		for _, addr := range subset.Addresses {
+			addresses = append(addresses, addr.IP)
+		}
+		for _, addr := range subset.NotReadyAddresses {
+			addresses = append(addresses, addr.IP+" (not ready)")
+		}
+
+		// Collect unique ports
+		for _, port := range subset.Ports {
+			portStr := fmt.Sprintf("%d", port.Port)
+			if port.Name != "" {
+				portStr = fmt.Sprintf("%s:%d", port.Name, port.Port)
+			}
+			if port.Protocol != "" {
+				portStr = fmt.Sprintf("%s/%s", portStr, port.Protocol)
+			}
+			ports = append(ports, portStr)
+		}
+	}
+
+	// Format addresses display
+	addressesDisplay := "None"
+	if totalAddresses > 0 {
+		if totalAddresses == 1 && len(addresses) > 0 {
+			addressesDisplay = addresses[0]
+		} else {
+			addressesDisplay = fmt.Sprintf("%d address(es)", totalAddresses)
+		}
+	}
+
+	// Format ports display
+	portsDisplay := "None"
+	if totalPorts > 0 {
+		if totalPorts == 1 && len(ports) > 0 {
+			portsDisplay = ports[0]
+		} else {
+			portsDisplay = fmt.Sprintf("%d port(s)", totalPorts)
+		}
+	}
+
+	return map[string]interface{}{
+		"name":              endpoint.Name,
+		"namespace":         endpoint.Namespace,
+		"age":               age,
+		"subsets":           len(endpoint.Subsets),
+		"totalAddresses":    totalAddresses,
+		"totalPorts":        totalPorts,
+		"addresses":         addresses,
+		"ports":             ports,
+		"addressesDisplay":  addressesDisplay,
+		"portsDisplay":      portsDisplay,
+		"creationTimestamp": endpoint.CreationTimestamp.Time,
+		"labels":            endpoint.Labels,
+		"annotations":       endpoint.Annotations,
+	}
+}

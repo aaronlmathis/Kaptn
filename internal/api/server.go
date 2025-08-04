@@ -375,6 +375,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/ingresses", s.handleListAllIngresses)
 			r.Get("/ingresses/{namespace}", s.handleListIngresses)
 			r.Get("/ingresses/{namespace}/{name}", s.handleGetIngress)
+			r.Get("/endpoints", s.handleListEndpoints)
+			r.Get("/endpoints/{namespace}/{name}", s.handleGetEndpoints)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
 			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
 

@@ -175,6 +175,8 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.kubeClient.CoreV1().ConfigMaps(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "Secret":
 		return rm.kubeClient.CoreV1().Secrets(req.Namespace).Delete(ctx, req.Name, deleteOptions)
+	case "Endpoints":
+		return rm.kubeClient.CoreV1().Endpoints(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	default:
 		return fmt.Errorf("unsupported resource kind for deletion: %s", req.Kind)
 	}
@@ -337,6 +339,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		// Convert map to unstructured
 		unstructuredIngress := &unstructured.Unstructured{Object: ingressObj}
 		obj = rm.stripManagedFields(unstructuredIngress)
+	case "Endpoints":
+		endpoints, err := rm.kubeClient.CoreV1().Endpoints(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredEndpoints := rm.convertToUnstructured(endpoints)
+		if unstructuredEndpoints == nil {
+			return nil, fmt.Errorf("failed to convert Endpoints to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredEndpoints)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -412,6 +424,15 @@ func (rm *ResourceManager) ListCronJobs(ctx context.Context, namespace string) (
 		return nil, err
 	}
 	return cronJobs.Items, nil
+}
+
+// ListEndpoints lists all endpoints in a namespace or across all namespaces
+func (rm *ResourceManager) ListEndpoints(ctx context.Context, namespace string) ([]v1.Endpoints, error) {
+	endpoints, err := rm.kubeClient.CoreV1().Endpoints(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return endpoints.Items, nil
 }
 
 // ListIngresses lists all ingresses in a namespace
@@ -550,6 +571,9 @@ func (rm *ResourceManager) convertToUnstructured(obj interface{}) *unstructured.
 	case *v1.Secret:
 		result.SetAPIVersion("v1")
 		result.SetKind("Secret")
+	case *v1.Endpoints:
+		result.SetAPIVersion("v1")
+		result.SetKind("Endpoints")
 	}
 
 	return result

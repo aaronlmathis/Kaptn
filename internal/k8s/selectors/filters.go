@@ -121,6 +121,18 @@ type CronJobFilterOptions struct {
 	Search        string // Text search across name, namespace, labels, schedule
 }
 
+// EndpointsFilterOptions represents filtering options for endpoints
+type EndpointsFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, subsets, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+}
+
 // FilterPods filters a list of pods based on the given options
 func FilterPods(pods []v1.Pod, options PodFilterOptions) ([]v1.Pod, error) {
 	var filtered []v1.Pod
@@ -1402,6 +1414,136 @@ func sortCronJobs(cronJobs []batchv1.CronJob, sortField, order string) {
 			less = cronJobs[i].CreationTimestamp.Time.After(cronJobs[j].CreationTimestamp.Time)
 		default:
 			less = cronJobs[i].Name < cronJobs[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// FilterEndpoints filters a list of endpoints based on the given options
+func FilterEndpoints(endpoints []v1.Endpoints, options EndpointsFilterOptions) ([]v1.Endpoints, error) {
+	var filtered []v1.Endpoints
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, endpoint := range endpoints {
+		// Filter by namespace
+		if options.Namespace != "" && endpoint.Namespace != options.Namespace {
+			continue
+		}
+
+		// Filter by text search (name, namespace, labels)
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in endpoint name
+			if strings.Contains(strings.ToLower(endpoint.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(endpoint.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range endpoint.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(endpoint.Labels)) {
+			continue
+		}
+
+		// Apply field selector (basic implementation)
+		if fieldSelector != nil {
+			fieldSet := fields.Set{
+				"metadata.name":      endpoint.Name,
+				"metadata.namespace": endpoint.Namespace,
+			}
+			if !fieldSelector.Matches(fieldSet) {
+				continue
+			}
+		}
+
+		filtered = append(filtered, endpoint)
+	}
+
+	// Sort
+	sortEndpoints(filtered, options.Sort, options.Order)
+
+	// Paginate
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []v1.Endpoints{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// sortEndpoints sorts endpoints by the specified field and order
+func sortEndpoints(endpoints []v1.Endpoints, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(endpoints, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = endpoints[i].Name < endpoints[j].Name
+		case "namespace":
+			less = endpoints[i].Namespace < endpoints[j].Namespace
+		case "subsets":
+			less = len(endpoints[i].Subsets) < len(endpoints[j].Subsets)
+		case "age":
+			less = endpoints[i].CreationTimestamp.Time.After(endpoints[j].CreationTimestamp.Time)
+		default:
+			less = endpoints[i].Name < endpoints[j].Name
 		}
 
 		if order == "desc" {

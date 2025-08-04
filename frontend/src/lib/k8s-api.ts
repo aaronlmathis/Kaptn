@@ -234,6 +234,23 @@ export interface CronJob {
 	failedJobsHistoryLimit: number;
 }
 
+// Endpoints interfaces based on the actual backend API response
+export interface Endpoints {
+	name: string;
+	namespace: string;
+	age: string;
+	subsets: number;
+	totalAddresses: number;
+	totalPorts: number;
+	addresses: string[];
+	ports: string[];
+	addressesDisplay: string;
+	portsDisplay: string;
+	creationTimestamp: string;
+	labels: Record<string, string>;
+	annotations: Record<string, string>;
+}
+
 // Namespace interface
 export interface Namespace {
 	metadata: {
@@ -362,6 +379,20 @@ export interface DashboardCronJob {
 	image: string;
 }
 
+export interface DashboardEndpoints {
+	id: number;
+	name: string;
+	namespace: string;
+	age: string;
+	subsets: number;
+	totalAddresses: number;
+	totalPorts: number;
+	addresses: string[];
+	ports: string[];
+	addressesDisplay: string;
+	portsDisplay: string;
+}
+
 export interface DashboardIngress {
 	id: number;
 	name: string;
@@ -465,6 +496,17 @@ export class K8sService {
 
 	async getCronJob(namespace: string, name: string): Promise<CronJob> {
 		return apiClient.get<CronJob>(`/cronjobs/${namespace}/${name}`);
+	}
+
+	// Endpoints operations
+	async getEndpoints(namespace?: string): Promise<Endpoints[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: Endpoints[] }; status: string }>(`/endpoints${query}`);
+		return response.data.items;
+	}
+
+	async getEndpoint(namespace: string, name: string): Promise<Endpoints> {
+		return apiClient.get<Endpoints>(`/endpoints/${namespace}/${name}`);
 	}
 
 	// Ingress operations
@@ -652,6 +694,22 @@ export function transformCronJobsToUI(cronJobs: CronJob[]): DashboardCronJob[] {
 		lastSchedule: cronJob.lastSchedule,
 		age: cronJob.age,
 		image: cronJob.image
+	}));
+}
+
+export function transformEndpointsToUI(endpoints: Endpoints[]): DashboardEndpoints[] {
+	return endpoints.map((endpoint, index) => ({
+		id: index + 1,
+		name: endpoint.name,
+		namespace: endpoint.namespace,
+		age: endpoint.age,
+		subsets: endpoint.subsets,
+		totalAddresses: endpoint.totalAddresses,
+		totalPorts: endpoint.totalPorts,
+		addresses: endpoint.addresses,
+		ports: endpoint.ports,
+		addressesDisplay: endpoint.addressesDisplay,
+		portsDisplay: endpoint.portsDisplay
 	}));
 }
 

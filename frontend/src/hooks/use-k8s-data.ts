@@ -10,6 +10,7 @@ import {
 	type DashboardReplicaSet,
 	type DashboardJob,
 	type DashboardCronJob,
+	type DashboardEndpoints,
 	type DashboardIngress,
 	type OverviewData,
 	transformPodsToUI,
@@ -21,6 +22,7 @@ import {
 	transformReplicaSetsToUI,
 	transformJobsToUI,
 	transformCronJobsToUI,
+	transformEndpointsToUI,
 	transformIngressesToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
@@ -280,6 +282,35 @@ export function useCronJobs(): UseK8sDataResult<DashboardCronJob> {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch cronjobs');
 			console.error('Error fetching cronjobs:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useEndpoints(): UseK8sDataResult<DashboardEndpoints> {
+	const [data, setData] = useState<DashboardEndpoints[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const endpoints = await k8sService.getEndpoints(namespace);
+			const transformedEndpoints = transformEndpointsToUI(endpoints);
+			setData(transformedEndpoints);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch endpoints');
+			console.error('Error fetching endpoints:', err);
 		} finally {
 			setLoading(false);
 		}
