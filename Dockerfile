@@ -28,9 +28,9 @@ ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 RUN CGO_ENABLED=0 GOOS=linux go build \
-	-ldflags "-X github.com/aaronlmathis/k8s-admin-dash/internal/version.Version=${VERSION} \
-	-X github.com/aaronlmathis/k8s-admin-dash/internal/version.GitCommit=${GIT_COMMIT} \
-	-X github.com/aaronlmathis/k8s-admin-dash/internal/version.BuildDate=${BUILD_DATE}" \
+	-ldflags "-X github.com/aaronlmathis/kaptn/internal/version.Version=${VERSION} \
+	-X github.com/aaronlmathis/kaptn/internal/version.GitCommit=${GIT_COMMIT} \
+	-X github.com/aaronlmathis/kaptn/internal/version.BuildDate=${BUILD_DATE}" \
 	-o /server ./cmd/server
 
 # Final stage
@@ -39,7 +39,7 @@ COPY --from=build /server /server
 
 LABEL org.opencontainers.image.title="Kubernetes Admin Dashboard"
 LABEL org.opencontainers.image.description="A secure, production-ready Kubernetes admin dashboard"
-LABEL org.opencontainers.image.source="https://github.com/aaronlmathis/k8s-admin-dash"
+LABEL org.opencontainers.image.source="https://github.com/aaronlmathis/kaptn"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 	CMD ["/server", "--health-check"]

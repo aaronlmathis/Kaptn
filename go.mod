@@ -1,4 +1,4 @@
-module github.com/aaronlmathis/k8s-admin-dash
+module github.com/aaronlmathis/kaptn
 
 go 1.24.3
 

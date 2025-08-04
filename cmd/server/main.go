@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aaronlmathis/k8s-admin-dash/internal/api"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/config"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/logging"
-	"github.com/aaronlmathis/k8s-admin-dash/internal/version"
+	"github.com/aaronlmathis/kaptn/internal/api"
+	"github.com/aaronlmathis/kaptn/internal/config"
+	"github.com/aaronlmathis/kaptn/internal/logging"
+	"github.com/aaronlmathis/kaptn/internal/version"
 	"go.uber.org/zap"
 )
 
