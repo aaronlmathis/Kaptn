@@ -86,25 +86,36 @@ build: frontend ## Build backend binary (embeds frontend)
 	@CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 	@echo "Binary built: $(BUILD_DIR)/$(BINARY_NAME)"
 
+IMAGE_NAME := aaronlmathis/kaptn
+
 docker: frontend ## Build Docker image
 	@echo "Building Docker image..."
 	@docker build \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		-t kaptn:$(VERSION) .
-	@docker tag kaptn:$(VERSION) kaptn:latest
-	@echo "Docker image built: kaptn:$(VERSION)"
+		-t $(IMAGE_NAME):$(VERSION) .
+	@docker tag $(IMAGE_NAME):$(VERSION) $(IMAGE_NAME):latest
+	@echo "Docker image built: $(IMAGE_NAME):$(VERSION)"
 
-docker-debug: frontend ## Build Docker debug image with shell access
+docker-debug: frontend
 	@echo "Building Docker debug image (with shell)..."
 	@docker build \
 		--target debug \
-		--build-arg VERSION=$(VERSION) \
+		--build-arg VERSION=debug \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		-t kaptn:debug .
-	@echo "Docker debug image built: kaptn:debug"
+		-t $(IMAGE_NAME):debug .
+	@echo "Docker debug image built: $(IMAGE_NAME):debug"
+
+push: docker ## Push Docker image to registry
+	@echo "Pushing Docker image..."
+	@docker push $(IMAGE_NAME):$(VERSION)
+	@docker push $(IMAGE_NAME):latest
+
+push-debug: docker-debug ## Push Docker debug image to registry
+	@echo "Pushing Docker debug image..."
+	@docker push $(IMAGE_NAME):debug
 
 kind-up: ## Create Kind cluster for development
 	@echo "Creating Kind cluster..."
@@ -116,12 +127,6 @@ kind-down: ## Delete Kind cluster
 	@kind delete cluster --name kaptn-dev
 	@echo "Kind cluster 'kaptn-dev' deleted"
 
-clean: ## Clean build artifacts
-	@echo "Cleaning build artifacts..."
-	@rm -rf $(BUILD_DIR)
-	@cd frontend && rm -rf dist node_modules/.vite 2>/dev/null || true
-	@echo "Clean complete"
-
 install-deps: ## Install all dependencies
 	@echo "Installing Go dependencies..."
 	@go mod download
@@ -129,15 +134,12 @@ install-deps: ## Install all dependencies
 	@cd frontend && npm install
 	@echo "Dependencies installed"
 
-push: docker ## Push Docker image to registry
-	@echo "Pushing Docker image..."
-	@docker push kaptn:$(VERSION)
-	@docker push kaptn:latest
-
-push-debug: docker-debug ## Push Docker debug image to registry
-	@echo "Pushing Docker debug image..."
-	@docker push kaptn:debug
-
 help: ## Show this help
 	@echo "Available targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
+
+clean: ## Clean build artifacts
+	@echo "Cleaning build artifacts..."
+	@rm -rf $(BUILD_DIR)
+	@cd frontend && rm -rf dist node_modules/.vite 2>/dev/null || true
+	@echo "Clean complete"

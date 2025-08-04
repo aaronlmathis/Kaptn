@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: kaptn-sa
-  namespace: monitoring
+  namespace: kaptn
 
 ---
 # 2) ClusterRole with expanded permissions
@@ -38,5 +38,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: kaptn-sa
-    namespace: monitoring
+    namespace: kaptn
 

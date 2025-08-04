@@ -2,30 +2,71 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: monitoring
+  name: kaptn
 ---
-# 2. ConfigMap
+# 2) ServiceAccount (no change)
 apiVersion: v1
-kind: ConfigMap
+kind: ServiceAccount
 metadata:
-  name: kaptn-config
-  namespace: monitoring
-data:
-  config.yaml: |
-    server:
-      addr: "0.0.0.0:8080"
-    kubernetes:
-      mode: "incluster"
-    integrations:
-      prometheus:
-        url: "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090"
+  name: kaptn-sa
+  namespace: kaptn
 ---
-# 3. Deployment
+# 3) ClusterRole with expanded permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-metrics-role
+rules:
+  # core pods & nodes
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+  # metrics.k8s.io pods & nodes
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  # resourcequotas & namespaces for cluster summary
+  - apiGroups: [""]
+    resources: ["resourcequotas", "namespaces"]
+    verbs: ["get", "list", "watch"]
+
+---
+# 4) ClusterRoleBinding (no change)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-metrics-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-metrics-role
+subjects:
+  - kind: ServiceAccount
+    name: kaptn-sa
+    namespace: kaptn
+---
+# # 2. ConfigMap
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: kaptn-config
+#   namespace: kaptn
+# data:
+#   config.yaml: |
+#     server:
+#       addr: "0.0.0.0:8080"
+#     kubernetes:
+#       mode: "incluster"
+#     integrations:
+#       prometheus:
+#         url: "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090"
+# ---
+# 5) Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kaptn
-  namespace: monitoring
+  namespace: kaptn
   labels:
     app: kaptn
 spec:
@@ -38,24 +79,26 @@ spec:
       labels:
         app: kaptn
     spec:
+      serviceAccountName: kaptn-sa
+      terminationGracePeriodSeconds: 10 
       containers:
       - name: kaptn
-        image: docker.io/aaronlmathis/kaptn:latest
-        imagePullPolicy: IfNotPresent
+        image: docker.io/aaronlmathis/kaptn:debug
+        imagePullPolicy: Always
         args:
           - "--config=/etc/kaptn/config.yaml"
         ports:
           - containerPort: 8080
         readinessProbe:
           httpGet:
-            path: /health
+            path: /healthz
             port: 8080
-          initialDelaySeconds: 10
+          initialDelaySeconds: 20
+          failureThreshold: 5
           periodSeconds: 10
         livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
+          exec:
+            command: ["/server", "--health-check"]
           initialDelaySeconds: 20
           periodSeconds: 30
         volumeMounts:
@@ -67,27 +110,28 @@ spec:
           configMap:
             name: kaptn-config
 ---
-# 4. Service
+# 6) Service
 apiVersion: v1
 kind: Service
 metadata:
   name: kaptn
-  namespace: monitoring
+  namespace: kaptn
 spec:
   selector:
     app: kaptn
   ports:
     - port: 80
       targetPort: 8080
-  type: LoadBalancer
+      nodePort: 30080
+  type: NodePort
 
 ---
-# 5. Ingress
+# 7) Ingress
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: kaptn
-  namespace: monitoring
+  namespace: kaptn
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:

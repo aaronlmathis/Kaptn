@@ -42,7 +42,7 @@ FROM gcr.io/distroless/base-debian12 AS prod
 COPY --from=build /server /server
 
 ARG VERSION
-LABEL org.opencontainers.image.title="Kapn ${VERSION}"
+LABEL org.opencontainers.image.title="Kaptn ${VERSION}"
 LABEL org.opencontainers.image.description="A secure, production-ready Kubernetes admin dashboard"
 LABEL org.opencontainers.image.source="https://github.com/aaronlmathis/kaptn"
 
@@ -57,10 +57,12 @@ ENTRYPOINT ["/server"]
 # =====================
 FROM alpine:3.20 AS debug
 RUN apk add --no-cache bash curl
+WORKDIR /
 COPY --from=build /server /server
+COPY --from=frontend /frontend/dist ./frontend/dist   # <-- ADD THIS LINE
 
 ARG VERSION
-LABEL org.opencontainers.image.title="Kapn Debug ${VERSION}"
+LABEL org.opencontainers.image.title="Kaptn Debug ${VERSION}"
 LABEL org.opencontainers.image.description="Debug build with shell access"
 LABEL org.opencontainers.image.source="https://github.com/aaronlmathis/kaptn"
 
