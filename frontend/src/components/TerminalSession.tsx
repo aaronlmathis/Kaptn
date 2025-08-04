@@ -72,13 +72,13 @@ const parseAnsiToHtml = (text: string): AnsiSegment[] => {
 	// Split by ANSI escape sequences while keeping them
 	// eslint-disable-next-line no-control-regex
 	const parts = text.split(/(\x1b\[[0-9;]*[a-zA-Z])/)
-	
+
 	for (const part of parts) {
 		// eslint-disable-next-line no-control-regex
 		if (part.match(/\x1b\[[0-9;]*[a-zA-Z]/)) {
 			// This is an ANSI escape sequence
 			const codes = part.slice(2, -1).split(';')
-			
+
 			for (const code of codes) {
 				switch (code) {
 					case '0': // Reset
@@ -126,7 +126,7 @@ const parseAnsiToHtml = (text: string): AnsiSegment[] => {
 			const cleanText = part.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
 				.replace(/\r\n/g, '\n')
 				.replace(/\r/g, '\n')
-			
+
 			if (cleanText) {
 				segments.push({
 					text: cleanText,
@@ -138,7 +138,7 @@ const parseAnsiToHtml = (text: string): AnsiSegment[] => {
 			}
 		}
 	}
-	
+
 	return segments
 }
 

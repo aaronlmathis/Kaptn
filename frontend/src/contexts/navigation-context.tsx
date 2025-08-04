@@ -93,7 +93,26 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 
 	// Generate breadcrumbs based on current URL path
 	const generateBreadcrumbs = (path: string): BreadcrumbItem[] => {
-		return navigationMap[path] || [
+		// First try exact match
+		if (navigationMap[path]) {
+			return navigationMap[path]
+		}
+
+		// Then try to match longer paths that might not be in the map
+		// For example, if we have /pods/default/some-pod, we want to show pods breadcrumb
+		const pathSegments = path.split('/').filter(Boolean)
+		if (pathSegments.length > 0) {
+			// Try matching progressively shorter paths
+			for (let i = pathSegments.length; i > 0; i--) {
+				const testPath = '/' + pathSegments.slice(0, i).join('/')
+				if (navigationMap[testPath]) {
+					return navigationMap[testPath]
+				}
+			}
+		}
+
+		// Default fallback
+		return [
 			{ title: 'Kubernetes Admin', url: '/' },
 			{ title: 'Dashboard' }
 		]
@@ -102,6 +121,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 	// Update breadcrumbs when path changes
 	useEffect(() => {
 		const newBreadcrumbs = generateBreadcrumbs(currentPath)
+		console.log('Navigation: path changed to', currentPath, 'breadcrumbs:', newBreadcrumbs)
 		setBreadcrumbs(newBreadcrumbs)
 	}, [currentPath])
 
@@ -109,10 +129,12 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
 			const updatePath = () => {
-				setCurrentPath(window.location.pathname)
+				const newPath = window.location.pathname
+				console.log('Navigation: updating path to', newPath)
+				setCurrentPath(newPath)
 			}
 
-			// Set initial path
+			// Set initial path immediately
 			updatePath()
 
 			// Listen for navigation changes
@@ -132,10 +154,18 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 				updatePath()
 			}
 
+			// Also listen for any clicks on links that might change the path
+			const handleLinkClick = () => {
+				// Use a small timeout to let the browser update the URL first
+				setTimeout(updatePath, 10)
+			}
+			document.addEventListener('click', handleLinkClick)
+
 			return () => {
 				window.removeEventListener('popstate', updatePath)
 				window.history.pushState = originalPushState
 				window.history.replaceState = originalReplaceState
+				document.removeEventListener('click', handleLinkClick)
 			}
 		}
 	}, [])
