@@ -20,9 +20,9 @@ import (
 func main() {
 	// Define command line flags
 	var (
-		showVersion   = flag.Bool("version", false, "Show version information and exit")
-		healthCheck   = flag.Bool("health-check", false, "Perform health check and exit")
-		configFile    = flag.String("config", "", "Path to configuration file")
+		showVersion = flag.Bool("version", false, "Show version information and exit")
+		healthCheck = flag.Bool("health-check", false, "Perform health check and exit")
+		configFile  = flag.String("config", "", "Path to configuration file")
 	)
 	flag.Parse()
 
@@ -36,13 +36,13 @@ func main() {
 	// Load configuration
 	var cfg *config.Config
 	var err error
-	
+
 	if *configFile != "" {
 		cfg, err = config.LoadFromFile(*configFile)
 	} else {
 		cfg, err = config.Load()
 	}
-	
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
@@ -129,14 +129,14 @@ func main() {
 func performHealthCheck(addr string) {
 	// Build the health check URL
 	url := fmt.Sprintf("http://%s/healthz", addr)
-	
+
 	// Create HTTP client with timeout
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	
+
 	fmt.Printf("Performing health check against %s...\n", url)
-	
+
 	// Make the request
 	resp, err := client.Get(url)
 	if err != nil {
@@ -144,7 +144,7 @@ func performHealthCheck(addr string) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
-	
+
 	// Check response status
 	if resp.StatusCode == http.StatusOK {
 		fmt.Println("Health check passed: Server is healthy")

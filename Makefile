@@ -13,7 +13,7 @@ LDFLAGS := -X github.com/aaronlmathis/kaptn/internal/version.Version=$(VERSION) 
            -X github.com/aaronlmathis/kaptn/internal/version.GitCommit=$(GIT_COMMIT) \
            -X github.com/aaronlmathis/kaptn/internal/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: all dev fmt lint test frontend build docker docker-debug kind-up kind-down clean help push
+.PHONY: all dev fmt lint test frontend build docker docker-debug kind-up kind-down clean help push push-debug
 
 all: build ## Build everything
 
@@ -133,6 +133,10 @@ push: docker ## Push Docker image to registry
 	@echo "Pushing Docker image..."
 	@docker push kad:$(VERSION)
 	@docker push kad:latest
+
+push-debug: docker-debug ## Push Docker debug image to registry
+	@echo "Pushing Docker debug image..."
+	@docker push kad:debug
 
 help: ## Show this help
 	@echo "Available targets:"
