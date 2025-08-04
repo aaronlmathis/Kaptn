@@ -292,6 +292,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert DaemonSet to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredDaemonSet)
+	case "ReplicaSet":
+		replicaSet, err := rm.kubeClient.AppsV1().ReplicaSets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredReplicaSet := rm.convertToUnstructured(replicaSet)
+		if unstructuredReplicaSet == nil {
+			return nil, fmt.Errorf("failed to convert ReplicaSet to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredReplicaSet)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}

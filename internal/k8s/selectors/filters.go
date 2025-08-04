@@ -72,6 +72,18 @@ type DaemonSetFilterOptions struct {
 	Search        string // Text search across name, namespace, labels
 }
 
+// ReplicaSetFilterOptions represents filtering options for replicasets
+type ReplicaSetFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, replicas, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+}
+
 // ServiceFilterOptions represents filtering options for services
 type ServiceFilterOptions struct {
 	Namespace     string
@@ -812,6 +824,105 @@ func FilterDaemonSets(daemonSets []appsv1.DaemonSet, options DaemonSetFilterOpti
 	return filtered, nil
 }
 
+// FilterReplicaSets filters a list of replicasets based on the given options
+func FilterReplicaSets(replicaSets []appsv1.ReplicaSet, options ReplicaSetFilterOptions) ([]appsv1.ReplicaSet, error) {
+	var filtered []appsv1.ReplicaSet
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, replicaSet := range replicaSets {
+		// Filter by namespace
+		if options.Namespace != "" && replicaSet.Namespace != options.Namespace {
+			continue
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(replicaSet.Labels)) {
+			continue
+		}
+
+		// Apply field selector
+		if fieldSelector != nil {
+			fields := fields.Set{
+				"metadata.name":      replicaSet.Name,
+				"metadata.namespace": replicaSet.Namespace,
+			}
+			if !fieldSelector.Matches(fields) {
+				continue
+			}
+		}
+
+		// Apply text search
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(replicaSet.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(replicaSet.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range replicaSet.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, replicaSet)
+	}
+
+	// Sort replicasets
+	sortReplicaSets(filtered, options.Sort, options.Order)
+
+	// Apply pagination
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []appsv1.ReplicaSet{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
 // sortDeployments sorts deployments by the specified field and order
 func sortDeployments(deployments []appsv1.Deployment, sortField, order string) {
 	if sortField == "" {
@@ -947,6 +1058,45 @@ func sortDaemonSets(daemonSets []appsv1.DaemonSet, sortField, order string) {
 			less = daemonSets[i].CreationTimestamp.Time.After(daemonSets[j].CreationTimestamp.Time)
 		default:
 			less = daemonSets[i].Name < daemonSets[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// sortReplicaSets sorts replicasets by the specified field and order
+func sortReplicaSets(replicaSets []appsv1.ReplicaSet, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(replicaSets, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = replicaSets[i].Name < replicaSets[j].Name
+		case "namespace":
+			less = replicaSets[i].Namespace < replicaSets[j].Namespace
+		case "replicas":
+			replicasI := int32(0)
+			replicasJ := int32(0)
+			if replicaSets[i].Spec.Replicas != nil {
+				replicasI = *replicaSets[i].Spec.Replicas
+			}
+			if replicaSets[j].Spec.Replicas != nil {
+				replicasJ = *replicaSets[j].Spec.Replicas
+			}
+			less = replicasI < replicasJ
+		case "age":
+			less = replicaSets[i].CreationTimestamp.Time.After(replicaSets[j].CreationTimestamp.Time)
+		default:
+			less = replicaSets[i].Name < replicaSets[j].Name
 		}
 
 		if order == "desc" {

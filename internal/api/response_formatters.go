@@ -454,6 +454,47 @@ func (s *Server) daemonSetToResponse(daemonSet appsv1.DaemonSet) map[string]inte
 	}
 }
 
+// replicaSetToResponse converts a Kubernetes replicaset to response format
+func (s *Server) replicaSetToResponse(replicaSet appsv1.ReplicaSet) map[string]interface{} {
+	// Calculate age
+	age := calculateAge(replicaSet.CreationTimestamp.Time)
+
+	// Prepare replica counts
+	desired := int32(0)
+	if replicaSet.Spec.Replicas != nil {
+		desired = *replicaSet.Spec.Replicas
+	}
+
+	replicas := map[string]int32{
+		"desired":   desired,
+		"ready":     replicaSet.Status.ReadyReplicas,
+		"available": replicaSet.Status.AvailableReplicas,
+		"fullyLabeled": replicaSet.Status.FullyLabeledReplicas,
+	}
+
+	// Convert conditions
+	var conditions []map[string]string
+	for _, condition := range replicaSet.Status.Conditions {
+		conditions = append(conditions, map[string]string{
+			"type":    string(condition.Type),
+			"status":  string(condition.Status),
+			"reason":  condition.Reason,
+			"message": condition.Message,
+		})
+	}
+
+	return map[string]interface{}{
+		"name":              replicaSet.Name,
+		"namespace":         replicaSet.Namespace,
+		"replicas":          replicas,
+		"conditions":        conditions,
+		"age":               age,
+		"labels":            replicaSet.Labels,
+		"creationTimestamp": replicaSet.CreationTimestamp.Time,
+		"selector":          replicaSet.Spec.Selector,
+	}
+}
+
 // serviceToResponse converts a Kubernetes service to response format
 func (s *Server) serviceToResponse(service v1.Service) map[string]interface{} {
 	// Calculate age

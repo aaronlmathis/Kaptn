@@ -933,3 +933,54 @@ func (s *Server) handleGetDaemonSet(w http.ResponseWriter, r *http.Request) {
 		"status": "success",
 	})
 }
+
+func (s *Server) handleGetReplicaSet(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get replicaset from Kubernetes API
+	replicaSet, err := s.kubeClient.AppsV1().ReplicaSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get replicaset",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.replicaSetToResponse(*replicaSet)
+
+	// Add full replicaset spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       replicaSet.Spec,
+		"status":     replicaSet.Status,
+		"metadata":   replicaSet.ObjectMeta,
+		"kind":       "ReplicaSet",
+		"apiVersion": "apps/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}

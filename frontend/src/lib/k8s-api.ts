@@ -154,6 +154,28 @@ export interface DaemonSet {
 	selector: Record<string, unknown>;
 }
 
+// ReplicaSet interfaces based on the actual backend API response
+export interface ReplicaSet {
+	name: string;
+	namespace: string;
+	age: string;
+	creationTimestamp: string;
+	labels: Record<string, string>;
+	replicas: {
+		desired: number;
+		ready: number;
+		available: number;
+		fullyLabeled: number;
+	};
+	conditions: Array<{
+		type: string;
+		status: string;
+		reason: string;
+		message: string;
+	}>;
+	selector: Record<string, unknown>;
+}
+
 // Namespace interface
 export interface Namespace {
 	metadata: {
@@ -248,6 +270,17 @@ export interface DashboardDaemonSet {
 	updateStrategy: string;
 }
 
+export interface DashboardReplicaSet {
+	id: number;
+	name: string;
+	namespace: string;
+	ready: string;
+	desired: number;
+	current: number;
+	available: number;
+	age: string;
+}
+
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
@@ -308,6 +341,13 @@ export class K8sService {
 	async getDaemonSets(namespace?: string): Promise<DaemonSet[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: DaemonSet[] }; status: string }>(`/daemonsets${query}`);
+		return response.data.items;
+	}
+
+	// ReplicaSet operations
+	async getReplicaSets(namespace?: string): Promise<ReplicaSet[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: ReplicaSet[] }; status: string }>(`/replicasets${query}`);
 		return response.data.items;
 	}
 
@@ -444,6 +484,19 @@ export function transformDaemonSetsToUI(daemonSets: DaemonSet[]): DashboardDaemo
 		unavailable: daemonSet.status.unavailable,
 		age: daemonSet.age,
 		updateStrategy: daemonSet.updateStrategy || 'RollingUpdate'
+	}));
+}
+
+export function transformReplicaSetsToUI(replicaSets: ReplicaSet[]): DashboardReplicaSet[] {
+	return replicaSets.map((replicaSet, index) => ({
+		id: index,
+		name: replicaSet.name,
+		namespace: replicaSet.namespace,
+		ready: `${replicaSet.replicas.ready}/${replicaSet.replicas.desired}`,
+		desired: replicaSet.replicas.desired,
+		current: replicaSet.replicas.available, // Using available as current
+		available: replicaSet.replicas.available,
+		age: replicaSet.age
 	}));
 }
 
