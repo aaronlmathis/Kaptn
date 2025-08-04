@@ -54,6 +54,15 @@ interface JobDetails {
 	apiVersion: string
 }
 
+interface CronJobDetails {
+	summary: any
+	spec: any
+	status: any
+	metadata: any
+	kind: string
+	apiVersion: string
+}
+
 export function usePodDetails(namespace: string, name: string, enabled: boolean = true) {
 	const [data, setData] = useState<PodDetails | null>(null)
 	const [loading, setLoading] = useState(false)
@@ -271,6 +280,89 @@ export function useJobDetails(namespace: string, name: string, enabled: boolean 
 		}
 
 		fetchJobDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}
+
+export function useCronJobDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<CronJobDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchCronJobDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/cronjobs/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === "success") {
+					setData(result.data)
+				} else {
+					setError(result.error || "Failed to fetch cronjob details")
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Unknown error")
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchCronJobDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}
+
+interface IngressDetails {
+	summary: Record<string, unknown>
+	spec: Record<string, unknown>
+	status: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+export function useIngressDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<IngressDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchIngressDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/ingresses/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch ingress details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchIngressDetails()
 	}, [namespace, name, enabled])
 
 	return { data, loading, error }

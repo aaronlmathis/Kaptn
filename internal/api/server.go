@@ -360,6 +360,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/daemonsets/{namespace}/{name}", s.handleGetDaemonSet)
 			r.Get("/k8s-jobs", s.handleListJobs)
 			r.Get("/k8s-jobs/{namespace}/{name}", s.handleGetJob)
+			r.Get("/cronjobs", s.handleListCronJobs)
+			r.Get("/cronjobs/{namespace}/{name}", s.handleGetCronJob)
 			r.Get("/overview", s.handleGetOverview)
 			r.Get("/jobs", s.handleListActionJobs)
 			r.Get("/jobs/{jobId}", s.handleGetActionJob)
@@ -370,7 +372,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/namespaces", s.handleListNamespaces)
 			r.Get("/services", s.handleListServices)
 			r.Get("/services/{namespace}", s.handleListServicesInNamespace)
+			r.Get("/ingresses", s.handleListAllIngresses)
 			r.Get("/ingresses/{namespace}", s.handleListIngresses)
+			r.Get("/ingresses/{namespace}/{name}", s.handleGetIngress)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
 			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
 

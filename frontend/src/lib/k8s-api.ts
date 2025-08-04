@@ -84,6 +84,22 @@ export interface Service {
 	annotations: Record<string, string> | null;
 }
 
+// Ingress interfaces based on the actual backend API response
+export interface Ingress {
+	name: string;
+	namespace: string;
+	age: string;
+	ingressClass: string;
+	hosts: string[];
+	hostsDisplay: string;
+	paths: string[];
+	externalIPs: string[];
+	externalIPsDisplay: string;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+}
+
 // Deployment interfaces based on the actual backend API response
 export interface Deployment {
 	name: string;
@@ -197,6 +213,25 @@ export interface Job {
 		reason: string;
 		message: string;
 	}>;
+}
+
+// CronJob interfaces based on the actual backend API response
+export interface CronJob {
+	name: string;
+	namespace: string;
+	schedule: string;
+	suspend: boolean;
+	active: number;
+	lastSchedule: string;
+	nextSchedule: string;
+	age: string;
+	image: string;
+	labels: Record<string, string>;
+	creationTimestamp: string;
+	concurrencyPolicy: string;
+	startingDeadlineSeconds?: number;
+	successfulJobsHistoryLimit: number;
+	failedJobsHistoryLimit: number;
 }
 
 // Namespace interface
@@ -315,6 +350,31 @@ export interface DashboardJob {
 	image: string;
 }
 
+export interface DashboardCronJob {
+	id: number;
+	name: string;
+	namespace: string;
+	schedule: string;
+	suspend: boolean;
+	active: number;
+	lastSchedule: string;
+	age: string;
+	image: string;
+}
+
+export interface DashboardIngress {
+	id: number;
+	name: string;
+	namespace: string;
+	age: string;
+	ingressClass: string;
+	hosts: string[];
+	hostsDisplay: string;
+	paths: string[];
+	externalIPs: string[];
+	externalIPsDisplay: string;
+}
+
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
@@ -394,6 +454,29 @@ export class K8sService {
 
 	async getJob(namespace: string, name: string): Promise<Job> {
 		return apiClient.get<Job>(`/k8s-jobs/${namespace}/${name}`);
+	}
+
+	// CronJob operations
+	async getCronJobs(namespace?: string): Promise<CronJob[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: CronJob[] }; status: string }>(`/cronjobs${query}`);
+		return response.data.items;
+	}
+
+	async getCronJob(namespace: string, name: string): Promise<CronJob> {
+		return apiClient.get<CronJob>(`/cronjobs/${namespace}/${name}`);
+	}
+
+	// Ingress operations
+	async getIngresses(namespace?: string): Promise<Ingress[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: Ingress[] }; status: string }>(`/ingresses${query}`);
+		return response.data.items;
+	}
+
+	async getIngress(namespace: string, name: string): Promise<{ summary: Ingress; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: Ingress; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/ingresses/${namespace}/${name}`);
+		return response.data;
 	}
 
 	// Namespace operations
@@ -555,6 +638,35 @@ export function transformJobsToUI(jobs: Job[]): DashboardJob[] {
 		duration: job.duration,
 		age: job.age,
 		image: job.image
+	}));
+}
+
+export function transformCronJobsToUI(cronJobs: CronJob[]): DashboardCronJob[] {
+	return cronJobs.map((cronJob, index) => ({
+		id: index,
+		name: cronJob.name,
+		namespace: cronJob.namespace,
+		schedule: cronJob.schedule,
+		suspend: cronJob.suspend,
+		active: cronJob.active,
+		lastSchedule: cronJob.lastSchedule,
+		age: cronJob.age,
+		image: cronJob.image
+	}));
+}
+
+export function transformIngressesToUI(ingresses: Ingress[]): DashboardIngress[] {
+	return ingresses.map((ingress, index) => ({
+		id: index + 1,
+		name: ingress.name,
+		namespace: ingress.namespace,
+		age: ingress.age,
+		ingressClass: ingress.ingressClass,
+		hosts: ingress.hosts,
+		hostsDisplay: ingress.hostsDisplay,
+		paths: ingress.paths,
+		externalIPs: ingress.externalIPs,
+		externalIPsDisplay: ingress.externalIPsDisplay
 	}));
 }
 

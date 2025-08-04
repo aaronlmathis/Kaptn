@@ -169,6 +169,8 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.kubeClient.CoreV1().Services(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "Job":
 		return rm.kubeClient.BatchV1().Jobs(req.Namespace).Delete(ctx, req.Name, deleteOptions)
+	case "CronJob":
+		return rm.kubeClient.BatchV1().CronJobs(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "ConfigMap":
 		return rm.kubeClient.CoreV1().ConfigMaps(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "Secret":
@@ -315,6 +317,26 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert Job to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredJob)
+	case "CronJob":
+		cronJob, err := rm.kubeClient.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredCronJob := rm.convertToUnstructured(cronJob)
+		if unstructuredCronJob == nil {
+			return nil, fmt.Errorf("failed to convert CronJob to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredCronJob)
+	case "Ingress":
+		// Get ingress using dynamic client (handles both networking.k8s.io/v1 and extensions/v1beta1)
+		ingressObj, err := rm.GetIngress(ctx, namespace, name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert map to unstructured
+		unstructuredIngress := &unstructured.Unstructured{Object: ingressObj}
+		obj = rm.stripManagedFields(unstructuredIngress)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -383,6 +405,15 @@ func (rm *ResourceManager) ListJobs(ctx context.Context, namespace string) ([]ba
 	return jobs.Items, nil
 }
 
+// ListCronJobs lists all cronjobs in a namespace or across all namespaces
+func (rm *ResourceManager) ListCronJobs(ctx context.Context, namespace string) ([]batchv1.CronJob, error) {
+	cronJobs, err := rm.kubeClient.BatchV1().CronJobs(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return cronJobs.Items, nil
+}
+
 // ListIngresses lists all ingresses in a namespace
 func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) ([]interface{}, error) {
 	// Try networking.k8s.io/v1 first, then fall back to extensions/v1beta1
@@ -409,6 +440,29 @@ func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) 
 	}
 
 	return result, nil
+}
+
+// GetIngress gets a specific ingress by name and namespace
+func (rm *ResourceManager) GetIngress(ctx context.Context, namespace, name string) (map[string]interface{}, error) {
+	// Try networking.k8s.io/v1 first, then fall back to extensions/v1beta1
+	ingressGVR := schema.GroupVersionResource{
+		Group:    "networking.k8s.io",
+		Version:  "v1",
+		Resource: "ingresses",
+	}
+
+	ingress, err := rm.dynamicClient.Resource(ingressGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		// Fallback to extensions/v1beta1
+		ingressGVR.Group = "extensions"
+		ingressGVR.Version = "v1beta1"
+		ingress, err = rm.dynamicClient.Resource(ingressGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return ingress.Object, nil
 }
 
 // GetPodLogs retrieves logs for a pod
@@ -484,6 +538,9 @@ func (rm *ResourceManager) convertToUnstructured(obj interface{}) *unstructured.
 	case *batchv1.Job:
 		result.SetAPIVersion("batch/v1")
 		result.SetKind("Job")
+	case *batchv1.CronJob:
+		result.SetAPIVersion("batch/v1")
+		result.SetKind("CronJob")
 	case *v1.Service:
 		result.SetAPIVersion("v1")
 		result.SetKind("Service")

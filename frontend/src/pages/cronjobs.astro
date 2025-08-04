@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { CronJobsPageContainer } from "@/components/pages/CronJobsPageContainer";
+
+const title = "CronJobs";
+---
+
+<Layout title={title}>
+	<CronJobsPageContainer client:load />
+</Layout>

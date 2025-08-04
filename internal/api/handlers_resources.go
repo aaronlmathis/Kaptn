@@ -563,6 +563,82 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func (s *Server) handleListCronJobs(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	labelSelector := r.URL.Query().Get("labelSelector")
+	fieldSelector := r.URL.Query().Get("fieldSelector")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get cronjobs from resource manager
+	cronJobs, err := s.resourceManager.ListCronJobs(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list cronjobs", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(cronJobs)
+
+	// Apply filters
+	filterOpts := selectors.CronJobFilterOptions{
+		Namespace:     namespace,
+		LabelSelector: labelSelector,
+		FieldSelector: fieldSelector,
+		Search:        search,
+		Sort:          sort,
+		Order:         order,
+		Page:          page,
+		PageSize:      pageSize,
+	}
+
+	filteredCronJobs, err := selectors.FilterCronJobs(cronJobs, filterOpts)
+	if err != nil {
+		s.logger.Error("Failed to filter cronjobs", zap.Error(err))
+		http.Error(w, "Failed to filter cronjobs", http.StatusBadRequest)
+		return
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, cronJob := range filteredCronJobs {
+		responses = append(responses, s.cronJobToResponse(cronJob))
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
 func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
@@ -603,6 +679,57 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 		"status":     job.Status,
 		"metadata":   job.ObjectMeta,
 		"kind":       "Job",
+		"apiVersion": "batch/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleGetCronJob(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get cronjob from Kubernetes API
+	cronJob, err := s.kubeClient.BatchV1().CronJobs(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get cronjob",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.cronJobToResponse(*cronJob)
+
+	// Add full cronjob spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       cronJob.Spec,
+		"status":     cronJob.Status,
+		"metadata":   cronJob.ObjectMeta,
+		"kind":       "CronJob",
 		"apiVersion": "batch/v1",
 	}
 
@@ -727,6 +854,70 @@ func (s *Server) handleListNamespaces(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(namespaces.Items)
 }
 
+func (s *Server) handleListAllIngresses(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters for filtering
+	namespace := r.URL.Query().Get("namespace")
+
+	// Get all ingresses from all namespaces if no specific namespace is requested
+	var allIngresses []interface{}
+
+	if namespace != "" {
+		// Get ingresses from specific namespace
+		ingresses, err := s.resourceManager.ListIngresses(r.Context(), namespace)
+		if err != nil {
+			s.logger.Error("Failed to list ingresses",
+				zap.String("namespace", namespace),
+				zap.Error(err))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		allIngresses = ingresses
+	} else {
+		// Get ingresses from all namespaces
+		// First get all namespaces
+		namespaces, err := s.kubeClient.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
+		if err != nil {
+			s.logger.Error("Failed to list namespaces for ingresses", zap.Error(err))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		// Get ingresses from each namespace
+		for _, ns := range namespaces.Items {
+			ingresses, err := s.resourceManager.ListIngresses(r.Context(), ns.Name)
+			if err != nil {
+				s.logger.Warn("Failed to list ingresses from namespace",
+					zap.String("namespace", ns.Name),
+					zap.Error(err))
+				continue // Skip this namespace but continue with others
+			}
+			allIngresses = append(allIngresses, ingresses...)
+		}
+	}
+
+	// Convert to response format
+	responses := make([]map[string]interface{}, 0, len(allIngresses))
+	for _, ingress := range allIngresses {
+		responses = append(responses, s.ingressToResponse(ingress))
+	}
+
+	// Create response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items": responses,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
 func (s *Server) handleListIngresses(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	if namespace == "" {
@@ -747,9 +938,74 @@ func (s *Server) handleListIngresses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert to response format
+	responses := make([]map[string]interface{}, 0, len(ingresses))
+	for _, ingress := range ingresses {
+		responses = append(responses, s.ingressToResponse(ingress))
+	}
+
+	// Create response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items": responses,
+		},
+		"status": "success",
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(ingresses)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetIngress(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get ingress from resource manager
+	ingressObj, err := s.resourceManager.GetIngress(r.Context(), namespace, name)
+	if err != nil {
+		s.logger.Error("Failed to get ingress",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.ingressToResponse(ingressObj)
+
+	// Add full ingress spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       ingressObj["spec"],
+		"status":     ingressObj["status"],
+		"metadata":   ingressObj["metadata"],
+		"kind":       "Ingress",
+		"apiVersion": ingressObj["apiVersion"],
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
 }
 
 func (s *Server) handleExportResource(w http.ResponseWriter, r *http.Request) {

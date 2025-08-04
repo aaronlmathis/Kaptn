@@ -109,6 +109,18 @@ type JobFilterOptions struct {
 	Search        string // Text search across name, namespace, labels
 }
 
+// CronJobFilterOptions represents filtering options for cronjobs
+type CronJobFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, schedule, suspend, active, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels, schedule
+}
+
 // FilterPods filters a list of pods based on the given options
 func FilterPods(pods []v1.Pod, options PodFilterOptions) ([]v1.Pod, error) {
 	var filtered []v1.Pod
@@ -1248,6 +1260,148 @@ func sortJobs(jobs []batchv1.Job, sortField, order string) {
 			less = jobs[i].CreationTimestamp.Time.After(jobs[j].CreationTimestamp.Time)
 		default:
 			less = jobs[i].Name < jobs[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// FilterCronJobs filters a list of cronjobs based on the given options
+func FilterCronJobs(cronJobs []batchv1.CronJob, options CronJobFilterOptions) ([]batchv1.CronJob, error) {
+	var filtered []batchv1.CronJob
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	// Apply filters
+	for _, cronJob := range cronJobs {
+		// Namespace filter
+		if options.Namespace != "" && cronJob.Namespace != options.Namespace {
+			continue
+		}
+
+		// Label selector filter
+		if labelSelector != nil {
+			cronJobLabels := labels.Set(cronJob.Labels)
+			if !labelSelector.Matches(cronJobLabels) {
+				continue
+			}
+		}
+
+		// Field selector filter
+		if fieldSelector != nil {
+			cronJobFields := fields.Set{
+				"metadata.name":      cronJob.Name,
+				"metadata.namespace": cronJob.Namespace,
+			}
+			if !fieldSelector.Matches(cronJobFields) {
+				continue
+			}
+		}
+
+		// Search filter
+		if options.Search != "" {
+			searchTerm := strings.ToLower(options.Search)
+			name := strings.ToLower(cronJob.Name)
+			namespace := strings.ToLower(cronJob.Namespace)
+			schedule := strings.ToLower(cronJob.Spec.Schedule)
+
+			// Search in labels
+			labelMatch := false
+			for key, value := range cronJob.Labels {
+				if strings.Contains(strings.ToLower(key), searchTerm) ||
+					strings.Contains(strings.ToLower(value), searchTerm) {
+					labelMatch = true
+					break
+				}
+			}
+
+			if !strings.Contains(name, searchTerm) &&
+				!strings.Contains(namespace, searchTerm) &&
+				!strings.Contains(schedule, searchTerm) &&
+				!labelMatch {
+				continue
+			}
+		}
+
+		filtered = append(filtered, cronJob)
+	}
+
+	// Sort
+	sortCronJobs(filtered, options.Sort, options.Order)
+
+	// Paginate
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []batchv1.CronJob{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// sortCronJobs sorts cronjobs by the specified field and order
+func sortCronJobs(cronJobs []batchv1.CronJob, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(cronJobs, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = cronJobs[i].Name < cronJobs[j].Name
+		case "namespace":
+			less = cronJobs[i].Namespace < cronJobs[j].Namespace
+		case "schedule":
+			less = cronJobs[i].Spec.Schedule < cronJobs[j].Spec.Schedule
+		case "suspend":
+			suspendI := false
+			suspendJ := false
+			if cronJobs[i].Spec.Suspend != nil {
+				suspendI = *cronJobs[i].Spec.Suspend
+			}
+			if cronJobs[j].Spec.Suspend != nil {
+				suspendJ = *cronJobs[j].Spec.Suspend
+			}
+			less = !suspendI && suspendJ // Active jobs first
+		case "active":
+			activeI := len(cronJobs[i].Status.Active)
+			activeJ := len(cronJobs[j].Status.Active)
+			less = activeI < activeJ
+		case "age":
+			less = cronJobs[i].CreationTimestamp.Time.After(cronJobs[j].CreationTimestamp.Time)
+		default:
+			less = cronJobs[i].Name < cronJobs[j].Name
 		}
 
 		if order == "desc" {

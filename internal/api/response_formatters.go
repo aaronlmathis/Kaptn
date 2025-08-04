@@ -706,3 +706,191 @@ func (s *Server) jobToResponse(job batchv1.Job) map[string]interface{} {
 		}(),
 	}
 }
+
+// cronJobToResponse converts a Kubernetes cronjob to response format
+func (s *Server) cronJobToResponse(cronJob batchv1.CronJob) map[string]interface{} {
+	// Calculate age
+	ageStr := calculateAge(cronJob.CreationTimestamp.Time)
+
+	// Get suspend status
+	suspend := false
+	if cronJob.Spec.Suspend != nil {
+		suspend = *cronJob.Spec.Suspend
+	}
+
+	// Get last schedule time
+	lastScheduleTime := "Never"
+	if cronJob.Status.LastScheduleTime != nil {
+		lastScheduleTime = cronJob.Status.LastScheduleTime.Format("2006-01-02 15:04:05")
+	}
+
+	// Get next schedule time (this is a simplified calculation)
+	nextScheduleTime := "N/A"
+	if !suspend && cronJob.Status.LastScheduleTime != nil {
+		// This is a basic estimation, real cron parsing would be more complex
+		nextScheduleTime = "Check cron schedule"
+	}
+
+	// Count active jobs
+	activeJobs := len(cronJob.Status.Active)
+
+	// Get container image from cronjob spec
+	image := "N/A"
+	if len(cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers) > 0 {
+		image = cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Image
+	}
+
+	return map[string]interface{}{
+		"name":                    cronJob.Name,
+		"namespace":               cronJob.Namespace,
+		"schedule":                cronJob.Spec.Schedule,
+		"suspend":                 suspend,
+		"active":                  activeJobs,
+		"lastSchedule":            lastScheduleTime,
+		"nextSchedule":            nextScheduleTime,
+		"age":                     ageStr,
+		"image":                   image,
+		"labels":                  cronJob.Labels,
+		"creationTimestamp":       cronJob.CreationTimestamp.Format(time.RFC3339),
+		"concurrencyPolicy":       string(cronJob.Spec.ConcurrencyPolicy),
+		"startingDeadlineSeconds": cronJob.Spec.StartingDeadlineSeconds,
+		"successfulJobsHistoryLimit": func() int32 {
+			if cronJob.Spec.SuccessfulJobsHistoryLimit != nil {
+				return *cronJob.Spec.SuccessfulJobsHistoryLimit
+			}
+			return 3
+		}(),
+		"failedJobsHistoryLimit": func() int32 {
+			if cronJob.Spec.FailedJobsHistoryLimit != nil {
+				return *cronJob.Spec.FailedJobsHistoryLimit
+			}
+			return 1
+		}(),
+	}
+}
+
+// ingressToResponse converts an Ingress to a response format
+func (s *Server) ingressToResponse(ingress interface{}) map[string]interface{} {
+	// Handle both unstructured and typed ingresses
+	var ingressObj map[string]interface{}
+
+	switch ing := ingress.(type) {
+	case map[string]interface{}:
+		ingressObj = ing
+	default:
+		// This should not happen with the current implementation, but handle it gracefully
+		return map[string]interface{}{
+			"name":      "unknown",
+			"namespace": "unknown",
+			"error":     "unsupported ingress type",
+		}
+	}
+
+	metadata, _ := ingressObj["metadata"].(map[string]interface{})
+	spec, _ := ingressObj["spec"].(map[string]interface{})
+	status, _ := ingressObj["status"].(map[string]interface{})
+
+	name, _ := metadata["name"].(string)
+	namespace, _ := metadata["namespace"].(string)
+	creationTimestamp, _ := metadata["creationTimestamp"].(string)
+	labels, _ := metadata["labels"].(map[string]interface{})
+	annotations, _ := metadata["annotations"].(map[string]interface{})
+
+	// Calculate age
+	age := "Unknown"
+	if creationTimestamp != "" {
+		if createdTime, err := time.Parse(time.RFC3339, creationTimestamp); err == nil {
+			age = calculateAge(createdTime)
+		}
+	}
+
+	// Extract ingress class
+	ingressClass := "Unknown"
+	if ic, ok := spec["ingressClassName"].(string); ok && ic != "" {
+		ingressClass = ic
+	} else if annotations != nil {
+		if ic, ok := annotations["kubernetes.io/ingress.class"].(string); ok && ic != "" {
+			ingressClass = ic
+		}
+	}
+
+	// Extract hosts and paths
+	hosts := []string{}
+	paths := []string{}
+
+	if rules, ok := spec["rules"].([]interface{}); ok {
+		for _, ruleInterface := range rules {
+			if rule, ok := ruleInterface.(map[string]interface{}); ok {
+				if host, ok := rule["host"].(string); ok && host != "" {
+					hosts = append(hosts, host)
+				}
+
+				if http, ok := rule["http"].(map[string]interface{}); ok {
+					if pathsArray, ok := http["paths"].([]interface{}); ok {
+						for _, pathInterface := range pathsArray {
+							if pathObj, ok := pathInterface.(map[string]interface{}); ok {
+								if pathStr, ok := pathObj["path"].(string); ok && pathStr != "" {
+									paths = append(paths, pathStr)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Extract external IPs/load balancer ingress
+	externalIPs := []string{}
+	if status != nil {
+		if loadBalancer, ok := status["loadBalancer"].(map[string]interface{}); ok {
+			if ingressArray, ok := loadBalancer["ingress"].([]interface{}); ok {
+				for _, ingressInterface := range ingressArray {
+					if ingressItem, ok := ingressInterface.(map[string]interface{}); ok {
+						if ip, ok := ingressItem["ip"].(string); ok && ip != "" {
+							externalIPs = append(externalIPs, ip)
+						}
+						if hostname, ok := ingressItem["hostname"].(string); ok && hostname != "" {
+							externalIPs = append(externalIPs, hostname)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Format hosts display
+	hostsDisplay := "N/A"
+	if len(hosts) > 0 {
+		if len(hosts) == 1 {
+			hostsDisplay = hosts[0]
+		} else {
+			hostsDisplay = fmt.Sprintf("%s (+%d more)", hosts[0], len(hosts)-1)
+		}
+	}
+
+	// Format external IPs display
+	externalIPsDisplay := "N/A"
+	if len(externalIPs) > 0 {
+		if len(externalIPs) == 1 {
+			externalIPsDisplay = externalIPs[0]
+		} else {
+			externalIPsDisplay = fmt.Sprintf("%s (+%d more)", externalIPs[0], len(externalIPs)-1)
+		}
+	}
+
+	return map[string]interface{}{
+		"name":               name,
+		"namespace":          namespace,
+		"age":                age,
+		"ingressClass":       ingressClass,
+		"hosts":              hosts,
+		"hostsDisplay":       hostsDisplay,
+		"paths":              paths,
+		"externalIPs":        externalIPs,
+		"externalIPsDisplay": externalIPsDisplay,
+		"creationTimestamp":  creationTimestamp,
+		"labels":             labels,
+		"annotations":        annotations,
+	}
+}

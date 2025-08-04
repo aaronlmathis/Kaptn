@@ -9,6 +9,8 @@ import {
 	type DashboardDaemonSet,
 	type DashboardReplicaSet,
 	type DashboardJob,
+	type DashboardCronJob,
+	type DashboardIngress,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
@@ -17,7 +19,9 @@ import {
 	transformStatefulSetsToUI,
 	transformDaemonSetsToUI,
 	transformReplicaSetsToUI,
-	transformJobsToUI
+	transformJobsToUI,
+	transformCronJobsToUI,
+	transformIngressesToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -247,6 +251,64 @@ export function useJobs(): UseK8sDataResult<DashboardJob> {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch jobs');
 			console.error('Error fetching jobs:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useCronJobs(): UseK8sDataResult<DashboardCronJob> {
+	const [data, setData] = useState<DashboardCronJob[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const cronJobs = await k8sService.getCronJobs(namespace);
+			const transformedCronJobs = transformCronJobsToUI(cronJobs);
+			setData(transformedCronJobs);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch cronjobs');
+			console.error('Error fetching cronjobs:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useIngresses(): UseK8sDataResult<DashboardIngress> {
+	const [data, setData] = useState<DashboardIngress[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const ingresses = await k8sService.getIngresses(namespace);
+			const transformedIngresses = transformIngressesToUI(ingresses);
+			setData(transformedIngresses);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch ingresses');
+			console.error('Error fetching ingresses:', err);
 		} finally {
 			setLoading(false);
 		}

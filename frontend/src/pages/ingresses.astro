@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { IngressesPageContainer } from "@/components/pages/IngressesPageContainer";
+
+const title = "Ingresses";
+---
+
+<Layout title={title}>
+	<IngressesPageContainer client:load />
+</Layout>
