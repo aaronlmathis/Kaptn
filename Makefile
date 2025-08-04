@@ -92,9 +92,9 @@ docker: frontend ## Build Docker image
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		-t kad:$(VERSION) .
-	@docker tag kad:$(VERSION) kad:latest
-	@echo "Docker image built: kad:$(VERSION)"
+		-t kaptn:$(VERSION) .
+	@docker tag kaptn:$(VERSION) kaptn:latest
+	@echo "Docker image built: kaptn:$(VERSION)"
 
 docker-debug: frontend ## Build Docker debug image with shell access
 	@echo "Building Docker debug image (with shell)..."
@@ -103,18 +103,18 @@ docker-debug: frontend ## Build Docker debug image with shell access
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		-t kad:debug .
-	@echo "Docker debug image built: kad:debug"
+		-t kaptn:debug .
+	@echo "Docker debug image built: kaptn:debug"
 
 kind-up: ## Create Kind cluster for development
 	@echo "Creating Kind cluster..."
-	@kind create cluster --name kad-dev --wait 300s
-	@echo "Kind cluster 'kad-dev' created"
+	@kind create cluster --name kaptn-dev --wait 300s
+	@echo "Kind cluster 'kaptn-dev' created"
 
 kind-down: ## Delete Kind cluster
 	@echo "Deleting Kind cluster..."
-	@kind delete cluster --name kad-dev
-	@echo "Kind cluster 'kad-dev' deleted"
+	@kind delete cluster --name kaptn-dev
+	@echo "Kind cluster 'kaptn-dev' deleted"
 
 clean: ## Clean build artifacts
 	@echo "Cleaning build artifacts..."
@@ -131,12 +131,12 @@ install-deps: ## Install all dependencies
 
 push: docker ## Push Docker image to registry
 	@echo "Pushing Docker image..."
-	@docker push kad:$(VERSION)
-	@docker push kad:latest
+	@docker push kaptn:$(VERSION)
+	@docker push kaptn:latest
 
 push-debug: docker-debug ## Push Docker debug image to registry
 	@echo "Pushing Docker debug image..."
-	@docker push kad:debug
+	@docker push kaptn:debug
 
 help: ## Show this help
 	@echo "Available targets:"
