@@ -251,6 +251,21 @@ export interface Endpoints {
 	annotations: Record<string, string>;
 }
 
+// NetworkPolicy interfaces based on the actual backend API response
+export interface NetworkPolicy {
+	name: string;
+	namespace: string;
+	age: string;
+	creationTimestamp: string;
+	labels: Record<string, string>;
+	annotations: Record<string, string>;
+	podSelector: Record<string, unknown>;
+	ingressRules: number;
+	egressRules: number;
+	policyTypes: string[];
+	affectedPods: number;
+}
+
 // Namespace interface
 export interface Namespace {
 	metadata: {
@@ -404,6 +419,18 @@ export interface DashboardIngress {
 	paths: string[];
 	externalIPs: string[];
 	externalIPsDisplay: string;
+}
+
+export interface DashboardNetworkPolicy {
+	id: number;
+	name: string;
+	namespace: string;
+	age: string;
+	podSelector: string;
+	ingressRules: number;
+	egressRules: number;
+	policyTypes: string;
+	affectedPods: number;
 }
 
 export class K8sService {

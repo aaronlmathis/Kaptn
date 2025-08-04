@@ -9,11 +9,11 @@ BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 GO_VERSION := $(shell go version | cut -d ' ' -f 3)
 
 # Go build flags
-LDFLAGS := -X github.com/aaronlmathis/k8s-admin-dash/internal/version.Version=$(VERSION) \
-           -X github.com/aaronlmathis/k8s-admin-dash/internal/version.GitCommit=$(GIT_COMMIT) \
-           -X github.com/aaronlmathis/k8s-admin-dash/internal/version.BuildDate=$(BUILD_DATE)
+LDFLAGS := -X github.com/aaronlmathis/kaptn/internal/version.Version=$(VERSION) \
+           -X github.com/aaronlmathis/kaptn/internal/version.GitCommit=$(GIT_COMMIT) \
+           -X github.com/aaronlmathis/kaptn/internal/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: all dev fmt lint test frontend build docker kind-up kind-down clean help
+.PHONY: all dev fmt lint test frontend build docker docker-debug kind-up kind-down clean help push
 
 all: build ## Build everything
 
@@ -77,7 +77,7 @@ test-watch: ## Run frontend tests in watch mode
 
 frontend: ## Build frontend
 	@echo "Building frontend..."
-	@cd frontend && npm run build
+	@cd frontend && npm ci && npm run build
 	@echo "Frontend built successfully"
 
 build: frontend ## Build backend binary (embeds frontend)
@@ -88,9 +88,23 @@ build: frontend ## Build backend binary (embeds frontend)
 
 docker: frontend ## Build Docker image
 	@echo "Building Docker image..."
-	@docker build -t kad:$(VERSION) .
+	@docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t kad:$(VERSION) .
 	@docker tag kad:$(VERSION) kad:latest
 	@echo "Docker image built: kad:$(VERSION)"
+
+docker-debug: frontend ## Build Docker debug image with shell access
+	@echo "Building Docker debug image (with shell)..."
+	@docker build \
+		--target debug \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t kad:debug .
+	@echo "Docker debug image built: kad:debug"
 
 kind-up: ## Create Kind cluster for development
 	@echo "Creating Kind cluster..."
@@ -114,6 +128,11 @@ install-deps: ## Install all dependencies
 	@echo "Installing frontend dependencies..."
 	@cd frontend && npm install
 	@echo "Dependencies installed"
+
+push: docker ## Push Docker image to registry
+	@echo "Pushing Docker image..."
+	@docker push kad:$(VERSION)
+	@docker push kad:latest
 
 help: ## Show this help
 	@echo "Available targets:"

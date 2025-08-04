@@ -37,6 +37,14 @@ Start the backend:
 ./bin/server
 ```
 
+Command line options:
+```bash
+./bin/server --help              # Show all available options
+./bin/server --version           # Show version information
+./bin/server --health-check      # Perform health check and exit
+./bin/server --config config.yaml  # Use specific config file
+```
+
 The server will start on `http://localhost:8080` with these endpoints:
 - `GET /healthz` - Health check
 - `GET /version` - Version information  

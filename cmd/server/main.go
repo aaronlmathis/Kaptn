@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,8 +18,31 @@ import (
 )
 
 func main() {
+	// Define command line flags
+	var (
+		showVersion   = flag.Bool("version", false, "Show version information and exit")
+		healthCheck   = flag.Bool("health-check", false, "Perform health check and exit")
+		configFile    = flag.String("config", "", "Path to configuration file")
+	)
+	flag.Parse()
+
+	// Handle version flag
+	if *showVersion {
+		info := version.Get()
+		fmt.Println(info.String())
+		os.Exit(0)
+	}
+
 	// Load configuration
-	cfg, err := config.Load()
+	var cfg *config.Config
+	var err error
+	
+	if *configFile != "" {
+		cfg, err = config.LoadFromFile(*configFile)
+	} else {
+		cfg, err = config.Load()
+	}
+	
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
@@ -27,6 +51,12 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid configuration: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Handle health check flag
+	if *healthCheck {
+		performHealthCheck(cfg.Server.Addr)
+		return
 	}
 
 	// Initialize logger
@@ -62,15 +92,6 @@ func main() {
 	}
 	defer apiServer.Stop()
 
-	// Start server components
-	startCtx, startCancel := context.WithCancel(context.Background())
-	defer startCancel()
-
-	if err := apiServer.Start(startCtx); err != nil {
-		logger.Fatal("Failed to start server components", zap.Error(err))
-	}
-	defer apiServer.Stop()
-
 	// Create HTTP server
 	server := &http.Server{
 		Addr:    cfg.Server.Addr,
@@ -102,4 +123,34 @@ func main() {
 	}
 
 	logger.Info("Server exited")
+}
+
+// performHealthCheck performs a health check against the server's healthz endpoint
+func performHealthCheck(addr string) {
+	// Build the health check URL
+	url := fmt.Sprintf("http://%s/healthz", addr)
+	
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	
+	fmt.Printf("Performing health check against %s...\n", url)
+	
+	// Make the request
+	resp, err := client.Get(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	
+	// Check response status
+	if resp.StatusCode == http.StatusOK {
+		fmt.Println("Health check passed: Server is healthy")
+		os.Exit(0)
+	} else {
+		fmt.Fprintf(os.Stderr, "Health check failed: Server returned status %d\n", resp.StatusCode)
+		os.Exit(1)
+	}
 }

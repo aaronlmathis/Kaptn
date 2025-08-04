@@ -58,6 +58,10 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
    # Terminal 1: Start backend
    make build && ./bin/server
    
+   # Available command line options:
+   ./bin/server --version           # Show version information
+   ./bin/server --health-check      # Perform health check
+   ./bin/server --config config.yaml # Use specific config file
    ```
 
 4. **Access the dashboard**:
