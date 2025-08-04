@@ -136,7 +136,7 @@ export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentD
 				<IconRefresh className="size-4 mr-2" />
 				Scale Deployment
 			</Button>
-			<Button variant="outline" size="sm" className="w-full">
+			<Button variant="destructive" size="sm" className="w-full">
 				<IconRefresh className="size-4 mr-2" />
 				Restart Deployment
 			</Button>

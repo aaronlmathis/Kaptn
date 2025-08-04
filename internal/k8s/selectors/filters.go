@@ -60,6 +60,18 @@ type StatefulSetFilterOptions struct {
 	Search        string // Text search across name, namespace, labels
 }
 
+// DaemonSetFilterOptions represents filtering options for daemonsets
+type DaemonSetFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, desired, current, ready, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+}
+
 // ServiceFilterOptions represents filtering options for services
 type ServiceFilterOptions struct {
 	Namespace     string
@@ -701,6 +713,105 @@ func FilterServices(services []v1.Service, options ServiceFilterOptions) ([]v1.S
 	return filtered, nil
 }
 
+// FilterDaemonSets filters a list of daemonsets based on the given options
+func FilterDaemonSets(daemonSets []appsv1.DaemonSet, options DaemonSetFilterOptions) ([]appsv1.DaemonSet, error) {
+	var filtered []appsv1.DaemonSet
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, daemonSet := range daemonSets {
+		// Filter by namespace
+		if options.Namespace != "" && daemonSet.Namespace != options.Namespace {
+			continue
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(daemonSet.Labels)) {
+			continue
+		}
+
+		// Apply field selector
+		if fieldSelector != nil {
+			fields := fields.Set{
+				"metadata.name":      daemonSet.Name,
+				"metadata.namespace": daemonSet.Namespace,
+			}
+			if !fieldSelector.Matches(fields) {
+				continue
+			}
+		}
+
+		// Apply text search
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(daemonSet.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(daemonSet.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range daemonSet.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, daemonSet)
+	}
+
+	// Sort daemonsets
+	sortDaemonSets(filtered, options.Sort, options.Order)
+
+	// Apply pagination
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []appsv1.DaemonSet{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
 // sortDeployments sorts deployments by the specified field and order
 func sortDeployments(deployments []appsv1.Deployment, sortField, order string) {
 	if sortField == "" {
@@ -801,6 +912,41 @@ func sortServices(services []v1.Service, sortField, order string) {
 			less = services[i].CreationTimestamp.Time.After(services[j].CreationTimestamp.Time)
 		default:
 			less = services[i].Name < services[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// sortDaemonSets sorts daemonsets by the specified field and order
+func sortDaemonSets(daemonSets []appsv1.DaemonSet, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(daemonSets, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = daemonSets[i].Name < daemonSets[j].Name
+		case "namespace":
+			less = daemonSets[i].Namespace < daemonSets[j].Namespace
+		case "desired":
+			less = daemonSets[i].Status.DesiredNumberScheduled < daemonSets[j].Status.DesiredNumberScheduled
+		case "current":
+			less = daemonSets[i].Status.CurrentNumberScheduled < daemonSets[j].Status.CurrentNumberScheduled
+		case "ready":
+			less = daemonSets[i].Status.NumberReady < daemonSets[j].Status.NumberReady
+		case "age":
+			less = daemonSets[i].CreationTimestamp.Time.After(daemonSets[j].CreationTimestamp.Time)
+		default:
+			less = daemonSets[i].Name < daemonSets[j].Name
 		}
 
 		if order == "desc" {

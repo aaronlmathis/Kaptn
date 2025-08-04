@@ -335,6 +335,82 @@ func (s *Server) handleListStatefulSets(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(response)
 }
 
+func (s *Server) handleListDaemonSets(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	labelSelector := r.URL.Query().Get("labelSelector")
+	fieldSelector := r.URL.Query().Get("fieldSelector")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get daemonsets from resource manager
+	daemonSets, err := s.resourceManager.ListDaemonSets(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list daemonsets", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(daemonSets)
+
+	// Apply filters
+	filterOpts := selectors.DaemonSetFilterOptions{
+		Namespace:     namespace,
+		LabelSelector: labelSelector,
+		FieldSelector: fieldSelector,
+		Search:        search,
+		Sort:          sort,
+		Order:         order,
+		Page:          page,
+		PageSize:      pageSize,
+	}
+
+	filteredDaemonSets, err := selectors.FilterDaemonSets(daemonSets, filterOpts)
+	if err != nil {
+		s.logger.Error("Failed to filter daemonsets", zap.Error(err))
+		http.Error(w, "Failed to filter daemonsets", http.StatusBadRequest)
+		return
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, daemonSet := range filteredDaemonSets {
+		responses = append(responses, s.daemonSetToResponse(daemonSet))
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
 func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	namespace := r.URL.Query().Get("namespace")
@@ -720,6 +796,57 @@ func (s *Server) handleGetStatefulSet(w http.ResponseWriter, r *http.Request) {
 		"status":     statefulSet.Status,
 		"metadata":   statefulSet.ObjectMeta,
 		"kind":       "StatefulSet",
+		"apiVersion": "apps/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleGetDaemonSet(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get daemonset from Kubernetes API
+	daemonSet, err := s.kubeClient.AppsV1().DaemonSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get daemonset",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.daemonSetToResponse(*daemonSet)
+
+	// Add full daemonset spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       daemonSet.Spec,
+		"status":     daemonSet.Status,
+		"metadata":   daemonSet.ObjectMeta,
+		"kind":       "DaemonSet",
 		"apiVersion": "apps/v1",
 	}
 

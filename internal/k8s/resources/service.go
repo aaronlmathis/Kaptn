@@ -162,6 +162,8 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.kubeClient.AppsV1().ReplicaSets(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "StatefulSet":
 		return rm.kubeClient.AppsV1().StatefulSets(req.Namespace).Delete(ctx, req.Name, deleteOptions)
+	case "DaemonSet":
+		return rm.kubeClient.AppsV1().DaemonSets(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "Service":
 		return rm.kubeClient.CoreV1().Services(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "ConfigMap":
@@ -280,6 +282,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert StatefulSet to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredStatefulSet)
+	case "DaemonSet":
+		daemonSet, err := rm.kubeClient.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredDaemonSet := rm.convertToUnstructured(daemonSet)
+		if unstructuredDaemonSet == nil {
+			return nil, fmt.Errorf("failed to convert DaemonSet to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredDaemonSet)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -319,6 +331,15 @@ func (rm *ResourceManager) ListStatefulSets(ctx context.Context, namespace strin
 		return nil, err
 	}
 	return statefulSets.Items, nil
+}
+
+// ListDaemonSets lists all daemonsets in a namespace or across all namespaces
+func (rm *ResourceManager) ListDaemonSets(ctx context.Context, namespace string) ([]appsv1.DaemonSet, error) {
+	daemonSets, err := rm.kubeClient.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return daemonSets.Items, nil
 }
 
 // ListIngresses lists all ingresses in a namespace
@@ -410,6 +431,12 @@ func (rm *ResourceManager) convertToUnstructured(obj interface{}) *unstructured.
 	case *appsv1.Deployment:
 		result.SetAPIVersion("apps/v1")
 		result.SetKind("Deployment")
+	case *appsv1.StatefulSet:
+		result.SetAPIVersion("apps/v1")
+		result.SetKind("StatefulSet")
+	case *appsv1.DaemonSet:
+		result.SetAPIVersion("apps/v1")
+		result.SetKind("DaemonSet")
 	case *v1.Service:
 		result.SetAPIVersion("v1")
 		result.SetKind("Service")

@@ -354,6 +354,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/deployments/{namespace}/{name}", s.handleGetDeployment)
 			r.Get("/statefulsets", s.handleListStatefulSets)
 			r.Get("/statefulsets/{namespace}/{name}", s.handleGetStatefulSet)
+			r.Get("/daemonsets", s.handleListDaemonSets)
+			r.Get("/daemonsets/{namespace}/{name}", s.handleGetDaemonSet)
 			r.Get("/overview", s.handleGetOverview)
 			r.Get("/jobs", s.handleListJobs)
 			r.Get("/jobs/{jobId}", s.handleGetJob)

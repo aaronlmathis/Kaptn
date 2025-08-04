@@ -2,7 +2,7 @@ import * as React from "react"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconTerminal, IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconX } from "@tabler/icons-react"
+import { IconTerminal, IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconX, IconRefresh } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useShell } from "@/hooks/use-shell"
 import {
@@ -183,6 +183,18 @@ export function PodDetailDrawer({ item, open, onOpenChange }: PodDetailDrawerPro
 					Edit YAML
 				</Button>
 			</ResourceYamlEditor>
+			<Button
+				variant="destructive"
+				size="sm"
+				className="w-full"
+				onClick={() => {
+					// TODO: Implement pod restart functionality
+					console.log('Restart pod:', item.name, 'in namespace:', item.namespace)
+				}}
+			>
+				<IconRefresh className="size-4 mr-2" />
+				Restart
+			</Button>
 		</>
 	)
 

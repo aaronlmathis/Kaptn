@@ -409,6 +409,51 @@ func (s *Server) statefulSetToResponse(statefulSet appsv1.StatefulSet) map[strin
 	}
 }
 
+// daemonSetToResponse converts a Kubernetes daemonset to response format
+func (s *Server) daemonSetToResponse(daemonSet appsv1.DaemonSet) map[string]interface{} {
+	// Calculate age
+	age := calculateAge(daemonSet.CreationTimestamp.Time)
+
+	// DaemonSet status numbers
+	desired := daemonSet.Status.DesiredNumberScheduled
+	current := daemonSet.Status.CurrentNumberScheduled
+	ready := daemonSet.Status.NumberReady
+	available := daemonSet.Status.NumberAvailable
+	unavailable := daemonSet.Status.NumberUnavailable
+
+	status := map[string]int32{
+		"desired":     desired,
+		"current":     current,
+		"ready":       ready,
+		"available":   available,
+		"unavailable": unavailable,
+	}
+
+	// Convert conditions
+	var conditions []map[string]string
+	for _, condition := range daemonSet.Status.Conditions {
+		conditions = append(conditions, map[string]string{
+			"type":    string(condition.Type),
+			"status":  string(condition.Status),
+			"reason":  condition.Reason,
+			"message": condition.Message,
+		})
+	}
+
+	return map[string]interface{}{
+		"name":              daemonSet.Name,
+		"namespace":         daemonSet.Namespace,
+		"status":            status,
+		"conditions":        conditions,
+		"age":               age,
+		"labels":            daemonSet.Labels,
+		"creationTimestamp": daemonSet.CreationTimestamp.Time,
+		"updateStrategy":    daemonSet.Spec.UpdateStrategy.Type,
+		"currentRevision":   daemonSet.Status.CurrentNumberScheduled, // Using current number as revision info isn't always available
+		"selector":          daemonSet.Spec.Selector,
+	}
+}
+
 // serviceToResponse converts a Kubernetes service to response format
 func (s *Server) serviceToResponse(service v1.Service) map[string]interface{} {
 	// Calculate age

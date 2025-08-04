@@ -6,12 +6,14 @@ import {
 	type ServiceTableRow,
 	type DashboardDeployment,
 	type DashboardStatefulSet,
+	type DashboardDaemonSet,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
 	transformServicesToUI,
 	transformDeploymentsToUI,
-	transformStatefulSetsToUI
+	transformStatefulSetsToUI,
+	transformDaemonSetsToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -154,6 +156,35 @@ export function useStatefulSets(): UseK8sDataResult<DashboardStatefulSet> {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch statefulsets');
 			console.error('Error fetching statefulsets:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useDaemonSets(): UseK8sDataResult<DashboardDaemonSet> {
+	const [data, setData] = useState<DashboardDaemonSet[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const daemonSets = await k8sService.getDaemonSets(namespace);
+			const transformedDaemonSets = transformDaemonSetsToUI(daemonSets);
+			setData(transformedDaemonSets);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch daemonsets');
+			console.error('Error fetching daemonsets:', err);
 		} finally {
 			setLoading(false);
 		}

@@ -130,6 +130,30 @@ export interface StatefulSet {
 	updateRevision?: string;
 }
 
+// DaemonSet interfaces based on the actual backend API response
+export interface DaemonSet {
+	name: string;
+	namespace: string;
+	age: string;
+	creationTimestamp: string;
+	labels: Record<string, string>;
+	status: {
+		desired: number;
+		current: number;
+		ready: number;
+		available: number;
+		unavailable: number;
+	};
+	conditions: Array<{
+		type: string;
+		status: string;
+		reason: string;
+		message: string;
+	}>;
+	updateStrategy: string;
+	selector: Record<string, unknown>;
+}
+
 // Namespace interface
 export interface Namespace {
 	metadata: {
@@ -211,6 +235,19 @@ export interface DashboardStatefulSet {
 	updateStrategy: string;
 }
 
+export interface DashboardDaemonSet {
+	id: number;
+	name: string;
+	namespace: string;
+	desired: number;
+	current: number;
+	ready: number;
+	available: number;
+	unavailable: number;
+	age: string;
+	updateStrategy: string;
+}
+
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
@@ -267,6 +304,13 @@ export class K8sService {
 		return response.data.items;
 	}
 
+	// DaemonSet operations
+	async getDaemonSets(namespace?: string): Promise<DaemonSet[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: DaemonSet[] }; status: string }>(`/daemonsets${query}`);
+		return response.data.items;
+	}
+
 	// Namespace operations
 	async getNamespaces(): Promise<Namespace[]> {
 		return apiClient.get<Namespace[]>('/namespaces');
@@ -302,8 +346,8 @@ export class K8sService {
 	}
 
 	// Export operations
-	async exportResource(namespace: string, kind: string, name: string): Promise<any> {
-		const response = await apiClient.get<any>(`/export/${namespace}/${kind}/${name}`);
+	async exportResource(namespace: string, kind: string, name: string): Promise<Record<string, unknown>> {
+		const response = await apiClient.get<Record<string, unknown>>(`/export/${namespace}/${kind}/${name}`);
 		return response;
 	}
 
@@ -388,20 +432,19 @@ export function transformStatefulSetsToUI(statefulSets: StatefulSet[]): Dashboar
 	}));
 }
 
-// Helper functions
-function calculateAge(timestamp: string): string {
-	const now = new Date();
-	const created = new Date(timestamp);
-	const diffMs = now.getTime() - created.getTime();
-
-	const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-	const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-	const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-	if (days > 0) return `${days}d`;
-	if (hours > 0) return `${hours}h`;
-	if (minutes > 0) return `${minutes}m`;
-	return '<1m';
+export function transformDaemonSetsToUI(daemonSets: DaemonSet[]): DashboardDaemonSet[] {
+	return daemonSets.map((daemonSet, index) => ({
+		id: index,
+		name: daemonSet.name,
+		namespace: daemonSet.namespace,
+		desired: daemonSet.status.desired,
+		current: daemonSet.status.current,
+		ready: daemonSet.status.ready,
+		available: daemonSet.status.available,
+		unavailable: daemonSet.status.unavailable,
+		age: daemonSet.age,
+		updateStrategy: daemonSet.updateStrategy || 'RollingUpdate'
+	}));
 }
 
 function getExternalIP(service: Service): string {
