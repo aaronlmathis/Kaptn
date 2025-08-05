@@ -376,6 +376,26 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		// Convert map to unstructured
 		unstructuredEndpointSlice := &unstructured.Unstructured{Object: endpointSliceObj.(map[string]interface{})}
 		obj = rm.stripManagedFields(unstructuredEndpointSlice)
+	case "PersistentVolume":
+		persistentVolume, err := rm.kubeClient.CoreV1().PersistentVolumes().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredPV := rm.convertToUnstructured(persistentVolume)
+		if unstructuredPV == nil {
+			return nil, fmt.Errorf("failed to convert PersistentVolume to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredPV)
+	case "PersistentVolumeClaim":
+		persistentVolumeClaim, err := rm.kubeClient.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredPVC := rm.convertToUnstructured(persistentVolumeClaim)
+		if unstructuredPVC == nil {
+			return nil, fmt.Errorf("failed to convert PersistentVolumeClaim to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredPVC)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}

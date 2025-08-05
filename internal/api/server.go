@@ -384,6 +384,10 @@ func (s *Server) setupRoutes() {
 			r.Get("/config-maps/{namespace}/{name}", s.handleGetConfigMap)
 			r.Get("/network-policies", s.handleListNetworkPolicies)
 			r.Get("/network-policies/{namespace}/{name}", s.handleGetNetworkPolicy)
+			r.Get("/persistent-volumes", s.handleListPersistentVolumes)
+			r.Get("/persistent-volumes/{name}", s.handleGetPersistentVolume)
+			r.Get("/persistent-volume-claims", s.handleListPersistentVolumeClaims)
+			r.Get("/persistent-volume-claims/{namespace}/{name}", s.handleGetPersistentVolumeClaim)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
 			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
 

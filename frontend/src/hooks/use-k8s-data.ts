@@ -15,6 +15,8 @@ import {
 	type DashboardIngress,
 	type DashboardNetworkPolicy,
 	type DashboardConfigMap,
+	type DashboardPersistentVolume,
+	type DashboardPersistentVolumeClaim,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
@@ -29,7 +31,9 @@ import {
 	transformEndpointSlicesToUI,
 	transformIngressesToUI,
 	transformNetworkPoliciesToUI,
-	transformConfigMapsToUI
+	transformConfigMapsToUI,
+	transformPersistentVolumesToUI,
+	transformPersistentVolumeClaimsToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -565,4 +569,60 @@ export function useOverview(): UseK8sDataResult<OverviewData> {
 		error,
 		refetch: fetchData
 	} as UseK8sDataResult<OverviewData>;
+}
+
+export function usePersistentVolumes(): UseK8sDataResult<DashboardPersistentVolume> {
+	const [data, setData] = useState<DashboardPersistentVolume[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const persistentVolumes = await k8sService.getPersistentVolumes();
+			const transformedPVs = transformPersistentVolumesToUI(persistentVolumes);
+			setData(transformedPVs);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch persistent volumes');
+			console.error('Error fetching persistent volumes:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function usePersistentVolumeClaims(): UseK8sDataResult<DashboardPersistentVolumeClaim> {
+	const [data, setData] = useState<DashboardPersistentVolumeClaim[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const persistentVolumeClaims = await k8sService.getPersistentVolumeClaims(namespace);
+			const transformedPVCs = transformPersistentVolumeClaimsToUI(persistentVolumeClaims);
+			setData(transformedPVCs);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch persistent volume claims');
+			console.error('Error fetching persistent volume claims:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
 }

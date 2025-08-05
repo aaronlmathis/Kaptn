@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { PersistentVolumesPageContainer } from "@/components/pages/PersistentVolumesPage";
+
+const title = "Persistent Volumes";
+---
+
+<Layout title={title}>
+	<PersistentVolumesPageContainer client:load />
+</Layout>

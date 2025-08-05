@@ -498,6 +498,74 @@ export interface DashboardConfigMap {
 	annotationsCount: number;
 }
 
+// PersistentVolume interfaces based on the actual backend API response
+export interface PersistentVolume {
+	name: string;
+	capacity: string;
+	accessModes: string[];
+	accessModesDisplay: string;
+	reclaimPolicy: string;
+	status: string;
+	claim: string;
+	storageClass: string;
+	volumeSource: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+}
+
+export interface DashboardPersistentVolume {
+	id: string;
+	name: string;
+	capacity: string;
+	accessModes: string[];
+	accessModesDisplay: string;
+	reclaimPolicy: string;
+	status: string;
+	claim: string;
+	storageClass: string;
+	volumeSource: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+}
+
+// PersistentVolumeClaim interfaces based on the actual backend API response
+export interface PersistentVolumeClaim {
+	name: string;
+	namespace: string;
+	status: string;
+	volume: string;
+	capacity: string;
+	accessModes: string[];
+	accessModesDisplay: string;
+	storageClass: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+}
+
+export interface DashboardPersistentVolumeClaim {
+	id: string;
+	name: string;
+	namespace: string;
+	status: string;
+	volume: string;
+	capacity: string;
+	accessModes: string[];
+	accessModesDisplay: string;
+	storageClass: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+}
+
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
@@ -535,8 +603,8 @@ export class K8sService {
 
 	// Service operations
 	async getServices(namespace?: string): Promise<Service[]> {
-		const endpoint = namespace ? `/services/${namespace}` : '/services';
-		const response = await apiClient.get<{ data: { items: Service[] }; status: string }>(endpoint);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: Service[] }; status: string }>(`/services${query}`);
 		return response.data?.items || [];
 	}
 
@@ -622,6 +690,29 @@ export class K8sService {
 
 	async getConfigMap(namespace: string, name: string): Promise<{ summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
 		const response = await apiClient.get<{ data: { summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/config-maps/${namespace}/${name}`);
+		return response.data;
+	}
+
+	// PersistentVolume operations
+	async getPersistentVolumes(): Promise<PersistentVolume[]> {
+		const response = await apiClient.get<{ data: { items: PersistentVolume[] }; status: string }>(`/persistent-volumes`);
+		return response.data?.items || [];
+	}
+
+	async getPersistentVolume(name: string): Promise<{ summary: PersistentVolume; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: PersistentVolume; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volumes/${name}`);
+		return response.data;
+	}
+
+	// PersistentVolumeClaim operations
+	async getPersistentVolumeClaims(namespace?: string): Promise<PersistentVolumeClaim[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: PersistentVolumeClaim[] }; status: string }>(`/persistent-volume-claims${query}`);
+		return response.data?.items || [];
+	}
+
+	async getPersistentVolumeClaim(namespace: string, name: string): Promise<{ summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volume-claims/${namespace}/${name}`);
 		return response.data;
 	}
 
@@ -736,7 +827,9 @@ export function transformNodesToUI(nodes: Node[]): NodeTableRow[] {
 		age: node.age,
 		version: node.nodeInfo.kubeletVersion
 	}));
-} export function transformServicesToUI(services: Service[]): ServiceTableRow[] {
+}
+
+export function transformServicesToUI(services: Service[]): ServiceTableRow[] {
 	if (!services || !Array.isArray(services)) {
 		return [];
 	}
@@ -943,6 +1036,47 @@ export function transformConfigMapsToUI(configMaps: ConfigMap[]): DashboardConfi
 		dataKeys: configMap.dataKeys,
 		labelsCount: configMap.labelsCount,
 		annotationsCount: configMap.annotationsCount
+	}));
+}
+
+export function transformPersistentVolumesToUI(persistentVolumes: PersistentVolume[]): DashboardPersistentVolume[] {
+	if (!persistentVolumes || !Array.isArray(persistentVolumes)) {
+		return [];
+	}
+	return persistentVolumes.map((pv) => ({
+		id: pv.name,
+		name: pv.name,
+		capacity: pv.capacity,
+		accessModes: pv.accessModes,
+		accessModesDisplay: pv.accessModesDisplay,
+		reclaimPolicy: pv.reclaimPolicy,
+		status: pv.status,
+		claim: pv.claim,
+		storageClass: pv.storageClass,
+		volumeSource: pv.volumeSource,
+		age: pv.age,
+		labelsCount: pv.labelsCount,
+		annotationsCount: pv.annotationsCount
+	}));
+}
+
+export function transformPersistentVolumeClaimsToUI(persistentVolumeClaims: PersistentVolumeClaim[]): DashboardPersistentVolumeClaim[] {
+	if (!persistentVolumeClaims || !Array.isArray(persistentVolumeClaims)) {
+		return [];
+	}
+	return persistentVolumeClaims.map((pvc) => ({
+		id: `${pvc.namespace}-${pvc.name}`,
+		name: pvc.name,
+		namespace: pvc.namespace,
+		status: pvc.status,
+		volume: pvc.volume,
+		capacity: pvc.capacity,
+		accessModes: pvc.accessModes,
+		accessModesDisplay: pvc.accessModesDisplay,
+		storageClass: pvc.storageClass,
+		age: pvc.age,
+		labelsCount: pvc.labelsCount,
+		annotationsCount: pvc.annotationsCount
 	}));
 }
 

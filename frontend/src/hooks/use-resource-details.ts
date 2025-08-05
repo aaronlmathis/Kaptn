@@ -582,6 +582,55 @@ interface ConfigMapDetails {
 	apiVersion: string
 }
 
+interface PersistentVolumeDetails {
+	summary: {
+		name: string
+		capacity: string
+		accessModes: string[]
+		accessModesDisplay: string
+		reclaimPolicy: string
+		status: string
+		claim: string
+		storageClass: string
+		volumeSource: string
+		age: string
+		labelsCount: number
+		annotationsCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	status: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+interface PersistentVolumeClaimDetails {
+	summary: {
+		name: string
+		namespace: string
+		status: string
+		volume: string
+		capacity: string
+		accessModes: string[]
+		accessModesDisplay: string
+		storageClass: string
+		age: string
+		labelsCount: number
+		annotationsCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	status: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
 export function useConfigMapDetails(namespace: string, name: string, enabled: boolean = true) {
 	const [data, setData] = useState<ConfigMapDetails | null>(null)
 	const [loading, setLoading] = useState(false)
@@ -622,4 +671,78 @@ export function useConfigMapDetails(namespace: string, name: string, enabled: bo
 export function useLoadBalancerDetails(namespace: string, name: string, enabled: boolean = true) {
 	// LoadBalancers are Services with type=LoadBalancer, so we can reuse the service details hook
 	return useServiceDetails(namespace, name, enabled)
+}
+
+export function usePersistentVolumeDetails(name: string, enabled: boolean = true) {
+	const [data, setData] = useState<PersistentVolumeDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchPersistentVolumeDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/persistent-volumes/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch persistent volume details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchPersistentVolumeDetails()
+	}, [name, enabled])
+
+	return { data, loading, error }
+}
+
+export function usePersistentVolumeClaimDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<PersistentVolumeClaimDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchPersistentVolumeClaimDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/persistent-volume-claims/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch persistent volume claim details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchPersistentVolumeClaimDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
 }

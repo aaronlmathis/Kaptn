@@ -1099,7 +1099,7 @@ func (s *Server) endpointSliceToResponse(endpointSlice interface{}) map[string]i
 
 // networkPolicyToResponse converts a NetworkPolicy to a response format
 func (s *Server) networkPolicyToResponse(networkPolicy networkingv1.NetworkPolicy) map[string]interface{} {
-	age := time.Since(networkPolicy.CreationTimestamp.Time).String()
+	age := calculateAge(networkPolicy.CreationTimestamp.Time)
 
 	// Format pod selector
 	podSelector := "All Pods"
@@ -1149,7 +1149,7 @@ func (s *Server) networkPolicyToResponse(networkPolicy networkingv1.NetworkPolic
 
 // configMapToResponse converts a Kubernetes ConfigMap to response format
 func (s *Server) configMapToResponse(configMap v1.ConfigMap) map[string]interface{} {
-	age := time.Since(configMap.CreationTimestamp.Time).String()
+	age := calculateAge(configMap.CreationTimestamp.Time)
 
 	// Count data keys
 	dataKeysCount := len(configMap.Data)
@@ -1204,5 +1204,177 @@ func (s *Server) configMapToResponse(configMap v1.ConfigMap) map[string]interfac
 		"creationTimestamp": configMap.CreationTimestamp.Time,
 		"labels":            configMap.Labels,
 		"annotations":       configMap.Annotations,
+	}
+}
+
+// PersistentVolume response formatter
+func (s *Server) persistentVolumeToResponse(pv *v1.PersistentVolume) map[string]interface{} {
+	// Calculate age
+	age := time.Since(pv.CreationTimestamp.Time).Round(time.Second).String()
+	if age == "0s" {
+		age = "1s"
+	}
+
+	// Get capacity
+	capacity := "Unknown"
+	if pv.Spec.Capacity != nil {
+		if storageQuantity, ok := pv.Spec.Capacity[v1.ResourceStorage]; ok {
+			capacity = storageQuantity.String()
+		}
+	}
+
+	// Get access modes
+	accessModes := make([]string, len(pv.Spec.AccessModes))
+	for i, mode := range pv.Spec.AccessModes {
+		switch mode {
+		case v1.ReadWriteOnce:
+			accessModes[i] = "RWO"
+		case v1.ReadOnlyMany:
+			accessModes[i] = "ROX"
+		case v1.ReadWriteMany:
+			accessModes[i] = "RWX"
+		case v1.ReadWriteOncePod:
+			accessModes[i] = "RWOP"
+		default:
+			accessModes[i] = string(mode)
+		}
+	}
+
+	// Get reclaim policy
+	reclaimPolicy := "Unknown"
+	if pv.Spec.PersistentVolumeReclaimPolicy != "" {
+		reclaimPolicy = string(pv.Spec.PersistentVolumeReclaimPolicy)
+	}
+
+	// Get status/phase
+	status := string(pv.Status.Phase)
+
+	// Get claim reference
+	claimRef := ""
+	if pv.Spec.ClaimRef != nil {
+		claimRef = fmt.Sprintf("%s/%s", pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name)
+	}
+
+	// Get storage class
+	storageClass := pv.Spec.StorageClassName
+	if storageClass == "" {
+		storageClass = "<none>"
+	}
+
+	// Get volume source type
+	volumeSource := "Unknown"
+	if pv.Spec.HostPath != nil {
+		volumeSource = "HostPath"
+	} else if pv.Spec.NFS != nil {
+		volumeSource = "NFS"
+	} else if pv.Spec.GCEPersistentDisk != nil {
+		volumeSource = "GCE"
+	} else if pv.Spec.AWSElasticBlockStore != nil {
+		volumeSource = "AWS EBS"
+	} else if pv.Spec.CSI != nil {
+		volumeSource = fmt.Sprintf("CSI (%s)", pv.Spec.CSI.Driver)
+	} else if pv.Spec.Local != nil {
+		volumeSource = "Local"
+	}
+
+	// Count labels and annotations
+	labelsCount := len(pv.Labels)
+	annotationsCount := len(pv.Annotations)
+
+	return map[string]interface{}{
+		"id":                pv.Name, // For table sorting
+		"name":              pv.Name,
+		"capacity":          capacity,
+		"accessModes":       accessModes,
+		"accessModesDisplay": fmt.Sprintf("[%s]", fmt.Sprintf("%v", accessModes)),
+		"reclaimPolicy":     reclaimPolicy,
+		"status":            status,
+		"claim":             claimRef,
+		"storageClass":      storageClass,
+		"volumeSource":      volumeSource,
+		"age":               age,
+		"labelsCount":       labelsCount,
+		"annotationsCount":  annotationsCount,
+		"creationTimestamp": pv.CreationTimestamp.Time,
+		"labels":            pv.Labels,
+		"annotations":       pv.Annotations,
+	}
+}
+
+// PersistentVolumeClaim response formatter
+func (s *Server) persistentVolumeClaimToResponse(pvc *v1.PersistentVolumeClaim) map[string]interface{} {
+	// Calculate age
+	age := time.Since(pvc.CreationTimestamp.Time).Round(time.Second).String()
+	if age == "0s" {
+		age = "1s"
+	}
+
+	// Get status/phase
+	status := string(pvc.Status.Phase)
+
+	// Get volume name (bound PV)
+	volumeName := ""
+	if pvc.Spec.VolumeName != "" {
+		volumeName = pvc.Spec.VolumeName
+	}
+
+	// Get capacity - from status if available, otherwise from spec
+	capacity := "Unknown"
+	if pvc.Status.Capacity != nil {
+		if storageQuantity, ok := pvc.Status.Capacity[v1.ResourceStorage]; ok {
+			capacity = storageQuantity.String()
+		}
+	} else if pvc.Spec.Resources.Requests != nil {
+		if storageQuantity, ok := pvc.Spec.Resources.Requests[v1.ResourceStorage]; ok {
+			capacity = storageQuantity.String()
+		}
+	}
+
+	// Get access modes
+	accessModes := make([]string, len(pvc.Spec.AccessModes))
+	for i, mode := range pvc.Spec.AccessModes {
+		switch mode {
+		case v1.ReadWriteOnce:
+			accessModes[i] = "RWO"
+		case v1.ReadOnlyMany:
+			accessModes[i] = "ROX"
+		case v1.ReadWriteMany:
+			accessModes[i] = "RWX"
+		case v1.ReadWriteOncePod:
+			accessModes[i] = "RWOP"
+		default:
+			accessModes[i] = string(mode)
+		}
+	}
+
+	// Get storage class
+	storageClass := ""
+	if pvc.Spec.StorageClassName != nil {
+		storageClass = *pvc.Spec.StorageClassName
+	}
+	if storageClass == "" {
+		storageClass = "<none>"
+	}
+
+	// Count labels and annotations
+	labelsCount := len(pvc.Labels)
+	annotationsCount := len(pvc.Annotations)
+
+	return map[string]interface{}{
+		"id":                fmt.Sprintf("%s-%s", pvc.Namespace, pvc.Name), // For table sorting
+		"name":              pvc.Name,
+		"namespace":         pvc.Namespace,
+		"status":            status,
+		"volume":            volumeName,
+		"capacity":          capacity,
+		"accessModes":       accessModes,
+		"accessModesDisplay": fmt.Sprintf("[%s]", fmt.Sprintf("%v", accessModes)),
+		"storageClass":      storageClass,
+		"age":               age,
+		"labelsCount":       labelsCount,
+		"annotationsCount":  annotationsCount,
+		"creationTimestamp": pvc.CreationTimestamp.Time,
+		"labels":            pvc.Labels,
+		"annotations":       pvc.Annotations,
 	}
 }

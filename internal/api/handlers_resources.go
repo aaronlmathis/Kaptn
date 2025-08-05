@@ -2094,3 +2094,292 @@ func (s *Server) handleGetConfigMap(w http.ResponseWriter, r *http.Request) {
 		"status": "success",
 	})
 }
+
+// Persistent Volume handlers
+
+func (s *Server) handleListPersistentVolumes(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters for enhanced filtering
+	search := r.URL.Query().Get("search")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get PVs from Kubernetes API
+	pvs, err := s.kubeClient.CoreV1().PersistentVolumes().List(
+		r.Context(),
+		metav1.ListOptions{},
+	)
+	if err != nil {
+		s.logger.Error("Failed to list persistent volumes", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to slice for filtering
+	pvList := append([]v1.PersistentVolume{}, pvs.Items...)
+
+	// Store total count before filtering for pagination metadata
+	totalBeforeFilter := len(pvList)
+
+	// Apply basic filtering if search is provided
+	if search != "" {
+		var filteredPVs []v1.PersistentVolume
+		searchLower := strings.ToLower(search)
+		for _, pv := range pvList {
+			if strings.Contains(strings.ToLower(pv.Name), searchLower) ||
+				strings.Contains(strings.ToLower(string(pv.Status.Phase)), searchLower) {
+				filteredPVs = append(filteredPVs, pv)
+			}
+		}
+		pvList = filteredPVs
+	}
+
+	// Convert to enhanced summaries
+	var items []map[string]interface{}
+	for _, pv := range pvList {
+		summary := s.persistentVolumeToResponse(&pv)
+		items = append(items, summary)
+	}
+
+	// Apply pagination
+	start := (page - 1) * pageSize
+	end := start + pageSize
+
+	if start >= len(items) {
+		items = []map[string]interface{}{}
+	} else if end > len(items) {
+		items = items[start:]
+	} else {
+		items = items[start:end]
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    items,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetPersistentVolume(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "name is required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get PV from Kubernetes API
+	pv, err := s.kubeClient.CoreV1().PersistentVolumes().Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get persistent volume",
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.persistentVolumeToResponse(pv)
+
+	// Add full PV details for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       pv.Spec,
+		"status":     pv.Status,
+		"metadata":   pv.ObjectMeta,
+		"kind":       "PersistentVolume",
+		"apiVersion": "v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+// Persistent Volume Claim handlers
+
+func (s *Server) handleListPersistentVolumeClaims(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters for enhanced filtering
+	namespace := r.URL.Query().Get("namespace")
+	search := r.URL.Query().Get("search")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	var pvcs *v1.PersistentVolumeClaimList
+	var err error
+
+	// Get PVCs from Kubernetes API - either all namespaces or specific namespace
+	if namespace == "" || namespace == "all" {
+		pvcs, err = s.kubeClient.CoreV1().PersistentVolumeClaims("").List(
+			r.Context(),
+			metav1.ListOptions{},
+		)
+	} else {
+		pvcs, err = s.kubeClient.CoreV1().PersistentVolumeClaims(namespace).List(
+			r.Context(),
+			metav1.ListOptions{},
+		)
+	}
+
+	if err != nil {
+		s.logger.Error("Failed to list persistent volume claims", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to slice for filtering
+	pvcList := append([]v1.PersistentVolumeClaim{}, pvcs.Items...)
+
+	// Store total count before filtering for pagination metadata
+	totalBeforeFilter := len(pvcList)
+
+	// Apply basic filtering if search is provided
+	if search != "" {
+		var filteredPVCs []v1.PersistentVolumeClaim
+		searchLower := strings.ToLower(search)
+		for _, pvc := range pvcList {
+			if strings.Contains(strings.ToLower(pvc.Name), searchLower) ||
+				strings.Contains(strings.ToLower(pvc.Namespace), searchLower) ||
+				strings.Contains(strings.ToLower(string(pvc.Status.Phase)), searchLower) {
+				filteredPVCs = append(filteredPVCs, pvc)
+			}
+		}
+		pvcList = filteredPVCs
+	}
+
+	// Convert to enhanced summaries
+	var items []map[string]interface{}
+	for _, pvc := range pvcList {
+		summary := s.persistentVolumeClaimToResponse(&pvc)
+		items = append(items, summary)
+	}
+
+	// Apply pagination
+	start := (page - 1) * pageSize
+	end := start + pageSize
+
+	if start >= len(items) {
+		items = []map[string]interface{}{}
+	} else if end > len(items) {
+		items = items[start:]
+	} else {
+		items = items[start:end]
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    items,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetPersistentVolumeClaim(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get PVC from Kubernetes API
+	pvc, err := s.kubeClient.CoreV1().PersistentVolumeClaims(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get persistent volume claim",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.persistentVolumeClaimToResponse(pvc)
+
+	// Add full PVC details for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       pvc.Spec,
+		"status":     pvc.Status,
+		"metadata":   pvc.ObjectMeta,
+		"kind":       "PersistentVolumeClaim",
+		"apiVersion": "v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
