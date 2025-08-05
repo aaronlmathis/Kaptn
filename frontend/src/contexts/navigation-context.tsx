@@ -39,6 +39,7 @@ const navigationMap: Record<string, BreadcrumbItem[]> = {
 	'/endpoint-slices': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Services', url: '/services' }, { title: 'Endpoint Slices' }],
 	'/ingresses': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Services', url: '/services' }, { title: 'Ingresses' }],
 	'/configmaps': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Config & Storage', url: '#' }, { title: 'ConfigMaps' }],
+	'/config-maps': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Config & Storage', url: '#' }, { title: 'ConfigMaps' }],
 	'/secrets': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Config & Storage', url: '#' }, { title: 'Secrets' }],
 	'/persistent-volumes': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Config & Storage', url: '#' }, { title: 'Persistent Volumes' }],
 	'/cluster': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Cluster' }],
@@ -96,7 +97,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		} else if (path.startsWith('/services') || path.startsWith('/endpoints') || path.startsWith('/endpoint-slices') ||
 			path.startsWith('/ingresses') || path.startsWith('/ingress-classes') || path.startsWith('/networkpolicies') || path.startsWith('/load-balancers')) {
 			initialState['Services'] = true
-		} else if (path.startsWith('/configmaps') || path.startsWith('/secrets') || path.startsWith('/persistent-volumes') ||
+		} else if (path.startsWith('/configmaps') || path.startsWith('/config-maps') || path.startsWith('/secrets') || path.startsWith('/persistent-volumes') ||
 			path.startsWith('/persistent-volume-claims') || path.startsWith('/storage-classes') || path.startsWith('/volume-snapshots') ||
 			path.startsWith('/volume-snapshot-classes') || path.startsWith('/csi-drivers')) {
 			initialState['Config & Storage'] = true

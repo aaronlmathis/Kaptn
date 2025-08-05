@@ -470,6 +470,34 @@ export interface DashboardNetworkPolicy {
 	affectedPods: number;
 }
 
+export interface ConfigMap {
+	name: string;
+	namespace: string;
+	age: string;
+	dataKeysCount: number;
+	dataSize: string;
+	dataSizeBytes: number;
+	dataKeys: string[];
+	labelsCount: number;
+	annotationsCount: number;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+}
+
+export interface DashboardConfigMap {
+	id: string;
+	name: string;
+	namespace: string;
+	age: string;
+	dataKeysCount: number;
+	dataSize: string;
+	dataSizeBytes: number;
+	dataKeys: string[];
+	labelsCount: number;
+	annotationsCount: number;
+}
+
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
@@ -582,6 +610,18 @@ export class K8sService {
 
 	async getEndpointSlice(namespace: string, name: string): Promise<{ summary: EndpointSlice; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
 		const response = await apiClient.get<{ data: { summary: EndpointSlice; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/endpoint-slices/${namespace}/${name}`);
+		return response.data;
+	}
+
+	// ConfigMap operations
+	async getConfigMaps(namespace?: string): Promise<ConfigMap[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: ConfigMap[] }; status: string }>(`/config-maps${query}`);
+		return response.data?.items || [];
+	}
+
+	async getConfigMap(namespace: string, name: string): Promise<{ summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/config-maps/${namespace}/${name}`);
 		return response.data;
 	}
 
@@ -885,6 +925,24 @@ export function transformNetworkPoliciesToUI(networkPolicies: NetworkPolicy[]): 
 		egressRules: networkPolicy.egressRules,
 		policyTypes: networkPolicy.policyTypes,
 		affectedPods: networkPolicy.affectedPods
+	}));
+}
+
+export function transformConfigMapsToUI(configMaps: ConfigMap[]): DashboardConfigMap[] {
+	if (!configMaps || !Array.isArray(configMaps)) {
+		return [];
+	}
+	return configMaps.map((configMap) => ({
+		id: `${configMap.namespace}-${configMap.name}`,
+		name: configMap.name,
+		namespace: configMap.namespace,
+		age: configMap.age,
+		dataKeysCount: configMap.dataKeysCount,
+		dataSize: configMap.dataSize,
+		dataSizeBytes: configMap.dataSizeBytes,
+		dataKeys: configMap.dataKeys,
+		labelsCount: configMap.labelsCount,
+		annotationsCount: configMap.annotationsCount
 	}));
 }
 

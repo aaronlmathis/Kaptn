@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
@@ -1921,6 +1922,169 @@ func (s *Server) handleGetNetworkPolicy(w http.ResponseWriter, r *http.Request) 
 		"metadata":   networkPolicy.ObjectMeta,
 		"kind":       "NetworkPolicy",
 		"apiVersion": "networking.k8s.io/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleListConfigMaps(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get config maps from resource manager
+	configMaps, err := s.resourceManager.ListConfigMaps(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list config maps", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(configMaps)
+
+	// Apply basic filtering
+	var filteredConfigMaps []v1.ConfigMap
+	for _, cm := range configMaps {
+		// Basic search filter
+		if search != "" {
+			if !strings.Contains(strings.ToLower(cm.Name), strings.ToLower(search)) {
+				continue
+			}
+		}
+		filteredConfigMaps = append(filteredConfigMaps, cm)
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, configMap := range filteredConfigMaps {
+		responses = append(responses, s.configMapToResponse(configMap))
+	}
+
+	// Apply pagination
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > len(responses) {
+		responses = []map[string]interface{}{}
+	} else if end > len(responses) {
+		responses = responses[start:]
+	} else {
+		responses = responses[start:end]
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetConfigMap(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get config map from resource manager
+	configMap, err := s.resourceManager.GetConfigMap(r.Context(), namespace, name)
+	if err != nil {
+		s.logger.Error("Failed to get config map",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert unstructured to ConfigMap for enhanced summary
+	configMapObj := &v1.ConfigMap{}
+	if unstructuredMap, ok := configMap.(map[string]interface{}); ok {
+		// Extract metadata
+		if metadata, ok := unstructuredMap["metadata"].(map[string]interface{}); ok {
+			if name, ok := metadata["name"].(string); ok {
+				configMapObj.Name = name
+			}
+			if namespace, ok := metadata["namespace"].(string); ok {
+				configMapObj.Namespace = namespace
+			}
+			if creationTimestamp, ok := metadata["creationTimestamp"].(string); ok {
+				if ts, err := time.Parse(time.RFC3339, creationTimestamp); err == nil {
+					configMapObj.CreationTimestamp = metav1.NewTime(ts)
+				}
+			}
+		}
+		// Extract data
+		if data, ok := unstructuredMap["data"].(map[string]interface{}); ok {
+			configMapObj.Data = make(map[string]string)
+			for k, v := range data {
+				if strVal, ok := v.(string); ok {
+					configMapObj.Data[k] = strVal
+				}
+			}
+		}
+	}
+
+	// Convert to enhanced summary
+	summary := s.configMapToResponse(*configMapObj)
+
+	// Add full config map details for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       configMap.(map[string]interface{})["data"],
+		"metadata":   configMap.(map[string]interface{})["metadata"],
+		"kind":       "ConfigMap",
+		"apiVersion": "v1",
 	}
 
 	w.Header().Set("Content-Type", "application/json")

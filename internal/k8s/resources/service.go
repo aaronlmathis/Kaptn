@@ -524,6 +524,22 @@ func (rm *ResourceManager) GetEndpointSlice(ctx context.Context, namespace, name
 	return endpointSlice.Object, nil
 }
 
+// GetConfigMap gets a specific config map
+func (rm *ResourceManager) GetConfigMap(ctx context.Context, namespace, name string) (interface{}, error) {
+	configMap, err := rm.kubeClient.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config map: %w", err)
+	}
+
+	unstructuredConfigMap := rm.convertToUnstructured(configMap)
+	if unstructuredConfigMap == nil {
+		return nil, fmt.Errorf("failed to convert ConfigMap to unstructured")
+	}
+	obj := rm.stripManagedFields(unstructuredConfigMap)
+
+	return obj.Object, nil
+}
+
 // ListIngresses lists all ingresses and Istio gateways in a namespace
 func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) ([]interface{}, error) {
 	var result []interface{}
@@ -899,6 +915,37 @@ func (rm *ResourceManager) ListNetworkPolicies(ctx context.Context, namespace st
 	}
 
 	return networkPolicies, nil
+}
+
+// ListConfigMaps retrieves config maps from the specified namespace
+func (rm *ResourceManager) ListConfigMaps(ctx context.Context, namespace string) ([]v1.ConfigMap, error) {
+	var configMaps []v1.ConfigMap
+
+	if namespace != "" {
+		// Get config maps from specific namespace
+		configMapList, err := rm.kubeClient.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list config maps in namespace %s: %w", namespace, err)
+		}
+		if configMapList.Items == nil {
+			configMaps = []v1.ConfigMap{}
+		} else {
+			configMaps = configMapList.Items
+		}
+	} else {
+		// Get config maps from all namespaces
+		configMapList, err := rm.kubeClient.CoreV1().ConfigMaps("").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list config maps: %w", err)
+		}
+		if configMapList.Items == nil {
+			configMaps = []v1.ConfigMap{}
+		} else {
+			configMaps = configMapList.Items
+		}
+	}
+
+	return configMaps, nil
 }
 
 // deleteEndpointSlice deletes an EndpointSlice resource

@@ -1146,3 +1146,63 @@ func (s *Server) networkPolicyToResponse(networkPolicy networkingv1.NetworkPolic
 		"annotations":       networkPolicy.Annotations,
 	}
 }
+
+// configMapToResponse converts a Kubernetes ConfigMap to response format
+func (s *Server) configMapToResponse(configMap v1.ConfigMap) map[string]interface{} {
+	age := time.Since(configMap.CreationTimestamp.Time).String()
+
+	// Count data keys
+	dataKeysCount := len(configMap.Data)
+	binaryDataKeysCount := len(configMap.BinaryData)
+	totalKeys := dataKeysCount + binaryDataKeysCount
+
+	// Calculate approximate data size
+	var dataSize int
+	for _, value := range configMap.Data {
+		dataSize += len(value)
+	}
+	for _, value := range configMap.BinaryData {
+		dataSize += len(value)
+	}
+
+	// Format data size
+	dataSizeStr := "0 B"
+	if dataSize > 0 {
+		if dataSize < 1024 {
+			dataSizeStr = fmt.Sprintf("%d B", dataSize)
+		} else if dataSize < 1024*1024 {
+			dataSizeStr = fmt.Sprintf("%.1f KB", float64(dataSize)/1024)
+		} else {
+			dataSizeStr = fmt.Sprintf("%.1f MB", float64(dataSize)/(1024*1024))
+		}
+	}
+
+	// Get data keys for display
+	var dataKeys []string
+	for key := range configMap.Data {
+		dataKeys = append(dataKeys, key)
+	}
+	for key := range configMap.BinaryData {
+		dataKeys = append(dataKeys, key+" (binary)")
+	}
+
+	// Count labels and annotations
+	labelsCount := len(configMap.Labels)
+	annotationsCount := len(configMap.Annotations)
+
+	return map[string]interface{}{
+		"id":                fmt.Sprintf("%s-%s", configMap.Namespace, configMap.Name), // For table sorting
+		"name":              configMap.Name,
+		"namespace":         configMap.Namespace,
+		"age":               age,
+		"dataKeysCount":     totalKeys,
+		"dataSize":          dataSizeStr,
+		"dataSizeBytes":     dataSize,
+		"dataKeys":          dataKeys,
+		"labelsCount":       labelsCount,
+		"annotationsCount":  annotationsCount,
+		"creationTimestamp": configMap.CreationTimestamp.Time,
+		"labels":            configMap.Labels,
+		"annotations":       configMap.Annotations,
+	}
+}

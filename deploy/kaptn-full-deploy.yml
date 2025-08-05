@@ -21,13 +21,17 @@ rules:
   - apiGroups: [""]
     resources: ["pods","nodes","namespaces","resourcequotas","services","endpoints","events"]
     verbs: ["get","list","watch"]
-  # Workloads (if your UI lists them)
+  # Workloads
   - apiGroups: ["apps"]
     resources: ["deployments","daemonsets","statefulsets","replicasets"]
     verbs: ["get","list","watch"]
   # Metrics API
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods","nodes"]
+    verbs: ["get","list","watch"]
+  # Networking
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies","ingresses","ingressclasses"]
     verbs: ["get","list","watch"]
 ---
 # 4. ClusterRoleBinding

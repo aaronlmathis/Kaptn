@@ -380,6 +380,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/endpoints/{namespace}/{name}", s.handleGetEndpoints)
 			r.Get("/endpoint-slices", s.handleListEndpointSlices)
 			r.Get("/endpoint-slices/{namespace}/{name}", s.handleGetEndpointSlice)
+			r.Get("/config-maps", s.handleListConfigMaps)
+			r.Get("/config-maps/{namespace}/{name}", s.handleGetConfigMap)
 			r.Get("/network-policies", s.handleListNetworkPolicies)
 			r.Get("/network-policies/{namespace}/{name}", s.handleGetNetworkPolicy)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)

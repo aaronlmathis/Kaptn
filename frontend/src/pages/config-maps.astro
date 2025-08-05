@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { ConfigMapsPageContainer } from "@/components/pages/ConfigMapsPageContainer";
+
+const title = "ConfigMaps";
+---
+
+<Layout title={title}>
+	<ConfigMapsPageContainer client:load />
+</Layout>

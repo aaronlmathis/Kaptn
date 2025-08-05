@@ -14,6 +14,7 @@ import {
 	type DashboardEndpointSlice,
 	type DashboardIngress,
 	type DashboardNetworkPolicy,
+	type DashboardConfigMap,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
@@ -27,7 +28,8 @@ import {
 	transformEndpointsToUI,
 	transformEndpointSlicesToUI,
 	transformIngressesToUI,
-	transformNetworkPoliciesToUI
+	transformNetworkPoliciesToUI,
+	transformConfigMapsToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -440,6 +442,35 @@ export function useNetworkPolicies(): UseK8sDataResult<DashboardNetworkPolicy> {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch network policies');
 			console.error('Error fetching network policies:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useConfigMaps(): UseK8sDataResult<DashboardConfigMap> {
+	const [data, setData] = useState<DashboardConfigMap[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const configMaps = await k8sService.getConfigMaps(namespace);
+			const transformedConfigMaps = transformConfigMapsToUI(configMaps);
+			setData(transformedConfigMaps);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch config maps');
+			console.error('Error fetching config maps:', err);
 		} finally {
 			setLoading(false);
 		}

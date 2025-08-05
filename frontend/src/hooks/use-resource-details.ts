@@ -561,6 +561,64 @@ export function useNetworkPolicyDetails(namespace: string, name: string, enabled
 	return { data, loading, error }
 }
 
+interface ConfigMapDetails {
+	summary: {
+		name: string
+		namespace: string
+		age: string
+		dataKeysCount: number
+		dataSize: string
+		dataSizeBytes: number
+		dataKeys: string[]
+		labelsCount: number
+		annotationsCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+export function useConfigMapDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<ConfigMapDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchConfigMapDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/config-maps/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch config map details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchConfigMapDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}
+
 export function useLoadBalancerDetails(namespace: string, name: string, enabled: boolean = true) {
 	// LoadBalancers are Services with type=LoadBalancer, so we can reuse the service details hook
 	return useServiceDetails(namespace, name, enabled)

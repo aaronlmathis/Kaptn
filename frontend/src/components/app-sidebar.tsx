@@ -133,7 +133,7 @@ const data = {
       items: [
         {
           title: "ConfigMaps",
-          url: "/configmaps",
+          url: "/config-maps",
         },
         {
           title: "Secrets",
