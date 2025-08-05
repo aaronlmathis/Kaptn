@@ -394,3 +394,4 @@ scripts/
 config.yaml
 docs/
 .env
+!internal/k8s/logs/
