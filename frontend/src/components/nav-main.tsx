@@ -85,7 +85,7 @@ export function NavMain({
           }
 
           // If item has subitems, render as collapsible
-          // Use hydrated state to determine if we should show expanded state
+          // Use stored expanded state if available, otherwise expand based on active page
           const isExpanded = isHydrated ? isMenuExpanded(item.title) : false
           const parentIsActive = hasActiveChild(item.items)
 

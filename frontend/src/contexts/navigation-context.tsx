@@ -1,6 +1,7 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 
 export interface BreadcrumbItem {
 	title: string
@@ -19,7 +20,7 @@ export interface NavigationContextValue {
 const NavigationContext = createContext<NavigationContextValue | undefined>(undefined)
 
 interface NavigationProviderProps {
-	children: React.ReactNode
+	children: ReactNode
 }
 
 // Navigation data mapping paths to breadcrumbs
@@ -84,6 +85,34 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		]
 	}
 
+	// Function to determine which menus should be initially expanded based on current path
+	const getInitialMenuState = (path: string): Record<string, boolean> => {
+		const initialState: Record<string, boolean> = {}
+
+		// Check which main section should be expanded based on path
+		if (path.startsWith('/pods') || path.startsWith('/deployments') || path.startsWith('/replicasets') ||
+			path.startsWith('/statefulsets') || path.startsWith('/daemonsets') || path.startsWith('/jobs') || path.startsWith('/cronjobs')) {
+			initialState['Workloads'] = true
+		} else if (path.startsWith('/services') || path.startsWith('/endpoints') || path.startsWith('/endpoint-slices') ||
+			path.startsWith('/ingresses') || path.startsWith('/ingress-classes') || path.startsWith('/networkpolicies') || path.startsWith('/load-balancers')) {
+			initialState['Services'] = true
+		} else if (path.startsWith('/configmaps') || path.startsWith('/secrets') || path.startsWith('/persistent-volumes') ||
+			path.startsWith('/persistent-volume-claims') || path.startsWith('/storage-classes') || path.startsWith('/volume-snapshots') ||
+			path.startsWith('/volume-snapshot-classes') || path.startsWith('/csi-drivers')) {
+			initialState['Config & Storage'] = true
+		} else if (path.startsWith('/cluster')) {
+			initialState['Cluster'] = true
+		} else if (path.startsWith('/rbac') || path.startsWith('/service-accounts') || path.startsWith('/pod-security')) {
+			initialState['Access Control'] = true
+		} else if (path.startsWith('/metrics') || path.startsWith('/logs') || path.startsWith('/events')) {
+			initialState['Monitoring'] = true
+		} else if (path.startsWith('/cluster-settings') || path.startsWith('/user-management') || path.startsWith('/api-settings')) {
+			initialState['Settings'] = true
+		}
+
+		return initialState
+	}
+
 	// Load client-side state after hydration
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
@@ -95,25 +124,16 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 			const correctBreadcrumbs = generateBreadcrumbs(actualPath)
 			setBreadcrumbs(correctBreadcrumbs)
 
-			// Load menu state
-			try {
-				const savedExpandedMenus = localStorage.getItem('expandedMenus')
-				if (savedExpandedMenus) {
-					setExpandedMenus(JSON.parse(savedExpandedMenus))
-				}
-			} catch (error) {
-				console.warn('Failed to parse saved menu state:', error)
-			}
+			// Clear any old localStorage data since we now determine state based on current path
+			localStorage.removeItem('expandedMenus')
+
+			// Always initialize menu state based on current path (ignore saved state on page load)
+			const initialState = getInitialMenuState(actualPath)
+			setExpandedMenus(initialState)
+
 			setIsHydrated(true)
 		}
 	}, [])
-
-	// Save expanded menu state to localStorage
-	useEffect(() => {
-		if (typeof window !== 'undefined' && isHydrated) {
-			localStorage.setItem('expandedMenus', JSON.stringify(expandedMenus))
-		}
-	}, [expandedMenus, isHydrated])
 
 	// Menu state management functions
 	const setMenuExpanded = (menuTitle: string, expanded: boolean) => {
@@ -127,11 +147,15 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		return expandedMenus[menuTitle] ?? false
 	}
 
-	// Update breadcrumbs when path changes (only after hydration)
+	// Update breadcrumbs and menu state when path changes (only after hydration)
 	useEffect(() => {
 		if (isHydrated) {
 			const newBreadcrumbs = generateBreadcrumbs(currentPath)
 			setBreadcrumbs(newBreadcrumbs)
+
+			// Reset menu state based on new path
+			const newMenuState = getInitialMenuState(currentPath)
+			setExpandedMenus(newMenuState)
 		}
 	}, [currentPath, isHydrated])
 
