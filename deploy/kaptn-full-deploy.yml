@@ -1,0 +1,201 @@
+# 1. Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kaptn
+---
+# 2. ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kaptn-sa
+  namespace: kaptn
+---
+# 3. ClusterRole (full access needed by Kaptn UI)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-read-cluster
+rules:
+  # Core resources used in overviews
+  - apiGroups: [""]
+    resources: ["pods","nodes","namespaces","resourcequotas","services","endpoints","events"]
+    verbs: ["get","list","watch"]
+  # Workloads (if your UI lists them)
+  - apiGroups: ["apps"]
+    resources: ["deployments","daemonsets","statefulsets","replicasets"]
+    verbs: ["get","list","watch"]
+  # Metrics API
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods","nodes"]
+    verbs: ["get","list","watch"]
+---
+# 4. ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-read-cluster-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-read-cluster
+subjects:
+  - kind: ServiceAccount
+    name: kaptn-sa
+    namespace: kaptn
+---
+# 5. ConfigMap (full working config.yaml)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-config
+  namespace: kaptn
+data:
+  config.yaml: |
+    server:
+      addr: "0.0.0.0:8080"
+      base_path: "/"
+      cors:
+        allow_origins: ["*"]
+        allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+
+    security:
+      auth_mode: "none"
+      oidc:
+        issuer: ""
+        client_id: ""
+        audience: ""
+        jwks_url: ""
+
+    kubernetes:
+      mode: "incluster"
+      kubeconfig_path: ""
+      namespace_default: "default"
+
+    features:
+      enable_apply: true
+      enable_nodes_actions: true
+      enable_overview: true
+      enable_prometheus_analytics: true
+
+    rate_limits:
+      apply_per_minute: 10
+      actions_per_minute: 20
+
+    logging:
+      level: "info"
+
+    integrations:
+      prometheus:
+        url: "http://monitoring-stack-kube-prometheus-prometheus.monitoring.svc:9090"
+        timeout: "5s"
+        enabled: true
+
+    caching:
+      overview_ttl: "2s"
+      analytics_ttl: "60s"
+
+    jobs:
+      persistence_enabled: true
+      store_path: "./data/jobs"
+      cleanup_interval: "1h"
+      max_age: "24h"
+---
+# 6. Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kaptn
+  namespace: kaptn
+  labels:
+    app: kaptn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kaptn
+  template:
+    metadata:
+      labels:
+        app: kaptn
+    spec:
+      serviceAccountName: kaptn-sa
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: kaptn
+        image: docker.io/aaronlmathis/kaptn:debug
+        imagePullPolicy: Always
+        args:
+          - "--config=/etc/kaptn/config.yaml"
+        ports:
+          - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 20
+          failureThreshold: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command: ["/server", "--health-check"]
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        volumeMounts:
+          - name: config
+            mountPath: /etc/kaptn
+            readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: kaptn-config
+---
+# 7. Service (ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kaptn
+  namespace: kaptn
+spec:
+  selector:
+    app: kaptn
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+# 8. Istio Gateway
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: kaptn-gateway
+  namespace: kaptn
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - kaptn.local
+---
+# 9. Istio VirtualService
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: kaptn
+  namespace: kaptn
+spec:
+  hosts:
+    - kaptn.local
+  gateways:
+    - kaptn-gateway
+  http:
+    - route:
+        - destination:
+            host: kaptn.kaptn.svc.cluster.local
+            port:
+              number: 80

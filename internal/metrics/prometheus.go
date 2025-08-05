@@ -13,7 +13,7 @@ var (
 	// HTTP request metrics
 	httpRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "kad_http_requests_total",
+			Name: "kaptn_http_requests_total",
 			Help: "Total number of HTTP requests",
 		},
 		[]string{"method", "path", "status_code"},
@@ -21,7 +21,7 @@ var (
 
 	httpRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "kad_http_request_duration_seconds",
+			Name:    "kaptn_http_request_duration_seconds",
 			Help:    "HTTP request duration in seconds",
 			Buckets: prometheus.DefBuckets,
 		},
@@ -31,7 +31,7 @@ var (
 	// Kubernetes API call metrics
 	kubernetesRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "kad_kubernetes_requests_total",
+			Name: "kaptn_kubernetes_requests_total",
 			Help: "Total number of requests to Kubernetes API",
 		},
 		[]string{"resource", "verb", "status_code"},
@@ -39,7 +39,7 @@ var (
 
 	kubernetesRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "kad_kubernetes_request_duration_seconds",
+			Name:    "kaptn_kubernetes_request_duration_seconds",
 			Help:    "Kubernetes API request duration in seconds",
 			Buckets: prometheus.DefBuckets,
 		},
@@ -49,7 +49,7 @@ var (
 	// WebSocket metrics
 	websocketConnectionsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "kad_websocket_connections_total",
+			Name: "kaptn_websocket_connections_total",
 			Help: "Total number of WebSocket connections",
 		},
 		[]string{"stream_type"},
@@ -57,7 +57,7 @@ var (
 
 	websocketConnectionsActive = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "kad_websocket_connections_active",
+			Name: "kaptn_websocket_connections_active",
 			Help: "Number of active WebSocket connections",
 		},
 		[]string{"stream_type"},
@@ -66,7 +66,7 @@ var (
 	// Rate limiting metrics
 	rateLimitedRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "kad_rate_limited_requests_total",
+			Name: "kaptn_rate_limited_requests_total",
 			Help: "Total number of rate limited requests",
 		},
 		[]string{"user_id", "endpoint"},
@@ -75,7 +75,7 @@ var (
 	// Authentication metrics
 	authRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "kad_auth_requests_total",
+			Name: "kaptn_auth_requests_total",
 			Help: "Total number of authentication requests",
 		},
 		[]string{"auth_mode", "status"},
@@ -84,7 +84,7 @@ var (
 	// Job metrics
 	jobsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "kad_jobs_total",
+			Name: "kaptn_jobs_total",
 			Help: "Total number of background jobs",
 		},
 		[]string{"job_type", "status"},
@@ -92,7 +92,7 @@ var (
 
 	jobDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "kad_job_duration_seconds",
+			Name:    "kaptn_job_duration_seconds",
 			Help:    "Job execution duration in seconds",
 			Buckets: []float64{1, 5, 10, 30, 60, 300, 600, 1800}, // 1s to 30m
 		},
@@ -102,42 +102,42 @@ var (
 	// Cluster resource metrics (cached from Kubernetes metrics)
 	clusterCPUUsagePercent = promauto.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "kad_cluster_cpu_usage_percent",
+			Name: "kaptn_cluster_cpu_usage_percent",
 			Help: "Cluster CPU usage percentage",
 		},
 	)
 
 	clusterMemoryUsagePercent = promauto.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "kad_cluster_memory_usage_percent",
+			Name: "kaptn_cluster_memory_usage_percent",
 			Help: "Cluster memory usage percentage",
 		},
 	)
 
 	clusterPodsRunning = promauto.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "kad_cluster_pods_running",
+			Name: "kaptn_cluster_pods_running",
 			Help: "Number of running pods in cluster",
 		},
 	)
 
 	clusterPodsTotal = promauto.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "kad_cluster_pods_total",
+			Name: "kaptn_cluster_pods_total",
 			Help: "Total number of pods in cluster",
 		},
 	)
 
 	clusterNodesReady = promauto.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "kad_cluster_nodes_ready",
+			Name: "kaptn_cluster_nodes_ready",
 			Help: "Number of ready nodes in cluster",
 		},
 	)
 
 	clusterNodesTotal = promauto.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "kad_cluster_nodes_total",
+			Name: "kaptn_cluster_nodes_total",
 			Help: "Total number of nodes in cluster",
 		},
 	)

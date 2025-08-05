@@ -102,6 +102,7 @@ docker-debug: frontend
 	@echo "Building Docker debug image (with shell)..."
 	@docker build \
 		--target debug \
+		--no-cache \
 		--build-arg VERSION=debug \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \

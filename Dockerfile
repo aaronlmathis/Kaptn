@@ -59,7 +59,7 @@ FROM alpine:3.20 AS debug
 RUN apk add --no-cache bash curl
 WORKDIR /
 COPY --from=build /server /server
-COPY --from=frontend /frontend/dist ./frontend/dist   # <-- ADD THIS LINE
+COPY --from=frontend /frontend/dist ./frontend/dist
 
 ARG VERSION
 LABEL org.opencontainers.image.title="Kaptn Debug ${VERSION}"
