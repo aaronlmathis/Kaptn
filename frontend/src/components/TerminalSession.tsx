@@ -3,6 +3,7 @@ import { useShell } from '@/hooks/use-shell'
 import { Button } from '@/components/ui/button'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { IconRefresh, IconAlertTriangle } from '@tabler/icons-react'
+import { generateUUID } from '@/lib/utils'
 
 // We'll need to install xterm for the actual terminal, but for now let's create a placeholder
 interface TerminalSessionProps {
@@ -173,7 +174,7 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 	const terminalRef = useRef<HTMLDivElement>(null)
 	const inputRef = useRef<HTMLInputElement>(null)
 	const outputBufferRef = useRef<string>('')
-	const { updateTabStatus } = useShell()
+	const { updateTabStatus, closeShell } = useShell()
 
 	// Debounced output update to prevent too many renders
 	const flushOutputBuffer = useCallback(() => {
@@ -219,7 +220,7 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 
 			// Create WebSocket URL for exec session
 			const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-			const sessionId = crypto.randomUUID()
+			const sessionId = generateUUID()
 			// Use the same host as the current page (for production) but backend port for development
 			const isDev = window.location.port === '4321' || window.location.port === '4322'
 			const host = isDev ? `${window.location.hostname}:8080` : window.location.host
@@ -288,7 +289,13 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 				setIsConnected(false)
 				updateTabStatus(tabId, 'closed')
 
-				if (event.code !== 1000) {
+				// If connection closed normally (exit command or shell ended), close the tab
+				if (event.code === 1000) {
+					// Give a moment for any final output to appear, then close
+					setTimeout(() => {
+						closeShell(tabId)
+					}, 1000)
+				} else {
 					setError(`Connection closed unexpectedly (code: ${event.code}, reason: ${event.reason})`)
 				}
 			}
@@ -305,7 +312,7 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 			setError(errorMessage)
 			updateTabStatus(tabId, 'error', errorMessage)
 		}
-	}, [pod, container, namespace, tabId, updateTabStatus, flushOutputBuffer])
+	}, [pod, container, namespace, tabId, updateTabStatus, flushOutputBuffer, closeShell])
 
 	const disconnect = () => {
 		if (wsRef.current) {
@@ -316,6 +323,27 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 
 	const sendInput = () => {
 		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && input.trim()) {
+			const trimmedInput = input.trim()
+			
+			// Check if user typed exit commands
+			if (trimmedInput === 'exit' || trimmedInput === 'logout' || trimmedInput === 'quit') {
+				// Send the exit command first
+				const message: ExecMessage = {
+					type: 'stdin',
+					data: input + '\n'
+				}
+				wsRef.current.send(JSON.stringify(message))
+				setOutput(prev => [...prev, `$ ${input}`])
+				setInput('')
+				
+				// Close the shell tab after a short delay to allow the exit command to process
+				setTimeout(() => {
+					closeShell(tabId)
+				}, 500)
+				return
+			}
+			
+			// Normal command handling
 			const message: ExecMessage = {
 				type: 'stdin',
 				data: input + '\n'
@@ -329,6 +357,23 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 	const handleKeyPress = (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter') {
 			sendInput()
+		} else if (e.key === 'd' && e.ctrlKey) {
+			// Handle Ctrl+D (EOF) - common shell exit shortcut
+			e.preventDefault()
+			if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+				// Send EOF character (Ctrl+D)
+				const message: ExecMessage = {
+					type: 'stdin',
+					data: '\x04' // ASCII EOT (End of Transmission) character
+				}
+				wsRef.current.send(JSON.stringify(message))
+				setOutput(prev => [...prev, '^D'])
+				
+				// Close the shell tab after a short delay
+				setTimeout(() => {
+					closeShell(tabId)
+				}, 500)
+			}
 		}
 	}
 

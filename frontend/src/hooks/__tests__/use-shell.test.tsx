@@ -11,7 +11,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 
 describe('useShell hook', () => {
 	beforeEach(() => {
-		// Mock crypto.randomUUID
+		// Mock crypto.randomUUID to test our UUID generation utility
 		vi.stubGlobal('crypto', {
 			randomUUID: vi.fn().mockReturnValue('test-uuid')
 		})
@@ -130,14 +130,14 @@ describe('useShell hook', () => {
 		expect(result.current.activeTabId).toBe(tabs[0].id)
 	})
 
-	it('should default container to "main" when not specified', () => {
+	it('should default container to empty string when not specified', () => {
 		const { result } = renderHook(() => useShell(), { wrapper })
 
 		act(() => {
 			result.current.openShell('test-pod', 'default')
 		})
 
-		expect(result.current.tabs[0].containerName).toBe('main')
+		expect(result.current.tabs[0].containerName).toBe('')
 	})
 
 	it('should use specified container name', () => {

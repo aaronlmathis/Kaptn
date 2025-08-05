@@ -1,9 +1,10 @@
 "use client"
 
 import React, { createContext, useState, useCallback } from 'react'
+import { generateUUID } from '@/lib/utils'
 
 export interface ShellTab {
-	id: string // Generated with crypto.randomUUID()
+	id: string // Generated with generateUUID()
 	podName: string
 	containerName: string
 	namespace: string
@@ -35,7 +36,7 @@ export function ShellProvider({ children }: ShellProviderProps) {
 	const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
 	const openShell = useCallback((pod: string, namespace: string, container?: string) => {
-		const tabId = crypto.randomUUID()
+		const tabId = generateUUID()
 
 		// Don't default to 'main' - let the backend auto-detect the first container
 		const finalContainer = container || ''
