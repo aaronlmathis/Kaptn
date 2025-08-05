@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/breadcrumb"
 
 export function SiteHeader() {
-  const { breadcrumbs } = useNavigation()
+  const { breadcrumbs, isHydrated } = useNavigation()
 
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
@@ -25,24 +25,31 @@ export function SiteHeader() {
         />
         <Breadcrumb>
           <BreadcrumbList>
-            {breadcrumbs.map((item, index) => (
-              <div key={index} className="flex items-center">
-                {index > 0 && (
-                  <BreadcrumbSeparator className="hidden md:block" />
-                )}
-                <BreadcrumbItem className={index === 0 ? "hidden md:block" : ""}>
-                  {index === breadcrumbs.length - 1 ? (
-                    <BreadcrumbPage>{item.title}</BreadcrumbPage>
-                  ) : item.url ? (
-                    <BreadcrumbLink href={item.url}>
-                      {item.title}
-                    </BreadcrumbLink>
-                  ) : (
-                    <span className="text-muted-foreground">{item.title}</span>
+            {isHydrated ? (
+              breadcrumbs.map((item, index) => (
+                <div key={index} className="flex items-center">
+                  {index > 0 && (
+                    <BreadcrumbSeparator className="hidden md:block" />
                   )}
-                </BreadcrumbItem>
-              </div>
-            ))}
+                  <BreadcrumbItem className={index === 0 ? "hidden md:block" : ""}>
+                    {index === breadcrumbs.length - 1 ? (
+                      <BreadcrumbPage>{item.title}</BreadcrumbPage>
+                    ) : item.url ? (
+                      <BreadcrumbLink href={item.url}>
+                        {item.title}
+                      </BreadcrumbLink>
+                    ) : (
+                      <span className="text-muted-foreground">{item.title}</span>
+                    )}
+                  </BreadcrumbItem>
+                </div>
+              ))
+            ) : (
+              // Render placeholder breadcrumb to prevent layout shift
+              <BreadcrumbItem className="opacity-0">
+                <BreadcrumbPage>Loading...</BreadcrumbPage>
+              </BreadcrumbItem>
+            )}
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto flex items-center gap-2">

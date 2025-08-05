@@ -393,3 +393,4 @@ prompts/
 scripts/
 config.yaml
 docs/
+.env

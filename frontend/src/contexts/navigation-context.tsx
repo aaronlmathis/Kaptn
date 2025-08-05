@@ -13,6 +13,7 @@ export interface NavigationContextValue {
 	expandedMenus: Record<string, boolean>
 	setMenuExpanded: (menuTitle: string, expanded: boolean) => void
 	isMenuExpanded: (menuTitle: string) => boolean
+	isHydrated: boolean
 }
 
 const NavigationContext = createContext<NavigationContextValue | undefined>(undefined)
@@ -52,46 +53,11 @@ const navigationMap: Record<string, BreadcrumbItem[]> = {
 
 export function NavigationProvider({ children }: NavigationProviderProps) {
 	const [currentPath, setCurrentPath] = useState<string>('/')
-	const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([
-		{ title: 'Kubernetes Admin', url: '/' },
-		{ title: 'Dashboard' }
-	])
+	const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([])
 	const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({})
+	const [isHydrated, setIsHydrated] = useState(false)
 
-	// Load expanded menu state from localStorage
-	useEffect(() => {
-		if (typeof window !== 'undefined') {
-			const savedExpandedMenus = localStorage.getItem('expandedMenus')
-			if (savedExpandedMenus) {
-				try {
-					setExpandedMenus(JSON.parse(savedExpandedMenus))
-				} catch (error) {
-					console.warn('Failed to parse saved menu state:', error)
-				}
-			}
-		}
-	}, [])
-
-	// Save expanded menu state to localStorage
-	useEffect(() => {
-		if (typeof window !== 'undefined') {
-			localStorage.setItem('expandedMenus', JSON.stringify(expandedMenus))
-		}
-	}, [expandedMenus])
-
-	// Menu state management functions
-	const setMenuExpanded = (menuTitle: string, expanded: boolean) => {
-		setExpandedMenus(prev => ({
-			...prev,
-			[menuTitle]: expanded
-		}))
-	}
-
-	const isMenuExpanded = (menuTitle: string): boolean => {
-		return expandedMenus[menuTitle] ?? false
-	}
-
-	// Generate breadcrumbs based on current URL path
+	// Helper function to generate breadcrumbs
 	const generateBreadcrumbs = (path: string): BreadcrumbItem[] => {
 		// First try exact match
 		if (navigationMap[path]) {
@@ -118,57 +84,97 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		]
 	}
 
-	// Update breadcrumbs when path changes
-	useEffect(() => {
-		const newBreadcrumbs = generateBreadcrumbs(currentPath)
-		console.log('Navigation: path changed to', currentPath, 'breadcrumbs:', newBreadcrumbs)
-		setBreadcrumbs(newBreadcrumbs)
-	}, [currentPath])
-
-	// Initialize with current browser path and listen for changes
+	// Load client-side state after hydration
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
-			const updatePath = () => {
-				const newPath = window.location.pathname
-				console.log('Navigation: updating path to', newPath)
-				setCurrentPath(newPath)
+			// Get the actual current path
+			const actualPath = window.location.pathname
+			setCurrentPath(actualPath)
+
+			// Set correct breadcrumbs immediately
+			const correctBreadcrumbs = generateBreadcrumbs(actualPath)
+			setBreadcrumbs(correctBreadcrumbs)
+
+			// Load menu state
+			try {
+				const savedExpandedMenus = localStorage.getItem('expandedMenus')
+				if (savedExpandedMenus) {
+					setExpandedMenus(JSON.parse(savedExpandedMenus))
+				}
+			} catch (error) {
+				console.warn('Failed to parse saved menu state:', error)
 			}
-
-			// Set initial path immediately
-			updatePath()
-
-			// Listen for navigation changes
-			window.addEventListener('popstate', updatePath)
-
-			// Listen for pushstate/replacestate (for SPA navigation)
-			const originalPushState = window.history.pushState
-			const originalReplaceState = window.history.replaceState
-
-			window.history.pushState = function (...args) {
-				originalPushState.apply(window.history, args)
-				updatePath()
-			}
-
-			window.history.replaceState = function (...args) {
-				originalReplaceState.apply(window.history, args)
-				updatePath()
-			}
-
-			// Also listen for any clicks on links that might change the path
-			const handleLinkClick = () => {
-				// Use a small timeout to let the browser update the URL first
-				setTimeout(updatePath, 10)
-			}
-			document.addEventListener('click', handleLinkClick)
-
-			return () => {
-				window.removeEventListener('popstate', updatePath)
-				window.history.pushState = originalPushState
-				window.history.replaceState = originalReplaceState
-				document.removeEventListener('click', handleLinkClick)
-			}
+			setIsHydrated(true)
 		}
 	}, [])
+
+	// Save expanded menu state to localStorage
+	useEffect(() => {
+		if (typeof window !== 'undefined' && isHydrated) {
+			localStorage.setItem('expandedMenus', JSON.stringify(expandedMenus))
+		}
+	}, [expandedMenus, isHydrated])
+
+	// Menu state management functions
+	const setMenuExpanded = (menuTitle: string, expanded: boolean) => {
+		setExpandedMenus(prev => ({
+			...prev,
+			[menuTitle]: expanded
+		}))
+	}
+
+	const isMenuExpanded = (menuTitle: string): boolean => {
+		return expandedMenus[menuTitle] ?? false
+	}
+
+	// Update breadcrumbs when path changes (only after hydration)
+	useEffect(() => {
+		if (isHydrated) {
+			const newBreadcrumbs = generateBreadcrumbs(currentPath)
+			setBreadcrumbs(newBreadcrumbs)
+		}
+	}, [currentPath, isHydrated])
+
+	// Listen for navigation changes after hydration
+	useEffect(() => {
+		if (!isHydrated || typeof window === 'undefined') return
+
+		const updatePath = () => {
+			const newPath = window.location.pathname
+			setCurrentPath(newPath)
+		}
+
+		// Listen for navigation changes
+		window.addEventListener('popstate', updatePath)
+
+		// Listen for pushstate/replacestate (for SPA navigation)
+		const originalPushState = window.history.pushState
+		const originalReplaceState = window.history.replaceState
+
+		window.history.pushState = function (...args) {
+			originalPushState.apply(window.history, args)
+			updatePath()
+		}
+
+		window.history.replaceState = function (...args) {
+			originalReplaceState.apply(window.history, args)
+			updatePath()
+		}
+
+		// Also listen for any clicks on links that might change the path
+		const handleLinkClick = () => {
+			// Use a small timeout to let the browser update the URL first
+			setTimeout(updatePath, 10)
+		}
+		document.addEventListener('click', handleLinkClick)
+
+		return () => {
+			window.removeEventListener('popstate', updatePath)
+			window.history.pushState = originalPushState
+			window.history.replaceState = originalReplaceState
+			document.removeEventListener('click', handleLinkClick)
+		}
+	}, [isHydrated])
 
 	const contextValue: NavigationContextValue = {
 		currentPath,
@@ -176,6 +182,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		expandedMenus,
 		setMenuExpanded,
 		isMenuExpanded,
+		isHydrated,
 	}
 
 	return (

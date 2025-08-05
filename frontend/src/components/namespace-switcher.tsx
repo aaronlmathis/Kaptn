@@ -9,7 +9,6 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuLabel,
-	DropdownMenuSeparator,
 	DropdownMenuShortcut,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -22,7 +21,31 @@ import {
 
 export function NamespaceSwitcher() {
 	const { isMobile } = useSidebar()
-	const { selectedNamespace, namespaces, loading, setSelectedNamespace } = useNamespace()
+	const { selectedNamespace, namespaces, loading, setSelectedNamespace, isHydrated } = useNamespace()
+
+	// Don't render interactive content until hydrated to prevent mismatch
+	if (!isHydrated) {
+		return (
+			<SidebarMenu>
+				<SidebarMenuItem>
+					<SidebarMenuButton
+						size="lg"
+						className="cursor-default"
+						tooltip="Namespace"
+					>
+						<div className="bg-muted dark:bg-muted-dark text-white flex aspect-square size-8 items-center justify-center rounded-lg">
+							<Globe className="size-4" />
+						</div>
+						<div className="grid flex-1 text-left text-sm leading-tight">
+							<span className="truncate font-medium">All Namespaces</span>
+							<span className="truncate text-xs">View resources across all namespaces</span>
+						</div>
+						<ChevronsUpDown className="ml-auto" />
+					</SidebarMenuButton>
+				</SidebarMenuItem>
+			</SidebarMenu>
+		)
+	}
 
 	const allOption = {
 		name: "All Namespaces",
@@ -41,26 +64,30 @@ export function NamespaceSwitcher() {
 	const allOptions = [allOption, ...namespaceOptions]
 	const activeOption = allOptions.find(option => option.value === selectedNamespace) || allOption
 
-	if (loading) {
-		return (
-			<SidebarMenu>
-				<SidebarMenuItem>
-					<SidebarMenuButton
-						size="lg"
-						className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-					>
-						<div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-							<Layers className="size-4 animate-pulse" />
-						</div>
-						<div className="grid flex-1 text-left text-sm leading-tight">
-							<span className="truncate font-medium">Loading...</span>
-							<span className="truncate text-xs">Fetching namespaces</span>
-						</div>
-					</SidebarMenuButton>
-				</SidebarMenuItem>
-			</SidebarMenu>
-		)
+	// Use Globe icon for "all" namespaces, Layers for specific namespaces
+	// but don't use the loading-specific styling that shows blue color
+	const getIconComponent = () => {
+		if (loading) {
+			return selectedNamespace === 'all' ? Globe : Layers
+		}
+		return activeOption.icon
 	}
+
+	const getDisplayName = () => {
+		if (loading && namespaces.length === 0) {
+			return "Loading..."
+		}
+		return activeOption.name
+	}
+
+	const getDisplayDescription = () => {
+		if (loading && namespaces.length === 0) {
+			return "Fetching namespaces"
+		}
+		return activeOption.description
+	}
+
+	const IconComponent = getIconComponent()
 
 	return (
 		<SidebarMenu>
@@ -73,11 +100,11 @@ export function NamespaceSwitcher() {
 							tooltip="Namespace"
 						>
 							<div className="bg-muted dark:bg-muted-dark text-white flex aspect-square size-8 items-center justify-center rounded-lg">
-								<activeOption.icon className="size-4" />
+								<IconComponent className={`size-4 ${loading && namespaces.length === 0 ? 'animate-pulse' : ''}`} />
 							</div>
 							<div className="grid flex-1 text-left text-sm leading-tight">
-								<span className="truncate font-medium">{activeOption.name}</span>
-								<span className="truncate text-xs">{activeOption.description}</span>
+								<span className="truncate font-medium">{getDisplayName()}</span>
+								<span className="truncate text-xs">{getDisplayDescription()}</span>
 							</div>
 							<ChevronsUpDown className="ml-auto" />
 						</SidebarMenuButton>

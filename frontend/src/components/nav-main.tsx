@@ -1,7 +1,8 @@
 "use client"
 
-import { ChevronRight, type LucideIcon } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import { useNavigation } from "@/contexts/navigation-context"
+import type { ComponentType } from "react"
 
 import {
   Collapsible,
@@ -25,17 +26,19 @@ export function NavMain({
   items: {
     title: string
     url: string
-    icon?: React.ComponentType<any>
+    icon?: ComponentType<Record<string, unknown>>
     isActive?: boolean
     items?: {
       title: string
       url: string
+      isActive?: boolean
     }[]
   }[]
 }) {
-  const { setMenuExpanded, isMenuExpanded } = useNavigation()
+  const { setMenuExpanded, isMenuExpanded, isHydrated } = useNavigation()
 
-  const handleMenuToggle = (menuTitle: string, currentState: boolean) => {
+  const handleMenuToggle = (menuTitle: string) => {
+    const currentState = isMenuExpanded(menuTitle)
     setMenuExpanded(menuTitle, !currentState)
   }
 
@@ -59,14 +62,15 @@ export function NavMain({
           }
 
           // If item has subitems, render as collapsible
-          const isExpanded = isMenuExpanded(item.title)
+          // Use hydrated state to determine if we should show expanded state
+          const isExpanded = isHydrated ? isMenuExpanded(item.title) : false
 
           return (
             <Collapsible
               key={item.title}
               asChild
               open={isExpanded}
-              onOpenChange={(open) => handleMenuToggle(item.title, isExpanded)}
+              onOpenChange={() => handleMenuToggle(item.title)}
               className="group/collapsible"
             >
               <SidebarMenuItem>

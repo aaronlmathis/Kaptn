@@ -20,7 +20,7 @@ const { title } = Astro.props;
 		<script is:inline>
 			(function () {
 				function getThemePreference() {
-					const stored = localStorage.getItem("vite-ui-theme");
+					const stored = localStorage.getItem("k8s-dashboard-theme");
 					if (stored && (stored === "light" || stored === "dark")) {
 						return stored;
 					}
@@ -39,8 +39,6 @@ const { title } = Astro.props;
 		</script>
 	</head>
 	<body>
-		<ThemeProvider defaultTheme="system">
-			<slot />
-		</ThemeProvider>
+		<slot />
 	</body>
 </html>

@@ -177,6 +177,10 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.kubeClient.CoreV1().Secrets(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "Endpoints":
 		return rm.kubeClient.CoreV1().Endpoints(req.Namespace).Delete(ctx, req.Name, deleteOptions)
+	case "Ingress":
+		return rm.deleteIngress(ctx, req.Namespace, req.Name, deleteOptions)
+	case "Gateway":
+		return rm.deleteIstioGateway(ctx, req.Namespace, req.Name, deleteOptions)
 	default:
 		return fmt.Errorf("unsupported resource kind for deletion: %s", req.Kind)
 	}
@@ -339,6 +343,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		// Convert map to unstructured
 		unstructuredIngress := &unstructured.Unstructured{Object: ingressObj}
 		obj = rm.stripManagedFields(unstructuredIngress)
+	case "Gateway":
+		// Get Istio Gateway using dynamic client
+		gatewayObj, err := rm.getIstioGateway(ctx, namespace, name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert map to unstructured
+		unstructuredGateway := &unstructured.Unstructured{Object: gatewayObj}
+		obj = rm.stripManagedFields(unstructuredGateway)
 	case "Endpoints":
 		endpoints, err := rm.kubeClient.CoreV1().Endpoints(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
@@ -435,8 +449,60 @@ func (rm *ResourceManager) ListEndpoints(ctx context.Context, namespace string) 
 	return endpoints.Items, nil
 }
 
-// ListIngresses lists all ingresses in a namespace
+// ListIngresses lists all ingresses and Istio gateways in a namespace
 func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) ([]interface{}, error) {
+	var result []interface{}
+
+	// Use channels for concurrent fetching to improve performance
+	ingressChan := make(chan []interface{}, 1)
+	gatewayChan := make(chan []interface{}, 1)
+	errChan := make(chan error, 2)
+
+	// Fetch standard ingresses concurrently
+	go func() {
+		ingresses, err := rm.fetchStandardIngresses(ctx, namespace)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		ingressChan <- ingresses
+	}()
+
+	// Fetch Istio gateways concurrently
+	go func() {
+		gateways, err := rm.fetchIstioGateways(ctx, namespace)
+		if err != nil {
+			// Don't fail if Istio is not installed, just log and continue
+			rm.logger.Debug("Failed to fetch Istio gateways (Istio may not be installed)",
+				zap.String("namespace", namespace), zap.Error(err))
+			gatewayChan <- []interface{}{}
+			return
+		}
+		gatewayChan <- gateways
+	}()
+
+	// Collect results
+	ingressesReceived := false
+	gatewaysReceived := false
+
+	for !ingressesReceived || !gatewaysReceived {
+		select {
+		case ingresses := <-ingressChan:
+			result = append(result, ingresses...)
+			ingressesReceived = true
+		case gateways := <-gatewayChan:
+			result = append(result, gateways...)
+			gatewaysReceived = true
+		case err := <-errChan:
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+// fetchStandardIngresses fetches standard Kubernetes ingresses
+func (rm *ResourceManager) fetchStandardIngresses(ctx context.Context, namespace string) ([]interface{}, error) {
 	// Try networking.k8s.io/v1 first, then fall back to extensions/v1beta1
 	ingressGVR := schema.GroupVersionResource{
 		Group:    "networking.k8s.io",
@@ -457,14 +523,83 @@ func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) 
 
 	var result []interface{}
 	for _, ingress := range ingresses.Items {
-		result = append(result, ingress.Object)
+		// Create a deep copy to avoid modifying the original object
+		ingressCopy := ingress.DeepCopy()
+		ingressObj := ingressCopy.Object
+		if ingressObj == nil {
+			ingressObj = make(map[string]interface{})
+		}
+		if metadata, ok := ingressObj["metadata"].(map[string]interface{}); ok {
+			if annotations, ok := metadata["annotations"].(map[string]interface{}); ok {
+				annotations["kaptn.io/resource-type"] = "ingress"
+			} else {
+				metadata["annotations"] = map[string]interface{}{
+					"kaptn.io/resource-type": "ingress",
+				}
+			}
+		}
+		result = append(result, ingressObj)
 	}
 
 	return result, nil
 }
 
-// GetIngress gets a specific ingress by name and namespace
+// fetchIstioGateways fetches Istio Gateway resources
+func (rm *ResourceManager) fetchIstioGateways(ctx context.Context, namespace string) ([]interface{}, error) {
+	gatewayGVR := schema.GroupVersionResource{
+		Group:    "networking.istio.io",
+		Version:  "v1beta1",
+		Resource: "gateways",
+	}
+
+	gateways, err := rm.dynamicClient.Resource(gatewayGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var result []interface{}
+	for _, gateway := range gateways.Items {
+		// Create a deep copy to avoid modifying the original object
+		gatewayCopy := gateway.DeepCopy()
+		gatewayObj := gatewayCopy.Object
+		if gatewayObj == nil {
+			gatewayObj = make(map[string]interface{})
+		}
+		if metadata, ok := gatewayObj["metadata"].(map[string]interface{}); ok {
+			if annotations, ok := metadata["annotations"].(map[string]interface{}); ok {
+				annotations["kaptn.io/resource-type"] = "istio-gateway"
+			} else {
+				metadata["annotations"] = map[string]interface{}{
+					"kaptn.io/resource-type": "istio-gateway",
+				}
+			}
+		}
+		result = append(result, gatewayObj)
+	}
+
+	return result, nil
+}
+
+// GetIngress gets a specific ingress or Istio gateway by name and namespace
 func (rm *ResourceManager) GetIngress(ctx context.Context, namespace, name string) (map[string]interface{}, error) {
+	// Try to get standard ingress first
+	ingress, err := rm.getStandardIngress(ctx, namespace, name)
+	if err == nil {
+		return ingress, nil
+	}
+
+	// If standard ingress not found, try Istio gateway
+	gateway, gatewayErr := rm.getIstioGateway(ctx, namespace, name)
+	if gatewayErr == nil {
+		return gateway, nil
+	}
+
+	// Return the original ingress error if both fail
+	return nil, err
+}
+
+// getStandardIngress gets a standard Kubernetes ingress
+func (rm *ResourceManager) getStandardIngress(ctx context.Context, namespace, name string) (map[string]interface{}, error) {
 	// Try networking.k8s.io/v1 first, then fall back to extensions/v1beta1
 	ingressGVR := schema.GroupVersionResource{
 		Group:    "networking.k8s.io",
@@ -483,7 +618,49 @@ func (rm *ResourceManager) GetIngress(ctx context.Context, namespace, name strin
 		}
 	}
 
-	return ingress.Object, nil
+	// Create a deep copy and add type indicator
+	ingressCopy := ingress.DeepCopy()
+	ingressObj := ingressCopy.Object
+	if metadata, ok := ingressObj["metadata"].(map[string]interface{}); ok {
+		if annotations, ok := metadata["annotations"].(map[string]interface{}); ok {
+			annotations["kaptn.io/resource-type"] = "ingress"
+		} else {
+			metadata["annotations"] = map[string]interface{}{
+				"kaptn.io/resource-type": "ingress",
+			}
+		}
+	}
+
+	return ingressObj, nil
+}
+
+// getIstioGateway gets an Istio Gateway resource
+func (rm *ResourceManager) getIstioGateway(ctx context.Context, namespace, name string) (map[string]interface{}, error) {
+	gatewayGVR := schema.GroupVersionResource{
+		Group:    "networking.istio.io",
+		Version:  "v1beta1",
+		Resource: "gateways",
+	}
+
+	gateway, err := rm.dynamicClient.Resource(gatewayGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a deep copy and add type indicator
+	gatewayCopy := gateway.DeepCopy()
+	gatewayObj := gatewayCopy.Object
+	if metadata, ok := gatewayObj["metadata"].(map[string]interface{}); ok {
+		if annotations, ok := metadata["annotations"].(map[string]interface{}); ok {
+			annotations["kaptn.io/resource-type"] = "istio-gateway"
+		} else {
+			metadata["annotations"] = map[string]interface{}{
+				"kaptn.io/resource-type": "istio-gateway",
+			}
+		}
+	}
+
+	return gatewayObj, nil
 }
 
 // GetPodLogs retrieves logs for a pod
@@ -577,4 +754,43 @@ func (rm *ResourceManager) convertToUnstructured(obj interface{}) *unstructured.
 	}
 
 	return result
+}
+
+// deleteIngress deletes a standard Kubernetes ingress
+func (rm *ResourceManager) deleteIngress(ctx context.Context, namespace, name string, deleteOptions metav1.DeleteOptions) error {
+	// Try networking.k8s.io/v1 first, then fall back to extensions/v1beta1
+	ingressGVR := schema.GroupVersionResource{
+		Group:    "networking.k8s.io",
+		Version:  "v1",
+		Resource: "ingresses",
+	}
+
+	err := rm.dynamicClient.Resource(ingressGVR).Namespace(namespace).Delete(ctx, name, deleteOptions)
+	if err != nil {
+		// Fallback to extensions/v1beta1
+		ingressGVR.Group = "extensions"
+		ingressGVR.Version = "v1beta1"
+		err = rm.dynamicClient.Resource(ingressGVR).Namespace(namespace).Delete(ctx, name, deleteOptions)
+		if err != nil {
+			return fmt.Errorf("failed to delete ingress: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// deleteIstioGateway deletes an Istio Gateway resource
+func (rm *ResourceManager) deleteIstioGateway(ctx context.Context, namespace, name string, deleteOptions metav1.DeleteOptions) error {
+	gatewayGVR := schema.GroupVersionResource{
+		Group:    "networking.istio.io",
+		Version:  "v1beta1",
+		Resource: "gateways",
+	}
+
+	err := rm.dynamicClient.Resource(gatewayGVR).Namespace(namespace).Delete(ctx, name, deleteOptions)
+	if err != nil {
+		return fmt.Errorf("failed to delete Istio gateway: %w", err)
+	}
+
+	return nil
 }

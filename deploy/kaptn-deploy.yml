@@ -45,23 +45,6 @@ subjects:
     name: kaptn-sa
     namespace: kaptn
 ---
-# # 2. ConfigMap
-# apiVersion: v1
-# kind: ConfigMap
-# metadata:
-#   name: kaptn-config
-#   namespace: kaptn
-# data:
-#   config.yaml: |
-#     server:
-#       addr: "0.0.0.0:8080"
-#     kubernetes:
-#       mode: "incluster"
-#     integrations:
-#       prometheus:
-#         url: "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090"
-# ---
-# 5) Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
