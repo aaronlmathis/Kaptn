@@ -38,6 +38,8 @@ const navigationMap: Record<string, BreadcrumbItem[]> = {
 	'/endpoints': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Services', url: '/services' }, { title: 'Endpoints' }],
 	'/endpoint-slices': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Services', url: '/services' }, { title: 'Endpoint Slices' }],
 	'/ingresses': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Services', url: '/services' }, { title: 'Ingresses' }],
+	'/network-policies': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Services', url: '/services' }, { title: 'Network Policies' }],
+	'/load-balancers': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Services', url: '/services' }, { title: 'Load Balancers' }],
 	'/configmaps': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Config & Storage', url: '#' }, { title: 'ConfigMaps' }],
 	'/config-maps': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Config & Storage', url: '#' }, { title: 'ConfigMaps' }],
 	'/secrets': [{ title: 'Kubernetes Admin', url: '/' }, { title: 'Config & Storage', url: '#' }, { title: 'Secrets' }],
@@ -95,7 +97,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 			path.startsWith('/statefulsets') || path.startsWith('/daemonsets') || path.startsWith('/jobs') || path.startsWith('/cronjobs')) {
 			initialState['Workloads'] = true
 		} else if (path.startsWith('/services') || path.startsWith('/endpoints') || path.startsWith('/endpoint-slices') ||
-			path.startsWith('/ingresses') || path.startsWith('/ingress-classes') || path.startsWith('/networkpolicies') || path.startsWith('/load-balancers')) {
+			path.startsWith('/ingresses') || path.startsWith('/ingress-classes') || path.startsWith('/network-policies') || path.startsWith('/load-balancers')) {
 			initialState['Services'] = true
 		} else if (path.startsWith('/configmaps') || path.startsWith('/config-maps') || path.startsWith('/secrets') || path.startsWith('/persistent-volumes') ||
 			path.startsWith('/persistent-volume-claims') || path.startsWith('/storage-classes') || path.startsWith('/volume-snapshots') ||

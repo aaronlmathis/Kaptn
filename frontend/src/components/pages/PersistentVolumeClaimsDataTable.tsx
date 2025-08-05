@@ -138,149 +138,149 @@ function getStatusBadge(status: string) {
 const createColumns = (
 	onViewDetails: (pvc: z.infer<typeof persistentVolumeClaimSchema>) => void
 ): ColumnDef<z.infer<typeof persistentVolumeClaimSchema>>[] => [
-	{
-		id: "drag",
-		header: () => null,
-		cell: ({ row }) => <DragHandle id={row.original.id} />,
-	},
-	{
-		id: "select",
-		header: ({ table }) => (
-			<div className="flex items-center justify-center">
-				<Checkbox
-					checked={
-						table.getIsAllPageRowsSelected() ||
-						(table.getIsSomePageRowsSelected() && "indeterminate")
-					}
-					onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-					aria-label="Select all"
-				/>
-			</div>
-		),
-		cell: ({ row }) => (
-			<div className="flex items-center justify-center">
-				<Checkbox
-					checked={row.getIsSelected()}
-					onCheckedChange={(value) => row.toggleSelected(!!value)}
-					aria-label="Select row"
-				/>
-			</div>
-		),
-		enableSorting: false,
-		enableHiding: false,
-	},
-	{
-		accessorKey: "name",
-		header: "Name",
-		cell: ({ row }) => {
-			return (
-				<button
-					onClick={() => onViewDetails(row.original)}
-					className="text-left hover:underline focus:underline focus:outline-none"
-				>
-					{row.original.name}
-				</button>
-			)
+		{
+			id: "drag",
+			header: () => null,
+			cell: ({ row }) => <DragHandle id={row.original.id} />,
 		},
-		enableHiding: false,
-	},
-	{
-		accessorKey: "namespace",
-		header: "Namespace",
-		cell: ({ row }) => (
-			<Badge variant="outline" className="text-muted-foreground px-1.5">
-				{row.original.namespace}
-			</Badge>
-		),
-	},
-	{
-		accessorKey: "status",
-		header: "Status",
-		cell: ({ row }) => getStatusBadge(row.original.status),
-	},
-	{
-		accessorKey: "volume",
-		header: "Volume",
-		cell: ({ row }) => (
-			<div className="text-sm">{row.original.volume || "<none>"}</div>
-		),
-	},
-	{
-		accessorKey: "capacity",
-		header: "Capacity",
-		cell: ({ row }) => (
-			<div className="font-mono text-sm">{row.original.capacity}</div>
-		),
-	},
-	{
-		accessorKey: "accessModesDisplay",
-		header: "Access Modes",
-		cell: ({ row }) => (
-			<div className="text-sm">{row.original.accessModesDisplay}</div>
-		),
-	},
-	{
-		accessorKey: "storageClass",
-		header: "Storage Class",
-		cell: ({ row }) => (
-			<div className="text-sm">{row.original.storageClass}</div>
-		),
-	},
-	{
-		accessorKey: "age",
-		header: "Age",
-		cell: ({ row }) => (
-			<div className="font-mono text-sm">{row.original.age}</div>
-		),
-	},
-	{
-		id: "actions",
-		cell: ({ row }) => (
-			<DropdownMenu>
-				<DropdownMenuTrigger asChild>
-					<Button
-						variant="ghost"
-						className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-						size="icon"
-					>
-						<IconDotsVertical />
-						<span className="sr-only">Open menu</span>
-					</Button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end" className="w-40">
-					<DropdownMenuItem
+		{
+			id: "select",
+			header: ({ table }) => (
+				<div className="flex items-center justify-center">
+					<Checkbox
+						checked={
+							table.getIsAllPageRowsSelected() ||
+							(table.getIsSomePageRowsSelected() && "indeterminate")
+						}
+						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+						aria-label="Select all"
+					/>
+				</div>
+			),
+			cell: ({ row }) => (
+				<div className="flex items-center justify-center">
+					<Checkbox
+						checked={row.getIsSelected()}
+						onCheckedChange={(value) => row.toggleSelected(!!value)}
+						aria-label="Select row"
+					/>
+				</div>
+			),
+			enableSorting: false,
+			enableHiding: false,
+		},
+		{
+			accessorKey: "name",
+			header: "Name",
+			cell: ({ row }) => {
+				return (
+					<button
 						onClick={() => onViewDetails(row.original)}
+						className="text-left hover:underline focus:underline focus:outline-none"
 					>
-						<IconEye className="size-4 mr-2" />
-						View Details
-					</DropdownMenuItem>
-					<ResourceYamlEditor
-						resourceName={row.original.name}
-						namespace={row.original.namespace}
-						resourceKind="PersistentVolumeClaim"
-					>
-						<button
-							className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-							style={{
-								background: 'transparent',
-								border: 'none',
-								textAlign: 'left'
-							}}
+						{row.original.name}
+					</button>
+				)
+			},
+			enableHiding: false,
+		},
+		{
+			accessorKey: "namespace",
+			header: "Namespace",
+			cell: ({ row }) => (
+				<Badge variant="outline" className="text-muted-foreground px-1.5">
+					{row.original.namespace}
+				</Badge>
+			),
+		},
+		{
+			accessorKey: "status",
+			header: "Status",
+			cell: ({ row }) => getStatusBadge(row.original.status),
+		},
+		{
+			accessorKey: "volume",
+			header: "Volume",
+			cell: ({ row }) => (
+				<div className="text-sm">{row.original.volume || "<none>"}</div>
+			),
+		},
+		{
+			accessorKey: "capacity",
+			header: "Capacity",
+			cell: ({ row }) => (
+				<div className="font-mono text-sm">{row.original.capacity}</div>
+			),
+		},
+		{
+			accessorKey: "accessModesDisplay",
+			header: "Access Modes",
+			cell: ({ row }) => (
+				<div className="text-sm">{row.original.accessModesDisplay}</div>
+			),
+		},
+		{
+			accessorKey: "storageClass",
+			header: "Storage Class",
+			cell: ({ row }) => (
+				<div className="text-sm">{row.original.storageClass}</div>
+			),
+		},
+		{
+			accessorKey: "age",
+			header: "Age",
+			cell: ({ row }) => (
+				<div className="font-mono text-sm">{row.original.age}</div>
+			),
+		},
+		{
+			id: "actions",
+			cell: ({ row }) => (
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="ghost"
+							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+							size="icon"
 						>
-							<IconEdit className="size-4" />
-							Edit YAML
-						</button>
-					</ResourceYamlEditor>
-					<DropdownMenuSeparator />
-					<DropdownMenuItem className="text-red-600">
-						<IconTrash className="size-4 mr-2" />
-						Delete
-					</DropdownMenuItem>
-				</DropdownMenuContent>
-			</DropdownMenu>
-		),
-	},
-]
+							<IconDotsVertical />
+							<span className="sr-only">Open menu</span>
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="w-40">
+						<DropdownMenuItem
+							onClick={() => onViewDetails(row.original)}
+						>
+							<IconEye className="size-4 mr-2" />
+							View Details
+						</DropdownMenuItem>
+						<ResourceYamlEditor
+							resourceName={row.original.name}
+							namespace={row.original.namespace}
+							resourceKind="PersistentVolumeClaim"
+						>
+							<button
+								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+								style={{
+									background: 'transparent',
+									border: 'none',
+									textAlign: 'left'
+								}}
+							>
+								<IconEdit className="size-4" />
+								Edit YAML
+							</button>
+						</ResourceYamlEditor>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem className="text-red-600">
+							<IconTrash className="size-4 mr-2" />
+							Delete
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			),
+		},
+	]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof persistentVolumeClaimSchema>> }) {

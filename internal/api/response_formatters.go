@@ -1282,22 +1282,22 @@ func (s *Server) persistentVolumeToResponse(pv *v1.PersistentVolume) map[string]
 	annotationsCount := len(pv.Annotations)
 
 	return map[string]interface{}{
-		"id":                pv.Name, // For table sorting
-		"name":              pv.Name,
-		"capacity":          capacity,
-		"accessModes":       accessModes,
+		"id":                 pv.Name, // For table sorting
+		"name":               pv.Name,
+		"capacity":           capacity,
+		"accessModes":        accessModes,
 		"accessModesDisplay": fmt.Sprintf("[%s]", fmt.Sprintf("%v", accessModes)),
-		"reclaimPolicy":     reclaimPolicy,
-		"status":            status,
-		"claim":             claimRef,
-		"storageClass":      storageClass,
-		"volumeSource":      volumeSource,
-		"age":               age,
-		"labelsCount":       labelsCount,
-		"annotationsCount":  annotationsCount,
-		"creationTimestamp": pv.CreationTimestamp.Time,
-		"labels":            pv.Labels,
-		"annotations":       pv.Annotations,
+		"reclaimPolicy":      reclaimPolicy,
+		"status":             status,
+		"claim":              claimRef,
+		"storageClass":       storageClass,
+		"volumeSource":       volumeSource,
+		"age":                age,
+		"labelsCount":        labelsCount,
+		"annotationsCount":   annotationsCount,
+		"creationTimestamp":  pv.CreationTimestamp.Time,
+		"labels":             pv.Labels,
+		"annotations":        pv.Annotations,
 	}
 }
 
@@ -1361,20 +1361,20 @@ func (s *Server) persistentVolumeClaimToResponse(pvc *v1.PersistentVolumeClaim) 
 	annotationsCount := len(pvc.Annotations)
 
 	return map[string]interface{}{
-		"id":                fmt.Sprintf("%s-%s", pvc.Namespace, pvc.Name), // For table sorting
-		"name":              pvc.Name,
-		"namespace":         pvc.Namespace,
-		"status":            status,
-		"volume":            volumeName,
-		"capacity":          capacity,
-		"accessModes":       accessModes,
+		"id":                 fmt.Sprintf("%s-%s", pvc.Namespace, pvc.Name), // For table sorting
+		"name":               pvc.Name,
+		"namespace":          pvc.Namespace,
+		"status":             status,
+		"volume":             volumeName,
+		"capacity":           capacity,
+		"accessModes":        accessModes,
 		"accessModesDisplay": fmt.Sprintf("[%s]", fmt.Sprintf("%v", accessModes)),
-		"storageClass":      storageClass,
-		"age":               age,
-		"labelsCount":       labelsCount,
-		"annotationsCount":  annotationsCount,
-		"creationTimestamp": pvc.CreationTimestamp.Time,
-		"labels":            pvc.Labels,
-		"annotations":       pvc.Annotations,
+		"storageClass":       storageClass,
+		"age":                age,
+		"labelsCount":        labelsCount,
+		"annotationsCount":   annotationsCount,
+		"creationTimestamp":  pvc.CreationTimestamp.Time,
+		"labels":             pvc.Labels,
+		"annotations":        pvc.Annotations,
 	}
 }
