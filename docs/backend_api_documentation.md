@@ -36,16 +36,81 @@ Frontend (Astro + Shadcn/Tailwind) ←→ REST API + WebSocket ←→ Kubernetes
 
 ## Configuration
 
-### Required Environment Variables
+### Environment Variables
 
 The backend reads configuration from environment variables or `config.yaml`:
 
+#### Server Configuration
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `KAD_SERVER_ADDR` | `0.0.0.0:8080` | Server bind address |
+| `KAD_BASE_PATH` | `/` | Base path for API routes |
+| `PORT` | - | Override port (takes precedence over KAD_SERVER_ADDR) |
+
+#### Security & Authentication
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `KAD_AUTH_MODE` | `none` | Authentication mode: `none`, `header`, `oidc` |
+| `KAD_TLS_ENABLED` | `false` | Enable TLS/HTTPS |
+| `KAD_TLS_CERT_FILE` | - | Path to TLS certificate file |
+| `KAD_TLS_KEY_FILE` | - | Path to TLS private key file |
+
+#### OIDC Configuration (when auth_mode=oidc)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAD_OIDC_ISSUER` | - | OIDC provider issuer URL |
+| `KAD_OIDC_CLIENT_ID` | - | OIDC client ID |
+| `KAD_OIDC_CLIENT_SECRET` | - | OIDC client secret |
+| `KAD_OIDC_REDIRECT_URL` | - | OIDC redirect URL |
+| `KAD_OIDC_AUDIENCE` | - | Expected audience in tokens |
+| `KAD_OIDC_SCOPES` | `openid,profile,email,groups` | Comma-separated scopes |
+
+#### Kubernetes Configuration
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `KAD_KUBE_MODE` | `kubeconfig` | Kubernetes mode: `kubeconfig`, `incluster` |
-| `KAD_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `KUBECONFIG` | - | Path to kubeconfig file |
+| `KAD_NAMESPACE_DEFAULT` | `default` | Default namespace |
+
+#### Features & Capabilities
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAD_ENABLE_APPLY` | `true` | Enable YAML apply operations |
+| `KAD_ENABLE_NODE_ACTIONS` | `true` | Enable node cordon/drain operations |
+| `KAD_ENABLE_OVERVIEW` | `true` | Enable cluster overview |
+| `KAD_ENABLE_PROMETHEUS_ANALYTICS` | `true` | Enable Prometheus-based analytics |
+
+#### Rate Limiting
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAD_APPLY_PER_MINUTE` | `10` | Apply operations per minute per user |
+| `KAD_ACTIONS_PER_MINUTE` | `20` | Node actions per minute per user |
+
+#### Logging
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+
+#### Integrations
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAD_PROMETHEUS_URL` | `http://prometheus.monitoring.svc:9090` | Prometheus server URL |
+| `KAD_PROMETHEUS_TIMEOUT` | `5s` | Prometheus query timeout |
+| `KAD_PROMETHEUS_ENABLED` | `true` | Enable Prometheus integration |
+
+#### Caching
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAD_OVERVIEW_TTL` | `2s` | Overview data cache TTL |
+| `KAD_ANALYTICS_TTL` | `60s` | Analytics data cache TTL |
+
+#### Job Management
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAD_JOBS_PERSISTENCE_ENABLED` | `true` | Enable job state persistence |
+| `KAD_JOBS_STORE_PATH` | `./data/jobs` | Job persistence storage path |
+| `KAD_JOBS_CLEANUP_INTERVAL` | `1h` | Job cleanup interval |
+| `KAD_JOBS_MAX_AGE` | `24h` | Maximum job age before cleanup |
 
 ### Sample Configuration
 
@@ -62,8 +127,14 @@ security:
   oidc:
     issuer: ""
     client_id: ""
+    client_secret: ""
+    redirect_url: ""
     audience: ""
-    jwks_url: ""
+    scopes: ["openid", "profile", "email", "groups"]
+  tls:
+    enabled: false
+    cert_file: ""
+    key_file: ""
 
 kubernetes:
   mode: "kubeconfig"  # or "incluster"
@@ -73,6 +144,8 @@ kubernetes:
 features:
   enable_apply: true
   enable_nodes_actions: true
+  enable_overview: true
+  enable_prometheus_analytics: true
 
 rate_limits:
   apply_per_minute: 10
@@ -80,6 +153,22 @@ rate_limits:
 
 logging:
   level: "info"
+
+integrations:
+  prometheus:
+    url: "http://prometheus.monitoring.svc:9090"
+    timeout: "5s"
+    enabled: true
+
+caching:
+  overview_ttl: "2s"
+  analytics_ttl: "60s"
+
+jobs:
+  persistence_enabled: true
+  store_path: "./data/jobs"
+  cleanup_interval: "1h"
+  max_age: "24h"
 ```
 
 ---
@@ -104,6 +193,26 @@ The API supports three authentication modes:
 - **Mode**: `auth_mode: "oidc"`
 - **Flow**: OAuth2/OIDC authorization code flow
 - **Tokens**: JWT access tokens with Bearer authentication
+
+### User Roles and Permissions
+
+The API supports role-based access control through user groups:
+
+#### Admin Roles
+- `admin`, `cluster-admin`, `kad-admin`: Full access to all operations
+
+#### Editor Roles  
+- `editor`, `kad-editor`: Read and write access (excluding admin operations)
+
+#### Viewer Roles
+- `viewer`, `kad-viewer`: Read-only access
+
+#### Permission Levels
+- **Read Operations**: Available to all authenticated users (or public if auth disabled)
+- **Write Operations**: Require editor role or higher
+- **Admin Operations**: Require admin role
+
+The system automatically checks user permissions based on groups/roles in the JWT token or header-based authentication.
 
 ### Authentication Endpoints
 
@@ -166,11 +275,14 @@ Authorization: Bearer <token>
 **Response**:
 ```json
 {
-  "id": "user123",
-  "email": "user@example.com",
-  "name": "John Doe",
-  "groups": ["admin", "developers"],
-  "claims": {}
+  "authenticated": true,
+  "user": {
+    "id": "user123",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "groups": ["admin", "developers"],
+    "claims": {}
+  }
 }
 ```
 
@@ -259,37 +371,53 @@ GET /version
 
 #### List Nodes
 ```http
-GET /api/v1/nodes
+GET /api/v1/nodes?search={search}&sortBy={sortBy}&page={page}&pageSize={pageSize}
 Authorization: Bearer <token>  # if auth enabled
 ```
 
+**Query Parameters**:
+- `search` (optional): Search term for node names
+- `sortBy` (optional): Sort field (default: `name`)
+- `page` (optional): Page number (default: 1)
+- `pageSize` (optional): Items per page, max 100 (default: 50)
+
 **Response**:
 ```json
-[
-  {
-    "name": "node-1",
-    "roles": ["control-plane"],
-    "kubeletVersion": "v1.28.0",
-    "ready": true,
-    "unschedulable": false,
-    "taints": [
+{
+  "status": "success",
+  "data": {
+    "items": [
       {
-        "key": "node-role.kubernetes.io/control-plane",
-        "value": "",
-        "effect": "NoSchedule"
+        "name": "node-1",
+        "roles": ["control-plane"],
+        "kubeletVersion": "v1.28.0",
+        "ready": true,
+        "unschedulable": false,
+        "taints": [
+          {
+            "key": "node-role.kubernetes.io/control-plane",
+            "value": "",
+            "effect": "NoSchedule"
+          }
+        ],
+        "capacity": {
+          "cpu": "4",
+          "memory": "8Gi"
+        },
+        "allocatable": {
+          "cpu": "3800m",
+          "memory": "7.5Gi"
+        },
+        "creationTimestamp": "2025-08-01T10:00:00Z",
+        "conditions": [...],
+        "alerts": [...]
       }
     ],
-    "capacity": {
-      "cpu": "4",
-      "memory": "8Gi"
-    },
-    "allocatable": {
-      "cpu": "3800m",
-      "memory": "7.5Gi"
-    },
-    "creationTimestamp": "2025-08-01T10:00:00Z"
+    "total": 5,
+    "page": 1,
+    "pageSize": 50
   }
-]
+}
 ```
 
 #### Cordon Node
@@ -298,13 +426,7 @@ POST /api/v1/nodes/{nodeName}/cordon
 Authorization: Bearer <token>
 ```
 
-**Response**:
-```json
-{
-  "success": true,
-  "message": "Node node-1 cordoned successfully"
-}
-```
+**Response**: HTTP 204 No Content on success
 
 #### Uncordon Node
 ```http
@@ -312,13 +434,7 @@ POST /api/v1/nodes/{nodeName}/uncordon
 Authorization: Bearer <token>
 ```
 
-**Response**:
-```json
-{
-  "success": true,
-  "message": "Node node-1 uncordoned successfully"
-}
-```
+**Response**: HTTP 204 No Content on success
 
 #### Drain Node
 ```http
@@ -337,9 +453,7 @@ Content-Type: application/json
 **Response**:
 ```json
 {
-  "jobId": "drain-job-abc123",
-  "message": "Drain operation started",
-  "status": "running"
+  "jobId": "drain-job-abc123"
 }
 ```
 
@@ -347,43 +461,55 @@ Content-Type: application/json
 
 #### List Pods
 ```http
-GET /api/v1/pods?namespace={namespace}&node={nodeName}&labelSelector={selector}&fieldSelector={selector}&page={page}&pageSize={pageSize}
+GET /api/v1/pods?namespace={namespace}&node={nodeName}&phase={phase}&labelSelector={selector}&fieldSelector={selector}&search={search}&sort={sort}&order={order}&page={page}&pageSize={pageSize}
 Authorization: Bearer <token>
 ```
 
 **Query Parameters**:
 - `namespace` (optional): Filter by namespace
 - `node` (optional): Filter by node name
+- `phase` (optional): Filter by pod phase (Running, Pending, Succeeded, Failed, Unknown)
 - `labelSelector` (optional): Kubernetes label selector
 - `fieldSelector` (optional): Kubernetes field selector
+- `search` (optional): Search term for pod names
+- `sort` (optional): Sort field
+- `order` (optional): Sort order (asc/desc)
 - `page` (optional): Page number for pagination
 - `pageSize` (optional): Number of items per page
 
 **Response**:
 ```json
-[
-  {
-    "name": "nginx-deployment-abc123",
-    "namespace": "default",
-    "phase": "Running",
-    "ready": true,
-    "readyContainers": 1,
-    "totalContainers": 1,
-    "node": "node-1",
-    "podIP": "10.244.1.5",
-    "creationTimestamp": "2025-08-01T10:30:00Z",
-    "labels": {
-      "app": "nginx"
-    },
-    "conditions": [
+{
+  "data": {
+    "items": [
       {
-        "type": "Ready",
-        "status": "True",
-        "lastTransitionTime": "2025-08-01T10:30:30Z"
+        "name": "nginx-deployment-abc123",
+        "namespace": "default",
+        "phase": "Running",
+        "ready": true,
+        "readyContainers": 1,
+        "totalContainers": 1,
+        "node": "node-1",
+        "podIP": "10.244.1.5",
+        "creationTimestamp": "2025-08-01T10:30:00Z",
+        "labels": {
+          "app": "nginx"
+        },
+        "conditions": [
+          {
+            "type": "Ready",
+            "status": "True",
+            "lastTransitionTime": "2025-08-01T10:30:30Z"
+          }
+        ]
       }
-    ]
-  }
-]
+    ],
+    "page": 1,
+    "pageSize": 25,
+    "total": 100
+  },
+  "status": "success"
+}
 ```
 
 #### Get Pod Details
@@ -392,19 +518,26 @@ GET /api/v1/pods/{namespace}/{name}
 Authorization: Bearer <token>
 ```
 
-**Response**: Full Kubernetes Pod object
+**Response**: Full Kubernetes Pod object with enhanced summary
 
 #### Delete Pod
 ```http
-DELETE /api/v1/pods/{namespace}/{name}
+DELETE /api/v1/resources
 Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "namespace": "default",
+  "kind": "Pod",
+  "name": "nginx-abc123"
+}
 ```
 
 **Response**:
 ```json
 {
   "success": true,
-  "message": "Pod deleted successfully"
+  "message": "Resource deleted successfully"
 }
 ```
 
@@ -470,24 +603,220 @@ GET /api/v1/namespaces
 Authorization: Bearer <token>
 ```
 
-**Response**: Array of Kubernetes Namespace objects
+**Response**: Array of Kubernetes Namespace objects with enhanced formatting
 
-#### List Services
+#### List Services (All Namespaces)
 ```http
-GET /api/v1/services
+GET /api/v1/services?namespace={namespace}&search={search}&sortBy={sortBy}&page={page}&pageSize={pageSize}
+Authorization: Bearer <token>
+```
+
+**Response**: 
+```json
+{
+  "status": "success",
+  "data": {
+    "items": [...],
+    "total": 10,
+    "page": 1,
+    "pageSize": 50
+  }
+}
+```
+
+#### List Services in Namespace
+```http
 GET /api/v1/services/{namespace}
 Authorization: Bearer <token>
 ```
 
-**Response**: Array of Kubernetes Service objects
+**Response**: Array of Kubernetes Service objects in specified namespace
 
-#### List Ingresses
+#### Get Service Details
+```http
+GET /api/v1/services/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**:
+```json
+{
+  "data": {
+    "summary": { /* Enhanced service summary */ },
+    "spec": { /* Full service spec */ },
+    "status": { /* Service status */ },
+    "metadata": { /* Service metadata */ },
+    "kind": "Service",
+    "apiVersion": "v1"
+  },
+  "status": "success"
+}
+```
+
+#### List Deployments
+```http
+GET /api/v1/deployments?namespace={namespace}&labelSelector={selector}&fieldSelector={selector}&page={page}&pageSize={pageSize}&sort={sort}&order={order}&search={search}
+Authorization: Bearer <token>
+```
+
+**Query Parameters**:
+- `namespace` (optional): Filter by namespace
+- `labelSelector` (optional): Kubernetes label selector
+- `fieldSelector` (optional): Kubernetes field selector
+- `page` (optional): Page number for pagination (default: 1)
+- `pageSize` (optional): Number of items per page (default: 25)
+- `sort` (optional): Sort field
+- `order` (optional): Sort order (asc/desc)
+- `search` (optional): Search term
+
+**Response**:
+```json
+{
+  "data": {
+    "items": [...],
+    "page": 1,
+    "pageSize": 25,
+    "total": 100
+  },
+  "status": "success"
+}
+```
+
+#### Get Deployment Details
+```http
+GET /api/v1/deployments/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**: Full Deployment object with enhanced summary
+
+#### List StatefulSets
+```http
+GET /api/v1/statefulsets?namespace={namespace}&labelSelector={selector}&fieldSelector={selector}&page={page}&pageSize={pageSize}&sort={sort}&order={order}&search={search}
+Authorization: Bearer <token>
+```
+
+**Response**: Paginated list of StatefulSets with same structure as deployments
+
+#### Get StatefulSet Details
+```http
+GET /api/v1/statefulsets/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**: Full StatefulSet object with enhanced summary
+
+#### List ReplicaSets
+```http
+GET /api/v1/replicasets?namespace={namespace}&labelSelector={selector}&fieldSelector={selector}&page={page}&pageSize={pageSize}&sort={sort}&order={order}&search={search}
+Authorization: Bearer <token>
+```
+
+**Response**: Paginated list of ReplicaSets
+
+#### Get ReplicaSet Details
+```http
+GET /api/v1/replicasets/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**: Full ReplicaSet object with enhanced summary
+
+#### List DaemonSets
+```http
+GET /api/v1/daemonsets?namespace={namespace}&labelSelector={selector}&fieldSelector={selector}&page={page}&pageSize={pageSize}&sort={sort}&order={order}&search={search}
+Authorization: Bearer <token>
+```
+
+**Response**: Paginated list of DaemonSets
+
+#### Get DaemonSet Details
+```http
+GET /api/v1/daemonsets/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**: Full DaemonSet object with enhanced summary
+
+#### List Kubernetes Jobs
+```http
+GET /api/v1/k8s-jobs?namespace={namespace}&labelSelector={selector}&fieldSelector={selector}&page={page}&pageSize={pageSize}&sort={sort}&order={order}&search={search}
+Authorization: Bearer <token>
+```
+
+**Response**: Paginated list of Kubernetes Jobs
+
+#### Get Kubernetes Job Details
+```http
+GET /api/v1/k8s-jobs/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**: Full Job object with enhanced summary
+
+#### List CronJobs
+```http
+GET /api/v1/cronjobs?namespace={namespace}&labelSelector={selector}&fieldSelector={selector}&page={page}&pageSize={pageSize}&sort={sort}&order={order}&search={search}
+Authorization: Bearer <token>
+```
+
+**Response**: Paginated list of CronJobs
+
+#### Get CronJob Details
+```http
+GET /api/v1/cronjobs/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**: Full CronJob object with enhanced summary
+
+#### List All Ingresses
+```http
+GET /api/v1/ingresses
+Authorization: Bearer <token>
+```
+
+**Response**: Array of all Ingresses across namespaces
+
+#### List Ingresses in Namespace
 ```http
 GET /api/v1/ingresses/{namespace}
 Authorization: Bearer <token>
 ```
 
-**Response**: Array of Kubernetes Ingress objects
+**Response**: Array of Ingresses in specified namespace
+
+#### Get Ingress Details
+```http
+GET /api/v1/ingresses/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**: Full Ingress object with enhanced summary
+
+#### List Endpoints
+```http
+GET /api/v1/endpoints?namespace={namespace}&labelSelector={selector}&fieldSelector={selector}&page={page}&pageSize={pageSize}&sort={sort}&order={order}&search={search}
+Authorization: Bearer <token>
+```
+
+**Response**: Paginated list of Endpoints
+
+#### Get Endpoints Details
+```http
+GET /api/v1/endpoints/{namespace}/{name}
+Authorization: Bearer <token>
+```
+
+**Response**: Full Endpoints object with enhanced summary
+
+#### Cluster Overview
+```http
+GET /api/v1/overview
+Authorization: Bearer <token>
+```
+
+**Response**: Comprehensive cluster overview including resource counts, health status, and alerts
 
 #### Export Resource
 ```http
@@ -516,6 +845,109 @@ Content-Type: application/json
 {
   "success": true,
   "message": "Resource scaled successfully"
+}
+```
+
+#### Delete Resource
+```http
+DELETE /api/v1/resources
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "namespace": "default",
+  "kind": "Pod",
+  "name": "nginx-abc123"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Resource deleted successfully"
+}
+```
+
+#### Create Namespace
+```http
+POST /api/v1/namespaces
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "name": "new-namespace",
+  "labels": {
+    "team": "development"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Namespace created successfully"
+}
+```
+
+#### Delete Namespace
+```http
+DELETE /api/v1/namespaces/{namespace}
+Authorization: Bearer <token>
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Namespace deleted successfully"
+}
+```
+
+### Metrics & Analytics
+
+#### Get Cluster Metrics
+```http
+GET /api/v1/metrics
+Authorization: Bearer <token>
+```
+
+**Response**: Cluster-wide resource utilization metrics including CPU, memory, and storage
+
+#### Get Namespace Metrics
+```http
+GET /api/v1/metrics/namespace/{namespace}
+Authorization: Bearer <token>
+```
+
+**Response**: Resource utilization metrics for a specific namespace
+
+#### Get Analytics Data
+```http
+GET /api/v1/analytics/visitors?window={window}&step={step}
+Authorization: Bearer <token>
+```
+
+**Query Parameters**:
+- `window` (optional): Time window (`7d`, `30d`, `90d` - default: `90d`)
+- `step` (optional): Data point interval (`1h`, `1d` - auto-selected based on window)
+
+**Response**:
+```json
+{
+  "data": {
+    "visitors": [
+      {
+        "timestamp": "2025-08-01T00:00:00Z",
+        "count": 42
+      }
+    ],
+    "total": 1234,
+    "window": "90d",
+    "step": "1d"
+  },
+  "status": "success"
 }
 ```
 
@@ -562,9 +994,68 @@ DELETE /api/v1/logs/stream/{streamId}
 Authorization: Bearer <token>
 ```
 
-### Job Tracking
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Log stream stopped"
+}
+```
 
-#### Get Job Status
+#### Container Exec (WebSocket)
+```http
+GET /api/v1/exec/{sessionId}?namespace={namespace}&pod={pod}&container={container}&command={cmd}&tty=true
+Authorization: Bearer <token>
+Upgrade: websocket
+```
+
+**Query Parameters**:
+- `namespace`: Pod namespace
+- `pod`: Pod name
+- `container` (optional): Container name
+- `command` (optional): Command to execute (default: `/bin/sh`)
+- `tty` (optional): Allocate TTY (default: `true`)
+
+**Message Format**: Binary WebSocket frames for terminal I/O
+
+### Action Job Tracking
+
+#### List Action Jobs
+```http
+GET /api/v1/jobs
+Authorization: Bearer <token>
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": "drain-job-abc123",
+        "type": "drain",
+        "status": "completed",
+        "progress": [
+          "Starting drain operation",
+          "Cordoning node",
+          "Evicting pods",
+          "Drain completed"
+        ],
+        "startTime": "2025-08-01T10:45:00Z",
+        "endTime": "2025-08-01T10:47:00Z",
+        "details": {
+          "nodeName": "node-1",
+          "podsEvicted": 5
+        }
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+#### Get Action Job Status
 ```http
 GET /api/v1/jobs/{jobId}
 Authorization: Bearer <token>
@@ -620,6 +1111,37 @@ Authorization: Bearer <token>
   "type": "podUpdate",
   "action": "added|modified|deleted",
   "data": { /* Pod object */ }
+}
+```
+
+#### Overview Stream
+```
+WS /api/v1/stream/overview
+Authorization: Bearer <token>
+```
+
+**Message Format**:
+```json
+{
+  "type": "overviewUpdate",
+  "data": { /* Cluster overview object */ }
+}
+```
+
+#### Job Progress Stream
+```
+WS /api/v1/stream/jobs/{jobId}
+Authorization: Bearer <token>
+```
+
+**Message Format**:
+```json
+{
+  "type": "jobProgress",
+  "jobId": "drain-job-abc123",
+  "status": "running",
+  "progress": "Evicting pods from node",
+  "data": { /* Job status object */ }
 }
 ```
 
@@ -747,7 +1269,8 @@ export class AuthService {
   }
 
   async getCurrentUser(): Promise<AuthUser> {
-    return apiClient.get<AuthUser>('/auth/me');
+    const response = await apiClient.get<{authenticated: boolean, user: AuthUser}>('/auth/me');
+    return response.user;
   }
 
   async logout(): Promise<void> {
@@ -1056,15 +1579,15 @@ Common HTTP status codes:
 - `429`: Too Many Requests (rate limited)
 - `500`: Internal Server Error
 
-### Long-Running Operations
+### Job Persistence
 
-Operations like node drain return a job ID for tracking:
+Long-running operations like node drain are tracked as jobs:
 
 ```typescript
-// Start operation
+// Start operation (returns immediately with job ID)
 const { jobId } = await k8sService.drainNode('node-1');
 
-// Poll for completion
+// Poll for completion using the jobs API
 const pollJob = async (jobId: string): Promise<JobResult> => {
   const job = await apiClient.get(`/jobs/${jobId}`);
   
@@ -1077,7 +1600,52 @@ const pollJob = async (jobId: string): Promise<JobResult> => {
 };
 
 const result = await pollJob(jobId);
+
+// Or use WebSocket for real-time updates
+const ws = new WebSocket(`/api/v1/stream/jobs/${jobId}`);
+ws.onmessage = (event) => {
+  const update = JSON.parse(event.data);
+  console.log('Job progress:', update.progress);
+};
 ```
+
+### Enhanced Response Formats
+
+All resource endpoints return enhanced response formats with:
+
+- **Pagination**: `page`, `pageSize`, `total` fields
+- **Enhanced Summaries**: Calculated fields like `age`, `ready`, `status`
+- **Health Alerts**: Automatic detection of issues and maintenance needs
+- **Detailed Metadata**: Full Kubernetes metadata preserved
+- **Consistent Structure**: All responses follow the same `{data, status}` format
+
+### Request ID Tracing
+
+All requests include a unique `X-Request-ID` header for distributed tracing:
+
+```http
+X-Request-ID: req_1a2b3c4d5e6f
+```
+
+This ID is:
+- Automatically generated if not provided
+- Included in all log entries
+- Returned in response headers
+- Used for correlating WebSocket messages and job tracking
+
+### Resource Export
+
+Clean YAML export of resources without managed fields:
+
+```http
+GET /api/v1/export/{namespace}/{kind}/{name}
+```
+
+Returns sanitized YAML suitable for:
+- Version control
+- Migration between clusters  
+- Backup and restore operations
+- Infrastructure as Code workflows
 
 ### WebSocket Authentication
 
@@ -1130,7 +1698,86 @@ The API uses URL-based versioning (`/api/v1`). Breaking changes will increment t
 3. **RBAC**: Configure appropriate Kubernetes RBAC for the service account
 4. **Rate limits**: Adjust rate limits based on expected load
 5. **Monitoring**: Monitor the `/metrics` endpoint for operational insights
+6. **Job Persistence**: Enable job persistence for reliable operation tracking
+7. **Resource Limits**: Set appropriate resource limits in deployment manifests
+8. **Network Policies**: Implement network policies to restrict access
+9. **Image Security**: Use specific image tags and scan for vulnerabilities
+10. **Backup**: Regularly backup job persistence data and configuration
+
+### Performance & Caching
+
+The API implements multiple caching strategies:
+
+#### Informer Cache
+- Uses Kubernetes informers for real-time resource caching
+- Reduces API server load by serving from local cache
+- Automatically syncs with cluster state changes
+- Provides sub-second response times for resource listings
+
+#### Analytics Cache  
+- Analytics data cached with configurable TTL (default: 60s)
+- Reduces load on Prometheus integration
+- Supports cache invalidation for real-time updates
+
+#### Overview Cache
+- Cluster overview data cached with short TTL (default: 2s)
+- Balances real-time updates with performance
+- Includes resource counts, health status, and alerts
+
+#### Connection Pooling
+- Kubernetes client uses connection pooling
+- Metrics client maintains persistent connections
+- WebSocket connections are efficiently managed
+
+### High Availability
+
+For production deployments:
+
+1. **Multiple Replicas**: Deploy multiple API server instances
+2. **Load Balancing**: Use a load balancer with session affinity for WebSockets
+3. **Health Checks**: Configure proper health and readiness probes
+4. **Resource Monitoring**: Monitor memory and CPU usage
+5. **Graceful Shutdown**: Server handles SIGTERM for clean shutdowns
+6. **Circuit Breakers**: Built-in failure handling for external integrations
+
+### Security Features
+
+#### Headers
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY` 
+- `X-XSS-Protection: 1; mode=block`
+- Request ID tracking for audit trails
+
+#### Input Validation
+- YAML validation for apply operations
+- Parameter sanitization for all endpoints
+- Resource name validation
+- Namespace isolation enforcement
+
+#### RBAC Integration
+- Kubernetes RBAC enforcement
+- Custom role definitions supported
+- Group-based permission mapping
+- Audit logging for all operations
 
 ---
 
-This documentation covers all aspects of the Kubernetes Admin Dashboard backend API. For additional questions or issues, refer to the project repository or contact the development team.
+This documentation covers all aspects of the Kubernetes Admin Dashboard backend API. The backend is actively developed with regular feature additions and improvements.
+
+## Additional Resources
+
+- **Repository**: [Kaptn](https://github.com/aaronlmathis/Kaptn)
+- **Configuration Guide**: See `config.example.yaml` for full configuration options
+- **Deployment**: Check `deploy/` directory for Kubernetes manifests
+- **Development**: See `docs/development.md` for development setup
+- **Testing**: Review `docs/testing.md` for testing procedures
+
+## Feature Roadmap
+
+The API is continuously evolving with new features:
+
+- **Current**: Full CRUD operations, real-time streaming, analytics integration
+- **Planned**: Custom Resource Definitions (CRDs), extended RBAC, audit logging enhancements
+- **Future**: Multi-cluster support, advanced alerting, plugin system
+
+For questions, issues, or feature requests, please refer to the project repository or contact the development team.
