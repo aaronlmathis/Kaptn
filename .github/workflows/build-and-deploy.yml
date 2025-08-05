@@ -44,6 +44,11 @@ jobs:
           kubectl rollout restart deployment/kaptn -n kaptn
           kubectl rollout status deployment/kaptn -n kaptn
 
+      - name: Clean up Docker
+        if: always()
+        run: |
+          docker system prune -af --volumes
+          
       - name: Deployment Summary
         run: |
           echo "## Kaptn Deployment" >> $GITHUB_STEP_SUMMARY
