@@ -324,7 +324,7 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 	const sendInput = () => {
 		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && input.trim()) {
 			const trimmedInput = input.trim()
-			
+
 			// Check if user typed exit commands
 			if (trimmedInput === 'exit' || trimmedInput === 'logout' || trimmedInput === 'quit') {
 				// Send the exit command first
@@ -335,14 +335,14 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 				wsRef.current.send(JSON.stringify(message))
 				setOutput(prev => [...prev, `$ ${input}`])
 				setInput('')
-				
+
 				// Close the shell tab after a short delay to allow the exit command to process
 				setTimeout(() => {
 					closeShell(tabId)
 				}, 500)
 				return
 			}
-			
+
 			// Normal command handling
 			const message: ExecMessage = {
 				type: 'stdin',
@@ -368,7 +368,7 @@ export function TerminalSession({ pod, container, namespace, tabId }: TerminalSe
 				}
 				wsRef.current.send(JSON.stringify(message))
 				setOutput(prev => [...prev, '^D'])
-				
+
 				// Close the shell tab after a short delay
 				setTimeout(() => {
 					closeShell(tabId)

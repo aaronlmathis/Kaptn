@@ -415,249 +415,255 @@ const createPodColumns = (
 		},
 	]
 
-const createNodeColumns = (
-	onViewDetails?: (item: z.infer<typeof nodeSchema>) => void
-): ColumnDef<z.infer<typeof nodeSchema>>[] => [
-		{
-			id: "drag",
-			header: () => null,
-			cell: ({ row }) => <DragHandle id={row.original.id} />,
+const createNodeColumns = (): ColumnDef<z.infer<typeof nodeSchema>>[] => [
+	{
+		id: "drag",
+		header: () => null,
+		cell: ({ row }) => <DragHandle id={row.original.id} />,
+	},
+	{
+		id: "select",
+		header: ({ table }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={
+						table.getIsAllPageRowsSelected() ||
+						(table.getIsSomePageRowsSelected() && "indeterminate")
+					}
+					onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+					aria-label="Select all"
+				/>
+			</div>
+		),
+		cell: ({ row }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={row.getIsSelected()}
+					onCheckedChange={(value) => row.toggleSelected(!!value)}
+					aria-label="Select row"
+				/>
+			</div>
+		),
+		enableSorting: false,
+		enableHiding: false,
+	},
+	{
+		accessorKey: "name",
+		header: "Node Name",
+		cell: ({ row }) => {
+			return <NodeDetailViewer item={row.original} />
 		},
-		{
-			id: "select",
-			header: ({ table }) => (
-				<div className="flex items-center justify-center">
-					<Checkbox
-						checked={
-							table.getIsAllPageRowsSelected() ||
-							(table.getIsSomePageRowsSelected() && "indeterminate")
+		enableHiding: false,
+	},
+	{
+		accessorKey: "status",
+		header: "Status",
+		cell: ({ row }) => getNodeStatusBadge(row.original.status),
+	},
+	{
+		accessorKey: "roles",
+		header: "Roles",
+		cell: ({ row }) => (
+			<Badge variant="outline" className="text-muted-foreground px-1.5">
+				{row.original.roles}
+			</Badge>
+		),
+	},
+	{
+		accessorKey: "version",
+		header: "Version",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.version}</div>
+		),
+	},
+	{
+		accessorKey: "cpu",
+		header: "CPU",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.cpu}</div>
+		),
+	},
+	{
+		accessorKey: "memory",
+		header: "Memory",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.memory}</div>
+		),
+	},
+	{
+		accessorKey: "age",
+		header: "Age",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.age}</div>
+		),
+	},
+	{
+		id: "actions",
+		cell: ({ row }) => (
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						variant="ghost"
+						className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+						size="icon"
+					>
+						<IconDotsVertical />
+						<span className="sr-only">Open menu</span>
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-40">
+					<NodeDetailViewer
+						item={row.original}
+						trigger={
+							<DropdownMenuItem>
+								<IconEye className="size-4 mr-2" />
+								View Details
+							</DropdownMenuItem>
 						}
-						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-						aria-label="Select all"
 					/>
-				</div>
-			),
-			cell: ({ row }) => (
-				<div className="flex items-center justify-center">
-					<Checkbox
-						checked={row.getIsSelected()}
-						onCheckedChange={(value) => row.toggleSelected(!!value)}
-						aria-label="Select row"
-					/>
-				</div>
-			),
-			enableSorting: false,
-			enableHiding: false,
-		},
-		{
-			accessorKey: "name",
-			header: "Node Name",
-			cell: ({ row }) => {
-				return <NodeDetailViewer item={row.original} />
-			},
-			enableHiding: false,
-		},
-		{
-			accessorKey: "status",
-			header: "Status",
-			cell: ({ row }) => getNodeStatusBadge(row.original.status),
-		},
-		{
-			accessorKey: "roles",
-			header: "Roles",
-			cell: ({ row }) => (
-				<Badge variant="outline" className="text-muted-foreground px-1.5">
-					{row.original.roles}
-				</Badge>
-			),
-		},
-		{
-			accessorKey: "version",
-			header: "Version",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.version}</div>
-			),
-		},
-		{
-			accessorKey: "cpu",
-			header: "CPU",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.cpu}</div>
-			),
-		},
-		{
-			accessorKey: "memory",
-			header: "Memory",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.memory}</div>
-			),
-		},
-		{
-			accessorKey: "age",
-			header: "Age",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.age}</div>
-			),
-		},
-		{
-			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem onClick={() => onViewDetails?.(row.original)}>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<DropdownMenuItem>
-							<IconEdit className="size-4 mr-2" />
-							Cordon
-						</DropdownMenuItem>
-						<DropdownMenuItem>
-							<IconEdit className="size-4 mr-2" />
-							Drain
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+					<DropdownMenuItem>
+						<IconEdit className="size-4 mr-2" />
+						Cordon
+					</DropdownMenuItem>
+					<DropdownMenuItem>
+						<IconEdit className="size-4 mr-2" />
+						Drain
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem className="text-red-600">
+						<IconTrash className="size-4 mr-2" />
+						Delete
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		),
+	},
+]
 
-const createServiceColumns = (
-	onViewDetails?: (item: z.infer<typeof serviceSchema>) => void
-): ColumnDef<z.infer<typeof serviceSchema>>[] => [
-		{
-			id: "drag",
-			header: () => null,
-			cell: ({ row }) => <DragHandle id={row.original.id} />,
+const createServiceColumns = (): ColumnDef<z.infer<typeof serviceSchema>>[] => [
+	{
+		id: "drag",
+		header: () => null,
+		cell: ({ row }) => <DragHandle id={row.original.id} />,
+	},
+	{
+		id: "select",
+		header: ({ table }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={
+						table.getIsAllPageRowsSelected() ||
+						(table.getIsSomePageRowsSelected() && "indeterminate")
+					}
+					onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+					aria-label="Select all"
+				/>
+			</div>
+		),
+		cell: ({ row }) => (
+			<div className="flex items-center justify-center">
+				<Checkbox
+					checked={row.getIsSelected()}
+					onCheckedChange={(value) => row.toggleSelected(!!value)}
+					aria-label="Select row"
+				/>
+			</div>
+		),
+		enableSorting: false,
+		enableHiding: false,
+	},
+	{
+		accessorKey: "name",
+		header: "Service Name",
+		cell: ({ row }) => {
+			return <ServiceDetailViewer item={row.original} />
 		},
-		{
-			id: "select",
-			header: ({ table }) => (
-				<div className="flex items-center justify-center">
-					<Checkbox
-						checked={
-							table.getIsAllPageRowsSelected() ||
-							(table.getIsSomePageRowsSelected() && "indeterminate")
+		enableHiding: false,
+	},
+	{
+		accessorKey: "namespace",
+		header: "Namespace",
+		cell: ({ row }) => (
+			<Badge variant="outline" className="text-muted-foreground px-1.5">
+				{row.original.namespace}
+			</Badge>
+		),
+	},
+	{
+		accessorKey: "type",
+		header: "Type",
+		cell: ({ row }) => (
+			<Badge variant="outline" className="text-blue-600 border-border bg-transparent px-1.5">
+				{row.original.type}
+			</Badge>
+		),
+	},
+	{
+		accessorKey: "clusterIP",
+		header: "Cluster IP",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.clusterIP}</div>
+		),
+	},
+	{
+		accessorKey: "externalIP",
+		header: "External IP",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.externalIP}</div>
+		),
+	},
+	{
+		accessorKey: "ports",
+		header: "Ports",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.ports}</div>
+		),
+	},
+	{
+		accessorKey: "age",
+		header: "Age",
+		cell: ({ row }) => (
+			<div className="font-mono text-sm">{row.original.age}</div>
+		),
+	},
+	{
+		id: "actions",
+		cell: ({ row }) => (
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						variant="ghost"
+						className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+						size="icon"
+					>
+						<IconDotsVertical />
+						<span className="sr-only">Open menu</span>
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-40">
+					<ServiceDetailViewer
+						item={row.original}
+						trigger={
+							<DropdownMenuItem>
+								<IconEye className="size-4 mr-2" />
+								View Details
+							</DropdownMenuItem>
 						}
-						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-						aria-label="Select all"
 					/>
-				</div>
-			),
-			cell: ({ row }) => (
-				<div className="flex items-center justify-center">
-					<Checkbox
-						checked={row.getIsSelected()}
-						onCheckedChange={(value) => row.toggleSelected(!!value)}
-						aria-label="Select row"
-					/>
-				</div>
-			),
-			enableSorting: false,
-			enableHiding: false,
-		},
-		{
-			accessorKey: "name",
-			header: "Service Name",
-			cell: ({ row }) => {
-				return <ServiceDetailViewer item={row.original} />
-			},
-			enableHiding: false,
-		},
-		{
-			accessorKey: "namespace",
-			header: "Namespace",
-			cell: ({ row }) => (
-				<Badge variant="outline" className="text-muted-foreground px-1.5">
-					{row.original.namespace}
-				</Badge>
-			),
-		},
-		{
-			accessorKey: "type",
-			header: "Type",
-			cell: ({ row }) => (
-				<Badge variant="outline" className="text-blue-600 border-border bg-transparent px-1.5">
-					{row.original.type}
-				</Badge>
-			),
-		},
-		{
-			accessorKey: "clusterIP",
-			header: "Cluster IP",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.clusterIP}</div>
-			),
-		},
-		{
-			accessorKey: "externalIP",
-			header: "External IP",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.externalIP}</div>
-			),
-		},
-		{
-			accessorKey: "ports",
-			header: "Ports",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.ports}</div>
-			),
-		},
-		{
-			accessorKey: "age",
-			header: "Age",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.age}</div>
-			),
-		},
-		{
-			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem onClick={() => onViewDetails?.(row.original)}>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<DropdownMenuItem>
-							<IconEdit className="size-4 mr-2" />
-							Edit YAML
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+					<DropdownMenuItem>
+						<IconEdit className="size-4 mr-2" />
+						Edit YAML
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem className="text-red-600">
+						<IconTrash className="size-4 mr-2" />
+						Delete
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		),
+	},
+]
 
 const createDeploymentColumns = (
 	onViewDetails?: (item: z.infer<typeof deploymentSchema>) => void
@@ -831,16 +837,6 @@ export function KubernetesDashboard() {
 		setDrawerOpen(true)
 	}, [])
 
-	const handleViewServiceDetails = React.useCallback((item: z.infer<typeof serviceSchema>) => {
-		setSelectedItem(item)
-		setDrawerOpen(true)
-	}, [])
-
-	const handleViewNodeDetails = React.useCallback((item: z.infer<typeof nodeSchema>) => {
-		setSelectedItem(item)
-		setDrawerOpen(true)
-	}, [])
-
 	// Handle exec shell
 	const handleExecShell = React.useCallback((item: z.infer<typeof podSchema>) => {
 		openShell(item.name, item.namespace)
@@ -848,8 +844,8 @@ export function KubernetesDashboard() {
 
 	// Create columns for each resource type with callbacks
 	const podColumns = React.useMemo(() => createPodColumns(handleViewPodDetails, handleExecShell), [handleViewPodDetails, handleExecShell])
-	const nodeColumns = React.useMemo(() => createNodeColumns(handleViewNodeDetails), [handleViewNodeDetails])
-	const serviceColumns = React.useMemo(() => createServiceColumns(handleViewServiceDetails), [handleViewServiceDetails])
+	const nodeColumns = React.useMemo(() => createNodeColumns(), [])
+	const serviceColumns = React.useMemo(() => createServiceColumns(), [])
 	const deploymentColumns = React.useMemo(() => createDeploymentColumns(handleViewDeploymentDetails), [handleViewDeploymentDetails])
 
 	// Get current data and columns based on active tab
