@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -793,4 +794,27 @@ func (rm *ResourceManager) deleteIstioGateway(ctx context.Context, namespace, na
 	}
 
 	return nil
+}
+
+// ListNetworkPolicies retrieves network policies from the specified namespace
+func (rm *ResourceManager) ListNetworkPolicies(ctx context.Context, namespace string) ([]networkingv1.NetworkPolicy, error) {
+	var networkPolicies []networkingv1.NetworkPolicy
+
+	if namespace != "" {
+		// Get network policies from specific namespace
+		netPolList, err := rm.kubeClient.NetworkingV1().NetworkPolicies(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list network policies in namespace %s: %w", namespace, err)
+		}
+		networkPolicies = netPolList.Items
+	} else {
+		// Get network policies from all namespaces
+		netPolList, err := rm.kubeClient.NetworkingV1().NetworkPolicies("").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list network policies: %w", err)
+		}
+		networkPolicies = netPolList.Items
+	}
+
+	return networkPolicies, nil
 }

@@ -12,6 +12,7 @@ import {
 	type DashboardCronJob,
 	type DashboardEndpoints,
 	type DashboardIngress,
+	type DashboardNetworkPolicy,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
@@ -23,7 +24,8 @@ import {
 	transformJobsToUI,
 	transformCronJobsToUI,
 	transformEndpointsToUI,
-	transformIngressesToUI
+	transformIngressesToUI,
+	transformNetworkPoliciesToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -340,6 +342,35 @@ export function useIngresses(): UseK8sDataResult<DashboardIngress> {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch ingresses');
 			console.error('Error fetching ingresses:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useNetworkPolicies(): UseK8sDataResult<DashboardNetworkPolicy> {
+	const [data, setData] = useState<DashboardNetworkPolicy[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const networkPolicies = await k8sService.getNetworkPolicies(namespace);
+			const transformedNetworkPolicies = transformNetworkPoliciesToUI(networkPolicies);
+			setData(transformedNetworkPolicies);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch network policies');
+			console.error('Error fetching network policies:', err);
 		} finally {
 			setLoading(false);
 		}

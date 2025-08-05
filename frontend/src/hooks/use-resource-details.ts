@@ -458,3 +458,60 @@ export function useEndpointsDetails(namespace: string, name: string, enabled: bo
 
 	return { data, loading, error }
 }
+
+interface NetworkPolicyDetails {
+	summary: {
+		name: string
+		namespace: string
+		age: string
+		podSelector: string
+		ingressRules: number
+		egressRules: number
+		policyTypes: string
+		affectedPods: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+export function useNetworkPolicyDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<NetworkPolicyDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchNetworkPolicyDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/network-policies/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch network policy details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchNetworkPolicyDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}

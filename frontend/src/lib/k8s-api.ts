@@ -259,10 +259,10 @@ export interface NetworkPolicy {
 	creationTimestamp: string;
 	labels: Record<string, string>;
 	annotations: Record<string, string>;
-	podSelector: Record<string, unknown>;
+	podSelector: string;
 	ingressRules: number;
 	egressRules: number;
-	policyTypes: string[];
+	policyTypes: string;
 	affectedPods: number;
 }
 
@@ -548,6 +548,18 @@ export class K8sService {
 		return response.data;
 	}
 
+	// Network Policy operations
+	async getNetworkPolicies(namespace?: string): Promise<NetworkPolicy[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: NetworkPolicy[] }; status: string }>(`/network-policies${query}`);
+		return response.data.items;
+	}
+
+	async getNetworkPolicy(namespace: string, name: string): Promise<{ summary: NetworkPolicy; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: NetworkPolicy; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/network-policies/${namespace}/${name}`);
+		return response.data;
+	}
+
 	// Namespace operations
 	async getNamespaces(): Promise<Namespace[]> {
 		return apiClient.get<Namespace[]>('/namespaces');
@@ -752,6 +764,20 @@ export function transformIngressesToUI(ingresses: Ingress[]): DashboardIngress[]
 		paths: ingress.paths,
 		externalIPs: ingress.externalIPs,
 		externalIPsDisplay: ingress.externalIPsDisplay
+	}));
+}
+
+export function transformNetworkPoliciesToUI(networkPolicies: NetworkPolicy[]): DashboardNetworkPolicy[] {
+	return networkPolicies.map((networkPolicy, index) => ({
+		id: index + 1,
+		name: networkPolicy.name,
+		namespace: networkPolicy.namespace,
+		age: networkPolicy.age,
+		podSelector: networkPolicy.podSelector,
+		ingressRules: networkPolicy.ingressRules,
+		egressRules: networkPolicy.egressRules,
+		policyTypes: networkPolicy.policyTypes,
+		affectedPods: networkPolicy.affectedPods
 	}));
 }
 

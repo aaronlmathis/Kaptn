@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -1544,6 +1545,149 @@ func sortEndpoints(endpoints []v1.Endpoints, sortField, order string) {
 			less = endpoints[i].CreationTimestamp.Time.After(endpoints[j].CreationTimestamp.Time)
 		default:
 			less = endpoints[i].Name < endpoints[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// NetworkPolicyFilterOptions represents filtering options for network policies
+type NetworkPolicyFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, age, ingressRules, egressRules)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+}
+
+// FilterNetworkPolicies filters network policies based on the provided options
+func FilterNetworkPolicies(networkPolicies []networkingv1.NetworkPolicy, options NetworkPolicyFilterOptions) ([]networkingv1.NetworkPolicy, error) {
+	var filtered []networkingv1.NetworkPolicy
+
+	// Parse label selector if provided
+	var labelSelector labels.Selector
+	var err error
+	if options.LabelSelector != "" {
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector if provided
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, networkPolicy := range networkPolicies {
+		// Apply namespace filter
+		if options.Namespace != "" && networkPolicy.Namespace != options.Namespace {
+			continue
+		}
+
+		// Apply label selector filter
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(networkPolicy.Labels)) {
+			continue
+		}
+
+		// Apply field selector filter
+		if fieldSelector != nil {
+			fieldSet := fields.Set{
+				"metadata.name":      networkPolicy.Name,
+				"metadata.namespace": networkPolicy.Namespace,
+			}
+			if !fieldSelector.Matches(fieldSet) {
+				continue
+			}
+		}
+
+		// Apply search filter
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(networkPolicy.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(networkPolicy.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range networkPolicy.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, networkPolicy)
+	}
+
+	// Sort
+	sortNetworkPolicies(filtered, options.Sort, options.Order)
+
+	// Paginate
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []networkingv1.NetworkPolicy{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// sortNetworkPolicies sorts network policies by the specified field and order
+func sortNetworkPolicies(networkPolicies []networkingv1.NetworkPolicy, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(networkPolicies, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = networkPolicies[i].Name < networkPolicies[j].Name
+		case "namespace":
+			less = networkPolicies[i].Namespace < networkPolicies[j].Namespace
+		case "age":
+			less = networkPolicies[i].CreationTimestamp.Time.After(networkPolicies[j].CreationTimestamp.Time)
+		case "ingressRules":
+			less = len(networkPolicies[i].Spec.Ingress) < len(networkPolicies[j].Spec.Ingress)
+		case "egressRules":
+			less = len(networkPolicies[i].Spec.Egress) < len(networkPolicies[j].Spec.Egress)
+		default:
+			less = networkPolicies[i].Name < networkPolicies[j].Name
 		}
 
 		if order == "desc" {

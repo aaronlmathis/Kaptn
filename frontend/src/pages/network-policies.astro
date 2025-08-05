@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { NetworkPoliciesPageContainer } from "@/components/pages/NetworkPoliciesPageContainer";
+
+const title = "Network Policies";
+---
+
+<Layout title={title}>
+	<NetworkPoliciesPageContainer client:load />
+</Layout>

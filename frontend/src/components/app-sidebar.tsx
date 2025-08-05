@@ -117,8 +117,8 @@ const data = {
           url: "/ingress-classes",
         },
         {
-          title: "NetworkPolicies",
-          url: "/networkpolicies",
+          title: "Network Policies",
+          url: "/network-policies",
         },
         {
           title: "Load Balancers",

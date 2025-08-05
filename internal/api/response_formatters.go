@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 )
 
 // Response formatting functions
@@ -964,5 +965,55 @@ func (s *Server) endpointsToResponse(endpoint v1.Endpoints) map[string]interface
 		"creationTimestamp": endpoint.CreationTimestamp.Time,
 		"labels":            endpoint.Labels,
 		"annotations":       endpoint.Annotations,
+	}
+}
+
+// networkPolicyToResponse converts a NetworkPolicy to a response format
+func (s *Server) networkPolicyToResponse(networkPolicy networkingv1.NetworkPolicy) map[string]interface{} {
+	age := time.Since(networkPolicy.CreationTimestamp.Time).String()
+
+	// Format pod selector
+	podSelector := "All Pods"
+	if networkPolicy.Spec.PodSelector.MatchLabels != nil && len(networkPolicy.Spec.PodSelector.MatchLabels) > 0 {
+		selectorParts := make([]string, 0, len(networkPolicy.Spec.PodSelector.MatchLabels))
+		for key, value := range networkPolicy.Spec.PodSelector.MatchLabels {
+			selectorParts = append(selectorParts, fmt.Sprintf("%s=%s", key, value))
+		}
+		podSelector = fmt.Sprintf("%d label(s)", len(selectorParts))
+	}
+
+	// Count ingress and egress rules
+	ingressRules := len(networkPolicy.Spec.Ingress)
+	egressRules := len(networkPolicy.Spec.Egress)
+
+	// Format policy types
+	policyTypes := ""
+	if len(networkPolicy.Spec.PolicyTypes) > 0 {
+		for i, policyType := range networkPolicy.Spec.PolicyTypes {
+			if i > 0 {
+				policyTypes += ", "
+			}
+			policyTypes += string(policyType)
+		}
+	} else {
+		policyTypes = "Ingress"
+	}
+
+	// For now, we'll set affectedPods to 0 as calculating this requires querying pods
+	// This could be enhanced later with actual pod counting
+	affectedPods := 0
+
+	return map[string]interface{}{
+		"name":              networkPolicy.Name,
+		"namespace":         networkPolicy.Namespace,
+		"age":               age,
+		"podSelector":       podSelector,
+		"ingressRules":      ingressRules,
+		"egressRules":       egressRules,
+		"policyTypes":       policyTypes,
+		"affectedPods":      affectedPods,
+		"creationTimestamp": networkPolicy.CreationTimestamp.Time,
+		"labels":            networkPolicy.Labels,
+		"annotations":       networkPolicy.Annotations,
 	}
 }

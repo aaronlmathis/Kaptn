@@ -1544,3 +1544,129 @@ func (s *Server) handleGetEndpoints(w http.ResponseWriter, r *http.Request) {
 		"status": "success",
 	})
 }
+
+func (s *Server) handleListNetworkPolicies(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	labelSelector := r.URL.Query().Get("labelSelector")
+	fieldSelector := r.URL.Query().Get("fieldSelector")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get network policies from resource manager
+	networkPolicies, err := s.resourceManager.ListNetworkPolicies(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list network policies", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(networkPolicies)
+
+	// Apply filters
+	filterOpts := selectors.NetworkPolicyFilterOptions{
+		Namespace:     namespace,
+		LabelSelector: labelSelector,
+		FieldSelector: fieldSelector,
+		Search:        search,
+		Sort:          sort,
+		Order:         order,
+		Page:          page,
+		PageSize:      pageSize,
+	}
+
+	filteredNetworkPolicies, err := selectors.FilterNetworkPolicies(networkPolicies, filterOpts)
+	if err != nil {
+		s.logger.Error("Failed to filter network policies", zap.Error(err))
+		http.Error(w, "Failed to filter network policies", http.StatusBadRequest)
+		return
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, networkPolicy := range filteredNetworkPolicies {
+		responses = append(responses, s.networkPolicyToResponse(networkPolicy))
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetNetworkPolicy(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get network policy from Kubernetes API
+	networkPolicy, err := s.kubeClient.NetworkingV1().NetworkPolicies(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get network policy",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.networkPolicyToResponse(*networkPolicy)
+
+	// Add full network policy spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       networkPolicy.Spec,
+		"metadata":   networkPolicy.ObjectMeta,
+		"kind":       "NetworkPolicy",
+		"apiVersion": "networking.k8s.io/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
