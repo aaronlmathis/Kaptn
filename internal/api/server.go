@@ -378,6 +378,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/ingresses/{namespace}/{name}", s.handleGetIngress)
 			r.Get("/endpoints", s.handleListEndpoints)
 			r.Get("/endpoints/{namespace}/{name}", s.handleGetEndpoints)
+			r.Get("/endpoint-slices", s.handleListEndpointSlices)
+			r.Get("/endpoint-slices/{namespace}/{name}", s.handleGetEndpointSlice)
 			r.Get("/network-policies", s.handleListNetworkPolicies)
 			r.Get("/network-policies/{namespace}/{name}", s.handleGetNetworkPolicy)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)

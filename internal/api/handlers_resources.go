@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
@@ -1643,6 +1644,148 @@ func (s *Server) handleGetEndpoints(w http.ResponseWriter, r *http.Request) {
 		"metadata":   endpoint.ObjectMeta,
 		"kind":       "Endpoints",
 		"apiVersion": "v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleListEndpointSlices(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get endpoint slices from resource manager
+	endpointSlices, err := s.resourceManager.ListEndpointSlices(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list endpoint slices", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(endpointSlices)
+
+	// Apply basic filtering (we'll need to add EndpointSlice filters to selectors package)
+	var filteredEndpointSlices []interface{}
+	for _, es := range endpointSlices {
+		if endpointSliceMap, ok := es.(map[string]interface{}); ok {
+			// Basic search filter
+			if search != "" {
+				if metadata, ok := endpointSliceMap["metadata"].(map[string]interface{}); ok {
+					if name, ok := metadata["name"].(string); ok {
+						if !strings.Contains(strings.ToLower(name), strings.ToLower(search)) {
+							continue
+						}
+					}
+				}
+			}
+			filteredEndpointSlices = append(filteredEndpointSlices, es)
+		}
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, endpointSlice := range filteredEndpointSlices {
+		responses = append(responses, s.endpointSliceToResponse(endpointSlice))
+	}
+
+	// Apply pagination
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > len(responses) {
+		responses = []map[string]interface{}{}
+	} else if end > len(responses) {
+		responses = responses[start:]
+	} else {
+		responses = responses[start:end]
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetEndpointSlice(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get endpoint slice from resource manager
+	endpointSlice, err := s.resourceManager.GetEndpointSlice(r.Context(), namespace, name)
+	if err != nil {
+		s.logger.Error("Failed to get endpoint slice",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.endpointSliceToResponse(endpointSlice)
+
+	// Add full endpoint slice details for detailed view
+	endpointSliceMap := endpointSlice.(map[string]interface{})
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       endpointSliceMap["spec"],
+		"metadata":   endpointSliceMap["metadata"],
+		"kind":       "EndpointSlice",
+		"apiVersion": "discovery.k8s.io/v1",
 	}
 
 	w.Header().Set("Content-Type", "application/json")

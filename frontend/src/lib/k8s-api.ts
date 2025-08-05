@@ -251,6 +251,26 @@ export interface Endpoints {
 	annotations: Record<string, string>;
 }
 
+// EndpointSlice interfaces based on the actual backend API response
+export interface EndpointSlice {
+	name: string;
+	namespace: string;
+	age: string;
+	addressType: string;
+	endpoints: number;
+	ready: string;
+	readyCount: number;
+	notReadyCount: number;
+	ports: number;
+	addresses: string[];
+	portStrings: string[];
+	addressesDisplay: string;
+	portsDisplay: string;
+	creationTimestamp: string;
+	labels: Record<string, string>;
+	annotations: Record<string, string>;
+}
+
 // NetworkPolicy interfaces based on the actual backend API response
 export interface NetworkPolicy {
 	name: string;
@@ -408,6 +428,23 @@ export interface DashboardEndpoints {
 	portsDisplay: string;
 }
 
+export interface DashboardEndpointSlice {
+	id: number;
+	name: string;
+	namespace: string;
+	age: string;
+	addressType: string;
+	endpoints: number;
+	ready: string;
+	readyCount: number;
+	notReadyCount: number;
+	ports: number;
+	addresses: string[];
+	portStrings: string[];
+	addressesDisplay: string;
+	portsDisplay: string;
+}
+
 export interface DashboardIngress {
 	id: number;
 	name: string;
@@ -534,6 +571,18 @@ export class K8sService {
 
 	async getEndpoint(namespace: string, name: string): Promise<Endpoints> {
 		return apiClient.get<Endpoints>(`/endpoints/${namespace}/${name}`);
+	}
+
+	// EndpointSlices operations
+	async getEndpointSlices(namespace?: string): Promise<EndpointSlice[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: EndpointSlice[] }; status: string }>(`/endpoint-slices${query}`);
+		return response.data?.items || [];
+	}
+
+	async getEndpointSlice(namespace: string, name: string): Promise<{ summary: EndpointSlice; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: EndpointSlice; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/endpoint-slices/${namespace}/${name}`);
+		return response.data;
 	}
 
 	// Ingress operations
@@ -779,6 +828,28 @@ export function transformEndpointsToUI(endpoints: Endpoints[]): DashboardEndpoin
 		ports: endpoint.ports,
 		addressesDisplay: endpoint.addressesDisplay,
 		portsDisplay: endpoint.portsDisplay
+	}));
+}
+
+export function transformEndpointSlicesToUI(endpointSlices: EndpointSlice[]): DashboardEndpointSlice[] {
+	if (!endpointSlices || !Array.isArray(endpointSlices)) {
+		return [];
+	}
+	return endpointSlices.map((endpointSlice, index) => ({
+		id: index + 1,
+		name: endpointSlice.name,
+		namespace: endpointSlice.namespace,
+		age: endpointSlice.age,
+		addressType: endpointSlice.addressType,
+		endpoints: endpointSlice.endpoints,
+		ready: endpointSlice.ready,
+		readyCount: endpointSlice.readyCount,
+		notReadyCount: endpointSlice.notReadyCount,
+		ports: endpointSlice.ports,
+		addresses: endpointSlice.addresses,
+		portStrings: endpointSlice.portStrings,
+		addressesDisplay: endpointSlice.addressesDisplay,
+		portsDisplay: endpointSlice.portsDisplay
 	}));
 }
 

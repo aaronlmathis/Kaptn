@@ -178,6 +178,8 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.kubeClient.CoreV1().Secrets(req.Namespace).Delete(ctx, req.Name, deleteOptions)
 	case "Endpoints":
 		return rm.kubeClient.CoreV1().Endpoints(req.Namespace).Delete(ctx, req.Name, deleteOptions)
+	case "EndpointSlice":
+		return rm.deleteEndpointSlice(ctx, req.Namespace, req.Name, deleteOptions)
 	case "Ingress":
 		return rm.deleteIngress(ctx, req.Namespace, req.Name, deleteOptions)
 	case "Gateway":
@@ -364,6 +366,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert Endpoints to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredEndpoints)
+	case "EndpointSlice":
+		// Get EndpointSlice using dynamic client
+		endpointSliceObj, err := rm.GetEndpointSlice(ctx, namespace, name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert map to unstructured
+		unstructuredEndpointSlice := &unstructured.Unstructured{Object: endpointSliceObj.(map[string]interface{})}
+		obj = rm.stripManagedFields(unstructuredEndpointSlice)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -472,6 +484,44 @@ func (rm *ResourceManager) ListEndpoints(ctx context.Context, namespace string) 
 		return []v1.Endpoints{}, nil
 	}
 	return endpoints.Items, nil
+}
+
+// ListEndpointSlices lists all endpoint slices in a namespace or across all namespaces
+func (rm *ResourceManager) ListEndpointSlices(ctx context.Context, namespace string) ([]interface{}, error) {
+	// Use dynamic client to get EndpointSlices from discovery.k8s.io/v1
+	endpointSlicesGVR := schema.GroupVersionResource{
+		Group:    "discovery.k8s.io",
+		Version:  "v1",
+		Resource: "endpointslices",
+	}
+
+	endpointSlicesList, err := rm.dynamicClient.Resource(endpointSlicesGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list endpoint slices: %w", err)
+	}
+
+	var result []interface{}
+	for _, item := range endpointSlicesList.Items {
+		result = append(result, item.Object)
+	}
+
+	return result, nil
+}
+
+// GetEndpointSlice gets a specific endpoint slice
+func (rm *ResourceManager) GetEndpointSlice(ctx context.Context, namespace, name string) (interface{}, error) {
+	endpointSlicesGVR := schema.GroupVersionResource{
+		Group:    "discovery.k8s.io",
+		Version:  "v1",
+		Resource: "endpointslices",
+	}
+
+	endpointSlice, err := rm.dynamicClient.Resource(endpointSlicesGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get endpoint slice: %w", err)
+	}
+
+	return endpointSlice.Object, nil
 }
 
 // ListIngresses lists all ingresses and Istio gateways in a namespace
@@ -849,4 +899,20 @@ func (rm *ResourceManager) ListNetworkPolicies(ctx context.Context, namespace st
 	}
 
 	return networkPolicies, nil
+}
+
+// deleteEndpointSlice deletes an EndpointSlice resource
+func (rm *ResourceManager) deleteEndpointSlice(ctx context.Context, namespace, name string, deleteOptions metav1.DeleteOptions) error {
+	endpointSlicesGVR := schema.GroupVersionResource{
+		Group:    "discovery.k8s.io",
+		Version:  "v1",
+		Resource: "endpointslices",
+	}
+
+	err := rm.dynamicClient.Resource(endpointSlicesGVR).Namespace(namespace).Delete(ctx, name, deleteOptions)
+	if err != nil {
+		return fmt.Errorf("failed to delete EndpointSlice: %w", err)
+	}
+
+	return nil
 }

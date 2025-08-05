@@ -968,6 +968,135 @@ func (s *Server) endpointsToResponse(endpoint v1.Endpoints) map[string]interface
 	}
 }
 
+// endpointSliceToResponse converts a Kubernetes EndpointSlice to response format
+func (s *Server) endpointSliceToResponse(endpointSlice interface{}) map[string]interface{} {
+	endpointSliceMap, ok := endpointSlice.(map[string]interface{})
+	if !ok {
+		return map[string]interface{}{}
+	}
+
+	// Extract metadata
+	metadata, _ := endpointSliceMap["metadata"].(map[string]interface{})
+	name, _ := metadata["name"].(string)
+	namespace, _ := metadata["namespace"].(string)
+	labels, _ := metadata["labels"].(map[string]interface{})
+	annotations, _ := metadata["annotations"].(map[string]interface{})
+
+	// Extract creation timestamp and calculate age
+	var age string
+	var creationTimestamp interface{}
+	if creationTimestampStr, ok := metadata["creationTimestamp"].(string); ok {
+		if creationTime, err := time.Parse(time.RFC3339, creationTimestampStr); err == nil {
+			age = calculateAge(creationTime)
+			creationTimestamp = creationTime
+		}
+	}
+
+	// Extract addressType from spec
+	spec, _ := endpointSliceMap["spec"].(map[string]interface{})
+	addressType, _ := spec["addressType"].(string)
+
+	// Extract endpoints from spec
+	endpoints, _ := spec["endpoints"].([]interface{})
+	endpointCount := len(endpoints)
+
+	// Count ready and not ready endpoints
+	readyCount := 0
+	notReadyCount := 0
+	addresses := make([]string, 0) // Initialize as empty slice, not nil
+
+	for _, ep := range endpoints {
+		if epMap, ok := ep.(map[string]interface{}); ok {
+			// Check if endpoint is ready
+			conditions, _ := epMap["conditions"].(map[string]interface{})
+			ready, _ := conditions["ready"].(bool)
+
+			if ready {
+				readyCount++
+			} else {
+				notReadyCount++
+			}
+
+			// Extract addresses
+			if addressesSlice, ok := epMap["addresses"].([]interface{}); ok {
+				for _, addr := range addressesSlice {
+					if addrStr, ok := addr.(string); ok {
+						statusSuffix := ""
+						if !ready {
+							statusSuffix = " (not ready)"
+						}
+						addresses = append(addresses, addrStr+statusSuffix)
+					}
+				}
+			}
+		}
+	}
+
+	// Extract ports from spec
+	ports, _ := spec["ports"].([]interface{})
+	portCount := len(ports)
+	portStrings := make([]string, 0) // Initialize as empty slice, not nil
+
+	for _, port := range ports {
+		if portMap, ok := port.(map[string]interface{}); ok {
+			portNum, _ := portMap["port"].(float64) // JSON numbers are float64
+			portName, _ := portMap["name"].(string)
+			protocol, _ := portMap["protocol"].(string)
+
+			portStr := fmt.Sprintf("%.0f", portNum)
+			if portName != "" {
+				portStr = fmt.Sprintf("%s:%.0f", portName, portNum)
+			}
+			if protocol != "" {
+				portStr = fmt.Sprintf("%s/%s", portStr, protocol)
+			}
+			portStrings = append(portStrings, portStr)
+		}
+	}
+
+	// Format addresses display
+	addressesDisplay := "None"
+	if len(addresses) > 0 {
+		if len(addresses) == 1 {
+			addressesDisplay = addresses[0]
+		} else {
+			addressesDisplay = fmt.Sprintf("%d address(es)", len(addresses))
+		}
+	}
+
+	// Format ready status
+	readyStatus := fmt.Sprintf("%d/%d", readyCount, endpointCount)
+
+	// Format ports display
+	portsDisplay := "None"
+	if len(portStrings) > 0 {
+		if len(portStrings) == 1 {
+			portsDisplay = portStrings[0]
+		} else {
+			portsDisplay = fmt.Sprintf("%d port(s)", len(portStrings))
+		}
+	}
+
+	return map[string]interface{}{
+		"name":              name,
+		"namespace":         namespace,
+		"age":               age,
+		"addressType":       addressType,
+		"endpoints":         endpointCount,
+		"ready":             readyStatus,
+		"readyCount":        readyCount,
+		"notReadyCount":     notReadyCount,
+		"ports":             portCount,
+		"addresses":         addresses,
+		"portStrings":       portStrings,
+		"addressesDisplay":  addressesDisplay,
+		"portsDisplay":      portsDisplay,
+		"creationTimestamp": creationTimestamp,
+		"labels":            labels,
+		"annotations":       annotations,
+	}
+}
+
 // networkPolicyToResponse converts a NetworkPolicy to a response format
 func (s *Server) networkPolicyToResponse(networkPolicy networkingv1.NetworkPolicy) map[string]interface{} {
 	age := time.Since(networkPolicy.CreationTimestamp.Time).String()

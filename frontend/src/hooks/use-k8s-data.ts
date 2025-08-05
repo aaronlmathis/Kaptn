@@ -11,6 +11,7 @@ import {
 	type DashboardJob,
 	type DashboardCronJob,
 	type DashboardEndpoints,
+	type DashboardEndpointSlice,
 	type DashboardIngress,
 	type DashboardNetworkPolicy,
 	type OverviewData,
@@ -24,6 +25,7 @@ import {
 	transformJobsToUI,
 	transformCronJobsToUI,
 	transformEndpointsToUI,
+	transformEndpointSlicesToUI,
 	transformIngressesToUI,
 	transformNetworkPoliciesToUI
 } from '@/lib/k8s-api';
@@ -351,6 +353,35 @@ export function useEndpoints(): UseK8sDataResult<DashboardEndpoints> {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch endpoints');
 			console.error('Error fetching endpoints:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useEndpointSlices(): UseK8sDataResult<DashboardEndpointSlice> {
+	const [data, setData] = useState<DashboardEndpointSlice[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const endpointSlices = await k8sService.getEndpointSlices(namespace);
+			const transformedEndpointSlices = transformEndpointSlicesToUI(endpointSlices);
+			setData(transformedEndpointSlices);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch endpoint slices');
+			console.error('Error fetching endpoint slices:', err);
 		} finally {
 			setLoading(false);
 		}

@@ -459,6 +459,51 @@ export function useEndpointsDetails(namespace: string, name: string, enabled: bo
 	return { data, loading, error }
 }
 
+interface EndpointSliceDetails {
+	summary: Record<string, unknown>
+	spec: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+export function useEndpointSliceDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<EndpointSliceDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchEndpointSliceDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/endpoint-slices/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch endpoint slice details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchEndpointSliceDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}
+
 interface NetworkPolicyDetails {
 	summary: {
 		name: string

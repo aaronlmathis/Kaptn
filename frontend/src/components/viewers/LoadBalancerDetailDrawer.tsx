@@ -135,12 +135,12 @@ export function LoadBalancerDetailDrawer({ item, open, onOpenChange }: LoadBalan
 			typeof (serviceDetails.status as Record<string, unknown>)?.loadBalancer === 'object' &&
 			(serviceDetails.status as Record<string, unknown>)?.loadBalancer !== null) {
 			const loadBalancer = (serviceDetails.status as Record<string, unknown>).loadBalancer as Record<string, unknown>
-			
+
 			if (loadBalancer.ingress && Array.isArray(loadBalancer.ingress)) {
 				const ingress = loadBalancer.ingress as Array<Record<string, unknown>>
 				if (ingress.length > 0) {
 					additionalRows.push(["Ingress Points", <div className="text-sm">{ingress.length} ingress point(s)</div>])
-					
+
 					ingress.forEach((ing, index) => {
 						const ingressLabel = `Ingress ${index + 1}`
 						const ingressDetails = []
