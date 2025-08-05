@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { LoadBalancersPageContainer } from "@/components/pages/LoadBalancersPageContainer";
+
+const title = "Load Balancers";
+---
+
+<Layout title={title}>
+	<LoadBalancersPageContainer client:load />
+</Layout>

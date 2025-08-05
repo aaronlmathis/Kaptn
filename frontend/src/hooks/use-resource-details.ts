@@ -515,3 +515,8 @@ export function useNetworkPolicyDetails(namespace: string, name: string, enabled
 
 	return { data, loading, error }
 }
+
+export function useLoadBalancerDetails(namespace: string, name: string, enabled: boolean = true) {
+	// LoadBalancers are Services with type=LoadBalancer, so we can reuse the service details hook
+	return useServiceDetails(namespace, name, enabled)
+}

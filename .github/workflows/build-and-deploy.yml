@@ -31,6 +31,14 @@ jobs:
           mkdir -p "$HOME/.kube"
           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
 
+      - name: Verify kubeconfig
+        run: |
+          echo "Testing Kubernetes config..."
+          kubectl config view --minify --output 'jsonpath={..cluster.server}'
+          echo ""
+          echo "Cluster should be reachable:"
+          kubectl get nodes
+
       - name: Restart Kaptn Deployment
         run: |
           kubectl rollout restart deployment/kaptn -n monitoring

@@ -29,6 +29,7 @@ import {
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
+import { type LoadBalancer } from '@/lib/schemas/loadbalancer';
 
 interface UseK8sDataResult<T> {
 	data: T[];
@@ -110,6 +111,43 @@ export function useServices(): UseK8sDataResult<ServiceTableRow> {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch services');
 			console.error('Error fetching services:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useLoadBalancers(): UseK8sDataResult<LoadBalancer> {
+	const [data, setData] = useState<LoadBalancer[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const services = await k8sService.getServices(namespace);
+			// Filter to only LoadBalancer type services
+			const loadBalancerServices = services.filter(service => service.type === 'LoadBalancer');
+			const transformedServices = transformServicesToUI(loadBalancerServices);
+			// Transform to LoadBalancer format (they have the same structure for now)
+			const loadBalancers: LoadBalancer[] = transformedServices.map(service => ({
+				...service,
+				loadBalancerIP: service.externalIP !== '<none>' ? service.externalIP : undefined,
+				ingressPoints: service.externalIP !== '<none>' ? [service.externalIP] : undefined,
+			}));
+			setData(loadBalancers);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch load balancers');
+			console.error('Error fetching load balancers:', err);
 		} finally {
 			setLoading(false);
 		}
