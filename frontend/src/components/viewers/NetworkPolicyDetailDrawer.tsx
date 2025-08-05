@@ -125,7 +125,7 @@ export function NetworkPolicyDetailDrawer({
 							<div className="text-sm font-medium">Ingress Rules ({details.summary.ingressRules})</div>
 							<div className="p-3 bg-muted/50 rounded-lg">
 								<div className="text-sm text-muted-foreground">
-									{details.summary.ingressRules > 0 
+									{details.summary.ingressRules > 0
 										? `${details.summary.ingressRules} ingress rule(s) configured`
 										: "No ingress rules - all ingress traffic blocked"
 									}
@@ -138,7 +138,7 @@ export function NetworkPolicyDetailDrawer({
 							<div className="text-sm font-medium">Egress Rules ({details.summary.egressRules})</div>
 							<div className="p-3 bg-muted/50 rounded-lg">
 								<div className="text-sm text-muted-foreground">
-									{details.summary.egressRules > 0 
+									{details.summary.egressRules > 0
 										? `${details.summary.egressRules} egress rule(s) configured`
 										: "No egress rules - all egress traffic allowed (if Egress policy type is set)"
 									}
@@ -151,7 +151,7 @@ export function NetworkPolicyDetailDrawer({
 							<div className="text-sm font-medium">Affected Pods ({details.summary.affectedPods})</div>
 							<div className="p-3 bg-muted/50 rounded-lg">
 								<div className="text-sm text-muted-foreground">
-									{details.summary.affectedPods > 0 
+									{details.summary.affectedPods > 0
 										? `${details.summary.affectedPods} pod(s) affected by this policy`
 										: "No pods currently affected by this policy"
 									}

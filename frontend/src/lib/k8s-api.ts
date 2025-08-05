@@ -438,7 +438,7 @@ export class K8sService {
 	async getPods(namespace?: string): Promise<Pod[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: Pod[] }; status: string }>(`/pods${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	async getPod(namespace: string, name: string): Promise<Pod> {
@@ -452,7 +452,7 @@ export class K8sService {
 	// Node operations
 	async getNodes(): Promise<Node[]> {
 		const response = await apiClient.get<{ data: { items: Node[] }; status: string }>('/nodes');
-		return response.data.items;
+		return response.data?.items || [];
 	} async cordonNode(nodeName: string): Promise<{ success: boolean; message: string }> {
 		return apiClient.post(`/nodes/${nodeName}/cordon`);
 	}
@@ -472,42 +472,42 @@ export class K8sService {
 	async getServices(namespace?: string): Promise<Service[]> {
 		const endpoint = namespace ? `/services/${namespace}` : '/services';
 		const response = await apiClient.get<{ data: { items: Service[] }; status: string }>(endpoint);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	// Deployment operations (these might need to be implemented in the backend)
 	async getDeployments(namespace?: string): Promise<Deployment[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: Deployment[] }; status: string }>(`/deployments${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	// StatefulSet operations
 	async getStatefulSets(namespace?: string): Promise<StatefulSet[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: StatefulSet[] }; status: string }>(`/statefulsets${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	// DaemonSet operations
 	async getDaemonSets(namespace?: string): Promise<DaemonSet[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: DaemonSet[] }; status: string }>(`/daemonsets${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	// ReplicaSet operations
 	async getReplicaSets(namespace?: string): Promise<ReplicaSet[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: ReplicaSet[] }; status: string }>(`/replicasets${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	// Job operations
 	async getJobs(namespace?: string): Promise<Job[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: Job[] }; status: string }>(`/k8s-jobs${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	async getJob(namespace: string, name: string): Promise<Job> {
@@ -518,7 +518,7 @@ export class K8sService {
 	async getCronJobs(namespace?: string): Promise<CronJob[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: CronJob[] }; status: string }>(`/cronjobs${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	async getCronJob(namespace: string, name: string): Promise<CronJob> {
@@ -529,7 +529,7 @@ export class K8sService {
 	async getEndpoints(namespace?: string): Promise<Endpoints[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: Endpoints[] }; status: string }>(`/endpoints${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	async getEndpoint(namespace: string, name: string): Promise<Endpoints> {
@@ -540,7 +540,7 @@ export class K8sService {
 	async getIngresses(namespace?: string): Promise<Ingress[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: Ingress[] }; status: string }>(`/ingresses${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	async getIngress(namespace: string, name: string): Promise<{ summary: Ingress; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
@@ -552,7 +552,7 @@ export class K8sService {
 	async getNetworkPolicies(namespace?: string): Promise<NetworkPolicy[]> {
 		const query = namespace ? `?namespace=${namespace}` : '';
 		const response = await apiClient.get<{ data: { items: NetworkPolicy[] }; status: string }>(`/network-policies${query}`);
-		return response.data.items;
+		return response.data?.items || [];
 	}
 
 	async getNetworkPolicy(namespace: string, name: string): Promise<{ summary: NetworkPolicy; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
@@ -609,6 +609,9 @@ export class K8sService {
 
 // Utility functions to transform backend data to UI-compatible format
 export function transformPodsToUI(pods: Pod[]): DashboardPod[] {
+	if (!pods || !Array.isArray(pods)) {
+		return [];
+	}
 	return pods.map((pod, index) => ({
 		id: index + 1,
 		name: pod.name,
@@ -633,6 +636,9 @@ function formatNodeRoles(roles: string[]): string {
 }
 
 export function transformNodesToUI(nodes: Node[]): NodeTableRow[] {
+	if (!nodes || !Array.isArray(nodes)) {
+		return [];
+	}
 	return nodes.map((node, index) => ({
 		id: index,
 		name: node.name,
@@ -642,6 +648,9 @@ export function transformNodesToUI(nodes: Node[]): NodeTableRow[] {
 		version: node.nodeInfo.kubeletVersion
 	}));
 } export function transformServicesToUI(services: Service[]): ServiceTableRow[] {
+	if (!services || !Array.isArray(services)) {
+		return [];
+	}
 	return services.map((service, index) => ({
 		id: index,
 		name: service.name,
@@ -655,6 +664,9 @@ export function transformNodesToUI(nodes: Node[]): NodeTableRow[] {
 }
 
 export function transformDeploymentsToUI(deployments: Deployment[]): DashboardDeployment[] {
+	if (!deployments || !Array.isArray(deployments)) {
+		return [];
+	}
 	return deployments.map((deployment, index) => ({
 		id: index,
 		name: deployment.name,
@@ -668,6 +680,9 @@ export function transformDeploymentsToUI(deployments: Deployment[]): DashboardDe
 }
 
 export function transformStatefulSetsToUI(statefulSets: StatefulSet[]): DashboardStatefulSet[] {
+	if (!statefulSets || !Array.isArray(statefulSets)) {
+		return [];
+	}
 	return statefulSets.map((statefulSet, index) => ({
 		id: index,
 		name: statefulSet.name,
@@ -682,6 +697,9 @@ export function transformStatefulSetsToUI(statefulSets: StatefulSet[]): Dashboar
 }
 
 export function transformDaemonSetsToUI(daemonSets: DaemonSet[]): DashboardDaemonSet[] {
+	if (!daemonSets || !Array.isArray(daemonSets)) {
+		return [];
+	}
 	return daemonSets.map((daemonSet, index) => ({
 		id: index,
 		name: daemonSet.name,
@@ -697,6 +715,9 @@ export function transformDaemonSetsToUI(daemonSets: DaemonSet[]): DashboardDaemo
 }
 
 export function transformReplicaSetsToUI(replicaSets: ReplicaSet[]): DashboardReplicaSet[] {
+	if (!replicaSets || !Array.isArray(replicaSets)) {
+		return [];
+	}
 	return replicaSets.map((replicaSet, index) => ({
 		id: index,
 		name: replicaSet.name,
@@ -710,6 +731,9 @@ export function transformReplicaSetsToUI(replicaSets: ReplicaSet[]): DashboardRe
 }
 
 export function transformJobsToUI(jobs: Job[]): DashboardJob[] {
+	if (!jobs || !Array.isArray(jobs)) {
+		return [];
+	}
 	return jobs.map((job, index) => ({
 		id: index,
 		name: job.name,
@@ -723,6 +747,9 @@ export function transformJobsToUI(jobs: Job[]): DashboardJob[] {
 }
 
 export function transformCronJobsToUI(cronJobs: CronJob[]): DashboardCronJob[] {
+	if (!cronJobs || !Array.isArray(cronJobs)) {
+		return [];
+	}
 	return cronJobs.map((cronJob, index) => ({
 		id: index,
 		name: cronJob.name,
@@ -737,6 +764,9 @@ export function transformCronJobsToUI(cronJobs: CronJob[]): DashboardCronJob[] {
 }
 
 export function transformEndpointsToUI(endpoints: Endpoints[]): DashboardEndpoints[] {
+	if (!endpoints || !Array.isArray(endpoints)) {
+		return [];
+	}
 	return endpoints.map((endpoint, index) => ({
 		id: index + 1,
 		name: endpoint.name,
@@ -753,6 +783,9 @@ export function transformEndpointsToUI(endpoints: Endpoints[]): DashboardEndpoin
 }
 
 export function transformIngressesToUI(ingresses: Ingress[]): DashboardIngress[] {
+	if (!ingresses || !Array.isArray(ingresses)) {
+		return [];
+	}
 	return ingresses.map((ingress, index) => ({
 		id: index + 1,
 		name: ingress.name,
@@ -768,6 +801,9 @@ export function transformIngressesToUI(ingresses: Ingress[]): DashboardIngress[]
 }
 
 export function transformNetworkPoliciesToUI(networkPolicies: NetworkPolicy[]): DashboardNetworkPolicy[] {
+	if (!networkPolicies || !Array.isArray(networkPolicies)) {
+		return [];
+	}
 	return networkPolicies.map((networkPolicy, index) => ({
 		id: index + 1,
 		name: networkPolicy.name,

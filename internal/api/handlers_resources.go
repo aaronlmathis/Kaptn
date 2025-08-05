@@ -211,7 +211,16 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to list deployments", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -287,7 +296,16 @@ func (s *Server) handleListStatefulSets(w http.ResponseWriter, r *http.Request) 
 		s.logger.Error("Failed to list statefulsets", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -363,7 +381,16 @@ func (s *Server) handleListReplicaSets(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to list replicasets", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -439,7 +466,16 @@ func (s *Server) handleListDaemonSets(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to list daemonsets", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -515,7 +551,16 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to list jobs", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -591,7 +636,16 @@ func (s *Server) handleListCronJobs(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to list cronjobs", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -770,7 +824,16 @@ func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to list services", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"total":    0,
+				"page":     page,
+				"pageSize": pageSize,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -819,7 +882,13 @@ func (s *Server) handleListServicesInNamespace(w http.ResponseWriter, r *http.Re
 	if namespace == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "namespace is required"})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items": []interface{}{},
+			},
+			"status": "error",
+			"error":  "namespace is required",
+		})
 		return
 	}
 
@@ -830,7 +899,13 @@ func (s *Server) handleListServicesInNamespace(w http.ResponseWriter, r *http.Re
 			zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items": []interface{}{},
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -870,7 +945,13 @@ func (s *Server) handleListAllIngresses(w http.ResponseWriter, r *http.Request) 
 				zap.Error(err))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]interface{}{
+					"items": []interface{}{},
+				},
+				"status": "error",
+				"error":  err.Error(),
+			})
 			return
 		}
 		allIngresses = ingresses
@@ -882,7 +963,13 @@ func (s *Server) handleListAllIngresses(w http.ResponseWriter, r *http.Request) 
 			s.logger.Error("Failed to list namespaces for ingresses", zap.Error(err))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"data": map[string]interface{}{
+					"items": []interface{}{},
+				},
+				"status": "error",
+				"error":  err.Error(),
+			})
 			return
 		}
 
@@ -923,7 +1010,13 @@ func (s *Server) handleListIngresses(w http.ResponseWriter, r *http.Request) {
 	if namespace == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "namespace is required"})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items": []interface{}{},
+			},
+			"status": "error",
+			"error":  "namespace is required",
+		})
 		return
 	}
 
@@ -934,7 +1027,13 @@ func (s *Server) handleListIngresses(w http.ResponseWriter, r *http.Request) {
 			zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items": []interface{}{},
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -1396,7 +1495,16 @@ func (s *Server) handleListEndpoints(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to list endpoints", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 
@@ -1573,7 +1681,16 @@ func (s *Server) handleListNetworkPolicies(w http.ResponseWriter, r *http.Reques
 		s.logger.Error("Failed to list network policies", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
 		return
 	}
 

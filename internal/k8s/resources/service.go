@@ -384,6 +384,9 @@ func (rm *ResourceManager) ListServices(ctx context.Context, namespace string) (
 	if err != nil {
 		return nil, err
 	}
+	if services.Items == nil {
+		return []v1.Service{}, nil
+	}
 	return services.Items, nil
 }
 
@@ -392,6 +395,9 @@ func (rm *ResourceManager) ListDeployments(ctx context.Context, namespace string
 	deployments, err := rm.kubeClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
+	}
+	if deployments.Items == nil {
+		return []appsv1.Deployment{}, nil
 	}
 	return deployments.Items, nil
 }
@@ -402,6 +408,9 @@ func (rm *ResourceManager) ListStatefulSets(ctx context.Context, namespace strin
 	if err != nil {
 		return nil, err
 	}
+	if statefulSets.Items == nil {
+		return []appsv1.StatefulSet{}, nil
+	}
 	return statefulSets.Items, nil
 }
 
@@ -410,6 +419,9 @@ func (rm *ResourceManager) ListDaemonSets(ctx context.Context, namespace string)
 	daemonSets, err := rm.kubeClient.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
+	}
+	if daemonSets.Items == nil {
+		return []appsv1.DaemonSet{}, nil
 	}
 	return daemonSets.Items, nil
 }
@@ -420,6 +432,9 @@ func (rm *ResourceManager) ListReplicaSets(ctx context.Context, namespace string
 	if err != nil {
 		return nil, err
 	}
+	if replicaSets.Items == nil {
+		return []appsv1.ReplicaSet{}, nil
+	}
 	return replicaSets.Items, nil
 }
 
@@ -428,6 +443,9 @@ func (rm *ResourceManager) ListJobs(ctx context.Context, namespace string) ([]ba
 	jobs, err := rm.kubeClient.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
+	}
+	if jobs.Items == nil {
+		return []batchv1.Job{}, nil
 	}
 	return jobs.Items, nil
 }
@@ -438,6 +456,9 @@ func (rm *ResourceManager) ListCronJobs(ctx context.Context, namespace string) (
 	if err != nil {
 		return nil, err
 	}
+	if cronJobs.Items == nil {
+		return []batchv1.CronJob{}, nil
+	}
 	return cronJobs.Items, nil
 }
 
@@ -446,6 +467,9 @@ func (rm *ResourceManager) ListEndpoints(ctx context.Context, namespace string) 
 	endpoints, err := rm.kubeClient.CoreV1().Endpoints(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
+	}
+	if endpoints.Items == nil {
+		return []v1.Endpoints{}, nil
 	}
 	return endpoints.Items, nil
 }
@@ -806,14 +830,22 @@ func (rm *ResourceManager) ListNetworkPolicies(ctx context.Context, namespace st
 		if err != nil {
 			return nil, fmt.Errorf("failed to list network policies in namespace %s: %w", namespace, err)
 		}
-		networkPolicies = netPolList.Items
+		if netPolList.Items == nil {
+			networkPolicies = []networkingv1.NetworkPolicy{}
+		} else {
+			networkPolicies = netPolList.Items
+		}
 	} else {
 		// Get network policies from all namespaces
 		netPolList, err := rm.kubeClient.NetworkingV1().NetworkPolicies("").List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to list network policies: %w", err)
 		}
-		networkPolicies = netPolList.Items
+		if netPolList.Items == nil {
+			networkPolicies = []networkingv1.NetworkPolicy{}
+		} else {
+			networkPolicies = netPolList.Items
+		}
 	}
 
 	return networkPolicies, nil
