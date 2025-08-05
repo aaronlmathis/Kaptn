@@ -43,20 +43,25 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 
 1. **Clone and setup**:
    ```bash
-   git clone https://github.com/aaronlmathis/k8s-admin-dash.git
-   cd kad
+   git clone https://github.com/aaronlmathis/kaptn.git
+   cd kaptn
    make install-deps
    ```
 
 2. **Start a Kind cluster**:
+   Launch a simple kubernetes cluster for local development:
    ```bash
    make kind-up
    ```
+   Or, minikube works as wel...
 
 3. **Run the application**:
    ```bash
-   # Terminal 1: Start backend
-   make build && ./bin/server
+   make build
+   ./bin/server         # Build frontend and backend server.
+   
+   # Launch server. Web portal and API default to :8080
+   ./bin/server
    
    # Available command line options:
    ./bin/server --version           # Show version information
@@ -80,7 +85,7 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
    make docker
    ```
 
-3. **Deploy to Kubernetes** (coming in M5):
+3. **Deploy to Kubernetes** (coming soon):
    ```bash
    helm install kad ./deploy/helm -n kube-system
    ```
@@ -118,33 +123,171 @@ The application can be configured via environment variables or a config file:
 # config.yaml
 server:
   addr: "0.0.0.0:8080"
-kubernetes:
-  mode: "kubeconfig"  # or "incluster"
-logging:
-  level: "info"
-```
+  base_path: "/"
+  cors:
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 
+security:
+  # enable one of: "none", "header", "oidc"
+  auth_mode: "none"
+  oidc:
+    issuer: ""
+    client_id: ""
+    audience: ""
+    jwks_url: ""
+
+kubernetes:
+  mode: "kubeconfig"        # or "incluster"
+  kubeconfig_path: ""       # used if mode=kubeconfig, defaults to $KUBECONFIG
+  namespace_default: "default"
+
+features:
+  enable_apply: true
+  enable_nodes_actions: true
+  enable_overview: true
+  enable_prometheus_analytics: true
+
+rate_limits:
+  apply_per_minute: 10
+  actions_per_minute: 20
+
+logging:
+  level: "info"             # debug, info, warn, error
+
+integrations:
+  prometheus:
+    url: "http://prometheus.monitoring.svc:9090"
+    timeout: "5s"
+    enabled: true
+
+caching:
+  overview_ttl: "2s"
+  analytics_ttl: "60s"
+
+jobs:
+  persistence_enabled: true
+  store_path: "./data/jobs"
+  cleanup_interval: "1h"
+  max_age: "24h"
+```
+```
 Key environment variables:
 - `PORT` - Server port (default: 8080)
 - `LOG_LEVEL` - Logging level (debug, info, warn, error)
 - `KUBECONFIG` - Path to kubeconfig file
 - `KAD_CONFIG_PATH` - Path to config file
+```
 
 ---
 
+# Kaptn Administrative Feature Roadmap
 
-## API Endpoints
+## Cluster Overview & Management
+- View real-time cluster health and resource utilization (CPU, memory, disk, network)
+- Display node status, conditions, and capacity usage
+- Show aggregated namespace summaries (resource quotas, usage, limits)
+- Cluster-wide event stream with filtering by type, namespace, or keyword
+- View and manage Kubernetes API server, scheduler, and controller-manager status
+- View all API resources, CRDs, and versions
 
-### Health & Status
-- `GET /healthz` - Health check
-- `GET /readyz` - Readiness check  
-- `GET /version` - Version information
+## Namespace & Resource Scoping
+- Switch between namespaces quickly
+- Create, edit, and delete namespaces
+- Apply resource quotas and limit ranges per namespace
+- Manage namespace labels and annotations
 
-### Kubernetes Resources (Coming in M1)
-- `GET /api/v1/nodes` - List cluster nodes
-- `GET /api/v1/pods` - List pods with filtering
-- `WS /api/v1/stream/nodes` - Real-time node updates
-- `WS /api/v1/stream/pods` - Real-time pod updates
+## Workload Management
+- List, describe, and filter Deployments, StatefulSets, DaemonSets, and ReplicaSets
+- Scale workloads (manual replica count adjustment)
+- Restart workloads (rolling restart)
+- Trigger image updates or rollbacks
+- View rollout history and undo to previous versions
+- Pause and resume rollouts
+- Manage workload labels and annotations
+
+## Pod Management
+- View pod details (status, events, IP, node placement, resource requests/limits)
+- Stream logs from one or multiple containers
+- Execute shell commands inside running containers (interactive exec)
+- Copy files to/from containers
+- Delete pods (to trigger redeployment)
+- Drain or cordon nodes hosting problematic pods
+- Edit pod YAML for transient debugging changes
+
+## Service & Networking Management
+- List and describe Services, Endpoints, and EndpointSlices
+- Create, edit, and delete Services (ClusterIP, NodePort, LoadBalancer)
+- Restart selected services or force re-provisioning
+- Manage Ingress objects (NGINX, Istio, etc.)
+- View and edit ConfigMaps and Secrets (with RBAC-based redaction)
+- View and modify NetworkPolicies
+- Port-forward services to local machine
+- Test service reachability from within the cluster
+
+## Storage Management
+- List and describe PersistentVolumeClaims and PersistentVolumes
+- Edit PVCs and rebind to different PVs
+- View storage class details and provisioner status
+- Delete or resize PVCs (if supported by provisioner)
+- Create and manage snapshots of PVCs
+- Mount and inspect volume contents (read-only access)
+
+## Job & CronJob Management
+- List running and completed Jobs
+- View Job logs and failure reasons
+- Restart failed Jobs
+- Edit CronJob schedules and definitions
+- Suspend or resume CronJobs
+- Manually trigger a CronJob run
+
+## Config & Secret Management
+- View, create, edit, and delete ConfigMaps
+- View, create, edit, and delete Secrets (with sensitive value masking)
+- Apply changes immediately to dependent workloads
+- Compare live vs stored versions of configurations
+- Version history and rollback for configurations
+
+## Security & RBAC Management
+- View all ServiceAccounts, Roles, RoleBindings, ClusterRoles, and ClusterRoleBindings
+- Create and edit RBAC bindings
+- Impersonate a ServiceAccount for troubleshooting
+- Audit who has access to what resources
+- Detect overly permissive RBAC rules
+
+## System Maintenance & Troubleshooting
+- View and edit raw YAML for any editable resource
+- Apply YAML changes directly from the dashboard
+- Restart core components (kube-proxy, CNI, DNS, ingress controllers)
+- View logs for system pods in kube-system and other critical namespaces
+- Node management: drain, cordon, uncordon, taint, and label nodes
+- Trigger garbage collection for unused images and volumes
+- Restart selected namespaces or components in bulk
+
+## Observability Integration
+- Integrated metrics from Prometheus (pod, node, cluster)
+- View container CPU, memory, disk, and network trends
+- View historical data for troubleshooting performance issues
+- Log aggregation and search across namespaces
+- Correlate events, logs, and metrics for incidents
+
+## Backup & Restore
+- Trigger ad-hoc backups of resources or namespaces
+- Restore from previous backups
+- Export full cluster YAML for disaster recovery
+- Export filtered sets of resources for migration
+
+## Advanced Automation
+- Save custom kubectl queries for re-use
+- Define and run preconfigured automation scripts/jobs
+- Trigger webhooks or automation pipelines based on events
+- Schedule recurring administrative tasks
+
+## Audit & Activity Tracking
+- View recent administrative actions taken via Kaptn
+- Search audit history by user, namespace, resource, or action
+- Export audit logs for compliance
+- Detect anomalies in administrative activity
 
 ---
 
@@ -162,39 +305,11 @@ make fmt            # Format code
 make clean          # Clean build artifacts
 make kind-up        # Create Kind cluster
 make kind-down      # Delete Kind cluster
+make docker          # Without shell
+make docker-debug    # build docker image with shell
+make push            # Push image to registry
+make push-debug      # Push debug image to registry
 ```
-
-### Architecture
-
-The application follows a clean architecture pattern:
-
-- **Frontend**: React SPA with real-time updates via WebSockets
-- **Backend**: Go server with chi router, structured logging, and Kubernetes client-go
-- **Communication**: REST APIs + WebSocket for live data
-- **Deployment**: Container-first with Helm chart
-
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## Security
-
-This project follows security best practices:
-
-- Least-privilege RBAC
-- Request ID tracking for audit trails
-- Rate limiting on mutation endpoints
-- Input validation and sanitization
-- Secure defaults
 
 ## License
 
