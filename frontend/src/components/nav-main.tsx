@@ -35,11 +35,33 @@ export function NavMain({
     }[]
   }[]
 }) {
-  const { setMenuExpanded, isMenuExpanded, isHydrated } = useNavigation()
+  const { setMenuExpanded, isMenuExpanded, isHydrated, currentPath } = useNavigation()
 
   const handleMenuToggle = (menuTitle: string) => {
     const currentState = isMenuExpanded(menuTitle)
     setMenuExpanded(menuTitle, !currentState)
+  }
+
+  // Function to check if a path is active
+  const isPathActive = (url: string): boolean => {
+    if (!isHydrated) return false
+
+    // Handle root path specifically
+    if (url === '/' && currentPath === '/') return true
+    if (url === '/' && currentPath === '/dashboard') return true
+
+    // For other paths, check if current path starts with the url
+    if (url !== '/' && url !== '#') {
+      return currentPath.startsWith(url)
+    }
+
+    return false
+  }
+
+  // Function to check if a parent item should be active (has an active child)
+  const hasActiveChild = (items?: { title: string; url: string }[]): boolean => {
+    if (!items || !isHydrated) return false
+    return items.some(subItem => isPathActive(subItem.url))
   }
 
   return (
@@ -49,9 +71,10 @@ export function NavMain({
         {items.map((item) => {
           // If item has no subitems and a real URL, render as a simple navigation link
           if (!item.items || item.items.length === 0) {
+            const isActive = isPathActive(item.url)
             return (
               <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton tooltip={item.title} asChild>
+                <SidebarMenuButton tooltip={item.title} isActive={isActive} asChild>
                   <a href={item.url}>
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
@@ -64,6 +87,7 @@ export function NavMain({
           // If item has subitems, render as collapsible
           // Use hydrated state to determine if we should show expanded state
           const isExpanded = isHydrated ? isMenuExpanded(item.title) : false
+          const parentIsActive = hasActiveChild(item.items)
 
           return (
             <Collapsible
@@ -75,7 +99,7 @@ export function NavMain({
             >
               <SidebarMenuItem>
                 <CollapsibleTrigger asChild>
-                  <SidebarMenuButton tooltip={item.title}>
+                  <SidebarMenuButton tooltip={item.title} isActive={parentIsActive}>
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
                     <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
@@ -83,15 +107,18 @@ export function NavMain({
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <SidebarMenuSub>
-                    {item.items.map((subItem) => (
-                      <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton asChild>
-                          <a href={subItem.url}>
-                            <span>{subItem.title}</span>
-                          </a>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
+                    {item.items.map((subItem) => {
+                      const subIsActive = isPathActive(subItem.url)
+                      return (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton asChild isActive={subIsActive}>
+                            <a href={subItem.url}>
+                              <span>{subItem.title}</span>
+                            </a>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )
+                    })}
                   </SidebarMenuSub>
                 </CollapsibleContent>
               </SidebarMenuItem>

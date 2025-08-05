@@ -119,3 +119,10 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom active sidebar menu item text color */
+[data-sidebar="menu-button"][data-active="true"],
+[data-sidebar="menu-sub-button"][data-active="true"] {
+  color: #33A1FD !important;
+  background-color: transparent !important;
+}
