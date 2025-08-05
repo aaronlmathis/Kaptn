@@ -15,7 +15,7 @@ RUN apk add --no-cache git
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
+# Copy source code 
 COPY cmd ./cmd
 COPY internal ./internal
 COPY config.example.yaml ./config.yaml
