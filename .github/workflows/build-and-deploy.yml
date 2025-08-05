@@ -40,4 +40,4 @@ jobs:
           echo "## Kaptn Deployment" >> $GITHUB_STEP_SUMMARY
           echo "* **Image:** aaronlmathis/kaptn:debug" >> $GITHUB_STEP_SUMMARY
           echo "* **Namespace:** monitoring" >> $GITHUB_STEP_SUMMARY
-          echo "* **Status:** Deployment triggered" >> $GITHUB_STEP_SUMMARY          
+          echo "* **Status:** Deployment triggered" >> $GITHUB_STEP_SUMMARY           
