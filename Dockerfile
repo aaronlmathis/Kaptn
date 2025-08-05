@@ -18,7 +18,7 @@ RUN go mod download
 # Copy source code
 COPY cmd ./cmd
 COPY internal ./internal
-COPY config.yaml ./config.yaml
+COPY config.example.yaml ./config.yaml
 
 # Copy built frontend
 COPY --from=frontend /frontend/dist ./frontend/dist
