@@ -631,6 +631,51 @@ interface PersistentVolumeClaimDetails {
 	apiVersion: string
 }
 
+interface StorageClassDetails {
+	summary: {
+		name: string
+		provisioner: string
+		reclaimPolicy: string
+		volumeBindingMode: string
+		allowVolumeExpansion: boolean
+		isDefault: boolean
+		age: string
+		labelsCount: number
+		annotationsCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+interface VolumeSnapshotDetails {
+	summary: {
+		name: string
+		namespace: string
+		sourcePVC: string
+		volumeSnapshotClassName: string
+		readyToUse: boolean
+		restoreSize: string
+		creationTime: string
+		snapshotHandle: string
+		age: string
+		labelsCount: number
+		annotationsCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	status: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
 export function useConfigMapDetails(namespace: string, name: string, enabled: boolean = true) {
 	const [data, setData] = useState<ConfigMapDetails | null>(null)
 	const [loading, setLoading] = useState(false)
@@ -742,6 +787,80 @@ export function usePersistentVolumeClaimDetails(namespace: string, name: string,
 		}
 
 		fetchPersistentVolumeClaimDetails()
+	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}
+
+export function useStorageClassDetails(name: string, enabled: boolean = true) {
+	const [data, setData] = useState<StorageClassDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchStorageClassDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/storage-classes/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch storage class details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchStorageClassDetails()
+	}, [name, enabled])
+
+	return { data, loading, error }
+}
+
+export function useVolumeSnapshotDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<VolumeSnapshotDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchVolumeSnapshotDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/volume-snapshots/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch volume snapshot details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchVolumeSnapshotDetails()
 	}, [namespace, name, enabled])
 
 	return { data, loading, error }

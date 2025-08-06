@@ -2,7 +2,7 @@ import * as React from "react"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconEye, IconEdit, IconRefresh, IconCircleCheckFilled, IconAlertTriangle } from "@tabler/icons-react"
+import { IconEdit, IconRefresh, IconCircleCheckFilled, IconAlertTriangle } from "@tabler/icons-react"
 import { ResourceDetailDrawer, DetailRows } from "@/components/ResourceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 

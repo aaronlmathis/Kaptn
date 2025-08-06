@@ -1,5 +1,4 @@
 // Manual type definitions for react-table compatibility
-import type { Table } from "@tanstack/react-table"
 
 // Define the state types manually based on usage
 export type VisibilityState = Record<string, boolean>

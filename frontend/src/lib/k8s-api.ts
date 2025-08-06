@@ -566,6 +566,71 @@ export interface DashboardPersistentVolumeClaim {
 	annotationsCount: number;
 }
 
+// StorageClass interfaces based on the actual backend API response
+export interface StorageClass {
+	name: string;
+	provisioner: string;
+	reclaimPolicy: string;
+	volumeBindingMode: string;
+	allowVolumeExpansion: boolean;
+	parametersCount: number;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	isDefault: boolean;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+	parameters: Record<string, string> | null;
+}
+
+export interface DashboardStorageClass {
+	id: string;
+	name: string;
+	provisioner: string;
+	reclaimPolicy: string;
+	volumeBindingMode: string;
+	allowVolumeExpansion: boolean;
+	parametersCount: number;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	isDefault: boolean;
+}
+
+// VolumeSnapshot interfaces based on the actual backend API response
+export interface VolumeSnapshot {
+	name: string;
+	namespace: string;
+	sourcePVC: string;
+	volumeSnapshotClassName: string;
+	readyToUse: boolean;
+	restoreSize: string;
+	creationTime: string;
+	snapshotHandle: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+}
+
+export interface DashboardVolumeSnapshot {
+	id: string;
+	name: string;
+	namespace: string;
+	sourcePVC: string;
+	volumeSnapshotClassName: string;
+	readyToUse: boolean;
+	restoreSize: string;
+	creationTime: string;
+	snapshotHandle: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+}
+
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
@@ -713,6 +778,29 @@ export class K8sService {
 
 	async getPersistentVolumeClaim(namespace: string, name: string): Promise<{ summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
 		const response = await apiClient.get<{ data: { summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volume-claims/${namespace}/${name}`);
+		return response.data;
+	}
+
+	// StorageClass operations
+	async getStorageClasses(): Promise<StorageClass[]> {
+		const response = await apiClient.get<{ data: { items: StorageClass[] }; status: string }>(`/storage-classes`);
+		return response.data?.items || [];
+	}
+
+	async getStorageClass(name: string): Promise<{ summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/storage-classes/${name}`);
+		return response.data;
+	}
+
+	// VolumeSnapshot operations
+	async getVolumeSnapshots(namespace?: string): Promise<VolumeSnapshot[]> {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: VolumeSnapshot[] }; status: string }>(`/volume-snapshots${query}`);
+		return response.data?.items || [];
+	}
+
+	async getVolumeSnapshot(namespace: string, name: string): Promise<{ summary: VolumeSnapshot; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: VolumeSnapshot; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/volume-snapshots/${namespace}/${name}`);
 		return response.data;
 	}
 
@@ -1077,6 +1165,45 @@ export function transformPersistentVolumeClaimsToUI(persistentVolumeClaims: Pers
 		age: pvc.age,
 		labelsCount: pvc.labelsCount,
 		annotationsCount: pvc.annotationsCount
+	}));
+}
+
+export function transformStorageClassesToUI(storageClasses: StorageClass[]): DashboardStorageClass[] {
+	if (!storageClasses || !Array.isArray(storageClasses)) {
+		return [];
+	}
+	return storageClasses.map((sc) => ({
+		id: sc.name,
+		name: sc.name,
+		provisioner: sc.provisioner,
+		reclaimPolicy: sc.reclaimPolicy,
+		volumeBindingMode: sc.volumeBindingMode,
+		allowVolumeExpansion: sc.allowVolumeExpansion,
+		parametersCount: sc.parametersCount,
+		age: sc.age,
+		labelsCount: sc.labelsCount,
+		annotationsCount: sc.annotationsCount,
+		isDefault: sc.isDefault
+	}));
+}
+
+export function transformVolumeSnapshotsToUI(volumeSnapshots: VolumeSnapshot[]): DashboardVolumeSnapshot[] {
+	if (!volumeSnapshots || !Array.isArray(volumeSnapshots)) {
+		return [];
+	}
+	return volumeSnapshots.map((vs) => ({
+		id: `${vs.namespace}-${vs.name}`,
+		name: vs.name,
+		namespace: vs.namespace,
+		sourcePVC: vs.sourcePVC,
+		volumeSnapshotClassName: vs.volumeSnapshotClassName,
+		readyToUse: vs.readyToUse,
+		restoreSize: vs.restoreSize,
+		creationTime: vs.creationTime,
+		snapshotHandle: vs.snapshotHandle,
+		age: vs.age,
+		labelsCount: vs.labelsCount,
+		annotationsCount: vs.annotationsCount
 	}));
 }
 

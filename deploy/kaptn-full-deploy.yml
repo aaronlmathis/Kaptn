@@ -19,7 +19,7 @@ metadata:
 rules:
   # Core resources used in overviews
   - apiGroups: [""]
-    resources: ["pods","nodes","namespaces","resourcequotas","services","endpoints","events", "configmaps"]
+    resources: ["pods","nodes","namespaces","resourcequotas","services","endpoints","events", "configmaps","persistentvolumes"]
     verbs: ["get","list","watch"]
   # Workloads
   - apiGroups: ["apps"]

@@ -29,14 +29,12 @@ import {
 	IconGripVertical,
 	IconLayoutColumns,
 	IconLoader,
-	IconPlus,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTerminal,
 	IconTrash,
 	IconEdit,
 	IconEye,
-	IconX,
 } from "@tabler/icons-react"
 import { PodDetailViewer } from "@/components/viewers/PodDetailViewer"
 import { NodeDetailViewer } from "@/components/viewers/NodeDetailViewer"
@@ -59,26 +57,16 @@ import {
 	type SortingState,
 	type ColumnFiltersState,
 } from "@/lib/table"
-import { toast } from "sonner"
 import { z } from "zod"
 
-import { useIsMobile } from "@/hooks/use-mobile"
 import { usePods, useNodes, useServices, useDeployments } from "@/hooks/use-k8s-data"
 import { useNamespace } from "@/contexts/namespace-context"
 import { useShell } from "@/hooks/use-shell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-	Drawer,
-	DrawerClose,
-	DrawerContent,
-	DrawerDescription,
-	DrawerFooter,
-	DrawerHeader,
-	DrawerTitle,
-	DrawerTrigger,
-} from "@/components/ui/drawer"
+
+
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,

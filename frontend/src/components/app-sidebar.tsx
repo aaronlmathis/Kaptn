@@ -1,36 +1,21 @@
 "use client"
 
 import * as React from "react"
-import {
-  AudioWaveform,
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  GalleryVerticalEnd,
-  Map,
-  PieChart,
-  Settings2,
-  SquareTerminal,
-} from "lucide-react"
+
+
 
 import {
   IconDashboard,
   IconDatabase,
-  IconFileText,
   IconSettings,
   IconShield,
   IconDeviceDesktop,
   IconTerminal,
-  IconUsers,
   IconCloudComputing,
-  IconCloud,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
-import { SiKubernetes } from "react-icons/si";
 import { NavUser } from "@/components/nav-user"
 import { NamespaceSwitcher } from "@/components/namespace-switcher"
 import {

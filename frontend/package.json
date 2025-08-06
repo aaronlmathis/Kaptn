@@ -95,6 +95,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "eslint-plugin-testing-library": "^7.6.3",
+    "eslint-plugin-unused-imports": "^4.1.4",
     "jsdom": "^26.1.0",
     "msw": "^2.10.4",
     "tw-animate-css": "^1.3.6",

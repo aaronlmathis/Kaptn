@@ -17,6 +17,8 @@ import {
 	type DashboardConfigMap,
 	type DashboardPersistentVolume,
 	type DashboardPersistentVolumeClaim,
+	type DashboardStorageClass,
+	type DashboardVolumeSnapshot,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
@@ -33,7 +35,9 @@ import {
 	transformNetworkPoliciesToUI,
 	transformConfigMapsToUI,
 	transformPersistentVolumesToUI,
-	transformPersistentVolumeClaimsToUI
+	transformPersistentVolumeClaimsToUI,
+	transformStorageClassesToUI,
+	transformVolumeSnapshotsToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -615,6 +619,63 @@ export function usePersistentVolumeClaims(): UseK8sDataResult<DashboardPersisten
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch persistent volume claims');
 			console.error('Error fetching persistent volume claims:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useStorageClasses(): UseK8sDataResult<DashboardStorageClass> {
+	const [data, setData] = useState<DashboardStorageClass[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			// StorageClasses are cluster-scoped, so no namespace parameter needed
+			const storageClasses = await k8sService.getStorageClasses();
+			const transformedStorageClasses = transformStorageClassesToUI(storageClasses);
+			setData(transformedStorageClasses);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch storage classes');
+			console.error('Error fetching storage classes:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, []); // No dependency on selectedNamespace since StorageClasses are cluster-scoped
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useVolumeSnapshots(): UseK8sDataResult<DashboardVolumeSnapshot> {
+	const [data, setData] = useState<DashboardVolumeSnapshot[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const volumeSnapshots = await k8sService.getVolumeSnapshots(namespace);
+			const transformedVolumeSnapshots = transformVolumeSnapshotsToUI(volumeSnapshots);
+			setData(transformedVolumeSnapshots);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch volume snapshots');
+			console.error('Error fetching volume snapshots:', err);
 		} finally {
 			setLoading(false);
 		}

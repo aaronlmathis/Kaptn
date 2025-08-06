@@ -1,9 +1,10 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import tseslint from '@typescript-eslint/eslint-plugin'
-import tsparser from '@typescript-eslint/parser'
+import js from '@eslint/js';
+import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsparser from '@typescript-eslint/parser';
+import unusedImports from 'eslint-plugin-unused-imports';
 
 export default [
 	{
@@ -26,22 +27,42 @@ export default [
 			'react-hooks': reactHooks,
 			'react-refresh': reactRefresh,
 			'@typescript-eslint': tseslint,
+			'unused-imports': unusedImports,
 		},
 		rules: {
 			...js.configs.recommended.rules,
 			...tseslint.configs.recommended.rules,
 			...reactHooks.configs.recommended.rules,
+
 			'react-refresh/only-export-components': [
 				'warn',
 				{ allowConstantExport: true },
 			],
-			'@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+
+			// Remove unused imports automatically
+			'unused-imports/no-unused-imports': 'error',
+
+			// Warn on unused vars, ignore ones starting with "_"
+			'unused-imports/no-unused-vars': [
+				'warn',
+				{
+					vars: 'all',
+					varsIgnorePattern: '^_',
+					args: 'after-used',
+					argsIgnorePattern: '^_',
+				},
+			],
+
 			'@typescript-eslint/no-explicit-any': 'warn',
 			'@typescript-eslint/no-non-null-assertion': 'warn',
 		},
 	},
 	{
-		files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', '**/e2e/**/*.{ts,tsx}'],
+		files: [
+			'**/*.test.{ts,tsx}',
+			'**/*.spec.{ts,tsx}',
+			'**/e2e/**/*.{ts,tsx}',
+		],
 		languageOptions: {
 			globals: {
 				...globals.browser,
@@ -60,4 +81,4 @@ export default [
 			'@typescript-eslint/no-explicit-any': 'off',
 		},
 	},
-]
+];

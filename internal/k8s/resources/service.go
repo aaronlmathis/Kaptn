@@ -9,6 +9,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -184,6 +185,10 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.deleteIngress(ctx, req.Namespace, req.Name, deleteOptions)
 	case "Gateway":
 		return rm.deleteIstioGateway(ctx, req.Namespace, req.Name, deleteOptions)
+	case "StorageClass":
+		return rm.DeleteStorageClass(ctx, req.Name, deleteOptions)
+	case "VolumeSnapshot":
+		return rm.deleteVolumeSnapshot(ctx, req.Namespace, req.Name, deleteOptions)
 	default:
 		return fmt.Errorf("unsupported resource kind for deletion: %s", req.Kind)
 	}
@@ -396,6 +401,26 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert PersistentVolumeClaim to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredPVC)
+	case "StorageClass":
+		storageClass, err := rm.kubeClient.StorageV1().StorageClasses().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredSC := rm.convertToUnstructured(storageClass)
+		if unstructuredSC == nil {
+			return nil, fmt.Errorf("failed to convert StorageClass to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredSC)
+	case "VolumeSnapshot":
+		// Get VolumeSnapshot using dynamic client
+		volumeSnapshotObj, err := rm.GetVolumeSnapshot(ctx, namespace, name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert map to unstructured
+		unstructuredVolumeSnapshot := &unstructured.Unstructured{Object: volumeSnapshotObj.(map[string]interface{})}
+		obj = rm.stripManagedFields(unstructuredVolumeSnapshot)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -405,6 +430,31 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		Kind:       obj.GetKind(),
 		Metadata:   obj.Object["metadata"],
 		Spec:       obj.Object["spec"],
+	}
+
+	// Special handling for resources that don't have a spec field
+	if kind == "StorageClass" {
+		// For StorageClass, the relevant fields are at the root level
+		storageClassSpec := make(map[string]interface{})
+		if provisioner, exists := obj.Object["provisioner"]; exists {
+			storageClassSpec["provisioner"] = provisioner
+		}
+		if reclaimPolicy, exists := obj.Object["reclaimPolicy"]; exists {
+			storageClassSpec["reclaimPolicy"] = reclaimPolicy
+		}
+		if volumeBindingMode, exists := obj.Object["volumeBindingMode"]; exists {
+			storageClassSpec["volumeBindingMode"] = volumeBindingMode
+		}
+		if allowVolumeExpansion, exists := obj.Object["allowVolumeExpansion"]; exists {
+			storageClassSpec["allowVolumeExpansion"] = allowVolumeExpansion
+		}
+		if parameters, exists := obj.Object["parameters"]; exists {
+			storageClassSpec["parameters"] = parameters
+		}
+		if mountOptions, exists := obj.Object["mountOptions"]; exists {
+			storageClassSpec["mountOptions"] = mountOptions
+		}
+		export.Spec = storageClassSpec
 	}
 
 	return export, nil
@@ -862,6 +912,9 @@ func (rm *ResourceManager) convertToUnstructured(obj interface{}) *unstructured.
 	case *v1.Endpoints:
 		result.SetAPIVersion("v1")
 		result.SetKind("Endpoints")
+	case *storagev1.StorageClass:
+		result.SetAPIVersion("storage.k8s.io/v1")
+		result.SetKind("StorageClass")
 	}
 
 	return result
@@ -979,6 +1032,90 @@ func (rm *ResourceManager) deleteEndpointSlice(ctx context.Context, namespace, n
 	err := rm.dynamicClient.Resource(endpointSlicesGVR).Namespace(namespace).Delete(ctx, name, deleteOptions)
 	if err != nil {
 		return fmt.Errorf("failed to delete EndpointSlice: %w", err)
+	}
+
+	return nil
+}
+
+// ListStorageClasses lists all storage classes in the cluster
+func (rm *ResourceManager) ListStorageClasses(ctx context.Context) ([]storagev1.StorageClass, error) {
+	storageClasses, err := rm.kubeClient.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list storage classes: %w", err)
+	}
+	if storageClasses.Items == nil {
+		return []storagev1.StorageClass{}, nil
+	}
+	return storageClasses.Items, nil
+}
+
+// GetStorageClass gets a specific storage class
+func (rm *ResourceManager) GetStorageClass(ctx context.Context, name string) (*storagev1.StorageClass, error) {
+	storageClass, err := rm.kubeClient.StorageV1().StorageClasses().Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get storage class %s: %w", name, err)
+	}
+	return storageClass, nil
+}
+
+// DeleteStorageClass deletes a storage class
+func (rm *ResourceManager) DeleteStorageClass(ctx context.Context, name string, deleteOptions metav1.DeleteOptions) error {
+	err := rm.kubeClient.StorageV1().StorageClasses().Delete(ctx, name, deleteOptions)
+	if err != nil {
+		return fmt.Errorf("failed to delete storage class: %w", err)
+	}
+	return nil
+}
+
+// ListVolumeSnapshots lists all volume snapshots in a namespace
+func (rm *ResourceManager) ListVolumeSnapshots(ctx context.Context, namespace string) ([]interface{}, error) {
+	// Use dynamic client to get VolumeSnapshots from snapshot.storage.k8s.io/v1
+	volumeSnapshotsGVR := schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshots",
+	}
+
+	volumeSnapshotsList, err := rm.dynamicClient.Resource(volumeSnapshotsGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list volume snapshots: %w", err)
+	}
+
+	var result []interface{}
+	for _, item := range volumeSnapshotsList.Items {
+		result = append(result, item.Object)
+	}
+
+	return result, nil
+}
+
+// GetVolumeSnapshot gets a specific volume snapshot
+func (rm *ResourceManager) GetVolumeSnapshot(ctx context.Context, namespace, name string) (interface{}, error) {
+	volumeSnapshotsGVR := schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshots",
+	}
+
+	volumeSnapshot, err := rm.dynamicClient.Resource(volumeSnapshotsGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get volume snapshot: %w", err)
+	}
+
+	return volumeSnapshot.Object, nil
+}
+
+// deleteVolumeSnapshot deletes a VolumeSnapshot resource
+func (rm *ResourceManager) deleteVolumeSnapshot(ctx context.Context, namespace, name string, deleteOptions metav1.DeleteOptions) error {
+	volumeSnapshotsGVR := schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshots",
+	}
+
+	err := rm.dynamicClient.Resource(volumeSnapshotsGVR).Namespace(namespace).Delete(ctx, name, deleteOptions)
+	if err != nil {
+		return fmt.Errorf("failed to delete VolumeSnapshot: %w", err)
 	}
 
 	return nil

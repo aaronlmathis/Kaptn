@@ -9,6 +9,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	storagev1 "k8s.io/api/storage/v1"
 )
 
 // Response formatting functions
@@ -1376,5 +1377,162 @@ func (s *Server) persistentVolumeClaimToResponse(pvc *v1.PersistentVolumeClaim) 
 		"creationTimestamp":  pvc.CreationTimestamp.Time,
 		"labels":             pvc.Labels,
 		"annotations":        pvc.Annotations,
+	}
+}
+
+// StorageClass response formatter
+func (s *Server) storageClassToResponse(sc storagev1.StorageClass) map[string]interface{} {
+	// Calculate age
+	age := "unknown"
+	if !sc.CreationTimestamp.IsZero() {
+		age = time.Since(sc.CreationTimestamp.Time).String()
+	}
+
+	// Get provisioner
+	provisioner := sc.Provisioner
+
+	// Get reclaim policy
+	reclaimPolicy := "Delete" // Default reclaim policy for StorageClass
+	if sc.ReclaimPolicy != nil {
+		reclaimPolicy = string(*sc.ReclaimPolicy)
+	}
+
+	// Get volume binding mode
+	volumeBindingMode := "Immediate" // Default volume binding mode
+	if sc.VolumeBindingMode != nil {
+		volumeBindingMode = string(*sc.VolumeBindingMode)
+	}
+
+	// Get allow volume expansion
+	allowVolumeExpansion := false
+	if sc.AllowVolumeExpansion != nil {
+		allowVolumeExpansion = *sc.AllowVolumeExpansion
+	}
+
+	// Count parameters
+	parametersCount := len(sc.Parameters)
+
+	// Count labels and annotations
+	labelsCount := len(sc.Labels)
+	annotationsCount := len(sc.Annotations)
+
+	// Check if default storage class
+	isDefault := false
+	if sc.Annotations != nil {
+		if value, exists := sc.Annotations["storageclass.kubernetes.io/is-default-class"]; exists {
+			isDefault = value == "true"
+		}
+		// Also check the beta annotation for backward compatibility
+		if !isDefault {
+			if value, exists := sc.Annotations["storageclass.beta.kubernetes.io/is-default-class"]; exists {
+				isDefault = value == "true"
+			}
+		}
+	}
+
+	return map[string]interface{}{
+		"id":                   sc.Name, // For table sorting (StorageClass is cluster-scoped)
+		"name":                 sc.Name,
+		"provisioner":          provisioner,
+		"reclaimPolicy":        reclaimPolicy,
+		"volumeBindingMode":    volumeBindingMode,
+		"allowVolumeExpansion": allowVolumeExpansion,
+		"parametersCount":      parametersCount,
+		"age":                  age,
+		"labelsCount":          labelsCount,
+		"annotationsCount":     annotationsCount,
+		"isDefault":            isDefault,
+		"creationTimestamp":    sc.CreationTimestamp.Time,
+		"labels":               sc.Labels,
+		"annotations":          sc.Annotations,
+		"parameters":           sc.Parameters,
+	}
+}
+
+// volumeSnapshotToResponse converts a VolumeSnapshot object to a response format
+func (s *Server) volumeSnapshotToResponse(obj interface{}) map[string]interface{} {
+	vsMap, ok := obj.(map[string]interface{})
+	if !ok {
+		return map[string]interface{}{
+			"name":      "unknown",
+			"namespace": "unknown",
+			"error":     "invalid volume snapshot format",
+		}
+	}
+
+	// Extract metadata
+	metadata, _ := vsMap["metadata"].(map[string]interface{})
+	name, _ := metadata["name"].(string)
+	namespace, _ := metadata["namespace"].(string)
+	creationTimestamp, _ := metadata["creationTimestamp"].(string)
+	labels, _ := metadata["labels"].(map[string]interface{})
+	annotations, _ := metadata["annotations"].(map[string]interface{})
+
+	// Calculate age
+	age := "unknown"
+	if creationTimestamp != "" {
+		if parsedTime, err := time.Parse(time.RFC3339, creationTimestamp); err == nil {
+			age = calculateAge(parsedTime)
+		}
+	}
+
+	// Extract spec
+	spec, _ := vsMap["spec"].(map[string]interface{})
+	sourcePVC := "unknown"
+	volumeSnapshotClassName := "unknown"
+
+	if source, ok := spec["source"].(map[string]interface{}); ok {
+		if pvcSource, ok := source["persistentVolumeClaimName"].(string); ok {
+			sourcePVC = pvcSource
+		}
+	}
+
+	if className, ok := spec["volumeSnapshotClassName"].(string); ok {
+		volumeSnapshotClassName = className
+	}
+
+	// Extract status
+	status, _ := vsMap["status"].(map[string]interface{})
+	readyToUse := false
+	restoreSize := "unknown"
+	creationTime := "unknown"
+	snapshotHandle := "unknown"
+
+	if readyValue, ok := status["readyToUse"].(bool); ok {
+		readyToUse = readyValue
+	}
+
+	if size, ok := status["restoreSize"].(string); ok {
+		restoreSize = size
+	}
+
+	if createdAt, ok := status["creationTime"].(string); ok {
+		creationTime = createdAt
+	}
+
+	if handle, ok := status["snapshotHandle"].(string); ok {
+		snapshotHandle = handle
+	}
+
+	// Count labels and annotations
+	labelsCount := len(labels)
+	annotationsCount := len(annotations)
+
+	return map[string]interface{}{
+		"id":                        fmt.Sprintf("%s-%s", namespace, name), // For table sorting
+		"name":                      name,
+		"namespace":                 namespace,
+		"sourcePVC":                 sourcePVC,
+		"volumeSnapshotClassName":   volumeSnapshotClassName,
+		"readyToUse":                readyToUse,
+		"restoreSize":               restoreSize,
+		"creationTime":              creationTime,
+		"snapshotHandle":            snapshotHandle,
+		"age":                       age,
+		"labelsCount":               labelsCount,
+		"annotationsCount":          annotationsCount,
+		"creationTimestamp":         creationTimestamp,
+		"labels":                    labels,
+		"annotations":               annotations,
 	}
 }

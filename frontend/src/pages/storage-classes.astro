@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { StorageClassesPageContainer } from "@/components/pages/StorageClassesPageContainer";
+
+const title = "Storage Classes";
+---
+
+<Layout title={title}>
+	<StorageClassesPageContainer client:load />
+</Layout>

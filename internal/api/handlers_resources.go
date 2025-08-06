@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -1114,10 +1115,28 @@ func (s *Server) handleExportResource(w http.ResponseWriter, r *http.Request) {
 	kind := chi.URLParam(r, "kind")
 	name := chi.URLParam(r, "name")
 
-	if namespace == "" || kind == "" || name == "" {
+	if kind == "" || name == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "namespace, kind, and name are required"})
+		json.NewEncoder(w).Encode(map[string]string{"error": "kind and name are required"})
+		return
+	}
+
+	// For cluster-scoped resources, namespace can be empty
+	// Check if this is a cluster-scoped resource
+	clusterScopedResources := map[string]bool{
+		"StorageClass":       true,
+		"PersistentVolume":   true,
+		"ClusterRole":        true,
+		"ClusterRoleBinding": true,
+		"Node":               true,
+	}
+
+	// If it's not a cluster-scoped resource, namespace is required
+	if !clusterScopedResources[kind] && namespace == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace is required for namespaced resources"})
 		return
 	}
 
@@ -2374,6 +2393,284 @@ func (s *Server) handleGetPersistentVolumeClaim(w http.ResponseWriter, r *http.R
 		"metadata":   pvc.ObjectMeta,
 		"kind":       "PersistentVolumeClaim",
 		"apiVersion": "v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleListStorageClasses(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get storage classes from resource manager
+	storageClasses, err := s.resourceManager.ListStorageClasses(r.Context())
+	if err != nil {
+		s.logger.Error("Failed to list storage classes", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(storageClasses)
+
+	// Apply basic search filtering
+	var filteredStorageClasses []interface{}
+	for _, sc := range storageClasses {
+		if search != "" {
+			if !strings.Contains(strings.ToLower(sc.Name), strings.ToLower(search)) {
+				continue
+			}
+		}
+		filteredStorageClasses = append(filteredStorageClasses, sc)
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, sc := range filteredStorageClasses {
+		scTyped, ok := sc.(storagev1.StorageClass)
+		if !ok {
+			continue
+		}
+		responses = append(responses, s.storageClassToResponse(scTyped))
+	}
+
+	// Apply pagination
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > len(responses) {
+		responses = []map[string]interface{}{}
+	} else if end > len(responses) {
+		responses = responses[start:]
+	} else {
+		responses = responses[start:end]
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetStorageClass(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "name is required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get storage class from resource manager
+	storageClass, err := s.resourceManager.GetStorageClass(r.Context(), name)
+	if err != nil {
+		s.logger.Error("Failed to get storage class",
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.storageClassToResponse(*storageClass)
+
+	// Add full storage class details for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"parameters": storageClass.Parameters,
+		"metadata":   storageClass.ObjectMeta,
+		"kind":       "StorageClass",
+		"apiVersion": "storage.k8s.io/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleListVolumeSnapshots(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get volume snapshots from resource manager
+	volumeSnapshots, err := s.resourceManager.ListVolumeSnapshots(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list volume snapshots", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(volumeSnapshots)
+
+	// Apply basic filtering (search by name)
+	var filteredVolumeSnapshots []interface{}
+	for _, vs := range volumeSnapshots {
+		if volumeSnapshotMap, ok := vs.(map[string]interface{}); ok {
+			// Basic search filter
+			if search != "" {
+				if metadata, ok := volumeSnapshotMap["metadata"].(map[string]interface{}); ok {
+					if name, ok := metadata["name"].(string); ok {
+						if !strings.Contains(strings.ToLower(name), strings.ToLower(search)) {
+							continue
+						}
+					}
+				}
+			}
+			filteredVolumeSnapshots = append(filteredVolumeSnapshots, vs)
+		}
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, volumeSnapshot := range filteredVolumeSnapshots {
+		responses = append(responses, s.volumeSnapshotToResponse(volumeSnapshot))
+	}
+
+	// Apply pagination
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > len(responses) {
+		responses = []map[string]interface{}{}
+	} else if end > len(responses) {
+		responses = responses[start:]
+	} else {
+		responses = responses[start:end]
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get volume snapshot from resource manager
+	volumeSnapshot, err := s.resourceManager.GetVolumeSnapshot(r.Context(), namespace, name)
+	if err != nil {
+		s.logger.Error("Failed to get volume snapshot",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.volumeSnapshotToResponse(volumeSnapshot)
+
+	// Add full volume snapshot details for detailed view
+	volumeSnapshotMap := volumeSnapshot.(map[string]interface{})
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       volumeSnapshotMap["spec"],
+		"status":     volumeSnapshotMap["status"],
+		"metadata":   volumeSnapshotMap["metadata"],
+		"kind":       "VolumeSnapshot",
+		"apiVersion": "snapshot.storage.k8s.io/v1",
 	}
 
 	w.Header().Set("Content-Type", "application/json")

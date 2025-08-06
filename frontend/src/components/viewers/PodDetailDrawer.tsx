@@ -2,7 +2,7 @@ import * as React from "react"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconTerminal, IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconX, IconRefresh } from "@tabler/icons-react"
+import { IconTerminal, IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconRefresh } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useShell } from "@/hooks/use-shell"
 import {
