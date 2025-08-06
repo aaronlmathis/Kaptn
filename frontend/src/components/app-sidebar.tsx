@@ -9,9 +9,10 @@ import {
   IconDatabase,
   IconSettings,
   IconShield,
-  IconDeviceDesktop,
+  IconHexagons,
   IconTerminal,
   IconCloudComputing,
+  IconTopologyStar,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -79,7 +80,7 @@ const data = {
     {
       title: "Services",
       url: "/services",
-      icon: IconDatabase,
+      icon: IconTopologyStar,
       items: [
         {
           title: "Services",
@@ -153,7 +154,7 @@ const data = {
     {
       title: "Cluster",
       url: "/cluster",
-      icon: IconDeviceDesktop,
+      icon: IconHexagons,
       items: [
         {
           title: "Cluster Overview",

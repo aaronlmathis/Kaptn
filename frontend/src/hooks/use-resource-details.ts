@@ -676,6 +676,26 @@ interface VolumeSnapshotDetails {
 	apiVersion: string
 }
 
+interface VolumeSnapshotClassDetails {
+	summary: {
+		name: string
+		driver: string
+		deletionPolicy: string
+		age: string
+		labelsCount: number
+		annotationsCount: number
+		parametersCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+		parameters?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
 export function useConfigMapDetails(namespace: string, name: string, enabled: boolean = true) {
 	const [data, setData] = useState<ConfigMapDetails | null>(null)
 	const [loading, setLoading] = useState(false)
@@ -862,6 +882,103 @@ export function useVolumeSnapshotDetails(namespace: string, name: string, enable
 
 		fetchVolumeSnapshotDetails()
 	}, [namespace, name, enabled])
+
+	return { data, loading, error }
+}
+
+export function useVolumeSnapshotClassDetails(name: string, enabled: boolean = true) {
+	const [data, setData] = useState<VolumeSnapshotClassDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchVolumeSnapshotClassDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/volume-snapshot-classes/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch volume snapshot class details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchVolumeSnapshotClassDetails()
+	}, [name, enabled])
+
+	return { data, loading, error }
+}
+
+interface CSIDriverDetails {
+	summary: {
+		name: string
+		attachRequired: boolean
+		podInfoOnMount: boolean
+		requiresRepublish: boolean
+		storageCapacity: boolean
+		fsGroupPolicy: string
+		volumeLifecycleModes: number
+		tokenRequests: number
+		age: string
+		labelsCount: number
+		annotationsCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+export function useCSIDriverDetails(name: string, enabled: boolean = true) {
+	const [data, setData] = useState<CSIDriverDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchCSIDriverDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/csi-drivers/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch CSI driver details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchCSIDriverDetails()
+	}, [name, enabled])
 
 	return { data, loading, error }
 }

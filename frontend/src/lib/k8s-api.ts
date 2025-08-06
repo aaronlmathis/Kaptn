@@ -598,6 +598,50 @@ export interface DashboardStorageClass {
 	isDefault: boolean;
 }
 
+// CSIDriver interfaces based on the actual backend API response
+export interface CSIDriver {
+	name: string;
+	attachRequired: boolean;
+	podInfoOnMount: boolean;
+	requiresRepublish: boolean;
+	storageCapacity: boolean;
+	fsGroupPolicy: string;
+	volumeLifecycleModes: number;
+	tokenRequests: number;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+}
+
+export interface DashboardCSIDriver {
+	id: string;
+	name: string;
+	attachRequired: boolean;
+	podInfoOnMount: boolean;
+	requiresRepublish: boolean;
+	storageCapacity: boolean;
+	fsGroupPolicy: string;
+	volumeLifecycleModes: number;
+	tokenRequests: number;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+}
+
+export interface DashboardVolumeSnapshotClass {
+	id: string;
+	name: string;
+	driver: string;
+	deletionPolicy: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	parametersCount: number;
+}
+
 // VolumeSnapshot interfaces based on the actual backend API response
 export interface VolumeSnapshot {
 	name: string;
@@ -629,6 +673,21 @@ export interface DashboardVolumeSnapshot {
 	age: string;
 	labelsCount: number;
 	annotationsCount: number;
+}
+
+// VolumeSnapshotClass interfaces based on the actual backend API response
+export interface VolumeSnapshotClass {
+	name: string;
+	driver: string;
+	deletionPolicy: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	parametersCount: number;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+	parameters: Record<string, string> | null;
 }
 
 export class K8sService {
@@ -789,6 +848,28 @@ export class K8sService {
 
 	async getStorageClass(name: string): Promise<{ summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
 		const response = await apiClient.get<{ data: { summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/storage-classes/${name}`);
+		return response.data;
+	}
+
+	// CSIDriver operations
+	async getCSIDrivers(): Promise<CSIDriver[]> {
+		const response = await apiClient.get<{ data: { items: CSIDriver[] }; status: string }>(`/csi-drivers`);
+		return response.data?.items || [];
+	}
+
+	async getCSIDriver(name: string): Promise<{ summary: CSIDriver; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: CSIDriver; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/csi-drivers/${name}`);
+		return response.data;
+	}
+
+	// VolumeSnapshotClass operations
+	async getVolumeSnapshotClasses(): Promise<VolumeSnapshotClass[]> {
+		const response = await apiClient.get<{ data: { items: VolumeSnapshotClass[] }; status: string }>(`/volume-snapshot-classes`);
+		return response.data?.items || [];
+	}
+
+	async getVolumeSnapshotClass(name: string): Promise<{ summary: VolumeSnapshotClass; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: VolumeSnapshotClass; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/volume-snapshot-classes/${name}`);
 		return response.data;
 	}
 
@@ -1184,6 +1265,42 @@ export function transformStorageClassesToUI(storageClasses: StorageClass[]): Das
 		labelsCount: sc.labelsCount,
 		annotationsCount: sc.annotationsCount,
 		isDefault: sc.isDefault
+	}));
+}
+
+export function transformCSIDriversToUI(csiDrivers: CSIDriver[]): DashboardCSIDriver[] {
+	if (!csiDrivers || !Array.isArray(csiDrivers)) {
+		return [];
+	}
+	return csiDrivers.map((csi) => ({
+		id: csi.name,
+		name: csi.name,
+		attachRequired: csi.attachRequired,
+		podInfoOnMount: csi.podInfoOnMount,
+		requiresRepublish: csi.requiresRepublish,
+		storageCapacity: csi.storageCapacity,
+		fsGroupPolicy: csi.fsGroupPolicy,
+		volumeLifecycleModes: csi.volumeLifecycleModes,
+		tokenRequests: csi.tokenRequests,
+		age: csi.age,
+		labelsCount: csi.labelsCount,
+		annotationsCount: csi.annotationsCount
+	}));
+}
+
+export function transformVolumeSnapshotClassesToUI(volumeSnapshotClasses: VolumeSnapshotClass[]): DashboardVolumeSnapshotClass[] {
+	if (!volumeSnapshotClasses || !Array.isArray(volumeSnapshotClasses)) {
+		return [];
+	}
+	return volumeSnapshotClasses.map((vsc) => ({
+		id: vsc.name,
+		name: vsc.name,
+		driver: vsc.driver,
+		deletionPolicy: vsc.deletionPolicy,
+		age: vsc.age,
+		labelsCount: vsc.labelsCount,
+		annotationsCount: vsc.annotationsCount,
+		parametersCount: vsc.parametersCount
 	}));
 }
 

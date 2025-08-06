@@ -18,6 +18,8 @@ import {
 	type DashboardPersistentVolume,
 	type DashboardPersistentVolumeClaim,
 	type DashboardStorageClass,
+	type DashboardCSIDriver,
+	type DashboardVolumeSnapshotClass,
 	type DashboardVolumeSnapshot,
 	type OverviewData,
 	transformPodsToUI,
@@ -37,6 +39,8 @@ import {
 	transformPersistentVolumesToUI,
 	transformPersistentVolumeClaimsToUI,
 	transformStorageClassesToUI,
+	transformCSIDriversToUI,
+	transformVolumeSnapshotClassesToUI,
 	transformVolumeSnapshotsToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
@@ -659,6 +663,34 @@ export function useStorageClasses(): UseK8sDataResult<DashboardStorageClass> {
 	return { data, loading, error, refetch: fetchData };
 }
 
+export function useCSIDrivers(): UseK8sDataResult<DashboardCSIDriver> {
+	const [data, setData] = useState<DashboardCSIDriver[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			// CSIDrivers are cluster-scoped, so no namespace parameter needed
+			const csiDrivers = await k8sService.getCSIDrivers();
+			const transformedCSIDrivers = transformCSIDriversToUI(csiDrivers);
+			setData(transformedCSIDrivers);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch CSI drivers');
+			console.error('Error fetching CSI drivers:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, []); // No dependency on selectedNamespace since CSIDrivers are cluster-scoped
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
 export function useVolumeSnapshots(): UseK8sDataResult<DashboardVolumeSnapshot> {
 	const [data, setData] = useState<DashboardVolumeSnapshot[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -680,6 +712,34 @@ export function useVolumeSnapshots(): UseK8sDataResult<DashboardVolumeSnapshot> 
 			setLoading(false);
 		}
 	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useVolumeSnapshotClasses(): UseK8sDataResult<DashboardVolumeSnapshotClass> {
+	const [data, setData] = useState<DashboardVolumeSnapshotClass[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			// VolumeSnapshotClasses are cluster-scoped, so no namespace parameter needed
+			const volumeSnapshotClasses = await k8sService.getVolumeSnapshotClasses();
+			const transformedVolumeSnapshotClasses = transformVolumeSnapshotClassesToUI(volumeSnapshotClasses);
+			setData(transformedVolumeSnapshotClasses);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch volume snapshot classes');
+			console.error('Error fetching volume snapshot classes:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, []); // No dependency on selectedNamespace since VolumeSnapshotClasses are cluster-scoped
 
 	useEffect(() => {
 		fetchData();

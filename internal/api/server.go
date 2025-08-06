@@ -390,8 +390,12 @@ func (s *Server) setupRoutes() {
 			r.Get("/persistent-volume-claims/{namespace}/{name}", s.handleGetPersistentVolumeClaim)
 			r.Get("/storage-classes", s.handleListStorageClasses)
 			r.Get("/storage-classes/{name}", s.handleGetStorageClass)
+			r.Get("/csi-drivers", s.handleListCSIDrivers)
+			r.Get("/csi-drivers/{name}", s.handleGetCSIDriver)
 			r.Get("/volume-snapshots", s.handleListVolumeSnapshots)
 			r.Get("/volume-snapshots/{namespace}/{name}", s.handleGetVolumeSnapshot)
+			r.Get("/volume-snapshot-classes", s.handleListVolumeSnapshotClasses)
+			r.Get("/volume-snapshot-classes/{name}", s.handleGetVolumeSnapshotClass)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
 			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
 

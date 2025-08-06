@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { CSIDriversPageContainer } from "@/components/pages/CSIDriversPageContainer";
+
+const title = "CSI Drivers";
+---
+
+<Layout title={title}>
+	<CSIDriversPageContainer client:load />
+</Layout>

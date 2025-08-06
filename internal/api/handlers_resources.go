@@ -1130,6 +1130,7 @@ func (s *Server) handleExportResource(w http.ResponseWriter, r *http.Request) {
 		"ClusterRole":        true,
 		"ClusterRoleBinding": true,
 		"Node":               true,
+		"CSIDriver":          true,
 	}
 
 	// If it's not a cluster-scoped resource, namespace is required
@@ -2671,6 +2672,281 @@ func (s *Server) handleGetVolumeSnapshot(w http.ResponseWriter, r *http.Request)
 		"metadata":   volumeSnapshotMap["metadata"],
 		"kind":       "VolumeSnapshot",
 		"apiVersion": "snapshot.storage.k8s.io/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleListVolumeSnapshotClasses(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get volume snapshot classes from resource manager
+	volumeSnapshotClasses, err := s.resourceManager.ListVolumeSnapshotClasses(r.Context())
+	if err != nil {
+		s.logger.Error("Failed to list volume snapshot classes", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(volumeSnapshotClasses)
+
+	// Apply basic search filtering
+	var filteredVolumeSnapshotClasses []interface{}
+	for _, vsc := range volumeSnapshotClasses {
+		if search != "" {
+			vscMap, ok := vsc.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if metadata, ok := vscMap["metadata"].(map[string]interface{}); ok {
+				if name, ok := metadata["name"].(string); ok {
+					if !strings.Contains(strings.ToLower(name), strings.ToLower(search)) {
+						continue
+					}
+				}
+			}
+		}
+		filteredVolumeSnapshotClasses = append(filteredVolumeSnapshotClasses, vsc)
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, vsc := range filteredVolumeSnapshotClasses {
+		responses = append(responses, s.volumeSnapshotClassToResponse(vsc))
+	}
+
+	// Apply pagination
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > len(responses) {
+		responses = []map[string]interface{}{}
+	} else if end > len(responses) {
+		responses = responses[start:]
+	} else {
+		responses = responses[start:end]
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetVolumeSnapshotClass(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "name is required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get volume snapshot class from resource manager
+	volumeSnapshotClass, err := s.resourceManager.GetVolumeSnapshotClass(r.Context(), name)
+	if err != nil {
+		s.logger.Error("Failed to get volume snapshot class",
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.volumeSnapshotClassToResponse(volumeSnapshotClass)
+
+	// Add full volume snapshot class details for detailed view
+	volumeSnapshotClassMap := volumeSnapshotClass.(map[string]interface{})
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       volumeSnapshotClassMap["spec"],
+		"metadata":   volumeSnapshotClassMap["metadata"],
+		"kind":       "VolumeSnapshotClass",
+		"apiVersion": "snapshot.storage.k8s.io/v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleListCSIDrivers(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get CSI drivers from resource manager
+	csiDrivers, err := s.resourceManager.ListCSIDrivers(r.Context())
+	if err != nil {
+		s.logger.Error("Failed to list CSI drivers", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(csiDrivers)
+
+	// Apply basic search filtering
+	var filteredCSIDrivers []interface{}
+	for _, csi := range csiDrivers {
+		if search != "" {
+			if !strings.Contains(strings.ToLower(csi.Name), strings.ToLower(search)) {
+				continue
+			}
+		}
+		filteredCSIDrivers = append(filteredCSIDrivers, csi)
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, csi := range filteredCSIDrivers {
+		csiTyped, ok := csi.(storagev1.CSIDriver)
+		if !ok {
+			continue
+		}
+		responses = append(responses, s.csiDriverToResponse(csiTyped))
+	}
+
+	// Apply pagination
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > len(responses) {
+		responses = []map[string]interface{}{}
+	} else if end > len(responses) {
+		responses = responses[start:]
+	} else {
+		responses = responses[start:end]
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetCSIDriver(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "name is required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get CSI driver from resource manager
+	csiDriver, err := s.resourceManager.GetCSIDriver(r.Context(), name)
+	if err != nil {
+		s.logger.Error("Failed to get CSI driver",
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.csiDriverToResponse(*csiDriver)
+
+	// Add full CSI driver details for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       csiDriver.Spec,
+		"metadata":   csiDriver.ObjectMeta,
+		"kind":       "CSIDriver",
+		"apiVersion": "storage.k8s.io/v1",
 	}
 
 	w.Header().Set("Content-Type", "application/json")

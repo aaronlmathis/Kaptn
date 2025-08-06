@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { VolumeSnapshotClassesPageContainer } from "@/components/pages/VolumeSnapshotClassesPageContainer";
+
+const title = "Volume Snapshot Classes";
+---
+
+<Layout title={title}>
+	<VolumeSnapshotClassesPageContainer client:load />
+</Layout>

@@ -187,8 +187,12 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.deleteIstioGateway(ctx, req.Namespace, req.Name, deleteOptions)
 	case "StorageClass":
 		return rm.DeleteStorageClass(ctx, req.Name, deleteOptions)
+	case "CSIDriver":
+		return rm.DeleteCSIDriver(ctx, req.Name, deleteOptions)
 	case "VolumeSnapshot":
 		return rm.deleteVolumeSnapshot(ctx, req.Namespace, req.Name, deleteOptions)
+	case "VolumeSnapshotClass":
+		return rm.deleteVolumeSnapshotClass(ctx, req.Name, deleteOptions)
 	default:
 		return fmt.Errorf("unsupported resource kind for deletion: %s", req.Kind)
 	}
@@ -411,6 +415,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert StorageClass to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredSC)
+	case "CSIDriver":
+		csiDriver, err := rm.kubeClient.StorageV1().CSIDrivers().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredCSI := rm.convertToUnstructured(csiDriver)
+		if unstructuredCSI == nil {
+			return nil, fmt.Errorf("failed to convert CSIDriver to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredCSI)
 	case "VolumeSnapshot":
 		// Get VolumeSnapshot using dynamic client
 		volumeSnapshotObj, err := rm.GetVolumeSnapshot(ctx, namespace, name)
@@ -421,6 +435,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		// Convert map to unstructured
 		unstructuredVolumeSnapshot := &unstructured.Unstructured{Object: volumeSnapshotObj.(map[string]interface{})}
 		obj = rm.stripManagedFields(unstructuredVolumeSnapshot)
+	case "VolumeSnapshotClass":
+		// Get VolumeSnapshotClass using dynamic client
+		volumeSnapshotClassObj, err := rm.GetVolumeSnapshotClass(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert map to unstructured
+		unstructuredVolumeSnapshotClass := &unstructured.Unstructured{Object: volumeSnapshotClassObj.(map[string]interface{})}
+		obj = rm.stripManagedFields(unstructuredVolumeSnapshotClass)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -455,6 +479,13 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			storageClassSpec["mountOptions"] = mountOptions
 		}
 		export.Spec = storageClassSpec
+	}
+
+	if kind == "CSIDriver" {
+		// For CSIDriver, extract the spec fields
+		if spec, exists := obj.Object["spec"]; exists {
+			export.Spec = spec
+		}
 	}
 
 	return export, nil
@@ -1118,5 +1149,89 @@ func (rm *ResourceManager) deleteVolumeSnapshot(ctx context.Context, namespace, 
 		return fmt.Errorf("failed to delete VolumeSnapshot: %w", err)
 	}
 
+	return nil
+}
+
+// ListVolumeSnapshotClasses lists all volume snapshot classes in the cluster
+func (rm *ResourceManager) ListVolumeSnapshotClasses(ctx context.Context) ([]interface{}, error) {
+	// Use dynamic client to get VolumeSnapshotClasses from snapshot.storage.k8s.io/v1
+	volumeSnapshotClassesGVR := schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshotclasses",
+	}
+
+	volumeSnapshotClassesList, err := rm.dynamicClient.Resource(volumeSnapshotClassesGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list volume snapshot classes: %w", err)
+	}
+
+	var result []interface{}
+	for _, item := range volumeSnapshotClassesList.Items {
+		result = append(result, item.Object)
+	}
+
+	return result, nil
+}
+
+// GetVolumeSnapshotClass gets a specific volume snapshot class
+func (rm *ResourceManager) GetVolumeSnapshotClass(ctx context.Context, name string) (interface{}, error) {
+	volumeSnapshotClassesGVR := schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshotclasses",
+	}
+
+	volumeSnapshotClass, err := rm.dynamicClient.Resource(volumeSnapshotClassesGVR).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get volume snapshot class: %w", err)
+	}
+
+	return volumeSnapshotClass.Object, nil
+}
+
+// deleteVolumeSnapshotClass deletes a VolumeSnapshotClass resource
+func (rm *ResourceManager) deleteVolumeSnapshotClass(ctx context.Context, name string, deleteOptions metav1.DeleteOptions) error {
+	volumeSnapshotClassesGVR := schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshotclasses",
+	}
+
+	err := rm.dynamicClient.Resource(volumeSnapshotClassesGVR).Delete(ctx, name, deleteOptions)
+	if err != nil {
+		return fmt.Errorf("failed to delete VolumeSnapshotClass: %w", err)
+	}
+
+	return nil
+}
+
+// ListCSIDrivers lists all CSI drivers in the cluster
+func (rm *ResourceManager) ListCSIDrivers(ctx context.Context) ([]storagev1.CSIDriver, error) {
+	csiDrivers, err := rm.kubeClient.StorageV1().CSIDrivers().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list CSI drivers: %w", err)
+	}
+	if csiDrivers.Items == nil {
+		return []storagev1.CSIDriver{}, nil
+	}
+	return csiDrivers.Items, nil
+}
+
+// GetCSIDriver gets a specific CSI driver
+func (rm *ResourceManager) GetCSIDriver(ctx context.Context, name string) (*storagev1.CSIDriver, error) {
+	csiDriver, err := rm.kubeClient.StorageV1().CSIDrivers().Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get CSI driver %s: %w", name, err)
+	}
+	return csiDriver, nil
+}
+
+// DeleteCSIDriver deletes a CSI driver
+func (rm *ResourceManager) DeleteCSIDriver(ctx context.Context, name string, deleteOptions metav1.DeleteOptions) error {
+	err := rm.kubeClient.StorageV1().CSIDrivers().Delete(ctx, name, deleteOptions)
+	if err != nil {
+		return fmt.Errorf("failed to delete CSI driver: %w", err)
+	}
 	return nil
 }
