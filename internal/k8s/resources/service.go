@@ -189,6 +189,8 @@ func (rm *ResourceManager) DeleteResource(ctx context.Context, req DeleteRequest
 		return rm.DeleteStorageClass(ctx, req.Name, deleteOptions)
 	case "CSIDriver":
 		return rm.DeleteCSIDriver(ctx, req.Name, deleteOptions)
+	case "Node":
+		return rm.kubeClient.CoreV1().Nodes().Delete(ctx, req.Name, deleteOptions)
 	case "VolumeSnapshot":
 		return rm.deleteVolumeSnapshot(ctx, req.Namespace, req.Name, deleteOptions)
 	case "VolumeSnapshotClass":
@@ -425,6 +427,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert CSIDriver to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredCSI)
+	case "Node":
+		node, err := rm.kubeClient.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredNode := rm.convertToUnstructured(node)
+		if unstructuredNode == nil {
+			return nil, fmt.Errorf("failed to convert Node to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredNode)
 	case "VolumeSnapshot":
 		// Get VolumeSnapshot using dynamic client
 		volumeSnapshotObj, err := rm.GetVolumeSnapshot(ctx, namespace, name)

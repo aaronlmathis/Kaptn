@@ -2956,3 +2956,52 @@ func (s *Server) handleGetCSIDriver(w http.ResponseWriter, r *http.Request) {
 		"status": "success",
 	})
 }
+
+func (s *Server) handleGetNode(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "name is required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get node from Kubernetes API
+	node, err := s.kubeClient.CoreV1().Nodes().Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get node",
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.nodeToEnrichedResponse(node)
+
+	// Add full node details for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       node.Spec,
+		"status":     node.Status,
+		"metadata":   node.ObjectMeta,
+		"kind":       "Node",
+		"apiVersion": "v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}

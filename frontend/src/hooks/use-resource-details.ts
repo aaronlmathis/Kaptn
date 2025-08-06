@@ -982,3 +982,83 @@ export function useCSIDriverDetails(name: string, enabled: boolean = true) {
 
 	return { data, loading, error }
 }
+
+interface NodeDetails {
+	summary: {
+		name: string
+		status: {
+			ready: boolean
+			unschedulable: boolean
+			conditions: Array<{
+				type: string
+				status: string
+				lastTransitionTime: string
+				message: string
+				reason: string
+			}>
+		}
+		capacity: {
+			cpu: string
+			memory: string
+			[key: string]: string
+		}
+		allocatable: {
+			cpu: string
+			memory: string
+			[key: string]: string
+		}
+		nodeInfo: {
+			kubeletVersion: string
+			osImage: string
+			containerRuntimeVersion: string
+			architecture: string
+			operatingSystem: string
+		}
+		age: string
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	status: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+export function useNodeDetails(name: string, enabled: boolean = true) {
+	const [data, setData] = useState<NodeDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchNodeDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/nodes/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch node details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchNodeDetails()
+	}, [name, enabled])
+
+	return { data, loading, error }
+}

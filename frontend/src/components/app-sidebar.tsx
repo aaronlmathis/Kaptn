@@ -2,18 +2,18 @@
 
 import * as React from "react"
 
-
-
 import {
   IconDashboard,
   IconDatabase,
   IconSettings,
   IconShield,
   IconHexagons,
-  IconTerminal,
+  IconChartBar,
   IconCloudComputing,
   IconTopologyStar,
 } from "@tabler/icons-react"
+
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -26,7 +26,6 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Separator } from "./ui/separator"
 import { AppLogo } from "@/components/AppLogo"
 
@@ -162,7 +161,7 @@ const data = {
         },
         {
           title: "Nodes",
-          url: "/cluster/nodes",
+          url: "/nodes",
         },
         {
           title: "Namespaces",
@@ -234,7 +233,7 @@ const data = {
     {
       title: "Monitoring",
       url: "#",
-      icon: IconTerminal,
+      icon: IconChartBar,
       items: [
         {
           title: "Metrics",
@@ -286,11 +285,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <ScrollArea className="h-full">
           <div className="flex flex-col h-full ">
             <NavMain items={data.navMain} />
-            <Separator />
             <NavSecondary items={data.navSecondary} className="mt-auto" />
           </div>
           <ScrollBar orientation="vertical" />
         </ScrollArea>
+
+
+
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />

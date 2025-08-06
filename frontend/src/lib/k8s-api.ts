@@ -710,7 +710,14 @@ export class K8sService {
 	async getNodes(): Promise<Node[]> {
 		const response = await apiClient.get<{ data: { items: Node[] }; status: string }>('/nodes');
 		return response.data?.items || [];
-	} async cordonNode(nodeName: string): Promise<{ success: boolean; message: string }> {
+	}
+
+	async getNode(name: string): Promise<Node> {
+		const response = await apiClient.get<{ data: Node; status: string }>(`/nodes/${name}`);
+		return response.data;
+	}
+
+	async cordonNode(nodeName: string): Promise<{ success: boolean; message: string }> {
 		return apiClient.post(`/nodes/${nodeName}/cordon`);
 	}
 

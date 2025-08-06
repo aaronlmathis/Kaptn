@@ -1,0 +1,94 @@
+"use client"
+
+import * as React from "react"
+import { ChevronRight } from "lucide-react"
+import { useNavigation } from "@/contexts/navigation-context"
+
+import {
+	SidebarGroup,
+	SidebarGroupContent,
+	SidebarMenu,
+	SidebarMenuButton,
+	SidebarMenuItem,
+	SidebarMenuSubButton,
+} from "@/components/ui/sidebar"
+
+import {
+	DropdownMenu,
+	DropdownMenuTrigger,
+	DropdownMenuContent,
+	DropdownMenuItem
+} from "@/components/ui/dropdown-menu"
+
+export function NavSecondary({ items, ...props }) {
+	const { isHydrated, currentPath } = useNavigation()
+
+	const isPathActive = (url) => {
+		if (!isHydrated) return false
+		return url !== "#" && currentPath.startsWith(url)
+	}
+
+	const hasActiveChild = (subItems) => {
+		if (!subItems || !isHydrated) return false
+		return subItems.some((s) => isPathActive(s.url))
+	}
+
+	return (
+		<SidebarGroup {...props}>
+			<SidebarGroupContent>
+				<SidebarMenu>
+					{items.map((item) => {
+						// Simple link (no submenu)
+						if (!item.items || item.items.length === 0) {
+							const isActive = isPathActive(item.url)
+							return (
+								<SidebarMenuItem key={item.title}>
+									<SidebarMenuButton tooltip={item.title} isActive={isActive} asChild>
+										<a href={item.url}>
+											<item.icon />
+											<span>{item.title}</span>
+										</a>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+							)
+						}
+
+						// Parent with submenu → use DropdownMenu
+						const parentIsActive = hasActiveChild(item.items)
+
+						return (
+							<SidebarMenuItem key={item.title}>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<SidebarMenuButton tooltip={item.title} isActive={parentIsActive}>
+											<item.icon />
+											<span>{item.title}</span>
+											<ChevronRight className="ml-auto" />
+										</SidebarMenuButton>
+									</DropdownMenuTrigger>
+
+									<DropdownMenuContent
+										side="right"
+										align="start"
+										className="min-w-[180px]"
+									>
+										{item.items.map((subItem) => {
+											const subIsActive = isPathActive(subItem.url)
+											return (
+												<DropdownMenuItem key={subItem.title} asChild>
+													<SidebarMenuSubButton asChild isActive={subIsActive}>
+														<a href={subItem.url}>{subItem.title}</a>
+													</SidebarMenuSubButton>
+												</DropdownMenuItem>
+											)
+										})}
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</SidebarMenuItem>
+						)
+					})}
+				</SidebarMenu>
+			</SidebarGroupContent>
+		</SidebarGroup>
+	)
+}
