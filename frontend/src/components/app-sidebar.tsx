@@ -300,6 +300,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <ScrollArea className="h-full">
           <div className="flex flex-col h-full ">
             <NavMain items={data.navMain} />
+            <Separator />
             <NavSecondary items={data.navSecondary} className="mt-auto" />
           </div>
           <ScrollBar orientation="vertical" />
