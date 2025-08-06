@@ -1026,6 +1026,61 @@ interface NodeDetails {
 	apiVersion: string
 }
 
+interface NamespaceDetails {
+	summary: {
+		name: string
+		status: string
+		age: string
+		labelsCount: number
+		annotationsCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+	}
+	spec: Record<string, unknown>
+	status: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
+export function useNamespaceDetails(name: string, enabled: boolean = true) {
+	const [data, setData] = useState<NamespaceDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchNamespaceDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/namespaces/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch namespace details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchNamespaceDetails()
+	}, [name, enabled])
+
+	return { data, loading, error }
+}
+
 export function useNodeDetails(name: string, enabled: boolean = true) {
 	const [data, setData] = useState<NodeDetails | null>(null)
 	const [loading, setLoading] = useState(false)

@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { NamespacesPageContainer } from "@/components/pages/NamespacesPageContainer";
+
+const title = "Namespaces";
+---
+
+<Layout title={title}>
+	<NamespacesPageContainer client:load />
+</Layout>

@@ -387,6 +387,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		// Convert map to unstructured
 		unstructuredEndpointSlice := &unstructured.Unstructured{Object: endpointSliceObj.(map[string]interface{})}
 		obj = rm.stripManagedFields(unstructuredEndpointSlice)
+	case "Namespace":
+		namespace, err := rm.kubeClient.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredNamespace := rm.convertToUnstructured(namespace)
+		if unstructuredNamespace == nil {
+			return nil, fmt.Errorf("failed to convert Namespace to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredNamespace)
 	case "PersistentVolume":
 		persistentVolume, err := rm.kubeClient.CoreV1().PersistentVolumes().Get(ctx, name, metav1.GetOptions{})
 		if err != nil {

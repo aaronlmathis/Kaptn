@@ -932,6 +932,49 @@ func (s *Server) handleListNamespaces(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(namespaces.Items)
 }
 
+func (s *Server) handleGetNamespace(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "namespace name is required"})
+		return
+	}
+
+	namespace, err := s.kubeClient.CoreV1().Namespaces().Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get namespace",
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Create namespace summary
+	summary := formatNamespaceSummary(namespace)
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"summary":    summary,
+			"spec":       namespace.Spec,
+			"status":     namespace.Status,
+			"metadata":   namespace.ObjectMeta,
+			"kind":       "Namespace",
+			"apiVersion": "v1",
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
 func (s *Server) handleListAllIngresses(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters for filtering
 	namespace := r.URL.Query().Get("namespace")
@@ -1131,6 +1174,7 @@ func (s *Server) handleExportResource(w http.ResponseWriter, r *http.Request) {
 		"ClusterRoleBinding": true,
 		"Node":               true,
 		"CSIDriver":          true,
+		"Namespace":          true,
 	}
 
 	// If it's not a cluster-scoped resource, namespace is required
@@ -1145,6 +1189,35 @@ func (s *Server) handleExportResource(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.Error("Failed to export resource",
 			zap.String("namespace", namespace),
+			zap.String("kind", kind),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(export)
+}
+
+func (s *Server) handleExportClusterScopedResource(w http.ResponseWriter, r *http.Request) {
+	kind := chi.URLParam(r, "kind")
+	name := chi.URLParam(r, "name")
+
+	if kind == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "kind and name are required"})
+		return
+	}
+
+	// This endpoint is specifically for cluster-scoped resources, so pass empty namespace
+	export, err := s.resourceManager.ExportResource(r.Context(), "", name, kind)
+	if err != nil {
+		s.logger.Error("Failed to export cluster-scoped resource",
 			zap.String("kind", kind),
 			zap.String("name", name),
 			zap.Error(err))

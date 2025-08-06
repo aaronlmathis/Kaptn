@@ -371,6 +371,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/metrics", s.handleGetMetrics)
 			r.Get("/metrics/namespace/{namespace}", s.handleGetNamespaceMetrics)
 			r.Get("/namespaces", s.handleListNamespaces)
+			r.Get("/namespaces/{name}", s.handleGetNamespace)
 			r.Get("/services", s.handleListServices)
 			r.Get("/services/{namespace}", s.handleListServicesInNamespace)
 			r.Get("/services/{namespace}/{name}", s.handleGetService)
@@ -398,6 +399,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/volume-snapshot-classes", s.handleListVolumeSnapshotClasses)
 			r.Get("/volume-snapshot-classes/{name}", s.handleGetVolumeSnapshotClass)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
+			r.Get("/export/{kind}/{name}", s.handleExportClusterScopedResource)
 			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
 
 			// Analytics endpoints

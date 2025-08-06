@@ -1687,3 +1687,33 @@ func (s *Server) volumeSnapshotClassToResponse(obj interface{}) map[string]inter
 		"parameters":        parameters,
 	}
 }
+
+// formatNamespaceSummary creates a basic namespace summary
+func formatNamespaceSummary(namespace *v1.Namespace) map[string]interface{} {
+	// Calculate age
+	age := "unknown"
+	if !namespace.CreationTimestamp.IsZero() {
+		age = time.Since(namespace.CreationTimestamp.Time).String()
+	}
+
+	// Count labels and annotations
+	labelsCount := 0
+	annotationsCount := 0
+	if namespace.Labels != nil {
+		labelsCount = len(namespace.Labels)
+	}
+	if namespace.Annotations != nil {
+		annotationsCount = len(namespace.Annotations)
+	}
+
+	return map[string]interface{}{
+		"name":              namespace.Name,
+		"status":            string(namespace.Status.Phase),
+		"age":               age,
+		"labelsCount":       labelsCount,
+		"annotationsCount":  annotationsCount,
+		"creationTimestamp": namespace.CreationTimestamp.Time,
+		"labels":            namespace.Labels,
+		"annotations":       namespace.Annotations,
+	}
+}

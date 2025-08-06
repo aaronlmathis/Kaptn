@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { IconLoader2 } from '@tabler/icons-react';
 import * as yaml from 'js-yaml';
@@ -43,17 +43,25 @@ export function ResourceYamlEditor({ resourceName, namespace, resourceKind, chil
 	const [isSaving, setIsSaving] = useState(false);
 
 	// Load resource YAML when dialog opens
-	useEffect(() => {
-		if (isOpen) {
-			loadResourceYaml();
-		}
-	}, [isOpen, resourceName, namespace, resourceKind]);
-
-	const loadResourceYaml = async () => {
+	const loadResourceYaml = useCallback(async () => {
 		setIsLoading(true);
 		try {
-			// Use the existing export API to get resource YAML
-			const yamlData = await k8sService.exportResource(namespace, resourceKind, resourceName);
+			let yamlData;
+
+			// For cluster-scoped resources, use the different endpoint
+			const clusterScopedResources = ['Namespace', 'Node', 'StorageClass', 'PersistentVolume', 'CSIDriver'];
+
+			if (clusterScopedResources.includes(resourceKind)) {
+				// Use the cluster-scoped export API endpoint
+				const response = await fetch(`/api/v1/export/${resourceKind}/${resourceName}`);
+				if (!response.ok) {
+					throw new Error(`HTTP error! status: ${response.status}`);
+				}
+				yamlData = await response.json();
+			} else {
+				// Use the existing export API to get resource YAML
+				yamlData = await k8sService.exportResource(namespace, resourceKind, resourceName);
+			}
 
 			// Convert the ResourceExport object to YAML format
 			const yamlString = convertResourceExportToYaml(yamlData);
@@ -64,7 +72,13 @@ export function ResourceYamlEditor({ resourceName, namespace, resourceKind, chil
 		} finally {
 			setIsLoading(false);
 		}
-	};
+	}, [resourceName, namespace, resourceKind]);
+
+	useEffect(() => {
+		if (isOpen) {
+			loadResourceYaml();
+		}
+	}, [isOpen, loadResourceYaml]);
 
 	const handleSave = async () => {
 		if (!yamlContent.trim()) {

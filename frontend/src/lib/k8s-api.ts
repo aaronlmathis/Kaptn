@@ -286,16 +286,30 @@ export interface NetworkPolicy {
 	affectedPods: number;
 }
 
-// Namespace interface
+// Namespace interface based on the actual backend API response
 export interface Namespace {
 	metadata: {
 		name: string;
 		creationTimestamp: string;
 		labels?: Record<string, string>;
+		annotations?: Record<string, string>;
 	};
 	status: {
 		phase: string;
 	};
+	spec?: {
+		finalizers?: string[];
+	};
+}
+
+// Dashboard namespace interface for UI
+export interface DashboardNamespace {
+	id: string;
+	name: string;
+	status: string;
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
 }
 
 // Interface for transformed data that matches the current UI schema
@@ -921,6 +935,15 @@ export class K8sService {
 		return apiClient.get<Namespace[]>('/namespaces');
 	}
 
+	async getNamespace(name: string): Promise<{ summary: Namespace; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		const response = await apiClient.get<{ data: { summary: Namespace; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/namespaces/${name}`);
+		return response.data;
+	}
+
+	async deleteNamespace(name: string): Promise<{ success: boolean; message: string }> {
+		return apiClient.delete(`/namespaces/${name}`);
+	}
+
 	// YAML operations
 	async applyYaml(
 		namespace: string,
@@ -1308,6 +1331,40 @@ export function transformVolumeSnapshotClassesToUI(volumeSnapshotClasses: Volume
 		labelsCount: vsc.labelsCount,
 		annotationsCount: vsc.annotationsCount,
 		parametersCount: vsc.parametersCount
+	}));
+}
+
+function calculateAge(creationTimestamp: string): string {
+	const now = new Date();
+	const created = new Date(creationTimestamp);
+	const diffMs = now.getTime() - created.getTime();
+
+	const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+	const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+	const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+	if (diffDays > 0) {
+		return `${diffDays}d`;
+	} else if (diffHours > 0) {
+		return `${diffHours}h`;
+	} else if (diffMinutes > 0) {
+		return `${diffMinutes}m`;
+	} else {
+		return '0m';
+	}
+}
+
+export function transformNamespacesToUI(namespaces: Namespace[]): DashboardNamespace[] {
+	if (!namespaces || !Array.isArray(namespaces)) {
+		return [];
+	}
+	return namespaces.map((namespace) => ({
+		id: namespace.metadata.name,
+		name: namespace.metadata.name,
+		status: namespace.status.phase,
+		age: calculateAge(namespace.metadata.creationTimestamp),
+		labelsCount: namespace.metadata.labels ? Object.keys(namespace.metadata.labels).length : 0,
+		annotationsCount: namespace.metadata.annotations ? Object.keys(namespace.metadata.annotations).length : 0,
 	}));
 }
 

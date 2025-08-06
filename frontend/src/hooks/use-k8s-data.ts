@@ -21,6 +21,7 @@ import {
 	type DashboardCSIDriver,
 	type DashboardVolumeSnapshotClass,
 	type DashboardVolumeSnapshot,
+	type DashboardNamespace,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
@@ -41,7 +42,8 @@ import {
 	transformStorageClassesToUI,
 	transformCSIDriversToUI,
 	transformVolumeSnapshotClassesToUI,
-	transformVolumeSnapshotsToUI
+	transformVolumeSnapshotsToUI,
+	transformNamespacesToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -712,6 +714,34 @@ export function useVolumeSnapshots(): UseK8sDataResult<DashboardVolumeSnapshot> 
 			setLoading(false);
 		}
 	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useNamespaces(): UseK8sDataResult<DashboardNamespace> {
+	const [data, setData] = useState<DashboardNamespace[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			// Namespaces are cluster-scoped, so no namespace parameter needed
+			const namespaces = await k8sService.getNamespaces();
+			const transformedNamespaces = transformNamespacesToUI(namespaces);
+			setData(transformedNamespaces);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch namespaces');
+			console.error('Error fetching namespaces:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, []); // No dependency on selectedNamespace since Namespaces are cluster-scoped
 
 	useEffect(() => {
 		fetchData();
