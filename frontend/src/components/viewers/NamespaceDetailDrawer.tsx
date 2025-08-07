@@ -19,7 +19,7 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNamespaceDetails } from "@/hooks/use-resource-details"
 
 // Import the namespace schema from the main data table component
-import { namespaceSchema } from "@/components/pages/NamespacesDataTable"
+import { namespaceSchema } from "@/components/data_tables/NamespacesDataTable"
 
 function getStatusBadge(status: string) {
 	switch (status) {

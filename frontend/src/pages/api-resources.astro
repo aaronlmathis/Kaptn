@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { ApiResourcesPageContainer } from "@/components/containers/ApiResourcesPageContainer";
+
+const title = "API Resources";
+---
+
+<Layout title={title}>
+	<ApiResourcesPageContainer client:load />
+</Layout>

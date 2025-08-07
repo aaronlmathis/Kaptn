@@ -103,7 +103,7 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 			path.startsWith('/persistent-volume-claims') || path.startsWith('/storage-classes') || path.startsWith('/volume-snapshots') ||
 			path.startsWith('/volume-snapshot-classes') || path.startsWith('/csi-drivers')) {
 			initialState['Config & Storage'] = true
-		} else if (path.startsWith('/cluster')) {
+		} else if (path.startsWith('/overview') || path.startsWith('/nodes') || path.startsWith('/namespaces') || path.startsWith('/resource-quotas') || path.startsWith('/api-resources') || path.startsWith('/crds') || path.startsWith('/roles') || path.startsWith('/cluster-roles') || path.startsWith('/events') || path.startsWith('/component-status') || path.startsWith('/certificates') || path.startsWith('/version-upgrades') || path.startsWith('/metrics')) {
 			initialState['Cluster'] = true
 		} else if (path.startsWith('/rbac') || path.startsWith('/service-accounts') || path.startsWith('/pod-security')) {
 			initialState['Access Control'] = true

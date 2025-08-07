@@ -1044,6 +1044,32 @@ interface NamespaceDetails {
 	apiVersion: string
 }
 
+interface ResourceQuotaDetails {
+	summary: {
+		name: string
+		namespace: string
+		age: string
+		labelsCount: number
+		annotationsCount: number
+		creationTimestamp: string
+		labels?: Record<string, string>
+		annotations?: Record<string, string>
+		hardLimits: Array<{
+			name: string
+			limit: string
+		}>
+		usedResources: Array<{
+			name: string
+			used: string
+		}>
+	}
+	spec: Record<string, unknown>
+	status: Record<string, unknown>
+	metadata: Record<string, unknown>
+	kind: string
+	apiVersion: string
+}
+
 export function useNamespaceDetails(name: string, enabled: boolean = true) {
 	const [data, setData] = useState<NamespaceDetails | null>(null)
 	const [loading, setLoading] = useState(false)
@@ -1077,6 +1103,43 @@ export function useNamespaceDetails(name: string, enabled: boolean = true) {
 
 		fetchNamespaceDetails()
 	}, [name, enabled])
+
+	return { data, loading, error }
+}
+
+export function useResourceQuotaDetails(namespace: string, name: string, enabled: boolean = true) {
+	const [data, setData] = useState<ResourceQuotaDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !namespace || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchResourceQuotaDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/resource-quotas/${namespace}/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch resource quota details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchResourceQuotaDetails()
+	}, [namespace, name, enabled])
 
 	return { data, loading, error }
 }

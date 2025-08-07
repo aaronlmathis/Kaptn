@@ -19,7 +19,7 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useVolumeSnapshotDetails } from "@/hooks/use-resource-details"
 
 // Import the volume snapshot schema from the data table
-import { volumeSnapshotSchema } from "@/components/pages/VolumeSnapshotsDataTable"
+import { volumeSnapshotSchema } from "@/components/data_tables/VolumeSnapshotsDataTable"
 
 function getReadyStatusBadge(readyToUse: boolean) {
 	if (readyToUse) {

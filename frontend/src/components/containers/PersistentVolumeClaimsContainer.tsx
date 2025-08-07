@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { PersistentVolumeClaimsDataTable } from "@/components/pages/PersistentVolumeClaimsDataTable"
+import { PersistentVolumeClaimsDataTable } from "@/components/data_tables/PersistentVolumeClaimsDataTable"
 
 export function PersistentVolumeClaimsContainer() {
 	return (

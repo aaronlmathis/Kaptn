@@ -1696,3 +1696,141 @@ func sortNetworkPolicies(networkPolicies []networkingv1.NetworkPolicy, sortField
 		return less
 	})
 }
+
+// ResourceQuotaFilterOptions represents filtering options for resource quotas
+type ResourceQuotaFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+}
+
+// FilterResourceQuotas filters and paginates resource quotas based on the provided options
+func FilterResourceQuotas(resourceQuotas []v1.ResourceQuota, options ResourceQuotaFilterOptions) ([]v1.ResourceQuota, error) {
+	var filtered []v1.ResourceQuota
+
+	// Apply label selector filter
+	labelSelector := labels.Everything()
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Apply field selector filter
+	fieldSelector := fields.Everything()
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, rq := range resourceQuotas {
+		// Namespace filter
+		if options.Namespace != "" && rq.Namespace != options.Namespace {
+			continue
+		}
+
+		// Label selector filter
+		if !labelSelector.Matches(labels.Set(rq.Labels)) {
+			continue
+		}
+
+		// Field selector filter (basic support for metadata.name and metadata.namespace)
+		fieldsSet := fields.Set{
+			"metadata.name":      rq.Name,
+			"metadata.namespace": rq.Namespace,
+		}
+		if !fieldSelector.Matches(fieldsSet) {
+			continue
+		}
+
+		// Search filter
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(rq.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(rq.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range rq.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, rq)
+	}
+
+	// Sort
+	sortResourceQuotas(filtered, options.Sort, options.Order)
+
+	// Paginate
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []v1.ResourceQuota{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// sortResourceQuotas sorts resource quotas by the specified field and order
+func sortResourceQuotas(resourceQuotas []v1.ResourceQuota, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(resourceQuotas, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = resourceQuotas[i].Name < resourceQuotas[j].Name
+		case "namespace":
+			less = resourceQuotas[i].Namespace < resourceQuotas[j].Namespace
+		case "age":
+			less = resourceQuotas[i].CreationTimestamp.Time.After(resourceQuotas[j].CreationTimestamp.Time)
+		default:
+			less = resourceQuotas[i].Name < resourceQuotas[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}

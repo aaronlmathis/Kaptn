@@ -22,6 +22,8 @@ import {
 	type DashboardVolumeSnapshotClass,
 	type DashboardVolumeSnapshot,
 	type DashboardNamespace,
+	type DashboardResourceQuota,
+	type DashboardAPIResource,
 	type OverviewData,
 	transformPodsToUI,
 	transformNodesToUI,
@@ -43,7 +45,9 @@ import {
 	transformCSIDriversToUI,
 	transformVolumeSnapshotClassesToUI,
 	transformVolumeSnapshotsToUI,
-	transformNamespacesToUI
+	transformNamespacesToUI,
+	transformResourceQuotasToUI,
+	transformAPIResourcesToUI
 } from '@/lib/k8s-api';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
@@ -750,6 +754,35 @@ export function useNamespaces(): UseK8sDataResult<DashboardNamespace> {
 	return { data, loading, error, refetch: fetchData };
 }
 
+export function useResourceQuotas(): UseK8sDataResult<DashboardResourceQuota> {
+	const [data, setData] = useState<DashboardResourceQuota[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const { selectedNamespace } = useNamespace();
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
+			const resourceQuotas = await k8sService.getResourceQuotas(namespace);
+			const transformedResourceQuotas = transformResourceQuotasToUI(resourceQuotas);
+			setData(transformedResourceQuotas);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch resource quotas');
+			console.error('Error fetching resource quotas:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, [selectedNamespace]);
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
 export function useVolumeSnapshotClasses(): UseK8sDataResult<DashboardVolumeSnapshotClass> {
 	const [data, setData] = useState<DashboardVolumeSnapshotClass[]>([]);
 	const [loading, setLoading] = useState(true);
@@ -770,6 +803,33 @@ export function useVolumeSnapshotClasses(): UseK8sDataResult<DashboardVolumeSnap
 			setLoading(false);
 		}
 	}, []); // No dependency on selectedNamespace since VolumeSnapshotClasses are cluster-scoped
+
+	useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	return { data, loading, error, refetch: fetchData };
+}
+
+export function useAPIResources(): UseK8sDataResult<DashboardAPIResource> {
+	const [data, setData] = useState<DashboardAPIResource[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	const fetchData = useCallback(async () => {
+		try {
+			setLoading(true);
+			setError(null);
+			const apiResources = await k8sService.getAPIResources();
+			const transformedAPIResources = transformAPIResourcesToUI(apiResources);
+			setData(transformedAPIResources);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to fetch API resources');
+			console.error('Error fetching API resources:', err);
+		} finally {
+			setLoading(false);
+		}
+	}, []); // No dependencies since API resources are cluster-scoped and static
 
 	useEffect(() => {
 		fetchData();

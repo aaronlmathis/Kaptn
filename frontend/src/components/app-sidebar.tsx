@@ -157,7 +157,7 @@ const data = {
       items: [
         {
           title: "Cluster Overview",
-          url: "/cluster/overview",
+          url: "/overview",
         },
         {
           title: "Nodes",
@@ -165,47 +165,47 @@ const data = {
         },
         {
           title: "Namespaces",
-          url: "/cluster/namespaces",
+          url: "/namespaces",
         },
         {
           title: "Resource Quotas",
-          url: "/cluster/resource-quotas",
+          url: "/resource-quotas",
         },
         {
           title: "API Resources",
-          url: "/cluster/api-resources",
+          url: "/api-resources",
         },
         {
           title: "CRDs",
-          url: "/cluster/crds",
+          url: "/crds",
         },
         {
           title: "Roles & RoleBindings",
-          url: "/cluster/roles",
+          url: "/roles",
         },
         {
           title: "ClusterRoles & Bindings",
-          url: "/cluster/cluster-roles",
+          url: "/cluster-roles",
         },
         {
           title: "Events",
-          url: "/cluster/events",
+          url: "/events",
         },
         {
           title: "Component Status",
-          url: "/cluster/component-status",
+          url: "/component-status",
         },
         {
           title: "Certificates",
-          url: "/cluster/certificates",
+          url: "/certificates",
         },
         {
           title: "Version & Upgrades",
-          url: "/cluster/version-upgrades",
+          url: "/version-upgrades",
         },
         {
           title: "Cluster Metrics",
-          url: "/cluster/metrics",
+          url: "/metrics",
         },
       ],
     },

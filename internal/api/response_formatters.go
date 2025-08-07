@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/k8s/metrics"
+	"github.com/aaronlmathis/kaptn/internal/k8s/resources"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
@@ -1715,5 +1716,156 @@ func formatNamespaceSummary(namespace *v1.Namespace) map[string]interface{} {
 		"creationTimestamp": namespace.CreationTimestamp.Time,
 		"labels":            namespace.Labels,
 		"annotations":       namespace.Annotations,
+	}
+}
+
+// resourceQuotaToResponse converts a ResourceQuota to a response format
+func (s *Server) resourceQuotaToResponse(resourceQuota v1.ResourceQuota) map[string]interface{} {
+	age := "unknown"
+	if !resourceQuota.CreationTimestamp.IsZero() {
+		age = calculateAge(resourceQuota.CreationTimestamp.Time)
+	}
+
+	// Count labels and annotations
+	labelsCount := 0
+	annotationsCount := 0
+	if resourceQuota.Labels != nil {
+		labelsCount = len(resourceQuota.Labels)
+	}
+	if resourceQuota.Annotations != nil {
+		annotationsCount = len(resourceQuota.Annotations)
+	}
+
+	// Extract resource limits and used
+	var hardLimits []map[string]interface{}
+	var usedResources []map[string]interface{}
+
+	if resourceQuota.Spec.Hard != nil {
+		for resourceName, quantity := range resourceQuota.Spec.Hard {
+			used := ""
+			if resourceQuota.Status.Used != nil {
+				if usedQuantity, exists := resourceQuota.Status.Used[resourceName]; exists {
+					used = usedQuantity.String()
+				} else {
+					used = "0"
+				}
+			}
+
+			hardLimits = append(hardLimits, map[string]interface{}{
+				"name":  string(resourceName),
+				"limit": quantity.String(),
+				"used":  used,
+			})
+		}
+	}
+
+	if resourceQuota.Status.Used != nil {
+		for resourceName, quantity := range resourceQuota.Status.Used {
+			usedResources = append(usedResources, map[string]interface{}{
+				"name":     string(resourceName),
+				"quantity": quantity.String(),
+			})
+		}
+	}
+
+	// Count resource types
+	hardResourcesCount := len(resourceQuota.Spec.Hard)
+	usedResourcesCount := len(resourceQuota.Status.Used)
+
+	return map[string]interface{}{
+		"id":                 fmt.Sprintf("%s-%s", resourceQuota.Namespace, resourceQuota.Name), // For table sorting
+		"name":               resourceQuota.Name,
+		"namespace":          resourceQuota.Namespace,
+		"age":                age,
+		"hardLimits":         hardLimits,
+		"usedResources":      usedResources,
+		"hardResourcesCount": hardResourcesCount,
+		"usedResourcesCount": usedResourcesCount,
+		"labelsCount":        labelsCount,
+		"annotationsCount":   annotationsCount,
+		"creationTimestamp":  resourceQuota.CreationTimestamp.Time,
+		"labels":             resourceQuota.Labels,
+		"annotations":        resourceQuota.Annotations,
+	}
+}
+
+// apiResourceToResponse converts an API resource to response format
+func (s *Server) apiResourceToResponse(resource resources.APIResource) map[string]interface{} {
+	shortNamesStr := ""
+	if len(resource.ShortNames) > 0 {
+		for i, shortName := range resource.ShortNames {
+			if i > 0 {
+				shortNamesStr += ","
+			}
+			shortNamesStr += shortName
+		}
+	}
+
+	categoriesStr := ""
+	if len(resource.Categories) > 0 {
+		for i, category := range resource.Categories {
+			if i > 0 {
+				categoriesStr += ","
+			}
+			categoriesStr += category
+		}
+	}
+
+	verbsStr := ""
+	if len(resource.Verbs) > 0 {
+		for i, verb := range resource.Verbs {
+			if i > 0 {
+				verbsStr += ","
+			}
+			verbsStr += verb
+		}
+	}
+
+	namespacedStr := "false"
+	if resource.Namespaced {
+		namespacedStr = "true"
+	}
+
+	return map[string]interface{}{
+		"id":           resource.ID,
+		"name":         resource.Name,
+		"singularName": resource.SingularName,
+		"shortNames":   shortNamesStr,
+		"kind":         resource.Kind,
+		"group":        resource.Group,
+		"version":      resource.Version,
+		"apiVersion":   resource.APIVersion,
+		"namespaced":   namespacedStr,
+		"categories":   categoriesStr,
+		"verbs":        verbsStr,
+	}
+}
+
+// apiResourceToEnrichedResponse converts an API resource to enriched response format
+func (s *Server) apiResourceToEnrichedResponse(resource resources.APIResource) map[string]interface{} {
+	// Create summary-like response for details view
+	return map[string]interface{}{
+		"summary": map[string]interface{}{
+			"name":            resource.Name,
+			"singularName":    resource.SingularName,
+			"shortNames":      resource.ShortNames,
+			"kind":            resource.Kind,
+			"group":           resource.Group,
+			"version":         resource.Version,
+			"apiVersion":      resource.APIVersion,
+			"namespaced":      resource.Namespaced,
+			"categories":      resource.Categories,
+			"verbs":           resource.Verbs,
+			"shortNamesCount": len(resource.ShortNames),
+			"categoriesCount": len(resource.Categories),
+			"verbsCount":      len(resource.Verbs),
+		},
+		"metadata": map[string]interface{}{
+			"name":       resource.Name,
+			"kind":       resource.Kind,
+			"apiVersion": resource.APIVersion,
+		},
+		"kind":       resource.Kind,
+		"apiVersion": resource.APIVersion,
 	}
 }

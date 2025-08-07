@@ -398,6 +398,10 @@ func (s *Server) setupRoutes() {
 			r.Get("/volume-snapshots/{namespace}/{name}", s.handleGetVolumeSnapshot)
 			r.Get("/volume-snapshot-classes", s.handleListVolumeSnapshotClasses)
 			r.Get("/volume-snapshot-classes/{name}", s.handleGetVolumeSnapshotClass)
+			r.Get("/resource-quotas", s.handleListResourceQuotas)
+			r.Get("/resource-quotas/{namespace}/{name}", s.handleGetResourceQuota)
+			r.Get("/api-resources", s.handleListAPIResources)
+			r.Get("/api-resources/{name}", s.handleGetAPIResource)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
 			r.Get("/export/{kind}/{name}", s.handleExportClusterScopedResource)
 			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
@@ -428,6 +432,7 @@ func (s *Server) setupRoutes() {
 			// M5: Advanced write endpoints
 			r.Post("/scale", s.handleScaleResource)
 			r.Delete("/resources", s.handleDeleteResource)
+			r.Delete("/resource-quotas/{namespace}/{name}", s.handleDeleteResourceQuota)
 			r.Post("/namespaces", s.handleCreateNamespace)
 			r.Delete("/namespaces/{namespace}", s.handleDeleteNamespace)
 			r.Get("/exec/{sessionId}", s.handleExecWebSocket)

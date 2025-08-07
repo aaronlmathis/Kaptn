@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { ResourceQuotasPageContainer } from "@/components/containers/ResourceQuotasPageContainer";
+
+const title = "Resource Quotas";
+---
+
+<Layout title={title}>
+	<ResourceQuotasPageContainer client:load />
+</Layout>

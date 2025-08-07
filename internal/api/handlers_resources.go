@@ -3078,3 +3078,336 @@ func (s *Server) handleGetNode(w http.ResponseWriter, r *http.Request) {
 		"status": "success",
 	})
 }
+
+func (s *Server) handleListResourceQuotas(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	namespace := r.URL.Query().Get("namespace")
+	labelSelector := r.URL.Query().Get("labelSelector")
+	fieldSelector := r.URL.Query().Get("fieldSelector")
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	sort := r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get resource quotas from resource manager
+	resourceQuotas, err := s.resourceManager.ListResourceQuotas(r.Context(), namespace)
+	if err != nil {
+		s.logger.Error("Failed to list resource quotas", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(resourceQuotas)
+
+	// Apply filters
+	filterOpts := selectors.ResourceQuotaFilterOptions{
+		Namespace:     namespace,
+		LabelSelector: labelSelector,
+		FieldSelector: fieldSelector,
+		Search:        search,
+		Sort:          sort,
+		Order:         order,
+		Page:          page,
+		PageSize:      pageSize,
+	}
+
+	filteredResourceQuotas, err := selectors.FilterResourceQuotas(resourceQuotas, filterOpts)
+	if err != nil {
+		s.logger.Error("Failed to filter resource quotas", zap.Error(err))
+		http.Error(w, "Failed to filter resource quotas", http.StatusBadRequest)
+		return
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, resourceQuota := range filteredResourceQuotas {
+		responses = append(responses, s.resourceQuotaToResponse(resourceQuota))
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetResourceQuota(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get resource quota from Kubernetes API
+	resourceQuota, err := s.kubeClient.CoreV1().ResourceQuotas(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		s.logger.Error("Failed to get resource quota",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.resourceQuotaToResponse(*resourceQuota)
+
+	// Add full resource quota spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary":    summary,
+		"spec":       resourceQuota.Spec,
+		"status":     resourceQuota.Status,
+		"metadata":   resourceQuota.ObjectMeta,
+		"kind":       "ResourceQuota",
+		"apiVersion": "v1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+func (s *Server) handleDeleteResourceQuota(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	name := chi.URLParam(r, "name")
+
+	if namespace == "" || name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "namespace and name are required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Delete the resource quota
+	err := s.resourceManager.DeleteResourceQuota(r.Context(), namespace, name, metav1.DeleteOptions{})
+	if err != nil {
+		s.logger.Error("Failed to delete resource quota",
+			zap.String("namespace", namespace),
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	s.logger.Info("Resource quota deleted successfully",
+		zap.String("namespace", namespace),
+		zap.String("name", name))
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Resource quota deleted successfully",
+		"status":  "success",
+	})
+}
+
+// API Resources handlers
+
+func (s *Server) handleListAPIResources(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	search := r.URL.Query().Get("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	pageSize, _ := strconv.Atoi(pageSizeStr)
+
+	// Default page size if not specified
+	if pageSize <= 0 {
+		pageSize = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+
+	// Get API resources from resource manager
+	apiResources, err := s.resourceManager.ListAPIResources(r.Context())
+	if err != nil {
+		s.logger.Error("Failed to list API resources", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    []interface{}{},
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    0,
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Store total count before filtering
+	totalBeforeFilter := len(apiResources)
+
+	// Apply basic filtering if search is provided
+	if search != "" {
+		var filteredResources []interface{}
+		searchLower := strings.ToLower(search)
+		for _, resource := range apiResources {
+			if strings.Contains(strings.ToLower(resource.Name), searchLower) ||
+				strings.Contains(strings.ToLower(resource.Kind), searchLower) ||
+				strings.Contains(strings.ToLower(resource.Group), searchLower) ||
+				strings.Contains(strings.ToLower(resource.APIVersion), searchLower) {
+				filteredResources = append(filteredResources, s.apiResourceToResponse(resource))
+			}
+		}
+
+		// Apply pagination to filtered results
+		start := (page - 1) * pageSize
+		end := start + pageSize
+		if start > len(filteredResources) {
+			start = len(filteredResources)
+		}
+		if end > len(filteredResources) {
+			end = len(filteredResources)
+		}
+
+		pagedItems := filteredResources[start:end]
+
+		response := map[string]interface{}{
+			"data": map[string]interface{}{
+				"items":    pagedItems,
+				"page":     page,
+				"pageSize": pageSize,
+				"total":    len(filteredResources),
+			},
+			"status": "success",
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// No filtering - apply pagination directly
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > len(apiResources) {
+		start = len(apiResources)
+	}
+	if end > len(apiResources) {
+		end = len(apiResources)
+	}
+
+	// Convert to response format
+	var responses []map[string]interface{}
+	for _, resource := range apiResources[start:end] {
+		responses = append(responses, s.apiResourceToResponse(resource))
+	}
+
+	// Create paginated response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    responses,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleGetAPIResource(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	group := r.URL.Query().Get("group") // Group can be empty for core resources
+
+	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "name is required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get API resource from resource manager
+	apiResource, err := s.resourceManager.GetAPIResource(r.Context(), name, group)
+	if err != nil {
+		s.logger.Error("Failed to get API resource",
+			zap.String("name", name),
+			zap.String("group", group),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.apiResourceToEnrichedResponse(*apiResource)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   summary,
+		"status": "success",
+	})
+}

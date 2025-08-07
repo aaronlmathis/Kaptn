@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -467,6 +468,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		// Convert map to unstructured
 		unstructuredVolumeSnapshotClass := &unstructured.Unstructured{Object: volumeSnapshotClassObj.(map[string]interface{})}
 		obj = rm.stripManagedFields(unstructuredVolumeSnapshotClass)
+	case "ResourceQuota":
+		resourceQuota, err := rm.kubeClient.CoreV1().ResourceQuotas(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredResourceQuota := rm.convertToUnstructured(resourceQuota)
+		if unstructuredResourceQuota == nil {
+			return nil, fmt.Errorf("failed to convert ResourceQuota to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredResourceQuota)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}
@@ -1256,4 +1267,154 @@ func (rm *ResourceManager) DeleteCSIDriver(ctx context.Context, name string, del
 		return fmt.Errorf("failed to delete CSI driver: %w", err)
 	}
 	return nil
+}
+
+// ListResourceQuotas lists resource quotas in a namespace or all namespaces
+func (rm *ResourceManager) ListResourceQuotas(ctx context.Context, namespace string) ([]v1.ResourceQuota, error) {
+	if namespace == "" {
+		resourceQuotas, err := rm.kubeClient.CoreV1().ResourceQuotas("").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list resource quotas: %w", err)
+		}
+		return resourceQuotas.Items, nil
+	}
+
+	resourceQuotas, err := rm.kubeClient.CoreV1().ResourceQuotas(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list resource quotas in namespace %s: %w", namespace, err)
+	}
+
+	return resourceQuotas.Items, nil
+}
+
+// GetResourceQuota gets a specific resource quota
+func (rm *ResourceManager) GetResourceQuota(ctx context.Context, namespace, name string) (*v1.ResourceQuota, error) {
+	resourceQuota, err := rm.kubeClient.CoreV1().ResourceQuotas(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource quota %s in namespace %s: %w", name, namespace, err)
+	}
+	return resourceQuota, nil
+}
+
+// DeleteResourceQuota deletes a resource quota
+func (rm *ResourceManager) DeleteResourceQuota(ctx context.Context, namespace, name string, deleteOptions metav1.DeleteOptions) error {
+	err := rm.kubeClient.CoreV1().ResourceQuotas(namespace).Delete(ctx, name, deleteOptions)
+	if err != nil {
+		return fmt.Errorf("failed to delete resource quota %s in namespace %s: %w", name, namespace, err)
+	}
+	return nil
+}
+
+// APIResource represents a Kubernetes API resource
+type APIResource struct {
+	ID           int      `json:"id"`
+	Name         string   `json:"name"`
+	SingularName string   `json:"singularName"`
+	ShortNames   []string `json:"shortNames"`
+	Kind         string   `json:"kind"`
+	Group        string   `json:"group"`
+	Version      string   `json:"version"`
+	APIVersion   string   `json:"apiVersion"`
+	Namespaced   bool     `json:"namespaced"`
+	Categories   []string `json:"categories"`
+	Verbs        []string `json:"verbs"`
+}
+
+// ListAPIResources lists all API resources available in the cluster
+func (rm *ResourceManager) ListAPIResources(ctx context.Context) ([]APIResource, error) {
+	// Get API resource lists from the discovery client
+	discoveryClient := rm.kubeClient.Discovery()
+
+	// Get all API groups and versions
+	apiGroupList, err := discoveryClient.ServerGroups()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API groups: %w", err)
+	}
+
+	var allAPIResources []APIResource
+	id := 1
+
+	// Process core API group (v1)
+	coreResourceList, err := discoveryClient.ServerResourcesForGroupVersion("v1")
+	if err != nil {
+		rm.logger.Warn("Failed to get core API resources", zap.Error(err))
+	} else {
+		for _, resource := range coreResourceList.APIResources {
+			// Skip subresources (those with / in the name)
+			if strings.Contains(resource.Name, "/") {
+				continue
+			}
+
+			apiResource := APIResource{
+				ID:           id,
+				Name:         resource.Name,
+				SingularName: resource.SingularName,
+				ShortNames:   resource.ShortNames,
+				Kind:         resource.Kind,
+				Group:        "", // Core API group has no group name
+				Version:      "v1",
+				APIVersion:   "v1",
+				Namespaced:   resource.Namespaced,
+				Categories:   resource.Categories,
+				Verbs:        resource.Verbs,
+			}
+			allAPIResources = append(allAPIResources, apiResource)
+			id++
+		}
+	}
+
+	// Process all other API groups
+	for _, group := range apiGroupList.Groups {
+		for _, version := range group.Versions {
+			groupVersion := fmt.Sprintf("%s/%s", group.Name, version.Version)
+			resourceList, err := discoveryClient.ServerResourcesForGroupVersion(groupVersion)
+			if err != nil {
+				rm.logger.Warn("Failed to get resources for group version",
+					zap.String("groupVersion", groupVersion),
+					zap.Error(err))
+				continue
+			}
+
+			for _, resource := range resourceList.APIResources {
+				// Skip subresources (those with / in the name)
+				if strings.Contains(resource.Name, "/") {
+					continue
+				}
+
+				apiResource := APIResource{
+					ID:           id,
+					Name:         resource.Name,
+					SingularName: resource.SingularName,
+					ShortNames:   resource.ShortNames,
+					Kind:         resource.Kind,
+					Group:        group.Name,
+					Version:      version.Version,
+					APIVersion:   groupVersion,
+					Namespaced:   resource.Namespaced,
+					Categories:   resource.Categories,
+					Verbs:        resource.Verbs,
+				}
+				allAPIResources = append(allAPIResources, apiResource)
+				id++
+			}
+		}
+	}
+
+	return allAPIResources, nil
+}
+
+// GetAPIResource gets a specific API resource by name and group
+func (rm *ResourceManager) GetAPIResource(ctx context.Context, name, group string) (*APIResource, error) {
+	allResources, err := rm.ListAPIResources(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, resource := range allResources {
+		if resource.Name == name && resource.Group == group {
+			return &resource, nil
+		}
+	}
+
+	return nil, fmt.Errorf("API resource %s not found in group %s", name, group)
 }
