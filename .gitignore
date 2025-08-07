@@ -397,3 +397,4 @@ docs/
 !internal/k8s/logs/
 code_review/
 internal_docs/
+/reports/

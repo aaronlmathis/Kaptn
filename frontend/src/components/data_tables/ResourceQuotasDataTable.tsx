@@ -78,7 +78,7 @@ import { ResourceQuotaDetailDrawer } from "@/components/viewers/ResourceQuotaDet
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useResourceQuotas } from "@/hooks/use-k8s-data"
 import { useNamespace } from "@/contexts/namespace-context"
-import { type DashboardResourceQuota } from "@/lib/k8s-api"
+import { type DashboardResourceQuota } from "@/lib/k8s-cluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: string }) {

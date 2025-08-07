@@ -17,7 +17,7 @@ import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNodeDetails } from "@/hooks/use-resource-details"
-import { k8sService } from "@/lib/k8s-api"
+import { k8sService } from "@/lib/k8s-service"
 import { nodeSchema } from "@/lib/schemas/node"
 
 function getNodeStatusBadge(status: string) {

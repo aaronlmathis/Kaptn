@@ -1,34 +1,4 @@
 import { apiClient } from './api-client';
-import { applyYaml, scaleResource, exportResource, formatMemory, getImageFromLabels, calculateAge } from './k8s-common';
-import {
-	getPods,
-	getPod,
-	deletePod,
-	getDeployments,
-	getStatefulSets,
-	getDaemonSets,
-	getReplicaSets,
-	getJobs,
-	getJob,
-	getCronJobs,
-	getCronJob
-} from './k8s-workloads';
-import {
-	getConfigMaps,
-	getConfigMap,
-	getPersistentVolumes,
-	getPersistentVolume,
-	getPersistentVolumeClaims,
-	getPersistentVolumeClaim,
-	getStorageClasses,
-	getStorageClass,
-	getVolumeSnapshots,
-	getVolumeSnapshot,
-	getVolumeSnapshotClasses,
-	getVolumeSnapshotClass,
-	getCSIDrivers,
-	getCSIDriver
-} from './k8s-storage';
 
 // Pod interfaces based on the actual backend API response
 export interface Pod {
@@ -809,15 +779,17 @@ export interface DashboardAPIResource {
 export class K8sService {
 	// Pod operations
 	async getPods(namespace?: string): Promise<Pod[]> {
-		return getPods(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: Pod[] }; status: string }>(`/pods${query}`);
+		return response.data?.items || [];
 	}
 
 	async getPod(namespace: string, name: string): Promise<Pod> {
-		return getPod(namespace, name);
+		return apiClient.get<Pod>(`/pods/${namespace}/${name}`);
 	}
 
 	async deletePod(namespace: string, name: string): Promise<{ success: boolean; message: string }> {
-		return deletePod(namespace, name);
+		return apiClient.delete(`/pods/${namespace}/${name}`);
 	}
 
 	// Node operations
@@ -853,42 +825,54 @@ export class K8sService {
 		return response.data?.items || [];
 	}
 
-	// Deployment operations
+	// Deployment operations (these might need to be implemented in the backend)
 	async getDeployments(namespace?: string): Promise<Deployment[]> {
-		return getDeployments(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: Deployment[] }; status: string }>(`/deployments${query}`);
+		return response.data?.items || [];
 	}
 
 	// StatefulSet operations
 	async getStatefulSets(namespace?: string): Promise<StatefulSet[]> {
-		return getStatefulSets(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: StatefulSet[] }; status: string }>(`/statefulsets${query}`);
+		return response.data?.items || [];
 	}
 
 	// DaemonSet operations
 	async getDaemonSets(namespace?: string): Promise<DaemonSet[]> {
-		return getDaemonSets(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: DaemonSet[] }; status: string }>(`/daemonsets${query}`);
+		return response.data?.items || [];
 	}
 
 	// ReplicaSet operations
 	async getReplicaSets(namespace?: string): Promise<ReplicaSet[]> {
-		return getReplicaSets(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: ReplicaSet[] }; status: string }>(`/replicasets${query}`);
+		return response.data?.items || [];
 	}
 
 	// Job operations
 	async getJobs(namespace?: string): Promise<Job[]> {
-		return getJobs(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: Job[] }; status: string }>(`/k8s-jobs${query}`);
+		return response.data?.items || [];
 	}
 
 	async getJob(namespace: string, name: string): Promise<Job> {
-		return getJob(namespace, name);
+		return apiClient.get<Job>(`/k8s-jobs/${namespace}/${name}`);
 	}
 
 	// CronJob operations
 	async getCronJobs(namespace?: string): Promise<CronJob[]> {
-		return getCronJobs(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: CronJob[] }; status: string }>(`/cronjobs${query}`);
+		return response.data?.items || [];
 	}
 
 	async getCronJob(namespace: string, name: string): Promise<CronJob> {
-		return getCronJob(namespace, name);
+		return apiClient.get<CronJob>(`/cronjobs/${namespace}/${name}`);
 	}
 
 	// Endpoints operations
@@ -916,65 +900,82 @@ export class K8sService {
 
 	// ConfigMap operations
 	async getConfigMaps(namespace?: string): Promise<ConfigMap[]> {
-		return getConfigMaps(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: ConfigMap[] }; status: string }>(`/config-maps${query}`);
+		return response.data?.items || [];
 	}
 
 	async getConfigMap(namespace: string, name: string): Promise<{ summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-		return getConfigMap(namespace, name);
+		const response = await apiClient.get<{ data: { summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/config-maps/${namespace}/${name}`);
+		return response.data;
 	}
 
 	// PersistentVolume operations
 	async getPersistentVolumes(): Promise<PersistentVolume[]> {
-		return getPersistentVolumes();
+		const response = await apiClient.get<{ data: { items: PersistentVolume[] }; status: string }>(`/persistent-volumes`);
+		return response.data?.items || [];
 	}
 
 	async getPersistentVolume(name: string): Promise<{ summary: PersistentVolume; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-		return getPersistentVolume(name);
+		const response = await apiClient.get<{ data: { summary: PersistentVolume; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volumes/${name}`);
+		return response.data;
 	}
 
 	// PersistentVolumeClaim operations
 	async getPersistentVolumeClaims(namespace?: string): Promise<PersistentVolumeClaim[]> {
-		return getPersistentVolumeClaims(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: PersistentVolumeClaim[] }; status: string }>(`/persistent-volume-claims${query}`);
+		return response.data?.items || [];
 	}
 
 	async getPersistentVolumeClaim(namespace: string, name: string): Promise<{ summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-		return getPersistentVolumeClaim(namespace, name);
+		const response = await apiClient.get<{ data: { summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volume-claims/${namespace}/${name}`);
+		return response.data;
 	}
 
 	// StorageClass operations
 	async getStorageClasses(): Promise<StorageClass[]> {
-		return getStorageClasses();
+		const response = await apiClient.get<{ data: { items: StorageClass[] }; status: string }>(`/storage-classes`);
+		return response.data?.items || [];
 	}
 
 	async getStorageClass(name: string): Promise<{ summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-		return getStorageClass(name);
+		const response = await apiClient.get<{ data: { summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/storage-classes/${name}`);
+		return response.data;
 	}
 
 	// CSIDriver operations
 	async getCSIDrivers(): Promise<CSIDriver[]> {
-		return getCSIDrivers();
+		const response = await apiClient.get<{ data: { items: CSIDriver[] }; status: string }>(`/csi-drivers`);
+		return response.data?.items || [];
 	}
 
 	async getCSIDriver(name: string): Promise<{ summary: CSIDriver; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-		return getCSIDriver(name);
+		const response = await apiClient.get<{ data: { summary: CSIDriver; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/csi-drivers/${name}`);
+		return response.data;
 	}
 
 	// VolumeSnapshotClass operations
 	async getVolumeSnapshotClasses(): Promise<VolumeSnapshotClass[]> {
-		return getVolumeSnapshotClasses();
+		const response = await apiClient.get<{ data: { items: VolumeSnapshotClass[] }; status: string }>(`/volume-snapshot-classes`);
+		return response.data?.items || [];
 	}
 
 	async getVolumeSnapshotClass(name: string): Promise<{ summary: VolumeSnapshotClass; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-		return getVolumeSnapshotClass(name);
+		const response = await apiClient.get<{ data: { summary: VolumeSnapshotClass; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/volume-snapshot-classes/${name}`);
+		return response.data;
 	}
 
 	// VolumeSnapshot operations
 	async getVolumeSnapshots(namespace?: string): Promise<VolumeSnapshot[]> {
-		return getVolumeSnapshots(namespace);
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: VolumeSnapshot[] }; status: string }>(`/volume-snapshots${query}`);
+		return response.data?.items || [];
 	}
 
 	async getVolumeSnapshot(namespace: string, name: string): Promise<{ summary: VolumeSnapshot; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-		return getVolumeSnapshot(namespace, name);
+		const response = await apiClient.get<{ data: { summary: VolumeSnapshot; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/volume-snapshots/${namespace}/${name}`);
+		return response.data;
 	}
 
 	// Ingress operations
@@ -1038,7 +1039,12 @@ export class K8sService {
 		yaml: string,
 		options: { dryRun?: boolean; force?: boolean } = {}
 	): Promise<{ success: boolean; resources: Array<{ name: string; action: string }>; errors?: string[] }> {
-		return applyYaml(namespace, yaml, options);
+		const query = new URLSearchParams();
+		if (options.dryRun) query.append('dryRun', 'true');
+		if (options.force) query.append('force', 'true');
+
+		const endpoint = `/namespaces/${namespace}/apply${query.toString() ? `?${query}` : ''}`;
+		return apiClient.postYaml(endpoint, yaml);
 	}
 
 	// Scale operations
@@ -1048,12 +1054,18 @@ export class K8sService {
 		name: string,
 		replicas: number
 	): Promise<{ success: boolean; message: string }> {
-		return scaleResource(namespace, kind, name, replicas);
+		return apiClient.post('/scale', {
+			namespace,
+			kind,
+			name,
+			replicas
+		});
 	}
 
 	// Export operations
 	async exportResource(namespace: string, kind: string, name: string): Promise<Record<string, unknown>> {
-		return exportResource(namespace, kind, name);
+		const response = await apiClient.get<Record<string, unknown>>(`/export/${namespace}/${kind}/${name}`);
+		return response;
 	}
 
 	// Overview operations
@@ -1422,6 +1434,26 @@ export function transformVolumeSnapshotClassesToUI(volumeSnapshotClasses: Volume
 	}));
 }
 
+function calculateAge(creationTimestamp: string): string {
+	const now = new Date();
+	const created = new Date(creationTimestamp);
+	const diffMs = now.getTime() - created.getTime();
+
+	const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+	const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+	const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+	if (diffDays > 0) {
+		return `${diffDays}d`;
+	} else if (diffHours > 0) {
+		return `${diffHours}h`;
+	} else if (diffMinutes > 0) {
+		return `${diffMinutes}m`;
+	} else {
+		return '0m';
+	}
+}
+
 export function transformNamespacesToUI(namespaces: Namespace[]): DashboardNamespace[] {
 	if (!namespaces || !Array.isArray(namespaces)) {
 		return [];
@@ -1509,6 +1541,23 @@ function formatPorts(ports?: Array<{ port: number; protocol: string; targetPort?
 		}
 		return portStr;
 	}).join(', ');
+} function formatMemory(bytes: number): string {
+	if (bytes === 0) return '0Mi';
+	const mi = bytes / (1024 * 1024);
+	if (mi < 1) return `${Math.round(bytes / 1024)}Ki`;
+	if (mi < 1024) return `${Math.round(mi)}Mi`;
+	return `${Math.round(mi / 1024)}Gi`;
+}
+
+function getImageFromLabels(labels: Record<string, string> | null | undefined): string {
+	// Handle null or undefined labels
+	if (!labels) return 'Unknown';
+
+	// Try to infer image from common labels
+	if (labels.app) return labels.app;
+	if (labels['k8s-app']) return labels['k8s-app'];
+	if (labels.component) return labels.component;
+	return 'Unknown';
 }
 
 // Overview data interface

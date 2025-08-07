@@ -80,7 +80,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { NodeDetailDrawer } from "@/components/viewers/NodeDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNodes } from "@/hooks/use-k8s-data"
-import { k8sService } from "@/lib/k8s-api"
+import { k8sService } from "@/lib/k8s-service"
 import { nodeSchema } from "@/lib/schemas/node"
 import { z } from "zod"
 

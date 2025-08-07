@@ -16,7 +16,7 @@ import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useConfigMapDetails } from "@/hooks/use-resource-details"
-import { type DashboardConfigMap } from "@/lib/k8s-api"
+import { type DashboardConfigMap } from "@/lib/k8s-storage"
 
 interface ConfigMapDetailDrawerProps {
 	item: DashboardConfigMap

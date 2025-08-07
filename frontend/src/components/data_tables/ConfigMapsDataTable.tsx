@@ -77,7 +77,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ConfigMapDetailDrawer } from "@/components/viewers/ConfigMapDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useConfigMaps } from "@/hooks/use-k8s-data"
-import { type DashboardConfigMap } from "@/lib/k8s-api"
+import { type DashboardConfigMap } from "@/lib/k8s-storage"
 import { useNamespace } from "@/contexts/namespace-context"
 
 // Drag handle component

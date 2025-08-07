@@ -13,7 +13,7 @@ import {
 	DialogDescription,
 	DialogTrigger,
 } from '@/components/ui/dialog';
-import { k8sService } from '@/lib/k8s-api';
+import { k8sService } from '@/lib/k8s-service';
 
 // Dynamic import for Monaco Editor (client-side only)
 const MonacoEditor = React.lazy(() =>

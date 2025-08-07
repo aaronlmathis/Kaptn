@@ -16,7 +16,7 @@ import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useResourceQuotaDetails } from "@/hooks/use-resource-details"
-import { type DashboardResourceQuota } from "@/lib/k8s-api"
+import { type DashboardResourceQuota } from "@/lib/k8s-cluster"
 
 interface ResourceQuotaDetailDrawerProps {
 	item: DashboardResourceQuota

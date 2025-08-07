@@ -1,19 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
+import { k8sService } from '@/lib/k8s-service';
 import {
-	k8sService,
-	type DashboardPod,
 	type NodeTableRow,
-	type ServiceTableRow,
-	type DashboardDeployment,
-	type DashboardStatefulSet,
-	type DashboardDaemonSet,
-	type DashboardReplicaSet,
-	type DashboardJob,
-	type DashboardCronJob,
-	type DashboardEndpoints,
-	type DashboardEndpointSlice,
-	type DashboardIngress,
-	type DashboardNetworkPolicy,
+	type DashboardNamespace,
+	type DashboardResourceQuota,
+	type DashboardAPIResource,
+	type OverviewData,
+	transformNodesToUI,
+	transformNamespacesToUI,
+	transformResourceQuotasToUI,
+	transformAPIResourcesToUI
+} from '@/lib/k8s-cluster';
+import {
 	type DashboardConfigMap,
 	type DashboardPersistentVolume,
 	type DashboardPersistentVolumeClaim,
@@ -21,34 +19,54 @@ import {
 	type DashboardCSIDriver,
 	type DashboardVolumeSnapshotClass,
 	type DashboardVolumeSnapshot,
-	type DashboardNamespace,
-	type DashboardResourceQuota,
-	type DashboardAPIResource,
-	type OverviewData,
-	transformPodsToUI,
-	transformNodesToUI,
-	transformServicesToUI,
-	transformDeploymentsToUI,
-	transformStatefulSetsToUI,
-	transformDaemonSetsToUI,
-	transformReplicaSetsToUI,
-	transformJobsToUI,
-	transformCronJobsToUI,
-	transformEndpointsToUI,
-	transformEndpointSlicesToUI,
-	transformIngressesToUI,
-	transformNetworkPoliciesToUI,
 	transformConfigMapsToUI,
 	transformPersistentVolumesToUI,
 	transformPersistentVolumeClaimsToUI,
 	transformStorageClassesToUI,
 	transformCSIDriversToUI,
 	transformVolumeSnapshotClassesToUI,
-	transformVolumeSnapshotsToUI,
-	transformNamespacesToUI,
-	transformResourceQuotasToUI,
-	transformAPIResourcesToUI
-} from '@/lib/k8s-api';
+	transformVolumeSnapshotsToUI
+} from '@/lib/k8s-storage';
+import {
+	type ServiceTableRow,
+	type DashboardEndpoints,
+	type DashboardEndpointSlice,
+	type DashboardIngress,
+	type DashboardNetworkPolicy,
+	getServices,
+	getEndpoints,
+	getEndpointSlices,
+	getIngresses,
+	getNetworkPolicies,
+	transformServicesToUI,
+	transformEndpointsToUI,
+	transformEndpointSlicesToUI,
+	transformIngressesToUI,
+	transformNetworkPoliciesToUI
+} from '@/lib/k8s-services';
+import {
+	type DashboardPod,
+	type DashboardDeployment,
+	type DashboardStatefulSet,
+	type DashboardDaemonSet,
+	type DashboardReplicaSet,
+	type DashboardJob,
+	type DashboardCronJob,
+	transformPodsToUI,
+	transformDeploymentsToUI,
+	transformStatefulSetsToUI,
+	transformDaemonSetsToUI,
+	transformReplicaSetsToUI,
+	transformJobsToUI,
+	transformCronJobsToUI,
+	getPods,
+	getDeployments,
+	getStatefulSets,
+	getDaemonSets,
+	getReplicaSets,
+	getJobs,
+	getCronJobs
+} from '@/lib/k8s-workloads';
 import { wsService } from '@/lib/websocket';
 import { useNamespace } from '@/contexts/namespace-context';
 import { type LoadBalancer } from '@/lib/schemas/loadbalancer';
@@ -71,7 +89,7 @@ export function usePods(): UseK8sDataResult<DashboardPod> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const pods = await k8sService.getPods(namespace);
+			const pods = await getPods(namespace);
 			const transformedPods = transformPodsToUI(pods);
 			setData(transformedPods);
 		} catch (err) {
@@ -127,7 +145,7 @@ export function useServices(): UseK8sDataResult<ServiceTableRow> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const services = await k8sService.getServices(namespace);
+			const services = await getServices(namespace);
 			const transformedServices = transformServicesToUI(services);
 			setData(transformedServices);
 		} catch (err) {
@@ -156,7 +174,7 @@ export function useLoadBalancers(): UseK8sDataResult<LoadBalancer> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const services = await k8sService.getServices(namespace);
+			const services = await getServices(namespace);
 			// Filter to only LoadBalancer type services
 			const loadBalancerServices = services.filter(service => service.type === 'LoadBalancer');
 			const transformedServices = transformServicesToUI(loadBalancerServices);
@@ -193,7 +211,7 @@ export function useDeployments(): UseK8sDataResult<DashboardDeployment> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const deployments = await k8sService.getDeployments(namespace);
+			const deployments = await getDeployments(namespace);
 			const transformedDeployments = transformDeploymentsToUI(deployments);
 			setData(transformedDeployments);
 		} catch (err) {
@@ -222,7 +240,7 @@ export function useStatefulSets(): UseK8sDataResult<DashboardStatefulSet> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const statefulSets = await k8sService.getStatefulSets(namespace);
+			const statefulSets = await getStatefulSets(namespace);
 			const transformedStatefulSets = transformStatefulSetsToUI(statefulSets);
 			setData(transformedStatefulSets);
 		} catch (err) {
@@ -251,7 +269,7 @@ export function useDaemonSets(): UseK8sDataResult<DashboardDaemonSet> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const daemonSets = await k8sService.getDaemonSets(namespace);
+			const daemonSets = await getDaemonSets(namespace);
 			const transformedDaemonSets = transformDaemonSetsToUI(daemonSets);
 			setData(transformedDaemonSets);
 		} catch (err) {
@@ -280,7 +298,7 @@ export function useReplicaSets(): UseK8sDataResult<DashboardReplicaSet> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const replicaSets = await k8sService.getReplicaSets(namespace);
+			const replicaSets = await getReplicaSets(namespace);
 			const transformedReplicaSets = transformReplicaSetsToUI(replicaSets);
 			setData(transformedReplicaSets);
 		} catch (err) {
@@ -309,7 +327,7 @@ export function useJobs(): UseK8sDataResult<DashboardJob> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const jobs = await k8sService.getJobs(namespace);
+			const jobs = await getJobs(namespace);
 			const transformedJobs = transformJobsToUI(jobs);
 			setData(transformedJobs);
 		} catch (err) {
@@ -338,7 +356,7 @@ export function useCronJobs(): UseK8sDataResult<DashboardCronJob> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const cronJobs = await k8sService.getCronJobs(namespace);
+			const cronJobs = await getCronJobs(namespace);
 			const transformedCronJobs = transformCronJobsToUI(cronJobs);
 			setData(transformedCronJobs);
 		} catch (err) {
@@ -367,7 +385,7 @@ export function useEndpoints(): UseK8sDataResult<DashboardEndpoints> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const endpoints = await k8sService.getEndpoints(namespace);
+			const endpoints = await getEndpoints(namespace);
 			const transformedEndpoints = transformEndpointsToUI(endpoints);
 			setData(transformedEndpoints);
 		} catch (err) {
@@ -396,7 +414,7 @@ export function useEndpointSlices(): UseK8sDataResult<DashboardEndpointSlice> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const endpointSlices = await k8sService.getEndpointSlices(namespace);
+			const endpointSlices = await getEndpointSlices(namespace);
 			const transformedEndpointSlices = transformEndpointSlicesToUI(endpointSlices);
 			setData(transformedEndpointSlices);
 		} catch (err) {
@@ -425,7 +443,7 @@ export function useIngresses(): UseK8sDataResult<DashboardIngress> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const ingresses = await k8sService.getIngresses(namespace);
+			const ingresses = await getIngresses(namespace);
 			const transformedIngresses = transformIngressesToUI(ingresses);
 			setData(transformedIngresses);
 		} catch (err) {
@@ -454,7 +472,7 @@ export function useNetworkPolicies(): UseK8sDataResult<DashboardNetworkPolicy> {
 			setLoading(true);
 			setError(null);
 			const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
-			const networkPolicies = await k8sService.getNetworkPolicies(namespace);
+			const networkPolicies = await getNetworkPolicies(namespace);
 			const transformedNetworkPolicies = transformNetworkPoliciesToUI(networkPolicies);
 			setData(transformedNetworkPolicies);
 		} catch (err) {

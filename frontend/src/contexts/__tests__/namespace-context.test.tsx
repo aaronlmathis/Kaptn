@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { NamespaceProvider, useNamespace } from '@/contexts/namespace-context'
-import { k8sService } from '@/lib/k8s-api'
+import { k8sService } from '@/lib/k8s-service'
 
 // Mock the k8sService
-vi.mock('@/lib/k8s-api', () => ({
+vi.mock('@/lib/k8s-service', () => ({
 	k8sService: {
 		getNamespaces: vi.fn()
 	}

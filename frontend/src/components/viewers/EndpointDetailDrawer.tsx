@@ -16,7 +16,7 @@ import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useEndpointsDetails } from "@/hooks/use-resource-details"
-import { type DashboardEndpoints } from "@/lib/k8s-api"
+import { type DashboardEndpoints } from "@/lib/k8s-services"
 
 interface EndpointDetailDrawerProps {
 	item: DashboardEndpoints

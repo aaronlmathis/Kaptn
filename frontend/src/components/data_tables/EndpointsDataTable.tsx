@@ -78,7 +78,7 @@ import { EndpointDetailDrawer } from "@/components/viewers/EndpointDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useEndpoints } from "@/hooks/use-k8s-data"
 import { useNamespace } from "@/contexts/namespace-context"
-import { type DashboardEndpoints } from "@/lib/k8s-api"
+import { type DashboardEndpoints } from "@/lib/k8s-services"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {

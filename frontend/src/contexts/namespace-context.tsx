@@ -1,7 +1,8 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { k8sService, type Namespace } from '@/lib/k8s-api'
+import { k8sService } from '@/lib/k8s-service'
+import { type Namespace } from '@/lib/k8s-cluster'
 
 // Cache configuration
 const NAMESPACE_CACHE_KEY = 'cachedNamespaces'
