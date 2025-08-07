@@ -447,6 +447,9 @@ func (s *Server) setupRoutes() {
 			}
 			r.Use(s.authMiddleware.RateLimit(s.config.RateLimits.ApplyPerMinute))
 
+			// Enhanced apply endpoint for Apply Config drawer
+			r.Post("/apply", s.handleApplyConfig)
+			// Existing namespace-specific apply endpoint
 			r.Post("/namespaces/{namespace}/apply", s.handleApplyYAML)
 		})
 	})

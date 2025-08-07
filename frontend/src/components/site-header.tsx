@@ -3,6 +3,8 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useNavigation } from "@/contexts/navigation-context"
+import { ApplyDrawer } from "@/components/ApplyDrawer/ApplyDrawer"
+import { IconCloudUpload } from "@tabler/icons-react"
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -53,6 +55,14 @@ export function SiteHeader() {
           </BreadcrumbList>
         </Breadcrumb>
         <div className="ml-auto flex items-center gap-2">
+          <ApplyDrawer
+            trigger={
+              <Button variant="default" size="sm" className="flex items-center gap-2">
+                <IconCloudUpload className="h-4 w-4" />
+                <span className="hidden sm:inline">Apply Config</span>
+              </Button>
+            }
+          />
           <Button variant="ghost" asChild size="sm" className="hidden sm:flex">
             <a
               href="https://github.com/shadcn-ui/ui/tree/main/apps/v4/app/(examples)/dashboard"
