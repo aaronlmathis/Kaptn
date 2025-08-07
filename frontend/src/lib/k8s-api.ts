@@ -1004,7 +1004,8 @@ export class K8sService {
 
 	// Namespace operations
 	async getNamespaces(): Promise<Namespace[]> {
-		return apiClient.get<Namespace[]>('/namespaces');
+		const response = await apiClient.get<{ data: { items: Namespace[] }; status: string }>('/namespaces');
+		return response.data?.items || [];
 	}
 
 	async getNamespace(name: string): Promise<{ summary: Namespace; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {

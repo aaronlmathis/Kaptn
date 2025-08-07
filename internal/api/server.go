@@ -367,7 +367,6 @@ func (s *Server) setupRoutes() {
 			r.Get("/jobs", s.handleListActionJobs)
 			r.Get("/jobs/{jobId}", s.handleGetActionJob)
 
-			// M5: Advanced read-only endpoints
 			r.Get("/metrics", s.handleGetMetrics)
 			r.Get("/metrics/namespace/{namespace}", s.handleGetNamespaceMetrics)
 			r.Get("/namespaces", s.handleListNamespaces)
