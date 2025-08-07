@@ -14,11 +14,11 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 
 **Current Dashboard**
 
-![Kubernetes Admin Dashboard Screenshot](images/Kaptain_Dashboard.png)
+![Kubernetes Admin Dashboard Screenshot](images/kaptn_demo_1024.gif)
 
 **Edit YAML / Pod Details**
 
-![Kubernetes Admin - Edit YAML / Pod Details](images/Kaptain_Edit_YAML.png)
+![Kubernetes Admin - Edit YAML / Pod Details](images/kaptn_edit_yaml.png)
 
 **Cloud Shell Exec**
 
