@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertTriangle, CheckCircle, FileText, Upload, X, Plus } from "lucide-react"
 import { useNamespace } from "@/contexts/namespace-context"
 import { useApplyYaml } from "@/hooks/useApplyYaml"
-import { SummaryCard } from "@/components/ApplyDrawer/SummaryCard"
 import { toast } from "sonner"
 
 interface ConfigFile {
@@ -33,23 +32,26 @@ interface ApplyOptions {
 	namespace: string
 }
 
-interface ApplyResult {
-	type: 'success' | 'warning' | 'error'
-	title: string
-	message: string
-	changes?: number
-	warnings?: number
-}
-
 export function CodeEditor() {
-	const { namespaces, loading: namespacesLoading } = useNamespace()
+	const { namespaces, selectedNamespace } = useNamespace()
+	const {
+		isLoading,
+		isSuccess,
+		error,
+		response,
+		applyConfig,
+		resetState
+	} = useApplyYaml()
 
-	// Transform namespaces from backend API format to combobox format
+	// Transform namespaces from backend API format to select options
 	const namespaceOptions = React.useMemo(() => {
-		return namespaces.map(ns => ({
-			value: ns.metadata.name,
-			label: ns.metadata.name,
-		}))
+		const options = [{ value: 'default', label: 'Default namespace' }]
+		namespaces.forEach(ns => {
+			if (ns.metadata.name !== 'default') {
+				options.push({ value: ns.metadata.name, label: ns.metadata.name })
+			}
+		})
+		return options
 	}, [namespaces])
 	const [configFiles, setConfigFiles] = React.useState<ConfigFile[]>([
 		{
@@ -69,8 +71,6 @@ data:
 
 	const [activeFileId, setActiveFileId] = React.useState('1')
 	const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)
-	const [applyResults, setApplyResults] = React.useState<ApplyResult[]>([])
-	const [namespaceOpen, setNamespaceOpen] = React.useState(false)
 
 	const [applyOptions, setApplyOptions] = React.useState<ApplyOptions>({
 		dryRun: true,
@@ -78,7 +78,7 @@ data:
 		validate: true,
 		showDiff: true,
 		serverSideApply: false,
-		namespace: 'default'
+		namespace: selectedNamespace === 'all' ? 'default' : selectedNamespace
 	})
 
 	const activeFile = configFiles.find(file => file.id === activeFileId)
@@ -112,28 +112,37 @@ data:
 	}
 
 	const handleApplyConfiguration = async () => {
-		// Simulate API call
-		const result: ApplyResult = {
-			type: applyOptions.dryRun ? 'warning' : 'success',
-			title: applyOptions.dryRun ? 'Dry Run Completed' : 'Configuration Applied',
-			message: applyOptions.dryRun
-				? 'Configuration validated successfully. No changes were made.'
-				: 'Configuration has been successfully applied to the cluster.',
-			changes: applyOptions.dryRun ? 0 : 3,
-			warnings: 1
+		try {
+			// Collect all YAML content
+			const yamlContent = configFiles
+				.filter(file => file.content.trim())
+				.map(file => file.content)
+				.join('\n---\n')
+
+			if (!yamlContent.trim()) {
+				toast.error('No YAML content to apply')
+				return
+			}
+
+			await applyConfig({
+				yamlContent,
+				namespace: applyOptions.namespace === 'default' ? undefined : applyOptions.namespace,
+				dryRun: applyOptions.dryRun,
+				force: applyOptions.forceApply,
+				validate: applyOptions.validate,
+				showDiff: applyOptions.showDiff,
+				serverSide: applyOptions.serverSideApply,
+			})
+		} catch (error) {
+			console.error('Apply failed:', error)
 		}
-
-		setApplyResults(prev => [result, ...prev.slice(0, 2)]) // Keep last 3 results
-	}
-
-	const handleDismissAlert = (index: number) => {
-		setApplyResults(prev => prev.filter((_, i) => i !== index))
 	}
 
 	const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
 		const files = event.target.files
 		if (!files) return
 
+		let lastFileId = ''
 		Array.from(files).forEach(file => {
 			const reader = new FileReader()
 			reader.onload = (e) => {
@@ -143,7 +152,9 @@ data:
 					name: file.name,
 					content
 				}
+				lastFileId = newFile.id
 				setConfigFiles(prev => [...prev, newFile])
+				setActiveFileId(lastFileId)
 			}
 			reader.readAsText(file)
 		})
@@ -163,6 +174,7 @@ data:
 		const files = e.dataTransfer.files
 		if (files.length === 0) return
 
+		let lastFileId = ''
 		Array.from(files).forEach(file => {
 			if (file.name.endsWith('.yaml') || file.name.endsWith('.yml') || file.name.endsWith('.json')) {
 				const reader = new FileReader()
@@ -173,7 +185,9 @@ data:
 						name: file.name,
 						content
 					}
+					lastFileId = newFile.id
 					setConfigFiles(prev => [...prev, newFile])
+					setActiveFileId(lastFileId)
 				}
 				reader.readAsText(file)
 			}
@@ -184,39 +198,81 @@ data:
 
 	return (
 		<div className="min-h-screen w-full flex flex-col p-2 sm:p-4 space-y-4">
-			{/* Alerts Section */}
-			<div className="space-y-2">
-				{applyResults.map((result, index) => (
-					<Alert key={index} className={
-						result.type === 'error' ? 'border-red-500' :
-							result.type === 'warning' ? 'border-yellow-500' :
-								'border-green-500'
-					}>
-						{result.type === 'error' ? <AlertTriangle className="h-4 w-4" /> :
-							result.type === 'warning' ? <AlertTriangle className="h-4 w-4" /> :
-								<CheckCircle className="h-4 w-4" />}
-						<AlertTitle className="flex items-center justify-between">
-							{result.title}
-							<button
-								onClick={() => handleDismissAlert(index)}
-								className="ml-2 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-								aria-label="Dismiss alert"
-							>
-								<X />
-							</button>
-						</AlertTitle>
-						<AlertDescription className="flex items-center gap-2">
-							{result.message}
-							{result.changes !== undefined && (
-								<Badge variant="secondary">{result.changes} changes</Badge>
-							)}
-							{result.warnings !== undefined && result.warnings > 0 && (
-								<Badge variant="outline">{result.warnings} warnings</Badge>
-							)}
-						</AlertDescription>
-					</Alert>
-				))}
-			</div>
+			{/* Error Alert */}
+			{error && (
+				<Alert variant="destructive">
+					<AlertTriangle className="h-4 w-4" />
+					<AlertTitle>Apply Error</AlertTitle>
+					<AlertDescription>{error}</AlertDescription>
+				</Alert>
+			)}
+
+			{/* Success/Dry Run Results Alert */}
+			{response && isSuccess && (
+				<Alert variant="default" className="border-green-200 bg-green-50/50 dark:bg-green-950/30 dark:border-green-800">
+					<CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+					<AlertTitle className="text-green-800 dark:text-green-200">
+						{applyOptions.dryRun ? 'Dry Run Completed' : 'Apply Completed'}
+					</AlertTitle>
+					<AlertDescription className="text-green-700 dark:text-green-300">
+						{response.summary ? (
+							<div className="space-y-2">
+								<p>
+									Applied {response.summary.totalResources} resources: {response.summary.createdCount} created, {response.summary.updatedCount} updated, {response.summary.unchangedCount} unchanged
+									{response.summary.errorCount > 0 && `, ${response.summary.errorCount} errors`}
+								</p>
+								{response.resources && response.resources.length > 0 && (
+									<div>
+										<p className="font-medium">Resources processed:</p>
+										<ul className="list-disc list-inside ml-4 space-y-1">
+											{response.resources.map((resource, index) => (
+												<li key={index} className="text-sm flex items-center gap-2">
+													<span>
+														{resource.kind}/{resource.name}
+														{resource.namespace && ` (namespace: ${resource.namespace})`}
+													</span>
+													{resource.action && (
+														<Badge
+															variant={
+																resource.action === 'created' || resource.action === 'would create' ? 'default' :
+																	resource.action === 'updated' || resource.action === 'would update' ? 'secondary' :
+																		resource.action === 'unchanged' ? 'outline' : 'default'
+															}
+															className="text-xs"
+														>
+															{resource.action}
+														</Badge>
+													)}
+												</li>
+											))}
+										</ul>
+									</div>
+								)}
+								{response.warnings && response.warnings.length > 0 && (
+									<div>
+										<p className="font-medium text-orange-600 dark:text-orange-400">Warnings:</p>
+										<ul className="list-disc list-inside ml-4 space-y-1">
+											{response.warnings.map((warning, index) => (
+												<li key={index} className="text-sm text-orange-600 dark:text-orange-400">
+													{warning}
+												</li>
+											))}
+										</ul>
+									</div>
+								)}
+							</div>
+						) : (
+							`${applyOptions.dryRun ? 'Dry run' : 'Apply'} completed successfully`
+						)}
+					</AlertDescription>
+					<button
+						onClick={resetState}
+						className="absolute top-2 right-2 p-1 rounded-full hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
+					>
+						<X className="h-4 w-4 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200" />
+					</button>
+				</Alert>
+			)}
 
 			{/* Main Content */}
 			<div className="flex flex-col lg:flex-row gap-4">
@@ -387,58 +443,25 @@ data:
 									/>
 								</div>
 
-								<div className="space-y-2">
+								<div className="flex items-center justify-between">
 									<Label htmlFor="namespace">Namespace</Label>
-									<Popover open={namespaceOpen} onOpenChange={setNamespaceOpen}>
-										<PopoverTrigger asChild>
-											<Button
-												variant="outline"
-												role="combobox"
-												aria-expanded={namespaceOpen}
-												className="w-full justify-between"
-												disabled={namespacesLoading}
-											>
-												{namespacesLoading ? "Loading namespaces..." :
-													applyOptions.namespace
-														? namespaceOptions.find((namespace) => namespace.value === applyOptions.namespace)?.label
-														: "Select namespace..."}
-												<ChevronsUpDown className="opacity-50" />
-											</Button>
-										</PopoverTrigger>
-										<PopoverContent className="w-full p-0">
-											<Command>
-												<CommandInput placeholder="Search namespace..." className="h-9" />
-												<ScrollArea className="h-[200px]">
-													<CommandList>
-														<CommandEmpty>
-															{namespacesLoading ? "Loading namespaces..." : "No namespace found."}
-														</CommandEmpty>
-														<CommandGroup>
-															{namespaceOptions.map((namespace) => (
-																<CommandItem
-																	key={namespace.value}
-																	value={namespace.value}
-																	onSelect={(currentValue) => {
-																		setApplyOptions(prev => ({ ...prev, namespace: currentValue }))
-																		setNamespaceOpen(false)
-																	}}
-																>
-																	{namespace.label}
-																	<Check
-																		className={cn(
-																			"ml-auto",
-																			applyOptions.namespace === namespace.value ? "opacity-100" : "opacity-0"
-																		)}
-																	/>
-																</CommandItem>
-															))}
-														</CommandGroup>
-													</CommandList>
-													<ScrollBar />
-												</ScrollArea>
-											</Command>
-										</PopoverContent>
-									</Popover>
+									<Select
+										value={applyOptions.namespace || 'default'}
+										onValueChange={(value: string) =>
+											setApplyOptions(prev => ({ ...prev, namespace: value === 'default' ? 'default' : value }))
+										}
+									>
+										<SelectTrigger className="w-[180px]">
+											<SelectValue placeholder="Select namespace" />
+										</SelectTrigger>
+										<SelectContent>
+											{namespaceOptions.map((option) => (
+												<SelectItem key={option.value} value={option.value}>
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
 								</div>
 							</CardContent>
 						</Card>
@@ -477,8 +500,12 @@ data:
 						onClick={handleApplyConfiguration}
 						className="w-full"
 						size="lg"
+						disabled={isLoading || !configFiles.some(f => f.content.trim())}
 					>
-						{applyOptions.dryRun ? 'Run Dry Run' : 'Apply Configuration'}
+						{isLoading
+							? (applyOptions.dryRun ? 'Running Dry Run...' : 'Applying...')
+							: (applyOptions.dryRun ? 'Run Dry Run' : 'Apply Configuration')
+						}
 					</Button>
 				</div>
 			</div>
