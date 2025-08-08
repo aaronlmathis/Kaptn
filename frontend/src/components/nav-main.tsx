@@ -1,14 +1,16 @@
-"use client"
+/* src/components/nav-main.tsx */
+"use client";
 
-import { ChevronRight } from "lucide-react"
-import { useNavigation } from "@/contexts/navigation-context"
-import type { ComponentType } from "react"
+import * as React from "react";
+import { ChevronRight } from "lucide-react";
+import { useNavigation } from "@/contexts/navigation-context";
+import type { ComponentType } from "react";
 
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+} from "@/components/ui/collapsible";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -18,130 +20,120 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
-export function NavMain({
-  items,
-}: {
-  items: {
-    title: string
-    url: string
-    icon?: ComponentType<Record<string, unknown>>
-    isActive?: boolean
-    items?: {
-      title: string
-      url: string
-      isActive?: boolean
-    }[]
-  }[]
-}) {
-  const { setMenuExpanded, isMenuExpanded, hasMenuState, isHydrated, currentPath } = useNavigation()
+type Item = {
+  title: string;
+  url: string;
+  icon?: ComponentType<Record<string, unknown>>;
+  isActive?: boolean;
+  items?: { title: string; url: string; isActive?: boolean }[];
+};
 
-  const handleMenuToggle = (menuTitle: string) => {
-    const currentState = isMenuExpanded(menuTitle)
-    setMenuExpanded(menuTitle, !currentState)
-  }
-
-  // Function to check if a path is active
-  const isPathActive = (url: string): boolean => {
-    if (!isHydrated) return false
-
-    // Handle root path specifically
-    if (url === '/' && currentPath === '/') return true
-    if (url === '/' && currentPath === '/dashboard') return true
-
-    // For other paths, check if current path starts with the url
-    if (url !== '/' && url !== '#') {
-      return currentPath.startsWith(url)
-    }
-
-    return false
-  }
-
-  // Function to check if a parent item should be active (has an active child)
-  const hasActiveChild = (items?: { title: string; url: string }[]): boolean => {
-    if (!items || !isHydrated) return false
-    return items.some(subItem => isPathActive(subItem.url))
-  }
-
-  // Function to determine if menu should be expanded
-  const getMenuState = (menuTitle: string, hasActiveChildren: boolean): boolean => {
-    // If not hydrated yet, show expanded state based on active children for SSR consistency  
-    if (!isHydrated) {
-      return hasActiveChildren
-    }
-
-    // Use the stored state from localStorage (via context)
-    // If user has explicitly set this menu's state, use that
-    // Otherwise, default to expanded if has active children
-    if (hasMenuState(menuTitle)) {
-      return isMenuExpanded(menuTitle)
-    }
-
-    return hasActiveChildren
-  }
-
+export function NavMain({ items }: { items: Item[] }) {
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item) => {
-          // If item has no subitems and a real URL, render as a simple navigation link
-          if (!item.items || item.items.length === 0) {
-            const isActive = isPathActive(item.url)
-            return (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton tooltip={item.title} isActive={isActive} asChild>
-                  <a href={item.url}>
-                    {item.icon && <item.icon />}
-                    <span>{item.title}</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )
-          }
-
-          // If item has subitems, render as collapsible
-          const parentIsActive = hasActiveChild(item.items)
-          const isExpanded = getMenuState(item.title, parentIsActive)
-
-          return (
-            <Collapsible
-              key={item.title}
-              asChild
-              open={isExpanded}
-              onOpenChange={() => handleMenuToggle(item.title)}
-              className="group/collapsible"
-            >
-              <SidebarMenuItem>
-                <CollapsibleTrigger asChild>
-                  <SidebarMenuButton tooltip={item.title} isActive={parentIsActive}>
-                    {item.icon && <item.icon />}
-                    <span>{item.title}</span>
-                    <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                  </SidebarMenuButton>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <SidebarMenuSub>
-                    {item.items.map((subItem) => {
-                      const subIsActive = isPathActive(subItem.url)
-                      return (
-                        <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton asChild isActive={subIsActive}>
-                            <a href={subItem.url}>
-                              <span>{subItem.title}</span>
-                            </a>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      )
-                    })}
-                  </SidebarMenuSub>
-                </CollapsibleContent>
-              </SidebarMenuItem>
-            </Collapsible>
+        {items.map((item) =>
+          item.items && item.items.length > 0 ? (
+            <NavGroupItem key={item.title} item={item} />
+          ) : (
+            <LeafItem key={item.title} item={item} />
           )
-        })}
+        )}
       </SidebarMenu>
     </SidebarGroup>
-  )
+  );
+}
+
+function LeafItem({ item }: { item: Item }) {
+  const { currentPath, isHydrated } = useNavigation();
+  const isActive =
+    isHydrated &&
+    ((item.url === "/" && (currentPath === "/" || currentPath === "/dashboard")) ||
+      (item.url !== "/" && item.url !== "#" && currentPath.startsWith(item.url)));
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton tooltip={item.title} isActive={!!isActive} asChild>
+        <a href={item.url}>
+          {item.icon && <item.icon />}
+          <span>{item.title}</span>
+        </a>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function NavGroupItem({ item }: { item: Item }) {
+  const {
+    currentPath,
+    isHydrated,
+    hasMenuState,
+    isMenuExpanded,
+    setMenuExpanded,
+  } = useNavigation();
+
+  // PRE-HYDRATION: do NOT infer open from route (prevents first-paint flip)
+  // Initial open = saved preference (if any), else closed.
+  const stored = hasMenuState(item.title) ? isMenuExpanded(item.title) : false;
+
+  // After hydration, if no saved preference, auto-open when a child is active.
+  const childActive =
+    isHydrated &&
+    (item.items ?? []).some((s) => {
+      if (s.url === "/" && (currentPath === "/" || currentPath === "/dashboard")) return true;
+      return s.url !== "/" && s.url !== "#" && currentPath.startsWith(s.url);
+    });
+
+  React.useEffect(() => {
+    if (!isHydrated) return;
+    if (!hasMenuState(item.title) && childActive) {
+      setMenuExpanded(item.title, true);
+    }
+  }, [isHydrated, childActive, hasMenuState, item.title, setMenuExpanded]);
+
+  const open = stored;
+
+  return (
+    <Collapsible
+      asChild
+      open={open}
+      onOpenChange={(nextOpen) => setMenuExpanded(item.title, nextOpen)}
+      className="group/collapsible"
+    >
+      <SidebarMenuItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuButton tooltip={item.title} isActive={childActive}>
+            {item.icon && <item.icon />}
+            <span>{item.title}</span>
+            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+          </SidebarMenuButton>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {(item.items ?? []).map((subItem) => {
+              const subIsActive =
+                isHydrated &&
+                ((subItem.url === "/" &&
+                  (currentPath === "/" || currentPath === "/dashboard")) ||
+                  (subItem.url !== "/" &&
+                    subItem.url !== "#" &&
+                    currentPath.startsWith(subItem.url)));
+              return (
+                <SidebarMenuSubItem key={subItem.title}>
+                  <SidebarMenuSubButton asChild isActive={!!subIsActive}>
+                    <a href={subItem.url}>
+                      <span>{subItem.title}</span>
+                    </a>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              );
+            })}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuItem>
+    </Collapsible>
+  );
 }

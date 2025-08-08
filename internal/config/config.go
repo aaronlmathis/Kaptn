@@ -102,6 +102,7 @@ type PrometheusConfig struct {
 type CachingConfig struct {
 	OverviewTTL  string `yaml:"overview_ttl"`
 	AnalyticsTTL string `yaml:"analytics_ttl"`
+	SummaryTTL   string `yaml:"summary_ttl"`
 }
 
 // JobsConfig represents job management configuration
@@ -177,6 +178,7 @@ func loadWithDefaults(configPath string) (*Config, error) {
 		Caching: CachingConfig{
 			OverviewTTL:  getEnv("KAD_OVERVIEW_TTL", "2s"),
 			AnalyticsTTL: getEnv("KAD_ANALYTICS_TTL", "60s"),
+			SummaryTTL:   getEnv("KAD_SUMMARY_TTL", "30s"),
 		},
 		Jobs: JobsConfig{
 			PersistenceEnabled: getEnvBool("KAD_JOBS_PERSISTENCE_ENABLED", true),
@@ -390,4 +392,27 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// GetSummaryConfig creates a summary service configuration from the main config
+func (c *Config) GetSummaryConfig() map[string]interface{} {
+	return map[string]interface{}{
+		"enable_websocket_updates": true,
+		"realtime_resources":       []string{"pods", "nodes", "deployments", "services"},
+		"cache_ttl": map[string]string{
+			"pods":         "5s",
+			"nodes":        "10s",
+			"deployments":  "15s",
+			"services":     "30s",
+			"replicasets":  "30s",
+			"statefulsets": "60s",
+			"daemonsets":   "60s",
+			"configmaps":   "60s",
+			"secrets":      "60s",
+			"endpoints":    "30s",
+		},
+		"max_cache_size":     1000,
+		"background_refresh": true,
+		"default_ttl":        c.Caching.SummaryTTL,
+	}
 }

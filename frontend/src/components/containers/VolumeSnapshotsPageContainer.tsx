@@ -7,7 +7,7 @@ import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function VolumeSnapshotsPageContainer() {
-	const { data: summaryData, isLoading, error } = useResourceSummary('volumesnapshots')
+	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('volumesnapshots')
 
 	return (
 		<SharedProviders>
@@ -24,6 +24,7 @@ export function VolumeSnapshotsPageContainer() {
 				cards={summaryData}
 				loading={isLoading}
 				error={error}
+				lastUpdated={lastUpdated}
 			/>
 
 			<VolumeSnapshotsDataTable />

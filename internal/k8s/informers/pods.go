@@ -40,6 +40,9 @@ func (h *PodEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		"action": "added",
 		"data":   summary,
 	})
+	
+	// Also broadcast to overview room for unified WebSocket support
+	h.hub.BroadcastToRoom("overview", "pod_added", summary)
 }
 
 // OnUpdate handles pod update events
@@ -58,6 +61,9 @@ func (h *PodEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		"action": "modified",
 		"data":   summary,
 	})
+	
+	// Also broadcast to overview room for unified WebSocket support
+	h.hub.BroadcastToRoom("overview", "pod_updated", summary)
 }
 
 // OnDelete handles pod deletion events
@@ -77,6 +83,12 @@ func (h *PodEventHandler) OnDelete(obj interface{}) {
 			"name":      pod.Name,
 			"namespace": pod.Namespace,
 		},
+	})
+	
+	// Also broadcast to overview room for unified WebSocket support
+	h.hub.BroadcastToRoom("overview", "pod_deleted", map[string]interface{}{
+		"name":      pod.Name,
+		"namespace": pod.Namespace,
 	})
 }
 

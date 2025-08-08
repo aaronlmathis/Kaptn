@@ -20,6 +20,14 @@ func (s *Server) handlePodsWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.wsHub.ServeWS(w, r, "pods")
 }
 
+func (s *Server) handleServicesWebSocket(w http.ResponseWriter, r *http.Request) {
+	s.wsHub.ServeWS(w, r, "services")
+}
+
+func (s *Server) handleDeploymentsWebSocket(w http.ResponseWriter, r *http.Request) {
+	s.wsHub.ServeWS(w, r, "deployments")
+}
+
 func (s *Server) handleOverviewWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.wsHub.ServeWS(w, r, "overview")
 }

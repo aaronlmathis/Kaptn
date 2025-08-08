@@ -7,7 +7,7 @@ import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function ConfigMapsPageContainer() {
-	const { data: summaryData, isLoading, error } = useResourceSummary('configmaps')
+	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('configmaps')
 
 	return (
 		<SharedProviders>
@@ -24,6 +24,7 @@ export function ConfigMapsPageContainer() {
 				cards={summaryData}
 				loading={isLoading}
 				error={error}
+			lastUpdated={lastUpdated}
 			/>
 
 			<ConfigMapsDataTable />

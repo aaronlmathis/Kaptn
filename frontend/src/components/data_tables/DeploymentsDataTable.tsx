@@ -76,7 +76,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { DeploymentDetailDrawer } from "@/components/viewers/DeploymentDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useDeployments } from "@/hooks/use-k8s-data"
+import { useDeploymentsWithWebSocket } from "@/hooks/useDeploymentsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { z } from "zod"
 
@@ -292,7 +292,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof deploymentSchema>> }) {
 }
 
 export function DeploymentsDataTable() {
-	const { data: deployments, loading, error, refetch } = useDeployments()
+	const { data: deployments, loading, error, refetch, isConnected } = useDeploymentsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -343,11 +343,11 @@ export function DeploymentsDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		deployments.map((deployment) => deployment.id)
+		deployments.map((deployment: z.infer<typeof deploymentSchema>) => deployment.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(deployments.map((deployment) => deployment.id))
+		setSortableIds(deployments.map((deployment: z.infer<typeof deploymentSchema>) => deployment.id))
 	}, [deployments])
 
 	function handleDragEnd(event: DragEndEvent) {
@@ -393,6 +393,12 @@ export function DeploymentsDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Live updates</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>

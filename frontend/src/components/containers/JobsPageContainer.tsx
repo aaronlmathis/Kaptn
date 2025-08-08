@@ -7,7 +7,7 @@ import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function JobsPageContainer() {
-	const { data: summaryData, isLoading, error } = useResourceSummary('jobs')
+	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('jobs')
 
 	return (
 		<SharedProviders>
@@ -24,6 +24,7 @@ export function JobsPageContainer() {
 				cards={summaryData}
 				loading={isLoading}
 				error={error}
+				lastUpdated={lastUpdated}
 			/>
 
 			<JobsDataTable />

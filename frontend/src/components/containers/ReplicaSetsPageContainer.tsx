@@ -7,7 +7,7 @@ import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function ReplicaSetsPageContainer() {
-  const { data: summaryData, isLoading, error } = useResourceSummary('replicasets')
+  const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('replicasets')
 
   return (
     <SharedProviders>
@@ -24,9 +24,10 @@ export function ReplicaSetsPageContainer() {
         cards={summaryData}
         loading={isLoading}
         error={error}
+        lastUpdated={lastUpdated}
       />
 
       <ReplicaSetsDataTable />
     </SharedProviders>
   )
-}
+} 

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { PersistentVolumesDataTable } from "@/components/data_tables/PersistentVolumesDataTable"
-
+import { SummaryCards } from "@/components/SummaryCards"
 export function PersistentVolumesContainer() {
 	return (
 		<div className="flex flex-col gap-4">
@@ -14,6 +14,12 @@ export function PersistentVolumesContainer() {
 					</p>
 				</div>
 			</div>
+			<SummaryCards
+				cards={summaryData}
+				loading={isLoading}
+				error={error}
+				lastUpdated={lastUpdated}
+			/>
 			<PersistentVolumesDataTable />
 		</div>
 	)

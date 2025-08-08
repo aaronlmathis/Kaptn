@@ -1,7 +1,6 @@
-"use client"
+"use client";
 
-import * as React from "react"
-
+import * as React from "react";
 import {
   IconDashboard,
   IconDatabase,
@@ -11,69 +10,34 @@ import {
   IconChartBar,
   IconCloudComputing,
   IconTopologyStar,
-} from "@tabler/icons-react"
+} from "@tabler/icons-react";
 
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-
-import { NavMain } from "@/components/nav-main"
-import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
-import { NamespaceSwitcher } from "@/components/namespace-switcher"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarRail,
-} from "@/components/ui/sidebar"
-import { Separator } from "./ui/separator"
-import { AppLogo } from "@/components/AppLogo"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { NavMain } from "@/components/nav-main";
+import { NavSecondary } from "@/components/nav-secondary";
+import { NavUser } from "@/components/nav-user";
+import { NamespaceSwitcher } from "@/components/namespace-switcher";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
+import { Separator } from "./ui/separator";
+import { AppLogo } from "@/components/AppLogo";
+import { useNavigation } from "@/contexts/navigation-context";
 
 const data = {
-  user: {
-    name: "kubernetes-admin",
-    email: "admin@k8s.local",
-    avatar: "/avatars/k8s-admin.jpg",
-  },
+  user: { name: "kubernetes-admin", email: "admin@k8s.local", avatar: "/avatars/k8s-admin.jpg" },
   navMain: [
-    {
-      title: "Dashboard",
-      url: "/",
-      icon: IconDashboard,
-    },
+    { title: "Dashboard", url: "/", icon: IconDashboard },
     {
       title: "Workloads",
       url: "#",
       icon: IconCloudComputing,
       items: [
-        {
-          title: "Pods",
-          url: "/pods",
-        },
-        {
-          title: "Deployments",
-          url: "/deployments",
-        },
-        {
-          title: "ReplicaSets",
-          url: "/replicasets",
-        },
-        {
-          title: "StatefulSets",
-          url: "/statefulsets",
-        },
-        {
-          title: "DaemonSets",
-          url: "/daemonsets",
-        },
-        {
-          title: "Jobs",
-          url: "/jobs",
-        },
-        {
-          title: "CronJobs",
-          url: "/cronjobs",
-        },
+        { title: "Pods", url: "/pods" },
+        { title: "Deployments", url: "/deployments" },
+        { title: "ReplicaSets", url: "/replicasets" },
+        { title: "StatefulSets", url: "/statefulsets" },
+        { title: "DaemonSets", url: "/daemonsets" },
+        { title: "Jobs", url: "/jobs" },
+        { title: "CronJobs", url: "/cronjobs" },
       ],
     },
     {
@@ -81,34 +45,13 @@ const data = {
       url: "/services",
       icon: IconTopologyStar,
       items: [
-        {
-          title: "Services",
-          url: "/services",
-        },
-        {
-          title: "Endpoints",
-          url: "/endpoints",
-        },
-        {
-          title: "Endpoint Slices",
-          url: "/endpoint-slices",
-        },
-        {
-          title: "Ingresses",
-          url: "/ingresses",
-        },
-        {
-          title: "Ingress Classes",
-          url: "/ingress-classes",
-        },
-        {
-          title: "Network Policies",
-          url: "/network-policies",
-        },
-        {
-          title: "Load Balancers",
-          url: "/load-balancers",
-        },
+        { title: "Services", url: "/services" },
+        { title: "Endpoints", url: "/endpoints" },
+        { title: "Endpoint Slices", url: "/endpoint-slices" },
+        { title: "Ingresses", url: "/ingresses" },
+        { title: "Ingress Classes", url: "/ingress-classes" },
+        { title: "Network Policies", url: "/network-policies" },
+        { title: "Load Balancers", url: "/load-balancers" },
       ],
     },
     {
@@ -116,38 +59,14 @@ const data = {
       url: "#",
       icon: IconDatabase,
       items: [
-        {
-          title: "ConfigMaps",
-          url: "/config-maps",
-        },
-        {
-          title: "Secrets",
-          url: "/secrets",
-        },
-        {
-          title: "Persistent Volumes",
-          url: "/persistent-volumes",
-        },
-        {
-          title: "Persistent Volume Claims",
-          url: "/persistent-volume-claims",
-        },
-        {
-          title: "Storage Classes",
-          url: "/storage-classes",
-        },
-        {
-          title: "Volume Snapshots",
-          url: "/volume-snapshots",
-        },
-        {
-          title: "Volume Snapshot Classes",
-          url: "/volume-snapshot-classes",
-        },
-        {
-          title: "CSI Drivers",
-          url: "/csi-drivers",
-        },
+        { title: "ConfigMaps", url: "/config-maps" },
+        { title: "Secrets", url: "/secrets" },
+        { title: "Persistent Volumes", url: "/persistent-volumes" },
+        { title: "Persistent Volume Claims", url: "/persistent-volume-claims" },
+        { title: "Storage Classes", url: "/storage-classes" },
+        { title: "Volume Snapshots", url: "/volume-snapshots" },
+        { title: "Volume Snapshot Classes", url: "/volume-snapshot-classes" },
+        { title: "CSI Drivers", url: "/csi-drivers" },
       ],
     },
     {
@@ -155,58 +74,19 @@ const data = {
       url: "/cluster",
       icon: IconHexagons,
       items: [
-        {
-          title: "Cluster Overview",
-          url: "/overview",
-        },
-        {
-          title: "Nodes",
-          url: "/nodes",
-        },
-        {
-          title: "Namespaces",
-          url: "/namespaces",
-        },
-        {
-          title: "Resource Quotas",
-          url: "/resource-quotas",
-        },
-        {
-          title: "API Resources",
-          url: "/api-resources",
-        },
-        {
-          title: "CRDs",
-          url: "/crds",
-        },
-        {
-          title: "Roles & RoleBindings",
-          url: "/roles",
-        },
-        {
-          title: "ClusterRoles & Bindings",
-          url: "/cluster-roles",
-        },
-        {
-          title: "Events",
-          url: "/events",
-        },
-        {
-          title: "Component Status",
-          url: "/component-status",
-        },
-        {
-          title: "Certificates",
-          url: "/certificates",
-        },
-        {
-          title: "Version & Upgrades",
-          url: "/version-upgrades",
-        },
-        {
-          title: "Cluster Metrics",
-          url: "/metrics",
-        },
+        { title: "Cluster Overview", url: "/overview" },
+        { title: "Nodes", url: "/nodes" },
+        { title: "Namespaces", url: "/namespaces" },
+        { title: "Resource Quotas", url: "/resource-quotas" },
+        { title: "API Resources", url: "/api-resources" },
+        { title: "CRDs", url: "/crds" },
+        { title: "Roles & RoleBindings", url: "/roles" },
+        { title: "ClusterRoles & Bindings", url: "/cluster-roles" },
+        { title: "Events", url: "/events" },
+        { title: "Component Status", url: "/component-status" },
+        { title: "Certificates", url: "/certificates" },
+        { title: "Version & Upgrades", url: "/version-upgrades" },
+        { title: "Cluster Metrics", url: "/metrics" },
       ],
     },
   ],
@@ -216,18 +96,9 @@ const data = {
       url: "#",
       icon: IconShield,
       items: [
-        {
-          title: "RBAC",
-          url: "/rbac",
-        },
-        {
-          title: "Service Accounts",
-          url: "/service-accounts",
-        },
-        {
-          title: "Pod Security",
-          url: "/pod-security",
-        },
+        { title: "RBAC", url: "/rbac" },
+        { title: "Service Accounts", url: "/service-accounts" },
+        { title: "Pod Security", url: "/pod-security" },
       ],
     },
     {
@@ -235,18 +106,9 @@ const data = {
       url: "#",
       icon: IconChartBar,
       items: [
-        {
-          title: "Metrics",
-          url: "/metrics",
-        },
-        {
-          title: "Logs",
-          url: "/logs",
-        },
-        {
-          title: "Events",
-          url: "/events",
-        },
+        { title: "Metrics", url: "/metrics" },
+        { title: "Logs", url: "/logs" },
+        { title: "Events", url: "/events" },
       ],
     },
     {
@@ -254,49 +116,38 @@ const data = {
       url: "#",
       icon: IconSettings,
       items: [
-        {
-          title: "Cluster Settings",
-          url: "/cluster-settings",
-        },
-        {
-          title: "User Management",
-          url: "/user-management",
-        },
-        {
-          title: "API Settings",
-          url: "/api-settings",
-        },
+        { title: "Cluster Settings", url: "/cluster-settings" },
+        { title: "User Management", url: "/user-management" },
+        { title: "API Settings", url: "/api-settings" },
       ],
     },
   ],
+};
 
-}
-
-
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
+  const { isMenuExpanded } = useNavigation();
   return (
-    <Sidebar className="group" collapsible="icon" {...props}>
+    <Sidebar className="group" collapsible="icon" data-expanded={isMenuExpanded("ROOT") ? "true" : "false"} {...props}>
       <SidebarHeader>
         <AppLogo />
         <Separator className="w-full" />
         <NamespaceSwitcher />
       </SidebarHeader>
+
       <SidebarContent className="p-0">
         <ScrollArea className="h-full">
-          <div className="flex flex-col h-full ">
+          <div className="flex flex-col h-full">
             <NavMain items={data.navMain} />
             <NavSecondary items={data.navSecondary} className="mt-auto" />
           </div>
           <ScrollBar orientation="vertical" />
         </ScrollArea>
-
-
-
       </SidebarContent>
+
       <SidebarFooter>
         <NavUser user={data.user} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  )
+  );
 }

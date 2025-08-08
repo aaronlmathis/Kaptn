@@ -7,7 +7,7 @@ import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function StatefulSetsPageContainer() {
-	const { data: summaryData, isLoading, error } = useResourceSummary('statefulsets')
+	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('statefulsets')
 
 	return (
 		<SharedProviders>
@@ -24,6 +24,7 @@ export function StatefulSetsPageContainer() {
 				cards={summaryData}
 				loading={isLoading}
 				error={error}
+				lastUpdated={lastUpdated}
 			/>
 
 			<StatefulSetsDataTable />

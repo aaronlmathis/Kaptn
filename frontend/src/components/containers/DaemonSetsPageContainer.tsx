@@ -7,7 +7,7 @@ import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function DaemonSetsPageContainer() {
-	const { data: summaryData, isLoading, error } = useResourceSummary('daemonsets')
+	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('daemonsets')
 
 	return (
 		<SharedProviders>
@@ -24,6 +24,7 @@ export function DaemonSetsPageContainer() {
 				cards={summaryData}
 				loading={isLoading}
 				error={error}
+			lastUpdated={lastUpdated}
 			/>
 
 			<DaemonSetsDataTable />

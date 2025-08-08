@@ -7,7 +7,7 @@ import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function CronJobsPageContainer() {
-	const { data: summaryData, isLoading, error } = useResourceSummary('cronjobs')
+	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('cronjobs')
 
 	return (
 		<SharedProviders>
@@ -24,6 +24,7 @@ export function CronJobsPageContainer() {
 				cards={summaryData}
 				loading={isLoading}
 				error={error}
+			lastUpdated={lastUpdated}
 			/>
 
 			<CronJobsDataTable />

@@ -2,8 +2,12 @@
 
 import * as React from "react"
 import { PersistentVolumeClaimsDataTable } from "@/components/data_tables/PersistentVolumeClaimsDataTable"
+import { SummaryCards } from "@/components/SummaryCards"
+import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function PersistentVolumeClaimsContainer() {
+	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('persistent-volume-claims')
+
 	return (
 		<div className="flex flex-col gap-4">
 			<div className="flex items-center justify-between">
@@ -14,6 +18,12 @@ export function PersistentVolumeClaimsContainer() {
 					</p>
 				</div>
 			</div>
+			<SummaryCards
+				cards={summaryData}
+				loading={isLoading}
+				error={error}
+				lastUpdated={lastUpdated}
+			/>
 			<PersistentVolumeClaimsDataTable />
 		</div>
 	)

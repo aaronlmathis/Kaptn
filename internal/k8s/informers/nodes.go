@@ -33,7 +33,11 @@ func (h *NodeEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 
 	// Convert to summary and broadcast
 	summary := h.nodeToSummary(node)
+	// Broadcast to nodes room
 	h.hub.BroadcastToRoom("nodes", "node_added", summary)
+	
+	// Also broadcast to overview room for unified WebSocket support
+	h.hub.BroadcastToRoom("overview", "node_added", summary)
 }
 
 // OnUpdate handles node update events
@@ -48,7 +52,11 @@ func (h *NodeEventHandler) OnUpdate(oldObj, newObj interface{}) {
 
 	// Convert to summary and broadcast
 	summary := h.nodeToSummary(newNode)
+	// Broadcast to nodes room
 	h.hub.BroadcastToRoom("nodes", "node_updated", summary)
+	
+	// Also broadcast to overview room for unified WebSocket support
+	h.hub.BroadcastToRoom("overview", "node_updated", summary)
 }
 
 // OnDelete handles node deletion events
@@ -62,7 +70,11 @@ func (h *NodeEventHandler) OnDelete(obj interface{}) {
 	h.logger.Debug("Node deleted", zap.String("name", node.Name))
 
 	// Broadcast deletion event
+	// Broadcast to nodes room
 	h.hub.BroadcastToRoom("nodes", "node_deleted", map[string]string{"name": node.Name})
+	
+	// Also broadcast to overview room for unified WebSocket support
+	h.hub.BroadcastToRoom("overview", "node_deleted", map[string]string{"name": node.Name})
 }
 
 // nodeToSummary converts a node to a summary representation

@@ -18,6 +18,7 @@ import (
 	"github.com/aaronlmathis/kaptn/internal/k8s/metrics"
 	"github.com/aaronlmathis/kaptn/internal/k8s/overview"
 	"github.com/aaronlmathis/kaptn/internal/k8s/resources"
+	"github.com/aaronlmathis/kaptn/internal/k8s/summaries"
 	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
 	apimiddleware "github.com/aaronlmathis/kaptn/internal/middleware"
 	"github.com/go-chi/chi/v5"
@@ -45,6 +46,7 @@ type Server struct {
 	overviewService  *overview.OverviewService
 	resourceManager  *resources.ResourceManager
 	analyticsService *analytics.AnalyticsService
+	summaryService   *summaries.SummaryService
 	authMiddleware   *auth.Middleware
 	oidcClient       *auth.OIDCClient
 }
@@ -65,6 +67,11 @@ func NewServer(logger *zap.Logger, cfg *config.Config) (*Server, error) {
 
 	// Initialize informers
 	if err := s.initInformers(); err != nil {
+		return nil, err
+	}
+
+	// Initialize summary service
+	if err := s.initSummaryService(); err != nil {
 		return nil, err
 	}
 
@@ -166,6 +173,46 @@ func (s *Server) initInformers() error {
 	podHandler := informers.NewPodEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddPodEventHandler(podHandler)
 
+	serviceHandler := informers.NewServiceEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddServiceEventHandler(serviceHandler)
+
+	deploymentHandler := informers.NewDeploymentEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddDeploymentEventHandler(deploymentHandler)
+
+	return nil
+}
+
+func (s *Server) initSummaryService() error {
+	s.logger.Info("Initializing summary service")
+
+	// Create summary config from main config
+	summaryConfigData := s.config.GetSummaryConfig()
+
+	// Convert to SummaryConfig struct
+	summaryConfig := &summaries.SummaryConfig{
+		EnableWebSocketUpdates: summaryConfigData["enable_websocket_updates"].(bool),
+		RealtimeResources:      summaryConfigData["realtime_resources"].([]string),
+		CacheTTL:               summaryConfigData["cache_ttl"].(map[string]string),
+		MaxCacheSize:           summaryConfigData["max_cache_size"].(int),
+		BackgroundRefresh:      summaryConfigData["background_refresh"].(bool),
+	}
+
+	// Parse cache TTL durations
+	if err := summaryConfig.ParseCacheTTLs(); err != nil {
+		return fmt.Errorf("failed to parse summary cache TTL config: %w", err)
+	}
+
+	// Initialize summary service
+	s.summaryService = summaries.NewSummaryService(
+		s.logger,
+		s.kubeClient,
+		s.informerManager,
+		summaryConfig,
+	)
+
+	// Set WebSocket hub for real-time updates
+	s.summaryService.SetWebSocketHub(s.wsHub)
+
 	return nil
 }
 
@@ -249,6 +296,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start overview streaming
 	s.overviewService.StartStreaming()
 
+	// Start summary service background processing
+	if s.summaryService != nil {
+		s.summaryService.StartBackgroundProcessing()
+	}
+
 	// Start informers
 	if err := s.informerManager.Start(); err != nil {
 		return err
@@ -263,6 +315,10 @@ func (s *Server) Stop() {
 
 	if s.overviewService != nil {
 		s.overviewService.StopStreaming()
+	}
+
+	if s.summaryService != nil {
+		s.summaryService.StopBackgroundProcessing()
 	}
 
 	if s.informerManager != nil {
@@ -408,9 +464,16 @@ func (s *Server) setupRoutes() {
 			// Analytics endpoints
 			r.Get("/analytics/visitors", s.handleGetVisitors)
 
+			// Summary endpoints
+			r.Get("/summaries/cards", s.handleGetSummaryCards)
+			r.Get("/summaries/{resource}", s.handleGetResourceSummary)
+			r.Get("/summaries/{resource}/namespaces/{namespace}", s.handleGetNamespacedResourceSummary)
+
 			// WebSocket endpoints (require authentication for real-time data)
 			r.Get("/stream/nodes", s.handleNodesWebSocket)
 			r.Get("/stream/pods", s.handlePodsWebSocket)
+			r.Get("/stream/services", s.handleServicesWebSocket)
+			r.Get("/stream/deployments", s.handleDeploymentsWebSocket)
 			r.Get("/stream/overview", s.handleOverviewWebSocket)
 			r.Get("/stream/jobs/{jobId}", s.handleJobWebSocket)
 			r.Get("/stream/logs/{streamId}", s.handleLogsWebSocket)

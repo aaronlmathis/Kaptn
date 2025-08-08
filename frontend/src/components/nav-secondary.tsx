@@ -1,14 +1,15 @@
-"use client"
+/* src/components/nav-secondary.tsx */
+"use client";
 
-import * as React from "react"
-import { ChevronRight } from "lucide-react"
-import { useNavigation } from "@/contexts/navigation-context"
+import * as React from "react";
+import { ChevronRight } from "lucide-react";
+import { useNavigation } from "@/contexts/navigation-context";
 
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+} from "@/components/ui/collapsible";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -18,126 +19,122 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
+
+type Item = {
+  title: string;
+  url: string;
+  icon: React.ComponentType<Record<string, unknown>>;
+  items?: { title: string; url: string }[];
+};
 
 export function NavSecondary({
   items,
   ...props
 }: {
-  items: {
-    title: string
-    url: string
-    icon: React.ComponentType<Record<string, unknown>>
-    items?: {
-      title: string
-      url: string
-    }[]
-  }[]
+  items: Item[];
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
-  const { setMenuExpanded, isMenuExpanded, hasMenuState, isHydrated, currentPath } = useNavigation()
-
-  const handleMenuToggle = (menuTitle: string) => {
-    const currentState = isMenuExpanded(menuTitle)
-    setMenuExpanded(menuTitle, !currentState)
-  }
-
-  // Function to check if a path is active
-  const isPathActive = (url: string): boolean => {
-    if (!isHydrated) return false
-
-    // For non-hash URLs, check if current path starts with the url
-    if (url !== '#') {
-      return currentPath.startsWith(url)
-    }
-
-    return false
-  }
-
-  // Function to check if a parent item should be active (has an active child)
-  const hasActiveChild = (items?: { title: string; url: string }[]): boolean => {
-    if (!items || !isHydrated) return false
-    return items.some(subItem => isPathActive(subItem.url))
-  }
-
-  // Function to determine if menu should be expanded
-  const getMenuState = (menuTitle: string, hasActiveChildren: boolean): boolean => {
-    // If not hydrated yet, show expanded state based on active children for SSR consistency  
-    if (!isHydrated) {
-      return hasActiveChildren
-    }
-
-    // Use the stored state from localStorage (via context)
-    // If user has explicitly set this menu's state, use that
-    // Otherwise, default to expanded if has active children
-    if (hasMenuState(menuTitle)) {
-      return isMenuExpanded(menuTitle)
-    }
-
-    return hasActiveChildren
-  }
-
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>
         <SidebarMenu>
-          {items.map((item) => {
-            // If item has no subitems and a real URL, render as a simple navigation link
-            if (!item.items || item.items.length === 0) {
-              const isActive = isPathActive(item.url)
-              return (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton tooltip={item.title} isActive={isActive} asChild>
-                    <a href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )
-            }
-
-            // If item has subitems, render as collapsible
-            const parentIsActive = hasActiveChild(item.items)
-            const isExpanded = getMenuState(item.title, parentIsActive)
-
-            return (
-              <Collapsible
-                key={item.title}
-                asChild
-                open={isExpanded}
-                onOpenChange={() => handleMenuToggle(item.title)}
-                className="group/collapsible"
-              >
-                <SidebarMenuItem>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuButton tooltip={item.title} isActive={parentIsActive}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                      <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                    </SidebarMenuButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {item.items.map((subItem) => {
-                        const subIsActive = isPathActive(subItem.url)
-                        return (
-                          <SidebarMenuSubItem key={subItem.title}>
-                            <SidebarMenuSubButton asChild isActive={subIsActive}>
-                              <a href={subItem.url}>
-                                <span>{subItem.title}</span>
-                              </a>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        )
-                      })}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
+          {items.map((item) =>
+            item.items && item.items.length > 0 ? (
+              <NavGroupItem key={item.title} item={item} />
+            ) : (
+              <LeafItem key={item.title} item={item} />
             )
-          })}
+          )}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
+}
+
+function LeafItem({ item }: { item: Item }) {
+  const { currentPath, isHydrated } = useNavigation();
+  const isActive =
+    isHydrated &&
+    ((item.url === "/" && (currentPath === "/" || currentPath === "/dashboard")) ||
+      (item.url !== "/" && item.url !== "#" && currentPath.startsWith(item.url)));
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton tooltip={item.title} isActive={!!isActive} asChild>
+        <a href={item.url}>
+          <item.icon />
+          <span>{item.title}</span>
+        </a>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+function NavGroupItem({ item }: { item: Item }) {
+  const {
+    currentPath,
+    isHydrated,
+    hasMenuState,
+    isMenuExpanded,
+    setMenuExpanded,
+  } = useNavigation();
+
+  const stored = hasMenuState(item.title) ? isMenuExpanded(item.title) : false;
+
+  const childActive =
+    isHydrated &&
+    (item.items ?? []).some((s) => {
+      if (s.url === "/" && (currentPath === "/" || currentPath === "/dashboard")) return true;
+      return s.url !== "/" && s.url !== "#" && currentPath.startsWith(s.url);
+    });
+
+  React.useEffect(() => {
+    if (!isHydrated) return;
+    if (!hasMenuState(item.title) && childActive) {
+      setMenuExpanded(item.title, true);
+    }
+  }, [isHydrated, childActive, hasMenuState, item.title, setMenuExpanded]);
+
+  const open = stored;
+
+  return (
+    <Collapsible
+      asChild
+      open={open}
+      onOpenChange={(nextOpen) => setMenuExpanded(item.title, nextOpen)}
+      className="group/collapsible"
+    >
+      <SidebarMenuItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuButton tooltip={item.title} isActive={childActive}>
+            <item.icon />
+            <span>{item.title}</span>
+            <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+          </SidebarMenuButton>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {(item.items ?? []).map((subItem) => {
+              const subIsActive =
+                isHydrated &&
+                ((subItem.url === "/" &&
+                  (currentPath === "/" || currentPath === "/dashboard")) ||
+                  (subItem.url !== "/" &&
+                    subItem.url !== "#" &&
+                    currentPath.startsWith(subItem.url)));
+              return (
+                <SidebarMenuSubItem key={subItem.title}>
+                  <SidebarMenuSubButton asChild isActive={!!subIsActive}>
+                    <a href={subItem.url}>
+                      <span>{subItem.title}</span>
+                    </a>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              );
+            })}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuItem>
+    </Collapsible>
+  );
 }
