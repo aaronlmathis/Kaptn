@@ -126,3 +126,7 @@
   color: #33A1FD !important;
   background-color: transparent !important;
 }
+
+html.no-transitions * {
+  transition: none !important;
+}

@@ -3,8 +3,12 @@
 import * as React from "react"
 import { SharedProviders } from "@/components/shared-providers"
 import { EndpointsDataTable } from "@/components/data_tables/EndpointsDataTable"
+import { SummaryCards } from "@/components/SummaryCards"
+import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function EndpointsPageContainer() {
+	const { data: summaryData, isLoading, error } = useResourceSummary('endpoints')
+
 	return (
 		<SharedProviders>
 			<div className="px-4 lg:px-6">
@@ -15,6 +19,13 @@ export function EndpointsPageContainer() {
 					</p>
 				</div>
 			</div>
+
+			<SummaryCards
+				cards={summaryData}
+				loading={isLoading}
+				error={error}
+			/>
+
 			<EndpointsDataTable />
 		</SharedProviders>
 	)

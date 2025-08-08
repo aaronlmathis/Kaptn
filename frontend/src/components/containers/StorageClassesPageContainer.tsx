@@ -3,8 +3,12 @@
 import * as React from "react"
 import { SharedProviders } from "@/components/shared-providers"
 import { StorageClassesDataTable } from "@/components/data_tables/StorageClassesDataTable"
+import { SummaryCards } from "@/components/SummaryCards"
+import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function StorageClassesPageContainer() {
+	const { data: summaryData, isLoading, error } = useResourceSummary('storageclasses')
+
 	return (
 		<SharedProviders>
 			<div className="px-4 lg:px-6">
@@ -15,6 +19,13 @@ export function StorageClassesPageContainer() {
 					</p>
 				</div>
 			</div>
+
+			<SummaryCards
+				cards={summaryData}
+				loading={isLoading}
+				error={error}
+			/>
+
 			<StorageClassesDataTable />
 		</SharedProviders>
 	)

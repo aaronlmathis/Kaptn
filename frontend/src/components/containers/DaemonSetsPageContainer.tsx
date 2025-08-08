@@ -3,8 +3,12 @@
 import * as React from "react"
 import { SharedProviders } from "@/components/shared-providers"
 import { DaemonSetsDataTable } from "@/components/data_tables/DaemonSetsDataTable"
+import { SummaryCards } from "@/components/SummaryCards"
+import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function DaemonSetsPageContainer() {
+	const { data: summaryData, isLoading, error } = useResourceSummary('daemonsets')
+
 	return (
 		<SharedProviders>
 			<div className="px-4 lg:px-6">
@@ -15,6 +19,13 @@ export function DaemonSetsPageContainer() {
 					</p>
 				</div>
 			</div>
+
+			<SummaryCards
+				cards={summaryData}
+				loading={isLoading}
+				error={error}
+			/>
+
 			<DaemonSetsDataTable />
 		</SharedProviders>
 	)

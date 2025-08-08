@@ -14,6 +14,8 @@ export interface NavigationContextValue {
 	expandedMenus: Record<string, boolean>
 	setMenuExpanded: (menuTitle: string, expanded: boolean) => void
 	isMenuExpanded: (menuTitle: string) => boolean
+	hasMenuState: (menuTitle: string) => boolean
+	clearMenuState: () => void
 	isHydrated: boolean
 }
 
@@ -127,38 +129,65 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 			const correctBreadcrumbs = generateBreadcrumbs(actualPath)
 			setBreadcrumbs(correctBreadcrumbs)
 
-			// Clear any old localStorage data since we now determine state based on current path
-			localStorage.removeItem('expandedMenus')
-
-			// Always initialize menu state based on current path (ignore saved state on page load)
-			const initialState = getInitialMenuState(actualPath)
-			setExpandedMenus(initialState)
+			// Only initialize menu state on first load, not on every path change
+			if (!isHydrated) {
+				// Try to restore from localStorage first
+				const savedMenuState = localStorage.getItem('expandedMenus')
+				if (savedMenuState) {
+					try {
+						const parsedState = JSON.parse(savedMenuState)
+						setExpandedMenus(parsedState)
+					} catch {
+						// If parsing fails, fall back to path-based initialization
+						console.warn('Failed to parse saved menu state, falling back to default')
+						const initialState = getInitialMenuState(actualPath)
+						setExpandedMenus(initialState)
+					}
+				} else {
+					// No saved state, use path-based initialization
+					const initialState = getInitialMenuState(actualPath)
+					setExpandedMenus(initialState)
+				}
+			}
 
 			setIsHydrated(true)
 		}
-	}, [])
+	}, [isHydrated])
 
 	// Menu state management functions
 	const setMenuExpanded = (menuTitle: string, expanded: boolean) => {
-		setExpandedMenus(prev => ({
-			...prev,
-			[menuTitle]: expanded
-		}))
+		setExpandedMenus(prev => {
+			const newState = {
+				...prev,
+				[menuTitle]: expanded
+			}
+			// Save to localStorage whenever menu state changes
+			localStorage.setItem('expandedMenus', JSON.stringify(newState))
+			return newState
+		})
 	}
 
 	const isMenuExpanded = (menuTitle: string): boolean => {
 		return expandedMenus[menuTitle] ?? false
 	}
 
-	// Update breadcrumbs and menu state when path changes (only after hydration)
+	const hasMenuState = (menuTitle: string): boolean => {
+		return menuTitle in expandedMenus
+	}
+
+	const clearMenuState = () => {
+		localStorage.removeItem('expandedMenus')
+		setExpandedMenus({})
+	}
+
+	// Update breadcrumbs when path changes (but DON'T reset menu state)
 	useEffect(() => {
 		if (isHydrated) {
 			const newBreadcrumbs = generateBreadcrumbs(currentPath)
 			setBreadcrumbs(newBreadcrumbs)
 
-			// Reset menu state based on new path
-			const newMenuState = getInitialMenuState(currentPath)
-			setExpandedMenus(newMenuState)
+			// DON'T reset menu state on path changes - let user control menu state
+			// Only auto-expand menus based on path during initial load
 		}
 	}, [currentPath, isHydrated])
 
@@ -209,6 +238,8 @@ export function NavigationProvider({ children }: NavigationProviderProps) {
 		expandedMenus,
 		setMenuExpanded,
 		isMenuExpanded,
+		hasMenuState,
+		clearMenuState,
 		isHydrated,
 	}
 

@@ -35,7 +35,7 @@ export function NavMain({
     }[]
   }[]
 }) {
-  const { setMenuExpanded, isMenuExpanded, isHydrated, currentPath } = useNavigation()
+  const { setMenuExpanded, isMenuExpanded, hasMenuState, isHydrated, currentPath } = useNavigation()
 
   const handleMenuToggle = (menuTitle: string) => {
     const currentState = isMenuExpanded(menuTitle)
@@ -64,6 +64,23 @@ export function NavMain({
     return items.some(subItem => isPathActive(subItem.url))
   }
 
+  // Function to determine if menu should be expanded
+  const getMenuState = (menuTitle: string, hasActiveChildren: boolean): boolean => {
+    // If not hydrated yet, show expanded state based on active children for SSR consistency  
+    if (!isHydrated) {
+      return hasActiveChildren
+    }
+
+    // Use the stored state from localStorage (via context)
+    // If user has explicitly set this menu's state, use that
+    // Otherwise, default to expanded if has active children
+    if (hasMenuState(menuTitle)) {
+      return isMenuExpanded(menuTitle)
+    }
+
+    return hasActiveChildren
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -85,9 +102,8 @@ export function NavMain({
           }
 
           // If item has subitems, render as collapsible
-          // Use stored expanded state if available, otherwise expand based on active page
-          const isExpanded = isHydrated ? isMenuExpanded(item.title) : false
           const parentIsActive = hasActiveChild(item.items)
+          const isExpanded = getMenuState(item.title, parentIsActive)
 
           return (
             <Collapsible

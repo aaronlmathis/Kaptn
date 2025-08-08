@@ -3,8 +3,12 @@
 import * as React from "react"
 import { SharedProviders } from "@/components/shared-providers"
 import { VolumeSnapshotsDataTable } from "@/components/data_tables/VolumeSnapshotsDataTable"
+import { SummaryCards } from "@/components/SummaryCards"
+import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function VolumeSnapshotsPageContainer() {
+	const { data: summaryData, isLoading, error } = useResourceSummary('volumesnapshots')
+
 	return (
 		<SharedProviders>
 			<div className="px-4 lg:px-6">
@@ -15,6 +19,13 @@ export function VolumeSnapshotsPageContainer() {
 					</p>
 				</div>
 			</div>
+
+			<SummaryCards
+				cards={summaryData}
+				loading={isLoading}
+				error={error}
+			/>
+
 			<VolumeSnapshotsDataTable />
 		</SharedProviders>
 	)

@@ -3,8 +3,12 @@
 import * as React from "react"
 import { SharedProviders } from "@/components/shared-providers"
 import { LoadBalancersDataTable } from "@/components/data_tables/LoadBalancersDataTable"
+import { SummaryCards } from "@/components/SummaryCards"
+import { useResourceSummary } from "@/hooks/useResourceSummary"
 
 export function LoadBalancersPageContainer() {
+	const { data: summaryData, isLoading, error } = useResourceSummary('loadbalancers')
+
 	return (
 		<SharedProviders>
 			<div className="px-4 lg:px-6">
@@ -15,6 +19,13 @@ export function LoadBalancersPageContainer() {
 					</p>
 				</div>
 			</div>
+
+			<SummaryCards
+				cards={summaryData}
+				loading={isLoading}
+				error={error}
+			/>
+
 			<LoadBalancersDataTable />
 		</SharedProviders>
 	)

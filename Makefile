@@ -13,7 +13,7 @@ LDFLAGS := -X github.com/aaronlmathis/kaptn/internal/version.Version=$(VERSION) 
            -X github.com/aaronlmathis/kaptn/internal/version.GitCommit=$(GIT_COMMIT) \
            -X github.com/aaronlmathis/kaptn/internal/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: all dev fmt lint test frontend build docker docker-debug kind-up kind-down clean help push push-debug
+.PHONY: all dev fmt lint test frontend build docker docker-debug kind-up kind-down clean help push push-debug run
 
 all: build ## Build everything
 
@@ -85,6 +85,10 @@ build: frontend ## Build backend binary (embeds frontend)
 	@mkdir -p $(BUILD_DIR)
 	@CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 	@echo "Binary built: $(BUILD_DIR)/$(BINARY_NAME)"
+
+run: build ## Run the built binary
+	@echo "Running $(BINARY_NAME)..."
+	@$(BUILD_DIR)/$(BINARY_NAME)
 
 IMAGE_NAME := aaronlmathis/kaptn
 
