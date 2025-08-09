@@ -36,6 +36,7 @@ import {
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconWifiOff,
 } from "@tabler/icons-react"
 
 import {
@@ -76,7 +77,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { PersistentVolumeClaimDetailDrawer } from "@/components/viewers/PersistentVolumeClaimDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { usePersistentVolumeClaims } from "@/hooks/use-k8s-data"
+import { usePersistentVolumeClaimsWithWebSocket } from "@/hooks/usePersistentVolumeClaimsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { persistentVolumeClaimSchema } from "@/lib/schemas/persistent-volume-claim"
 import { z } from "zod"
@@ -315,7 +316,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof persistentVolumeClaimSc
 }
 
 export function PersistentVolumeClaimsDataTable() {
-	const { data: persistentVolumeClaims, loading, error, refetch } = usePersistentVolumeClaims()
+	const { data: persistentVolumeClaims, loading, error, refetch, isConnected } = usePersistentVolumeClaimsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -411,11 +412,25 @@ export function PersistentVolumeClaimsDataTable() {
 			<div className="space-y-4">
 				{/* Table controls */}
 				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
+					<div className="flex items-center space-x-4">
 						<p className="text-sm text-muted-foreground">
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						<div className="flex items-center space-x-2">
+							{isConnected ? (
+								<>
+									<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+
+									<span className="text-xs text-green-600">Real-time updates enabled</span>
+								</>
+							) : (
+								<>
+									<IconWifiOff className="size-4 text-gray-400" />
+									<span className="text-xs text-gray-400">Real-time updates disconnected</span>
+								</>
+							)}
+						</div>
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>
@@ -515,6 +530,12 @@ export function PersistentVolumeClaimsDataTable() {
 					<div className="flex-1 text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
+						{isConnected && (
+							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-6 lg:space-x-8">
 						<div className="flex items-center space-x-2">

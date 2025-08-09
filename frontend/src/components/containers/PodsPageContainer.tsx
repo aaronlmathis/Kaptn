@@ -9,22 +9,21 @@ import {
 	getPodStatusBadge,
 	getPodPhaseBadge,
 	getPodReadinessBadge,
-	getResourceIcon,
-	getHealthTrendBadge
+	getResourceIcon
 } from "@/lib/summary-card-utils"
 
 // Inner component that can access the namespace context
 function PodsContent() {
 	const { data: pods, loading: isLoading, error, isConnected } = usePodsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
-	
+
 	// Update lastUpdated when pods change
 	React.useEffect(() => {
 		if (pods.length > 0) {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [pods])
-	
+
 	// Generate summary cards from pod data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
 		if (!pods || pods.length === 0) {
@@ -53,13 +52,13 @@ function PodsContent() {
 		}
 
 		const totalPods = pods.length
-		
+
 		// Count pods by status/phase
 		const runningPods = pods.filter(p => p.status === 'Running').length
 		const pendingPods = pods.filter(p => p.status === 'Pending').length
 		const failedPods = pods.filter(p => p.status === 'Failed').length
 		const succeededPods = pods.filter(p => p.status === 'Succeeded').length
-		
+
 		// Count ready pods by parsing the ready field (e.g., "1/1", "0/1")
 		const readyStats = pods.reduce((acc, pod) => {
 			const [ready, total] = pod.ready.split('/').map(Number)
@@ -68,7 +67,7 @@ function PodsContent() {
 				total: acc.total + (total || 0)
 			}
 		}, { ready: 0, total: 0 })
-		
+
 		// Count restarts
 		const totalRestarts = pods.reduce((sum, p) => sum + p.restarts, 0)
 
@@ -106,23 +105,33 @@ function PodsContent() {
 	}, [pods])
 
 	return (
-		<>
+		<div className="space-y-6">
+			{/* Header with connection status */}
 			<div className="px-4 lg:px-6">
-				<div className="space-y-2">
-					<div className="flex items-center justify-between">
-						<h1 className="text-2xl font-bold tracking-tight">Pods</h1>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
+				<div className="flex items-center justify-between">
+					<div className="space-y-2">
+						<div className="flex items-center gap-2">
+							<h1 className="text-2xl font-bold tracking-tight">Pods</h1>
+							{isConnected && (
+								<div className="flex items-center gap-1.5 text-xs text-green-600">
+									<div className="size-2 bg-green-500 rounded-full animate-pulse" />
+									Live
+								</div>
+							)}
+						</div>
+						<p className="text-muted-foreground">
+							Manage and monitor pod resources in your Kubernetes cluster
+						</p>
 					</div>
-					<p className="text-muted-foreground">
-						Manage and monitor pod resources in your Kubernetes cluster
-					</p>
+					{lastUpdated && (
+						<div className="text-sm text-muted-foreground">
+							Last updated: {new Date(lastUpdated).toLocaleTimeString()}
+						</div>
+					)}
 				</div>
 			</div>
+
+			{/* Summary Cards */}
 
 			<SummaryCards
 				cards={summaryData}
@@ -132,7 +141,7 @@ function PodsContent() {
 			/>
 
 			<PodsDataTable />
-		</>
+		</div>
 	)
 }
 

@@ -35,6 +35,7 @@ import {
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconWifiOff,
 } from "@tabler/icons-react"
 
 import {
@@ -75,7 +76,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { VolumeSnapshotClassDetailDrawer } from "@/components/viewers/VolumeSnapshotClassDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useVolumeSnapshotClasses } from "@/hooks/use-k8s-data"
+import { useVolumeSnapshotClassesWithWebSocket } from "@/hooks/useVolumeSnapshotClassesWithWebSocket"
 import { volumeSnapshotClassSchema } from "@/lib/schemas/volume-snapshot-class"
 import { z } from "zod"
 
@@ -274,7 +275,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof volumeSnapshotClassSche
 }
 
 export function VolumeSnapshotClassesDataTable() {
-	const { data: volumeSnapshotClasses, loading, error, refetch } = useVolumeSnapshotClasses()
+	const { data: volumeSnapshotClasses, loading, error, refetch, isConnected } = useVolumeSnapshotClassesWithWebSocket(true)
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -369,11 +370,24 @@ export function VolumeSnapshotClassesDataTable() {
 			<div className="space-y-4">
 				{/* Table controls */}
 				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
+					<div className="flex items-center space-x-4">
 						<p className="text-sm text-muted-foreground">
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						<div className="flex items-center space-x-2">
+							{isConnected ? (
+								<>
+									<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+									<span className="text-xs text-green-600">Real-time updates enabled</span>
+								</>
+							) : (
+								<>
+									<IconWifiOff className="size-4 text-gray-400" />
+									<span className="text-xs text-gray-400">Real-time updates disconnected</span>
+								</>
+							)}
+						</div>
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>
@@ -473,6 +487,12 @@ export function VolumeSnapshotClassesDataTable() {
 					<div className="flex-1 text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
+						{isConnected && (
+							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-6 lg:space-x-8">
 						<div className="flex items-center space-x-2">

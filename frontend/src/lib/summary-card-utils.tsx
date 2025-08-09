@@ -13,7 +13,9 @@ import {
 	IconCopy,
 	IconClockPlay,
 	IconClock,
-	IconRoute
+	IconRoute,
+	IconDatabase,
+	IconArchive
 } from "@tabler/icons-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -124,7 +126,7 @@ export function getServiceTypeBadge(count: number, total: number, type: "Cluster
 }
 
 // Generic resource icons
-export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints" | "daemonsets" | "cronjobs" | "endpointslices" | "ingresses" | "ingressclasses" | "networkpolicies" | "loadbalancers"): React.ReactNode {
+export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints" | "daemonsets" | "cronjobs" | "endpointslices" | "ingresses" | "ingressclasses" | "networkpolicies" | "loadbalancers" | "persistentvolumes" | "persistentvolumeclaims" | "storageclasses" | "volumesnapshots" | "volumesnapshotclasses" | "namespaces" | "resourcequotas"): React.ReactNode {
 	switch (type) {
 		case "deployments":
 			return <IconCube className="size-4" />
@@ -158,6 +160,20 @@ export function getResourceIcon(type: "deployments" | "services" | "pods" | "nod
 			return <IconShield className="size-4" />
 		case "loadbalancers":
 			return <IconCloudNetwork className="size-4" />
+		case "persistentvolumes":
+			return <IconDatabase className="size-4" />
+		case "persistentvolumeclaims":
+			return <IconDatabase className="size-4" />
+		case "storageclasses":
+			return <IconArchive className="size-4" />
+		case "volumesnapshots":
+			return <IconCopy className="size-4" />
+		case "volumesnapshotclasses":
+			return <IconArchive className="size-4" />
+		case "namespaces":
+			return <IconShield className="size-4" />
+		case "resourcequotas":
+			return <IconDatabase className="size-4" />
 		default:
 			return null
 	}
@@ -241,5 +257,126 @@ export function getHealthTrendBadge(percentage: number, isUpTrend?: boolean): Re
 		return createBadge("warning", trendIcon, "Needs Attention")
 	} else {
 		return createBadge("critical", trendIcon, "Critical")
+	}
+}
+
+// Persistent Volume status badges
+export function getPersistentVolumeStatusBadge(available: number, bound: number, total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconDatabase className="size-3" />, "No Volumes")
+
+	const boundPercentage = (bound / total) * 100
+
+	if (boundPercentage >= 80) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Well Utilized")
+	} else if (boundPercentage >= 50) {
+		return createBadge("warning", <IconTrendingUp className="size-3" />, "Partially Used")
+	} else if (available > 0) {
+		return createBadge("info", <IconDatabase className="size-3" />, "Available")
+	} else {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Check Status")
+	}
+}
+
+export function getPersistentVolumeReclaimBadge(retain: number, delete_: number, recycle: number): React.ReactNode {
+	const total = retain + delete_ + recycle
+	if (total === 0) return createBadge("info", <IconDatabase className="size-3" />, "No Policies")
+
+	const retainPercentage = (retain / total) * 100
+
+	if (retainPercentage >= 70) {
+		return createBadge("healthy", <IconShield className="size-3" />, "Data Safe")
+	} else if (retainPercentage >= 30) {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Mixed Policies")
+	} else {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Review Policies")
+	}
+}
+
+// Persistent Volume Claim status badges
+export function getPersistentVolumeClaimStatusBadge(bound: number, pending: number, lost: number, total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconDatabase className="size-3" />, "No Claims")
+
+	const boundPercentage = (bound / total) * 100
+	const pendingPercentage = (pending / total) * 100
+	const lostPercentage = (lost / total) * 100
+
+	if (lostPercentage > 0) {
+		return createBadge("critical", <IconAlertTriangle className="size-3" />, "Claims Lost")
+	} else if (pendingPercentage > 50) {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Many Pending")
+	} else if (boundPercentage >= 90) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Claims Bound")
+	} else if (boundPercentage >= 70) {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Some Pending")
+	} else {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Review Claims")
+	}
+}
+
+// Storage Class status badges
+export function getStorageClassStatusBadge(total: number, defaultCount: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconArchive className="size-3" />, "No Classes")
+
+	if (defaultCount === 0) {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "No Default")
+	} else if (defaultCount === 1) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Well Configured")
+	} else {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Multiple Defaults")
+	}
+}
+
+export function getStorageClassProvisionerBadge(total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconArchive className="size-3" />, "No Provisioners")
+
+	if (total >= 3) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Diverse Options")
+	} else if (total >= 2) {
+		return createBadge("info", <IconArchive className="size-3" />, "Good Coverage")
+	} else {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Limited Options")
+	}
+}
+
+// Namespace status badges
+export function getNamespaceStatusBadge(active: number, terminating: number, failed: number, total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconShield className="size-3" />, "No Namespaces")
+
+	const activePercentage = (active / total) * 100
+	const terminatingPercentage = (terminating / total) * 100
+	const failedPercentage = (failed / total) * 100
+
+	if (failedPercentage > 0) {
+		return createBadge("critical", <IconAlertTriangle className="size-3" />, "Some Failed")
+	} else if (terminatingPercentage > 20) {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Many Terminating")
+	} else if (activePercentage >= 95) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "All Active")
+	} else if (activePercentage >= 80) {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Most Active")
+	} else {
+		return createBadge("critical", <IconAlertTriangle className="size-3" />, "Few Active")
+	}
+}
+
+export function getNamespaceResourceBadge(count: number): React.ReactNode {
+	if (count === 0) return createBadge("info", <IconShield className="size-3" />, "No Resources")
+
+	if (count >= 100) {
+		return createBadge("info", <IconShield className="size-3" />, "High Activity")
+	} else if (count >= 50) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Active")
+	} else if (count >= 10) {
+		return createBadge("info", <IconShield className="size-3" />, "Moderate")
+	} else {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Low Activity")
+	}
+}
+
+export function getConnectionStatusBadge(isConnected: boolean): React.ReactNode {
+	if (isConnected) {
+		return createBadge("healthy", <IconActivity className="size-3" />, "Live")
+	} else {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Disconnected")
 	}
 }

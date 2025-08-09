@@ -36,6 +36,8 @@ import {
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconWifi,
+	IconWifiOff,
 } from "@tabler/icons-react"
 
 import {
@@ -76,7 +78,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { StorageClassDetailDrawer } from "@/components/viewers/StorageClassDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useStorageClasses } from "@/hooks/use-k8s-data"
+import { useStorageClassesWithWebSocket } from "@/hooks/useStorageClassesWithWebSocket"
 import { storageClassSchema } from "@/lib/schemas/storage-class"
 import { z } from "zod"
 
@@ -326,7 +328,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof storageClassSchema>> })
 }
 
 export function StorageClassesDataTable() {
-	const { data: storageClasses, loading, error, refetch } = useStorageClasses()
+	const { data: storageClasses, loading, error, refetch, isConnected } = useStorageClassesWithWebSocket()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -421,11 +423,24 @@ export function StorageClassesDataTable() {
 			<div className="space-y-4">
 				{/* Table controls */}
 				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
+					<div className="flex items-center space-x-4">
 						<p className="text-sm text-muted-foreground">
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						<div className="flex items-center space-x-2">
+							{isConnected ? (
+								<>
+									<IconWifi className="size-4 text-green-600" />
+									<span className="text-xs text-green-600">Real-time updates enabled</span>
+								</>
+							) : (
+								<>
+									<IconWifiOff className="size-4 text-gray-400" />
+									<span className="text-xs text-gray-400">Real-time updates disconnected</span>
+								</>
+							)}
+						</div>
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>

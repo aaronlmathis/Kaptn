@@ -88,7 +88,7 @@ function EndpointSlicesContent() {
 					</div>
 					{lastUpdated && (
 						<div className="text-sm text-muted-foreground">
-							Last updated: {lastUpdated}
+							Last updated: {new Date(lastUpdated).toLocaleTimeString()}
 						</div>
 					)}
 				</div>

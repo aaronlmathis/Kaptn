@@ -36,6 +36,7 @@ import {
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconWifiOff,
 } from "@tabler/icons-react"
 
 import {
@@ -77,7 +78,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { VolumeSnapshotDetailDrawer } from "@/components/viewers/VolumeSnapshotDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useVolumeSnapshots } from "@/hooks/use-k8s-data"
+import { useVolumeSnapshotsWithWebSocket } from "@/hooks/useVolumeSnapshotsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { z } from "zod"
 
@@ -311,7 +312,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof volumeSnapshotSchema>> 
 }
 
 export function VolumeSnapshotsDataTable() {
-	const { data: volumeSnapshots, loading, error, refetch } = useVolumeSnapshots()
+	const { data: volumeSnapshots, loading, error, refetch, isConnected } = useVolumeSnapshotsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -401,23 +402,36 @@ export function VolumeSnapshotsDataTable() {
 			<div className="space-y-4">
 				{/* Controls */}
 				<div className="flex items-center justify-between">
-					<div className="flex flex-1 items-center space-x-2">
-						{/* Optional: Add search/filter controls here */}
+					<div className="flex items-center space-x-4">
+						<p className="text-sm text-muted-foreground">
+							{table.getFilteredSelectedRowModel().rows.length} of{" "}
+							{table.getFilteredRowModel().rows.length} row(s) selected.
+						</p>
+						<div className="flex items-center space-x-2">
+							{isConnected ? (
+								<>
+									<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+									<span className="text-xs text-green-600">Real-time updates enabled</span>
+								</>
+							) : (
+								<>
+									<IconWifiOff className="size-4 text-gray-400" />
+									<span className="text-xs text-gray-400">Real-time updates disconnected</span>
+								</>
+							)}
+						</div>
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
-								<Button
-									variant="outline"
-									size="sm"
-									className="ml-auto hidden h-8 lg:flex"
-								>
-									<IconLayoutColumns className="mr-2 size-4" />
-									View
-									<IconChevronDown className="ml-2 size-4" />
+								<Button variant="outline" size="sm">
+									<IconLayoutColumns />
+									<span className="hidden lg:inline">Customize Columns</span>
+									<span className="lg:hidden">Columns</span>
+									<IconChevronDown />
 								</Button>
 							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-40">
+							<DropdownMenuContent align="end" className="w-56">
 								{table
 									.getAllColumns()
 									.filter(
@@ -512,6 +526,12 @@ export function VolumeSnapshotsDataTable() {
 					<div className="flex-1 text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
+						{isConnected && (
+							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-6 lg:space-x-8">
 						<div className="flex items-center space-x-2">

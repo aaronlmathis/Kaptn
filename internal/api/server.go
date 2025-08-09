@@ -25,6 +25,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned"
 	metricsv1beta1typed "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
@@ -36,6 +37,7 @@ type Server struct {
 	config           *config.Config
 	router           chi.Router
 	kubeClient       kubernetes.Interface
+	dynamicClient    dynamic.Interface
 	informerManager  *informers.Manager
 	wsHub            *ws.Hub
 	actionsService   *actions.NodeActionsService
@@ -114,6 +116,7 @@ func (s *Server) initKubernetesClient() error {
 	}
 
 	s.kubeClient = factory.Client()
+	s.dynamicClient = factory.DynamicClient()
 
 	// Initialize apply service
 	s.applyService = actions.NewApplyService(
@@ -164,7 +167,7 @@ func (s *Server) initKubernetesClient() error {
 func (s *Server) initInformers() error {
 	s.logger.Info("Initializing informers")
 
-	s.informerManager = informers.NewManager(s.logger, s.kubeClient)
+	s.informerManager = informers.NewManager(s.logger, s.kubeClient, s.dynamicClient)
 
 	// Add event handlers
 	nodeHandler := informers.NewNodeEventHandler(s.logger, s.wsHub)
@@ -175,6 +178,12 @@ func (s *Server) initInformers() error {
 
 	serviceHandler := informers.NewServiceEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddServiceEventHandler(serviceHandler)
+
+	namespaceHandler := informers.NewNamespaceEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddNamespaceEventHandler(namespaceHandler)
+
+	resourceQuotaHandler := informers.NewResourceQuotaEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddResourceQuotaEventHandler(resourceQuotaHandler)
 
 	deploymentHandler := informers.NewDeploymentEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddDeploymentEventHandler(deploymentHandler)
@@ -214,6 +223,23 @@ func (s *Server) initInformers() error {
 
 	loadBalancerHandler := informers.NewLoadBalancerEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddLoadBalancerEventHandler(loadBalancerHandler)
+
+	persistentVolumeHandler := informers.NewPersistentVolumeEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddPersistentVolumeEventHandler(persistentVolumeHandler)
+
+	persistentVolumeClaimHandler := informers.NewPersistentVolumeClaimEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddPersistentVolumeClaimEventHandler(persistentVolumeClaimHandler)
+
+	storageClassHandler := informers.NewStorageClassEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddStorageClassEventHandler(storageClassHandler)
+
+	s.logger.Info("Registering volume snapshot event handlers")
+	volumeSnapshotHandler := informers.NewVolumeSnapshotEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddVolumeSnapshotEventHandler(volumeSnapshotHandler)
+
+	volumeSnapshotClassHandler := informers.NewVolumeSnapshotClassEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddVolumeSnapshotClassEventHandler(volumeSnapshotClassHandler)
+	s.logger.Info("Volume snapshot event handlers registered")
 
 	return nil
 }

@@ -40,8 +40,8 @@ func ExampleIntegration(logger *zap.Logger, kubeClient kubernetes.Interface, rou
 		return nil, err
 	}
 
-	// Create informer manager
-	informerMgr := informers.NewManager(logger, kubeClient)
+	// Create informer manager (nil dynamic client for this example)
+	informerMgr := informers.NewManager(logger, kubeClient, nil)
 
 	// Create summary service
 	summaryService := NewSummaryService(logger, kubeClient, informerMgr, config)

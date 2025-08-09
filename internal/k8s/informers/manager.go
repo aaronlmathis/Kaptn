@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -17,22 +20,31 @@ type Manager struct {
 	client  kubernetes.Interface
 	factory informers.SharedInformerFactory
 
+	// Dynamic client for CRDs
+	dynamicClient  dynamic.Interface
+	dynamicFactory dynamicinformer.DynamicSharedInformerFactory
+
 	// Tier 1: Critical Resources (Real-time updates essential)
-	NodesInformer       cache.SharedIndexInformer
-	PodsInformer        cache.SharedIndexInformer
-	DeploymentsInformer cache.SharedIndexInformer
-	ServicesInformer    cache.SharedIndexInformer
+	NodesInformer          cache.SharedIndexInformer
+	PodsInformer           cache.SharedIndexInformer
+	DeploymentsInformer    cache.SharedIndexInformer
+	ServicesInformer       cache.SharedIndexInformer
+	NamespacesInformer     cache.SharedIndexInformer
+	ResourceQuotasInformer cache.SharedIndexInformer
 
 	// Tier 2: Important Resources (Moderate real-time needs)
-	ReplicaSetsInformer    cache.SharedIndexInformer
-	StatefulSetsInformer   cache.SharedIndexInformer
-	DaemonSetsInformer     cache.SharedIndexInformer
-	ConfigMapsInformer     cache.SharedIndexInformer
-	SecretsInformer        cache.SharedIndexInformer
-	EndpointsInformer      cache.SharedIndexInformer
-	EndpointSlicesInformer cache.SharedIndexInformer
-	JobsInformer           cache.SharedIndexInformer
-	CronJobsInformer       cache.SharedIndexInformer
+	ReplicaSetsInformer            cache.SharedIndexInformer
+	StatefulSetsInformer           cache.SharedIndexInformer
+	DaemonSetsInformer             cache.SharedIndexInformer
+	ConfigMapsInformer             cache.SharedIndexInformer
+	SecretsInformer                cache.SharedIndexInformer
+	EndpointsInformer              cache.SharedIndexInformer
+	EndpointSlicesInformer         cache.SharedIndexInformer
+	JobsInformer                   cache.SharedIndexInformer
+	CronJobsInformer               cache.SharedIndexInformer
+	PersistentVolumesInformer      cache.SharedIndexInformer
+	PersistentVolumeClaimsInformer cache.SharedIndexInformer
+	StorageClassesInformer         cache.SharedIndexInformer
 
 	// Tier 3: Optional Resources (Consider for future implementation)
 	IngressesInformer       cache.SharedIndexInformer
@@ -40,39 +52,69 @@ type Manager struct {
 	NetworkPoliciesInformer cache.SharedIndexInformer
 	// PVCsInformer         cache.SharedIndexInformer
 
+	// Volume Snapshot Resources (CRDs)
+	VolumeSnapshotsInformer       cache.SharedIndexInformer
+	VolumeSnapshotClassesInformer cache.SharedIndexInformer
+
 	// Context for cancellation
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
 // NewManager creates a new informer manager
-func NewManager(logger *zap.Logger, client kubernetes.Interface) *Manager {
+func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient dynamic.Interface) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create shared informer factory with default resync period
 	factory := informers.NewSharedInformerFactory(client, 30*time.Second)
 
-	return &Manager{
-		logger:  logger,
-		client:  client,
-		factory: factory,
+	// Create dynamic informer factory for CRDs
+	var dynamicFactory dynamicinformer.DynamicSharedInformerFactory
+	if dynamicClient != nil {
+		dynamicFactory = dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 30*time.Second)
+	}
+
+	// Define volume snapshot GVRs
+	volumeSnapshotGVR := schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshots",
+	}
+
+	volumeSnapshotClassGVR := schema.GroupVersionResource{
+		Group:    "snapshot.storage.k8s.io",
+		Version:  "v1",
+		Resource: "volumesnapshotclasses",
+	}
+
+	manager := &Manager{
+		logger:         logger,
+		client:         client,
+		factory:        factory,
+		dynamicClient:  dynamicClient,
+		dynamicFactory: dynamicFactory,
 
 		// Tier 1: Critical Resources
-		NodesInformer:       factory.Core().V1().Nodes().Informer(),
-		PodsInformer:        factory.Core().V1().Pods().Informer(),
-		DeploymentsInformer: factory.Apps().V1().Deployments().Informer(),
-		ServicesInformer:    factory.Core().V1().Services().Informer(),
+		NodesInformer:          factory.Core().V1().Nodes().Informer(),
+		PodsInformer:           factory.Core().V1().Pods().Informer(),
+		DeploymentsInformer:    factory.Apps().V1().Deployments().Informer(),
+		ServicesInformer:       factory.Core().V1().Services().Informer(),
+		NamespacesInformer:     factory.Core().V1().Namespaces().Informer(),
+		ResourceQuotasInformer: factory.Core().V1().ResourceQuotas().Informer(),
 
 		// Tier 2: Important Resources
-		ReplicaSetsInformer:    factory.Apps().V1().ReplicaSets().Informer(),
-		StatefulSetsInformer:   factory.Apps().V1().StatefulSets().Informer(),
-		DaemonSetsInformer:     factory.Apps().V1().DaemonSets().Informer(),
-		ConfigMapsInformer:     factory.Core().V1().ConfigMaps().Informer(),
-		SecretsInformer:        factory.Core().V1().Secrets().Informer(),
-		EndpointsInformer:      factory.Core().V1().Endpoints().Informer(),
-		EndpointSlicesInformer: factory.Discovery().V1().EndpointSlices().Informer(),
-		JobsInformer:           factory.Batch().V1().Jobs().Informer(),
-		CronJobsInformer:       factory.Batch().V1().CronJobs().Informer(),
+		ReplicaSetsInformer:            factory.Apps().V1().ReplicaSets().Informer(),
+		StatefulSetsInformer:           factory.Apps().V1().StatefulSets().Informer(),
+		DaemonSetsInformer:             factory.Apps().V1().DaemonSets().Informer(),
+		ConfigMapsInformer:             factory.Core().V1().ConfigMaps().Informer(),
+		SecretsInformer:                factory.Core().V1().Secrets().Informer(),
+		EndpointsInformer:              factory.Core().V1().Endpoints().Informer(),
+		EndpointSlicesInformer:         factory.Discovery().V1().EndpointSlices().Informer(),
+		JobsInformer:                   factory.Batch().V1().Jobs().Informer(),
+		CronJobsInformer:               factory.Batch().V1().CronJobs().Informer(),
+		PersistentVolumesInformer:      factory.Core().V1().PersistentVolumes().Informer(),
+		PersistentVolumeClaimsInformer: factory.Core().V1().PersistentVolumeClaims().Informer(),
+		StorageClassesInformer:         factory.Storage().V1().StorageClasses().Informer(),
 
 		// Tier 3: Optional Resources
 		IngressesInformer:       factory.Networking().V1().Ingresses().Informer(),
@@ -82,14 +124,31 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface) *Manager {
 		ctx:    ctx,
 		cancel: cancel,
 	}
+
+	// Add volume snapshot informers if dynamic client is available
+	if dynamicFactory != nil {
+		logger.Info("Creating volume snapshot informers")
+		manager.VolumeSnapshotsInformer = dynamicFactory.ForResource(volumeSnapshotGVR).Informer()
+		manager.VolumeSnapshotClassesInformer = dynamicFactory.ForResource(volumeSnapshotClassGVR).Informer()
+		logger.Info("Volume snapshot informers created successfully")
+	} else {
+		logger.Warn("Dynamic client not available, volume snapshot informers will not be created")
+	}
+
+	return manager
 }
 
 // Start starts all informers and waits for cache sync
 func (m *Manager) Start() error {
 	m.logger.Info("Starting informers")
 
-	// Start the informer factory
+	// Start the standard informer factory
 	go m.factory.Start(m.ctx.Done())
+
+	// Start the dynamic informer factory for CRDs if available
+	if m.dynamicFactory != nil {
+		go m.dynamicFactory.Start(m.ctx.Done())
+	}
 
 	// Wait for cache to sync
 	m.logger.Info("Waiting for caches to sync")
@@ -100,6 +159,8 @@ func (m *Manager) Start() error {
 		m.PodsInformer.HasSynced,
 		m.DeploymentsInformer.HasSynced,
 		m.ServicesInformer.HasSynced,
+		m.NamespacesInformer.HasSynced,
+		m.ResourceQuotasInformer.HasSynced,
 
 		// Tier 2: Important Resources
 		m.ReplicaSetsInformer.HasSynced,
@@ -111,11 +172,22 @@ func (m *Manager) Start() error {
 		m.EndpointSlicesInformer.HasSynced,
 		m.JobsInformer.HasSynced,
 		m.CronJobsInformer.HasSynced,
+		m.PersistentVolumesInformer.HasSynced,
+		m.PersistentVolumeClaimsInformer.HasSynced,
+		m.StorageClassesInformer.HasSynced,
 
 		// Tier 3: Optional Resources
 		m.IngressesInformer.HasSynced,
 		m.IngressClassesInformer.HasSynced,
 		m.NetworkPoliciesInformer.HasSynced,
+	}
+
+	// Add volume snapshot informers if available
+	if m.VolumeSnapshotsInformer != nil {
+		cacheSyncs = append(cacheSyncs, m.VolumeSnapshotsInformer.HasSynced)
+	}
+	if m.VolumeSnapshotClassesInformer != nil {
+		cacheSyncs = append(cacheSyncs, m.VolumeSnapshotClassesInformer.HasSynced)
 	}
 
 	if !cache.WaitForCacheSync(m.ctx.Done(), cacheSyncs...) {
@@ -150,6 +222,16 @@ func (m *Manager) AddDeploymentEventHandler(handler cache.ResourceEventHandler) 
 // AddServiceEventHandler adds an event handler for service events
 func (m *Manager) AddServiceEventHandler(handler cache.ResourceEventHandler) {
 	m.ServicesInformer.AddEventHandler(handler)
+}
+
+// AddNamespaceEventHandler adds an event handler for namespace events
+func (m *Manager) AddNamespaceEventHandler(handler cache.ResourceEventHandler) {
+	m.NamespacesInformer.AddEventHandler(handler)
+}
+
+// AddResourceQuotaEventHandler adds an event handler for resource quota events
+func (m *Manager) AddResourceQuotaEventHandler(handler cache.ResourceEventHandler) {
+	m.ResourceQuotasInformer.AddEventHandler(handler)
 }
 
 // AddReplicaSetEventHandler adds an event handler for replicaset events
@@ -217,6 +299,39 @@ func (m *Manager) AddLoadBalancerEventHandler(handler cache.ResourceEventHandler
 	m.ServicesInformer.AddEventHandler(handler)
 }
 
+// AddPersistentVolumeEventHandler adds an event handler for persistent volume events
+func (m *Manager) AddPersistentVolumeEventHandler(handler cache.ResourceEventHandler) {
+	m.PersistentVolumesInformer.AddEventHandler(handler)
+}
+
+// AddStorageClassEventHandler adds an event handler for storage class events
+func (m *Manager) AddStorageClassEventHandler(handler cache.ResourceEventHandler) {
+	m.StorageClassesInformer.AddEventHandler(handler)
+}
+
+// AddPersistentVolumeClaimEventHandler adds an event handler for persistent volume claim events
+func (m *Manager) AddPersistentVolumeClaimEventHandler(handler cache.ResourceEventHandler) {
+	m.PersistentVolumeClaimsInformer.AddEventHandler(handler)
+}
+
+// AddVolumeSnapshotEventHandler adds an event handler for volume snapshot events
+func (m *Manager) AddVolumeSnapshotEventHandler(handler cache.ResourceEventHandler) {
+	m.logger.Info("AddVolumeSnapshotEventHandler called")
+	if m.VolumeSnapshotsInformer != nil {
+		m.logger.Info("Adding volume snapshot event handler to informer")
+		m.VolumeSnapshotsInformer.AddEventHandler(handler)
+	} else {
+		m.logger.Warn("Volume snapshots informer is nil, cannot add event handler")
+	}
+}
+
+// AddVolumeSnapshotClassEventHandler adds an event handler for volume snapshot class events
+func (m *Manager) AddVolumeSnapshotClassEventHandler(handler cache.ResourceEventHandler) {
+	if m.VolumeSnapshotClassesInformer != nil {
+		m.VolumeSnapshotClassesInformer.AddEventHandler(handler)
+	}
+}
+
 // GetNodeLister returns a lister for nodes
 func (m *Manager) GetNodeLister() cache.Indexer {
 	return m.NodesInformer.GetIndexer()
@@ -235,6 +350,16 @@ func (m *Manager) GetDeploymentLister() cache.Indexer {
 // GetServiceLister returns a lister for services
 func (m *Manager) GetServiceLister() cache.Indexer {
 	return m.ServicesInformer.GetIndexer()
+}
+
+// GetNamespaceLister returns a lister for namespaces
+func (m *Manager) GetNamespaceLister() cache.Indexer {
+	return m.NamespacesInformer.GetIndexer()
+}
+
+// GetResourceQuotaLister returns a lister for resource quotas
+func (m *Manager) GetResourceQuotaLister() cache.Indexer {
+	return m.ResourceQuotasInformer.GetIndexer()
 }
 
 // GetReplicaSetLister returns a lister for replicasets
@@ -295,4 +420,29 @@ func (m *Manager) GetIngressClassLister() cache.Indexer {
 // GetNetworkPolicyLister returns a lister for network policies
 func (m *Manager) GetNetworkPolicyLister() cache.Indexer {
 	return m.NetworkPoliciesInformer.GetIndexer()
+}
+
+// GetPersistentVolumeLister returns a lister for persistent volumes
+func (m *Manager) GetPersistentVolumeLister() cache.Indexer {
+	return m.PersistentVolumesInformer.GetIndexer()
+}
+
+// GetStorageClassLister returns a lister for storage classes
+func (m *Manager) GetStorageClassLister() cache.Indexer {
+	return m.StorageClassesInformer.GetIndexer()
+}
+
+// GetPersistentVolumeClaimLister returns a lister for persistent volume claims
+func (m *Manager) GetPersistentVolumeClaimLister() cache.Indexer {
+	return m.PersistentVolumeClaimsInformer.GetIndexer()
+}
+
+// GetVolumeSnapshotLister returns a lister for volume snapshots
+func (m *Manager) GetVolumeSnapshotLister() cache.Indexer {
+	return m.VolumeSnapshotsInformer.GetIndexer()
+}
+
+// GetVolumeSnapshotClassLister returns a lister for volume snapshot classes
+func (m *Manager) GetVolumeSnapshotClassLister() cache.Indexer {
+	return m.VolumeSnapshotClassesInformer.GetIndexer()
 }

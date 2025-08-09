@@ -105,24 +105,33 @@ function StatefulSetsContent() {
 	}, [statefulSets])
 
 	return (
-		<>
+		<div className="space-y-6">
+			{/* Header with connection status */}
 			<div className="px-4 lg:px-6">
-				<div className="space-y-2">
-					<div className="flex items-center justify-between">
-						<h1 className="text-2xl font-bold tracking-tight">StatefulSets</h1>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
+				<div className="flex items-center justify-between">
+					<div className="space-y-2">
+						<div className="flex items-center gap-2">
+							<h1 className="text-2xl font-bold tracking-tight">Stateful Sets</h1>
+							{isConnected && (
+								<div className="flex items-center gap-1.5 text-xs text-green-600">
+									<div className="size-2 bg-green-500 rounded-full animate-pulse" />
+									Live
+								</div>
+							)}
+						</div>
+						<p className="text-muted-foreground">
+							Manage and monitor stateful sets resources in your Kubernetes cluster
+						</p>
 					</div>
-					<p className="text-muted-foreground">
-						Manage and monitor StatefulSet resources in your Kubernetes cluster
-					</p>
+					{lastUpdated && (
+						<div className="text-sm text-muted-foreground">
+							Last updated: {new Date(lastUpdated).toLocaleTimeString()}
+						</div>
+					)}
 				</div>
 			</div>
 
+			{/* Summary Cards */}
 			<SummaryCards
 				cards={summaryData}
 				loading={isLoading}
@@ -131,7 +140,7 @@ function StatefulSetsContent() {
 			/>
 
 			<StatefulSetsDataTable />
-		</>
+		</div>
 	)
 }
 
