@@ -188,6 +188,9 @@ func (s *Server) initInformers() error {
 	jobHandler := informers.NewJobEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddJobEventHandler(jobHandler)
 
+	configMapHandler := informers.NewConfigMapEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddConfigMapEventHandler(configMapHandler)
+
 	return nil
 }
 
