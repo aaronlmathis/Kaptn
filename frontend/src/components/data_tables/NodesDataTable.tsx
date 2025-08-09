@@ -79,7 +79,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { NodeDetailDrawer } from "@/components/viewers/NodeDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useNodes } from "@/hooks/use-k8s-data"
+import { useNodesWithWebSocket } from "@/hooks/useNodesWithWebSocket"
 import { k8sService } from "@/lib/k8s-service"
 import { nodeSchema } from "@/lib/schemas/node"
 import { z } from "zod"
@@ -311,7 +311,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof nodeSchema>> }) {
 }
 
 export function NodesDataTable() {
-	const { data: nodes, loading, error, refetch } = useNodes()
+	const { data: nodes, loading, error, refetch, isConnected } = useNodesWithWebSocket(true)
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -385,11 +385,11 @@ export function NodesDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		nodes.map((node) => node.id)
+		nodes.map((node: z.infer<typeof nodeSchema>) => node.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(nodes.map((node) => node.id))
+		setSortableIds(nodes.map((node: z.infer<typeof nodeSchema>) => node.id))
 	}, [nodes])
 
 	function handleDragEnd(event: DragEndEvent) {
@@ -435,6 +435,12 @@ export function NodesDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>

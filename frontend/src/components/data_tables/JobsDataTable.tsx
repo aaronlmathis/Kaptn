@@ -77,7 +77,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { JobDetailDrawer } from "@/components/viewers/JobDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useJobs } from "@/hooks/use-k8s-data"
+import { useJobsWithWebSocket } from "@/hooks/useJobsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { jobSchema } from "@/lib/schemas/job"
 import { z } from "zod"
@@ -315,7 +315,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof jobSchema>> }) {
 }
 
 export function JobsDataTable() {
-	const { data: jobs, loading, error, refetch } = useJobs()
+	const { data: jobs, loading, error, refetch, isConnected } = useJobsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -416,6 +416,12 @@ export function JobsDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>

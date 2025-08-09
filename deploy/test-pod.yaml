@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ name: demo-deployment
+spec:
+ replicas: 1
+ selector:
+   matchLabels:
+     app: alpine-demo
+ template:
+   metadata:
+     labels:
+       app: alpine-demo
+   spec:
+     restartPolicy: Always
+     containers:
+     - name: alpine-container
+       image: alpine:3.15
+       command: ["/bin/sh","-c"]
+       args: ["echo Hello World! && sleep infinity"]

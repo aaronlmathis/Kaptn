@@ -124,8 +124,8 @@ func (h *PodEventHandler) podToSummary(pod *v1.Pod) map[string]interface{} {
 			"bytes":          0,
 			"ofLimitPercent": nil,
 		},
-		"statusReason":      statusReason,
-		"containers":        containers,
+		"statusReason": statusReason,
+		"containers":   containers,
 		// Additional fields for compatibility
 		"podIP":             pod.Status.PodIP,
 		"labels":            pod.Labels,

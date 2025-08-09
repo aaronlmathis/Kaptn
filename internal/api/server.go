@@ -179,6 +179,15 @@ func (s *Server) initInformers() error {
 	deploymentHandler := informers.NewDeploymentEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddDeploymentEventHandler(deploymentHandler)
 
+	replicaSetHandler := informers.NewReplicaSetEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddReplicaSetEventHandler(replicaSetHandler)
+
+	statefulSetHandler := informers.NewStatefulSetEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddStatefulSetEventHandler(statefulSetHandler)
+
+	jobHandler := informers.NewJobEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddJobEventHandler(jobHandler)
+
 	return nil
 }
 

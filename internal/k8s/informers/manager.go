@@ -30,10 +30,10 @@ type Manager struct {
 	ConfigMapsInformer   cache.SharedIndexInformer
 	SecretsInformer      cache.SharedIndexInformer
 	EndpointsInformer    cache.SharedIndexInformer
+	JobsInformer         cache.SharedIndexInformer
 
 	// Tier 3: Optional Resources (Consider for future implementation)
 	// IngressesInformer    cache.SharedIndexInformer
-	// JobsInformer         cache.SharedIndexInformer
 	// CronJobsInformer     cache.SharedIndexInformer
 	// PVCsInformer         cache.SharedIndexInformer
 
@@ -67,6 +67,7 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface) *Manager {
 		ConfigMapsInformer:   factory.Core().V1().ConfigMaps().Informer(),
 		SecretsInformer:      factory.Core().V1().Secrets().Informer(),
 		EndpointsInformer:    factory.Core().V1().Endpoints().Informer(),
+		JobsInformer:         factory.Batch().V1().Jobs().Informer(),
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -97,6 +98,7 @@ func (m *Manager) Start() error {
 		m.ConfigMapsInformer.HasSynced,
 		m.SecretsInformer.HasSynced,
 		m.EndpointsInformer.HasSynced,
+		m.JobsInformer.HasSynced,
 	}
 
 	if !cache.WaitForCacheSync(m.ctx.Done(), cacheSyncs...) {
@@ -163,6 +165,11 @@ func (m *Manager) AddEndpointEventHandler(handler cache.ResourceEventHandler) {
 	m.EndpointsInformer.AddEventHandler(handler)
 }
 
+// AddJobEventHandler adds an event handler for job events
+func (m *Manager) AddJobEventHandler(handler cache.ResourceEventHandler) {
+	m.JobsInformer.AddEventHandler(handler)
+}
+
 // GetNodeLister returns a lister for nodes
 func (m *Manager) GetNodeLister() cache.Indexer {
 	return m.NodesInformer.GetIndexer()
@@ -211,4 +218,9 @@ func (m *Manager) GetSecretLister() cache.Indexer {
 // GetEndpointLister returns a lister for endpoints
 func (m *Manager) GetEndpointLister() cache.Indexer {
 	return m.EndpointsInformer.GetIndexer()
+}
+
+// GetJobLister returns a lister for jobs
+func (m *Manager) GetJobLister() cache.Indexer {
+	return m.JobsInformer.GetIndexer()
 }

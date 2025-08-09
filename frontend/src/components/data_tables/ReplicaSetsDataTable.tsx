@@ -77,7 +77,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ReplicaSetDetailDrawer } from "@/components/viewers/ReplicaSetDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useReplicaSets } from "@/hooks/use-k8s-data"
+import { useReplicaSetsWithWebSocket } from "@/hooks/useReplicaSetsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { replicaSetSchema } from "@/lib/schemas/replicaset"
 import { z } from "zod"
@@ -310,7 +310,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof replicaSetSchema>> }) {
 }
 
 export function ReplicaSetsDataTable() {
-	const { data: replicaSets, loading, error, refetch } = useReplicaSets()
+	const { data: replicaSets, loading, error, refetch, isConnected } = useReplicaSetsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -361,11 +361,11 @@ export function ReplicaSetsDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		replicaSets.map((replicaSet) => replicaSet.id)
+		replicaSets.map((replicaSet: z.infer<typeof replicaSetSchema>) => replicaSet.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(replicaSets.map((replicaSet) => replicaSet.id))
+		setSortableIds(replicaSets.map((replicaSet: z.infer<typeof replicaSetSchema>) => replicaSet.id))
 	}, [replicaSets])
 
 	function handleDragEnd(event: DragEndEvent) {
@@ -411,6 +411,12 @@ export function ReplicaSetsDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>

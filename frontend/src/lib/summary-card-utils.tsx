@@ -9,7 +9,9 @@ import {
 	IconServer,
 	IconCloudNetwork,
 	IconActivity,
-	IconShield
+	IconShield,
+	IconCopy,
+	IconClockPlay
 } from "@tabler/icons-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -43,9 +45,9 @@ function createBadge(variant: BadgeVariant, icon: React.ReactNode, text: string)
 // Deployment-specific badges
 export function getDeploymentStatusBadge(ready: number, total: number): React.ReactNode {
 	if (total === 0) return createBadge("info", <IconCube className="size-3" />, "No Deployments")
-	
+
 	const percentage = (ready / total) * 100
-	
+
 	if (percentage === 100) {
 		return createBadge("healthy", <IconCheck className="size-3" />, "All Ready")
 	} else if (percentage >= 80) {
@@ -57,9 +59,9 @@ export function getDeploymentStatusBadge(ready: number, total: number): React.Re
 
 export function getReplicaStatusBadge(ready: number, total: number): React.ReactNode {
 	if (total === 0) return createBadge("info", <IconActivity className="size-3" />, "No Replicas")
-	
+
 	const percentage = (ready / total) * 100
-	
+
 	if (percentage >= 95) {
 		return createBadge("healthy", <IconCheck className="size-3" />, "Healthy")
 	} else if (percentage >= 85) {
@@ -71,9 +73,9 @@ export function getReplicaStatusBadge(ready: number, total: number): React.React
 
 export function getUpdateStatusBadge(upToDate: number, total: number): React.ReactNode {
 	if (total === 0) return createBadge("info", <IconServer className="size-3" />, "N/A")
-	
+
 	const percentage = (upToDate / total) * 100
-	
+
 	if (percentage === 100) {
 		return createBadge("healthy", <IconCheck className="size-3" />, "Current")
 	} else if (percentage >= 80) {
@@ -86,7 +88,7 @@ export function getUpdateStatusBadge(upToDate: number, total: number): React.Rea
 // Service-specific badges
 export function getServiceStatusBadge(total: number): React.ReactNode {
 	if (total === 0) return createBadge("info", <IconNetwork className="size-3" />, "No Services")
-	
+
 	if (total >= 20) {
 		return createBadge("healthy", <IconCheck className="size-3" />, "Well Connected")
 	} else if (total >= 10) {
@@ -98,9 +100,7 @@ export function getServiceStatusBadge(total: number): React.ReactNode {
 
 export function getServiceTypeBadge(count: number, total: number, type: "ClusterIP" | "LoadBalancer" | "NodePort"): React.ReactNode {
 	if (total === 0) return createBadge("info", <IconNetwork className="size-3" />, "None")
-	
-	const percentage = (count / total) * 100
-	
+
 	switch (type) {
 		case "ClusterIP":
 			return createBadge("info", <IconShield className="size-3" />, "Internal")
@@ -122,7 +122,7 @@ export function getServiceTypeBadge(count: number, total: number, type: "Cluster
 }
 
 // Generic resource icons
-export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes"): React.ReactNode {
+export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets"): React.ReactNode {
 	switch (type) {
 		case "deployments":
 			return <IconCube className="size-4" />
@@ -132,6 +132,12 @@ export function getResourceIcon(type: "deployments" | "services" | "pods" | "nod
 			return <IconActivity className="size-4" />
 		case "nodes":
 			return <IconServer className="size-4" />
+		case "replicasets":
+			return <IconCopy className="size-4" />
+		case "jobs":
+			return <IconClockPlay className="size-4" />
+		case "statefulsets":
+			return <IconCube className="size-4" />
 		default:
 			return null
 	}
@@ -140,9 +146,9 @@ export function getResourceIcon(type: "deployments" | "services" | "pods" | "nod
 // Pod-specific badges
 export function getPodStatusBadge(running: number, total: number): React.ReactNode {
 	if (total === 0) return createBadge("info", <IconActivity className="size-3" />, "No Pods")
-	
+
 	const percentage = (running / total) * 100
-	
+
 	if (percentage >= 95) {
 		return createBadge("healthy", <IconCheck className="size-3" />, "Healthy")
 	} else if (percentage >= 80) {
@@ -154,7 +160,7 @@ export function getPodStatusBadge(running: number, total: number): React.ReactNo
 
 export function getPodPhaseBadge(count: number, total: number, phase: "Running" | "Pending" | "Failed" | "Succeeded"): React.ReactNode {
 	if (total === 0) return createBadge("info", <IconActivity className="size-3" />, "None")
-	
+
 	switch (phase) {
 		case "Running":
 			if (count === total) {
@@ -189,9 +195,9 @@ export function getPodPhaseBadge(count: number, total: number, phase: "Running" 
 
 export function getPodReadinessBadge(ready: number, total: number): React.ReactNode {
 	if (total === 0) return createBadge("info", <IconActivity className="size-3" />, "No Pods")
-	
+
 	const percentage = (ready / total) * 100
-	
+
 	if (percentage === 100) {
 		return createBadge("healthy", <IconCheck className="size-3" />, "All Ready")
 	} else if (percentage >= 80) {
@@ -203,10 +209,10 @@ export function getPodReadinessBadge(ready: number, total: number): React.ReactN
 
 // Health trend badges (for percentage-based metrics)
 export function getHealthTrendBadge(percentage: number, isUpTrend?: boolean): React.ReactNode {
-	const trendIcon = isUpTrend !== undefined 
+	const trendIcon = isUpTrend !== undefined
 		? (isUpTrend ? <IconTrendingUp className="size-3" /> : <IconTrendingDown className="size-3" />)
 		: <IconCheck className="size-3" />
-	
+
 	if (percentage >= 90) {
 		return createBadge("healthy", trendIcon, "Excellent")
 	} else if (percentage >= 75) {

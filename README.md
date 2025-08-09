@@ -24,6 +24,8 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 
 ![Kubernetes Admin - Cloud Shell Exec](images/Kaptain_Shell_Exec.png)
 
+**Resource Page (Services)**
+![Resource Page - Services](images/kaptn-dash-services.png)
 
 ---
 
