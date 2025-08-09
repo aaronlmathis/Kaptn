@@ -5,6 +5,11 @@ import { SharedProviders } from "@/components/shared-providers"
 import { ServicesDataTable } from "@/components/data_tables/ServicesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useServicesWithWebSocket } from "@/hooks/useServicesWithWebSocket"
+import {
+	getServiceStatusBadge,
+	getServiceTypeBadge,
+	getResourceIcon
+} from "@/lib/summary-card-utils"
 
 // Inner component that can access the namespace context
 function ServicesContent() {
@@ -56,22 +61,31 @@ function ServicesContent() {
 			{
 				title: "Total Services",
 				value: totalServices,
-				subtitle: `${services.length} services across all types`
+				subtitle: `${services.length} services across all types`,
+				badge: getServiceStatusBadge(totalServices),
+				icon: getResourceIcon("services"),
+				footer: totalServices > 0 ? "All service resources in cluster" : "No services found"
 			},
 			{
 				title: "ClusterIP",
 				value: clusterIPServices,
-				subtitle: `${clusterIPServices} internal cluster services`
+				subtitle: `${clusterIPServices} internal cluster services`,
+				badge: getServiceTypeBadge(clusterIPServices, totalServices, "ClusterIP"),
+				footer: clusterIPServices > 0 ? "Internal communication services" : "No internal services"
 			},
 			{
 				title: "LoadBalancer",
 				value: loadBalancerServices,
-				subtitle: `${loadBalancerServices} external load balancer services`
+				subtitle: `${loadBalancerServices} external load balancer services`,
+				badge: getServiceTypeBadge(loadBalancerServices, totalServices, "LoadBalancer"),
+				footer: loadBalancerServices > 0 ? "External traffic entry points" : "No external load balancers"
 			},
 			{
 				title: "NodePort",
 				value: nodePortServices,
-				subtitle: `${nodePortServices} node port services`
+				subtitle: `${nodePortServices} node port services`,
+				badge: getServiceTypeBadge(nodePortServices, totalServices, "NodePort"),
+				footer: nodePortServices > 0 ? "Direct node access services" : "No node port services"
 			}
 		]
 	}, [services])

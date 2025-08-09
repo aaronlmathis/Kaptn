@@ -79,7 +79,7 @@ export function useServicesWithWebSocket(enableWebSocket: boolean = true) {
 		transformWebSocketData: enableWebSocket ? transformWebSocketData : undefined,
 		getItemKey,
 		fetchDependencies: [selectedNamespace],
-		debug: true // Set to true for debugging
+		debug: false // Debug disabled
 	});
 	
 	return result;

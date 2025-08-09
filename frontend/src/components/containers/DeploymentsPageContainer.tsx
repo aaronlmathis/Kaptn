@@ -5,6 +5,13 @@ import { SharedProviders } from "@/components/shared-providers"
 import { DeploymentsDataTable } from "@/components/data_tables/DeploymentsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useDeploymentsWithWebSocket } from "@/hooks/useDeploymentsWithWebSocket"
+import {
+	getDeploymentStatusBadge,
+	getReplicaStatusBadge,
+	getUpdateStatusBadge,
+	getResourceIcon,
+	getHealthTrendBadge
+} from "@/lib/summary-card-utils"
 
 // Inner component that can access the namespace context
 function DeploymentsContent() {
@@ -69,22 +76,31 @@ function DeploymentsContent() {
 			{
 				title: "Total Deployments",
 				value: totalDeployments,
-				subtitle: `${readyDeployments}/${totalDeployments} ready`
+				subtitle: `${readyDeployments}/${totalDeployments} ready`,
+				badge: getDeploymentStatusBadge(readyDeployments, totalDeployments),
+				icon: getResourceIcon("deployments"),
+				footer: totalDeployments > 0 ? "All deployment resources in cluster" : "No deployments found"
 			},
 			{
 				title: "Ready Replicas",
 				value: `${totalReadyReplicas}/${totalReplicas}`,
-				subtitle: totalReplicas > 0 ? `${Math.round((totalReadyReplicas / totalReplicas) * 100)}% ready` : "No replicas"
+				subtitle: totalReplicas > 0 ? `${Math.round((totalReadyReplicas / totalReplicas) * 100)}% ready` : "No replicas",
+				badge: getReplicaStatusBadge(totalReadyReplicas, totalReplicas),
+				footer: totalReplicas > 0 ? "Pod instances across all deployments" : "No pod replicas"
 			},
 			{
 				title: "Up-to-Date",
 				value: totalUpToDate,
-				subtitle: `${totalUpToDate} replicas up-to-date`
+				subtitle: `${totalUpToDate} replicas up-to-date`,
+				badge: getUpdateStatusBadge(totalUpToDate, totalReplicas),
+				footer: totalReplicas > 0 ? "Running latest deployment version" : "No replicas to update"
 			},
 			{
 				title: "Available",
 				value: totalAvailable,
-				subtitle: `${totalAvailable} replicas available`
+				subtitle: `${totalAvailable} replicas available`,
+				badge: getHealthTrendBadge(totalReplicas > 0 ? (totalAvailable / totalReplicas) * 100 : 0),
+				footer: totalAvailable > 0 ? "Ready to serve traffic" : "No available replicas"
 			}
 		]
 	}, [deployments])

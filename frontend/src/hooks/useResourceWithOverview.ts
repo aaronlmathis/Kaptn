@@ -90,11 +90,9 @@ export function useResourceWithOverview<T>(
 	// Handle overview WebSocket events
 	const handleOverviewEvent = useCallback((event: OverviewWebSocketEvent) => {
 		log('Overview event received:', event);
-		log('Event action:', event.action, 'Event resource:', event.resource, 'Expected resource:', resource);
 		
 		// Only handle events for our resource type
 		if (event.resource !== resource) {
-			log('Skipping event - resource mismatch');
 			return;
 		}
 		
@@ -139,15 +137,11 @@ export function useResourceWithOverview<T>(
 			});
 		} else if (event.action === 'deleted') {
 			log('Removing deleted item:', event.data.name);
-			log('Raw delete event data:', event.data);
 			const deletedItem = transformWebSocketData(event.data);
-			log('Transformed deleted item:', deletedItem);
 			const itemKey = getItemKey(deletedItem);
 			log('Delete item key:', itemKey);
 			
 			setData(prevData => {
-				log('Current data before delete:', prevData.map(item => getItemKey(item)));
-				
 				// If the delete key contains undefined namespace, try to find by name only
 				if (itemKey.includes('undefined/')) {
 					const itemName = event.data.name;
@@ -158,10 +152,8 @@ export function useResourceWithOverview<T>(
 						// Extract name from the key (assuming format is "namespace/name")
 						const keyName = currentKey.split('/').pop();
 						const shouldKeep = keyName !== itemName;
-						log(`Item ${currentKey} (extracted name: ${keyName}): ${shouldKeep ? 'keeping' : 'removing'}`);
 						return shouldKeep;
 					});
-					log('Data after delete (by name):', updatedData.map(item => getItemKey(item)));
 					dataRef.current = updatedData;
 					return updatedData;
 				}
@@ -170,10 +162,8 @@ export function useResourceWithOverview<T>(
 				const updatedData = prevData.filter(item => {
 					const currentKey = getItemKey(item);
 					const shouldKeep = currentKey !== itemKey;
-					log(`Item ${currentKey}: ${shouldKeep ? 'keeping' : 'removing'}`);
 					return shouldKeep;
 				});
-				log('Data after delete:', updatedData.map(item => getItemKey(item)));
 				dataRef.current = updatedData;
 				return updatedData;
 			});
