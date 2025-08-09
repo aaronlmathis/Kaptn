@@ -11,7 +11,9 @@ import {
 	IconActivity,
 	IconShield,
 	IconCopy,
-	IconClockPlay
+	IconClockPlay,
+	IconClock,
+	IconRoute
 } from "@tabler/icons-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -122,7 +124,7 @@ export function getServiceTypeBadge(count: number, total: number, type: "Cluster
 }
 
 // Generic resource icons
-export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints"): React.ReactNode {
+export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints" | "daemonsets" | "cronjobs" | "endpointslices" | "ingresses"): React.ReactNode {
 	switch (type) {
 		case "deployments":
 			return <IconCube className="size-4" />
@@ -142,6 +144,14 @@ export function getResourceIcon(type: "deployments" | "services" | "pods" | "nod
 			return <IconShield className="size-4" />
 		case "endpoints":
 			return <IconCloudNetwork className="size-4" />
+		case "daemonsets":
+			return <IconServer className="size-4" />
+		case "cronjobs":
+			return <IconClock className="size-4" />
+		case "endpointslices":
+			return <IconCloudNetwork className="size-4" />
+		case "ingresses":
+			return <IconRoute className="size-4" />
 		default:
 			return null
 	}

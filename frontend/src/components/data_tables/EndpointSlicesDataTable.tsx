@@ -77,7 +77,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { EndpointSliceDetailDrawer } from "@/components/viewers/EndpointSliceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useEndpointSlices } from "@/hooks/use-k8s-data"
+import { useEndpointSlicesWithWebSocket } from "@/hooks/useEndpointSlicesWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { endpointSliceSchema } from "@/lib/schemas/endpointslice"
 import { z } from "zod"
@@ -320,7 +320,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof endpointSliceSchema>> }
 }
 
 export function EndpointSlicesDataTable() {
-	const { data: endpointSlices, loading, error, refetch } = useEndpointSlices()
+	const { data: endpointSlices, loading, error, refetch, isConnected } = useEndpointSlicesWithWebSocket()
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -421,6 +421,13 @@ export function EndpointSlicesDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{/* Connection status indicator */}
+						{isConnected && (
+							<div className="flex items-center gap-1.5 text-xs text-green-600">
+								<div className="size-2 bg-green-500 rounded-full animate-pulse" />
+								Live
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>

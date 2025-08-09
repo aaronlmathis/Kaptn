@@ -24,17 +24,18 @@ type Manager struct {
 	ServicesInformer    cache.SharedIndexInformer
 
 	// Tier 2: Important Resources (Moderate real-time needs)
-	ReplicaSetsInformer  cache.SharedIndexInformer
-	StatefulSetsInformer cache.SharedIndexInformer
-	DaemonSetsInformer   cache.SharedIndexInformer
-	ConfigMapsInformer   cache.SharedIndexInformer
-	SecretsInformer      cache.SharedIndexInformer
-	EndpointsInformer    cache.SharedIndexInformer
-	JobsInformer         cache.SharedIndexInformer
+	ReplicaSetsInformer    cache.SharedIndexInformer
+	StatefulSetsInformer   cache.SharedIndexInformer
+	DaemonSetsInformer     cache.SharedIndexInformer
+	ConfigMapsInformer     cache.SharedIndexInformer
+	SecretsInformer        cache.SharedIndexInformer
+	EndpointsInformer      cache.SharedIndexInformer
+	EndpointSlicesInformer cache.SharedIndexInformer
+	JobsInformer           cache.SharedIndexInformer
+	CronJobsInformer       cache.SharedIndexInformer
 
 	// Tier 3: Optional Resources (Consider for future implementation)
-	// IngressesInformer    cache.SharedIndexInformer
-	// CronJobsInformer     cache.SharedIndexInformer
+	IngressesInformer    cache.SharedIndexInformer
 	// PVCsInformer         cache.SharedIndexInformer
 
 	// Context for cancellation
@@ -61,13 +62,18 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface) *Manager {
 		ServicesInformer:    factory.Core().V1().Services().Informer(),
 
 		// Tier 2: Important Resources
-		ReplicaSetsInformer:  factory.Apps().V1().ReplicaSets().Informer(),
-		StatefulSetsInformer: factory.Apps().V1().StatefulSets().Informer(),
-		DaemonSetsInformer:   factory.Apps().V1().DaemonSets().Informer(),
-		ConfigMapsInformer:   factory.Core().V1().ConfigMaps().Informer(),
-		SecretsInformer:      factory.Core().V1().Secrets().Informer(),
-		EndpointsInformer:    factory.Core().V1().Endpoints().Informer(),
-		JobsInformer:         factory.Batch().V1().Jobs().Informer(),
+		ReplicaSetsInformer:    factory.Apps().V1().ReplicaSets().Informer(),
+		StatefulSetsInformer:   factory.Apps().V1().StatefulSets().Informer(),
+		DaemonSetsInformer:     factory.Apps().V1().DaemonSets().Informer(),
+		ConfigMapsInformer:     factory.Core().V1().ConfigMaps().Informer(),
+		SecretsInformer:        factory.Core().V1().Secrets().Informer(),
+		EndpointsInformer:      factory.Core().V1().Endpoints().Informer(),
+		EndpointSlicesInformer: factory.Discovery().V1().EndpointSlices().Informer(),
+		JobsInformer:           factory.Batch().V1().Jobs().Informer(),
+		CronJobsInformer:       factory.Batch().V1().CronJobs().Informer(),
+
+		// Tier 3: Optional Resources
+		IngressesInformer:      factory.Networking().V1().Ingresses().Informer(),
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -98,7 +104,12 @@ func (m *Manager) Start() error {
 		m.ConfigMapsInformer.HasSynced,
 		m.SecretsInformer.HasSynced,
 		m.EndpointsInformer.HasSynced,
+		m.EndpointSlicesInformer.HasSynced,
 		m.JobsInformer.HasSynced,
+		m.CronJobsInformer.HasSynced,
+
+		// Tier 3: Optional Resources
+		m.IngressesInformer.HasSynced,
 	}
 
 	if !cache.WaitForCacheSync(m.ctx.Done(), cacheSyncs...) {
@@ -170,6 +181,21 @@ func (m *Manager) AddJobEventHandler(handler cache.ResourceEventHandler) {
 	m.JobsInformer.AddEventHandler(handler)
 }
 
+// AddCronJobEventHandler adds an event handler for cronjob events
+func (m *Manager) AddCronJobEventHandler(handler cache.ResourceEventHandler) {
+	m.CronJobsInformer.AddEventHandler(handler)
+}
+
+// AddEndpointSliceEventHandler adds an event handler for endpointslice events
+func (m *Manager) AddEndpointSliceEventHandler(handler cache.ResourceEventHandler) {
+	m.EndpointSlicesInformer.AddEventHandler(handler)
+}
+
+// AddIngressEventHandler adds an event handler for ingress events
+func (m *Manager) AddIngressEventHandler(handler cache.ResourceEventHandler) {
+	m.IngressesInformer.AddEventHandler(handler)
+}
+
 // GetNodeLister returns a lister for nodes
 func (m *Manager) GetNodeLister() cache.Indexer {
 	return m.NodesInformer.GetIndexer()
@@ -223,4 +249,19 @@ func (m *Manager) GetEndpointLister() cache.Indexer {
 // GetJobLister returns a lister for jobs
 func (m *Manager) GetJobLister() cache.Indexer {
 	return m.JobsInformer.GetIndexer()
+}
+
+// GetCronJobLister returns a lister for cronjobs
+func (m *Manager) GetCronJobLister() cache.Indexer {
+	return m.CronJobsInformer.GetIndexer()
+}
+
+// GetEndpointSliceLister returns a lister for endpointslices
+func (m *Manager) GetEndpointSliceLister() cache.Indexer {
+	return m.EndpointSlicesInformer.GetIndexer()
+}
+
+// GetIngressLister returns a lister for ingresses
+func (m *Manager) GetIngressLister() cache.Indexer {
+	return m.IngressesInformer.GetIndexer()
 }

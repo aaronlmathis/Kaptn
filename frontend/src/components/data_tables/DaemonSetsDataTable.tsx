@@ -77,7 +77,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { DaemonSetDetailDrawer } from "@/components/viewers/DaemonSetDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useDaemonSets } from "@/hooks/use-k8s-data"
+import { useDaemonSetsWithWebSocket } from "@/hooks/useDaemonSetsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { daemonSetSchema } from "@/lib/schemas/daemonset"
 import { z } from "zod"
@@ -325,7 +325,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof daemonSetSchema>> }) {
 }
 
 export function DaemonSetsDataTable() {
-	const { data: daemonSets, loading, error, refetch } = useDaemonSets()
+	const { data: daemonSets, loading, error, refetch, isConnected } = useDaemonSetsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -426,6 +426,12 @@ export function DaemonSetsDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>
@@ -525,6 +531,12 @@ export function DaemonSetsDataTable() {
 					<div className="flex-1 text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
+						{isConnected && (
+							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-6 lg:space-x-8">
 						<div className="flex items-center space-x-2">

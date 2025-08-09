@@ -9,6 +9,7 @@
  * - ReplicaSets
  * - Jobs
  * - CronJobs
+ * - Ingresses
  */
 
 import { apiClient } from './api-client';
@@ -446,6 +447,76 @@ export function transformCronJobsToUI(cronJobs: CronJob[]): DashboardCronJob[] {
 		age: cronJob.age,
 		image: cronJob.image
 	}));
+}
+
+// Ingress interfaces based on the actual backend API response
+export interface Ingress {
+	name: string;
+	namespace: string;
+	age: string;
+	creationTimestamp: string;
+	ingressClass: string;
+	hosts: string[];
+	paths: string[];
+	externalIPs: string[];
+}
+
+export interface DashboardIngress {
+	id: number;
+	name: string;
+	namespace: string;
+	age: string;
+	ingressClass: string;
+	hosts: string[];
+	hostsDisplay: string;
+	paths: string[];
+	externalIPs: string[];
+	externalIPsDisplay: string;
+}
+
+// Ingress API functions
+export async function getIngresses(namespace?: string): Promise<Ingress[]> {
+	try {
+		const query = namespace ? `?namespace=${namespace}` : '';
+		const response = await apiClient.get<{ data: { items: Ingress[] }; status: string }>(`/api/v1/ingresses${query}`);
+		return response.data?.items || [];
+	} catch (error) {
+		console.error('Failed to fetch ingresses:', error);
+		return [];
+	}
+}
+
+export function transformIngressesToUI(ingresses: Ingress[]): DashboardIngress[] {
+	if (!ingresses || !Array.isArray(ingresses)) {
+		return [];
+	}
+	return ingresses.map((ingress, index) => {
+		// Create display strings for hosts and external IPs
+		const hostsDisplay = ingress.hosts.length > 0
+			? ingress.hosts.length === 1
+				? ingress.hosts[0]
+				: `${ingress.hosts[0]} (+${ingress.hosts.length - 1} more)`
+			: '';
+
+		const externalIPsDisplay = ingress.externalIPs.length > 0
+			? ingress.externalIPs.length === 1
+				? ingress.externalIPs[0]
+				: `${ingress.externalIPs[0]} (+${ingress.externalIPs.length - 1} more)`
+			: '';
+
+		return {
+			id: index,
+			name: ingress.name,
+			namespace: ingress.namespace,
+			age: ingress.age,
+			ingressClass: ingress.ingressClass,
+			hosts: ingress.hosts,
+			hostsDisplay,
+			paths: ingress.paths,
+			externalIPs: ingress.externalIPs,
+			externalIPsDisplay
+		};
+	});
 }
 
 

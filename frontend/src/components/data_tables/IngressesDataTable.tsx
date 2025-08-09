@@ -76,7 +76,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { IngressDetailDrawer } from "@/components/viewers/IngressDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useIngresses } from "@/hooks/use-k8s-data"
+import { useIngressesWithWebSocket } from "@/hooks/useIngressesWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { ingressSchema } from "@/lib/schemas/ingress"
 import { z } from "zod"
@@ -274,7 +274,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof ingressSchema>> }) {
 }
 
 export function IngressesDataTable() {
-	const { data: ingresses, loading, error, refetch } = useIngresses()
+	const { data: ingresses, loading, error, refetch, isConnected } = useIngressesWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -375,6 +375,12 @@ export function IngressesDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>

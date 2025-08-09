@@ -78,7 +78,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { CronJobDetailDrawer } from "@/components/viewers/CronJobDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useCronJobs } from "@/hooks/use-k8s-data"
+import { useCronJobsWithWebSocket } from "@/hooks/useCronJobsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { cronJobSchema } from "@/lib/schemas/cronjob"
 import { z } from "zod"
@@ -322,7 +322,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof cronJobSchema>> }) {
 }
 
 export function CronJobsDataTable() {
-	const { data: cronJobs, loading, error, refetch } = useCronJobs()
+	const { data: cronJobs, loading, error, refetch, isConnected } = useCronJobsWithWebSocket()
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -423,6 +423,13 @@ export function CronJobsDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{/* Connection status indicator */}
+						{isConnected && (
+							<div className="flex items-center gap-1.5 text-xs text-green-600">
+								<div className="size-2 bg-green-500 rounded-full animate-pulse" />
+								Live
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>

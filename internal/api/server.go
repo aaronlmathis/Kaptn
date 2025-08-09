@@ -194,6 +194,18 @@ func (s *Server) initInformers() error {
 	endpointHandler := informers.NewEndpointEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddEndpointEventHandler(endpointHandler)
 
+	daemonSetHandler := informers.NewDaemonSetEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddDaemonSetEventHandler(daemonSetHandler)
+
+	cronJobHandler := informers.NewCronJobEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddCronJobEventHandler(cronJobHandler)
+
+	endpointSliceHandler := informers.NewEndpointSliceEventHandler(s.logger, s.wsHub.BroadcastToRoom)
+	s.informerManager.AddEndpointSliceEventHandler(endpointSliceHandler)
+
+	ingressHandler := informers.NewIngressEventHandler(s.logger, s.wsHub.BroadcastToRoom)
+	s.informerManager.AddIngressEventHandler(ingressHandler)
+
 	return nil
 }
 
