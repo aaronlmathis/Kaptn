@@ -122,7 +122,7 @@ export function getServiceTypeBadge(count: number, total: number, type: "Cluster
 }
 
 // Generic resource icons
-export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps"): React.ReactNode {
+export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints"): React.ReactNode {
 	switch (type) {
 		case "deployments":
 			return <IconCube className="size-4" />
@@ -140,6 +140,8 @@ export function getResourceIcon(type: "deployments" | "services" | "pods" | "nod
 			return <IconCube className="size-4" />
 		case "configmaps":
 			return <IconShield className="size-4" />
+		case "endpoints":
+			return <IconCloudNetwork className="size-4" />
 		default:
 			return null
 	}

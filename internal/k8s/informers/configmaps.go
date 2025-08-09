@@ -3,9 +3,9 @@ package informers
 import (
 	"time"
 
+	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
-	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
 )
 
 // ConfigMapEventHandler handles configmap events and broadcasts via WebSocket
@@ -29,23 +29,23 @@ func (h *ConfigMapEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		h.logger.Error("Failed to cast object to ConfigMap")
 		return
 	}
-	
+
 	h.logger.Debug("ConfigMap added", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
-	
+
 	summary := h.configMapToSummary(configMap)
 	h.hub.BroadcastToRoom("overview", "configmap_added", summary)
 }
 
-// OnUpdate handles configmap update events  
+// OnUpdate handles configmap update events
 func (h *ConfigMapEventHandler) OnUpdate(oldObj, newObj interface{}) {
 	configMap, ok := newObj.(*v1.ConfigMap)
 	if !ok {
 		h.logger.Error("Failed to cast object to ConfigMap")
 		return
 	}
-	
+
 	h.logger.Debug("ConfigMap updated", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
-	
+
 	summary := h.configMapToSummary(configMap)
 	h.hub.BroadcastToRoom("overview", "configmap_updated", summary)
 }
@@ -57,9 +57,9 @@ func (h *ConfigMapEventHandler) OnDelete(obj interface{}) {
 		h.logger.Error("Failed to cast object to ConfigMap")
 		return
 	}
-	
+
 	h.logger.Debug("ConfigMap deleted", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
-	
+
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "configmap_deleted", map[string]string{
 		"name":      configMap.Name,

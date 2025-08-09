@@ -191,6 +191,9 @@ func (s *Server) initInformers() error {
 	configMapHandler := informers.NewConfigMapEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddConfigMapEventHandler(configMapHandler)
 
+	endpointHandler := informers.NewEndpointEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddEndpointEventHandler(endpointHandler)
+
 	return nil
 }
 

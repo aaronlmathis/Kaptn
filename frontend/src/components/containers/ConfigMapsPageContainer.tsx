@@ -16,14 +16,14 @@ import {
 function ConfigMapsContent() {
 	const { data: configMaps, loading: isLoading, error, isConnected } = useConfigMapsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
-	
+
 	// Update lastUpdated when configMaps change
 	React.useEffect(() => {
 		if (configMaps.length > 0) {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [configMaps])
-	
+
 	// Generate summary cards from configMap data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
 		if (!configMaps || configMaps.length === 0) {
@@ -52,12 +52,12 @@ function ConfigMapsContent() {
 		}
 
 		const totalConfigMaps = configMaps.length
-		
+
 		// Calculate ConfigMap-specific metrics
 		const totalDataKeys = configMaps.reduce((sum, cm) => sum + cm.dataKeysCount, 0)
 		const totalDataSizeBytes = configMaps.reduce((sum, cm) => sum + cm.dataSizeBytes, 0)
 		const totalLabels = configMaps.reduce((sum, cm) => sum + cm.labelsCount, 0)
-		
+
 		// Format total data size
 		let totalDataSizeStr = "0 B"
 		if (totalDataSizeBytes > 0) {
@@ -69,7 +69,7 @@ function ConfigMapsContent() {
 				totalDataSizeStr = `${(totalDataSizeBytes / (1024 * 1024)).toFixed(1)} MB`
 			}
 		}
-		
+
 		// Calculate percentage metrics for badges
 		const configMapsWithData = configMaps.filter(cm => cm.dataKeysCount > 0).length
 

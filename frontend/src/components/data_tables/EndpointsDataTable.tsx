@@ -76,7 +76,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { EndpointDetailDrawer } from "@/components/viewers/EndpointDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useEndpoints } from "@/hooks/use-k8s-data"
+import { useEndpointsWithWebSocket } from "@/hooks/useEndpointsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { type DashboardEndpoints } from "@/lib/k8s-services"
 
@@ -273,7 +273,7 @@ function DraggableRow({ row }: { row: Row<DashboardEndpoints> }) {
 }
 
 export function EndpointsDataTable() {
-	const { data: endpoints, loading, error, refetch } = useEndpoints()
+	const { data: endpoints, loading, error, refetch, isConnected } = useEndpointsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -374,6 +374,12 @@ export function EndpointsDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>
@@ -473,6 +479,12 @@ export function EndpointsDataTable() {
 					<div className="flex-1 text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
+						{isConnected && (
+							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-6 lg:space-x-8">
 						<div className="flex items-center space-x-2">
