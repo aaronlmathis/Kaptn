@@ -1,6 +1,6 @@
 # Kaptain
 
-A secure, production-ready **Kubernetes admin dashboard** that can observe cluster state and perform safe operational actions. Built with Go backend (client-go + WebSockets) and Astro + React + Shadcn frontend (TypeScript + Tailwind CSS).
+Kaptn intends to be a secure, production-ready **Kubernetes admin dashboard** that can observe cluster state, track metrics, generate alerts+actions, render opentelemetry traces of web applicaitons for visualizing issues, and perform safe operational actions. Built with Go backend (client-go + WebSockets) and Astro + React + Shadcn frontend (TypeScript + Tailwind CSS).
 
 ## Features
 
@@ -11,6 +11,7 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 - **Security-first** - RBAC integration, audit logs, rate limiting
 - **Easy deployment** - Helm chart for in-cluster deployment
 - **Multiple modes** - Container deployment or desktop app (Wails2)
+- **Observability** - Integration with prometheus, grafana, and opentelemetry tracing
 
 **Current Dashboard**
 
@@ -31,28 +32,33 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
 
 ## Quick Start
 
+There are two ways to provide kaptn with access to your cluster. Either by KUBECONFIG (path added to config.yaml) or `incluster` mode. If deployed either way, you must have the proper cluster admin privileges, whether through KUBECONFIG or through a service account created/used when deploying Kaptn.
+
 ### Prerequisites
 
 - Go 1.22+
 - Node.js 20+
 - Docker (optional)
-- Kind (for local development)
+- K8s cluster (minikube, kind, k3s, doesn't matter)
 
 ### Local Development
+Kaptn comes with a very useful `Makefile` that performs several useful actions such as:
+- `make build` - runs `make frontend` and `make backend` (npm run build on `frontend/` and go build on `internal`)
+- `make dev` - builds frontend and backend and launches an npm dev server.
+- `make docker` - builds a docker image of Kaptn
+- `make docker-debug` - builds a docker image of kaptn with a shell for troubleshooting
+- `make push` and `make push-debug` - pushes docker image to registry, although you'll need to put your repo in.
+
+Be sure to checkout the rest of the useful tools like `clean`, `fmt`, `test-go`, etc.
 
 1. **Clone and setup**:
    ```bash
    git clone https://github.com/aaronlmathis/kaptn.git
    cd kaptn
-   make install-deps
    ```
 
-2. **Start a Kind cluster**:
-   Launch a simple kubernetes cluster for local development:
-   ```bash
-   make kind-up
-   ```
-   Or, minikube works as wel...
+2. **Edit config.yaml**:
+  Edit config.example.yaml and save it as config.yaml. Choose incluster or kubeconfig mode. If deploying incluster, you can create the docker image and use one of the manifests in `deploy/` to get an idea of how to deploy it.
 
 3. **Run the application**:
    ```bash
@@ -72,26 +78,12 @@ A secure, production-ready **Kubernetes admin dashboard** that can observe clust
    - http://localhost:8080/
 
 
-### Build and Deploy
-
-1. **Build everything**:
-   ```bash
-   make build
-   ```
-
-2. **Build Docker image**:
-   ```bash
-   make docker
-   ```
-
-3. **Deploy to Kubernetes** (coming soon):
-   ```bash
-   helm install kad ./deploy/helm -n kube-system
-   ```
+I will get around to writing better instructions. You should be able to figure out how to deploy it, but if you have problems, email me (aaron@deepthought.sh)
 
 ---
 
 ## Project Structure
+This is probably outdated. But theres a `PROJECT_FILES.md` file that gets updated pretty regularly in root.
 
 ```
 ├── cmd/server/           # Main application entry point
@@ -180,116 +172,6 @@ Key environment variables:
 
 ---
 
-# Kaptn Administrative Feature Roadmap
-
-## Cluster Overview & Management
-- View real-time cluster health and resource utilization (CPU, memory, disk, network)
-- Display node status, conditions, and capacity usage
-- Show aggregated namespace summaries (resource quotas, usage, limits)
-- Cluster-wide event stream with filtering by type, namespace, or keyword
-- View and manage Kubernetes API server, scheduler, and controller-manager status
-- View all API resources, CRDs, and versions
-
-## Namespace & Resource Scoping
-- Switch between namespaces quickly
-- Create, edit, and delete namespaces
-- Apply resource quotas and limit ranges per namespace
-- Manage namespace labels and annotations
-
-## Workload Management
-- List, describe, and filter Deployments, StatefulSets, DaemonSets, and ReplicaSets
-- Scale workloads (manual replica count adjustment)
-- Restart workloads (rolling restart)
-- Trigger image updates or rollbacks
-- View rollout history and undo to previous versions
-- Pause and resume rollouts
-- Manage workload labels and annotations
-
-## Pod Management
-- View pod details (status, events, IP, node placement, resource requests/limits)
-- Stream logs from one or multiple containers
-- Execute shell commands inside running containers (interactive exec)
-- Copy files to/from containers
-- Delete pods (to trigger redeployment)
-- Drain or cordon nodes hosting problematic pods
-- Edit pod YAML for transient debugging changes
-
-## Service & Networking Management
-- List and describe Services, Endpoints, and EndpointSlices
-- Create, edit, and delete Services (ClusterIP, NodePort, LoadBalancer)
-- Restart selected services or force re-provisioning
-- Manage Ingress objects (NGINX, Istio, etc.)
-- View and edit ConfigMaps and Secrets (with RBAC-based redaction)
-- View and modify NetworkPolicies
-- Port-forward services to local machine
-- Test service reachability from within the cluster
-
-## Storage Management
-- List and describe PersistentVolumeClaims and PersistentVolumes
-- Edit PVCs and rebind to different PVs
-- View storage class details and provisioner status
-- Delete or resize PVCs (if supported by provisioner)
-- Create and manage snapshots of PVCs
-- Mount and inspect volume contents (read-only access)
-
-## Job & CronJob Management
-- List running and completed Jobs
-- View Job logs and failure reasons
-- Restart failed Jobs
-- Edit CronJob schedules and definitions
-- Suspend or resume CronJobs
-- Manually trigger a CronJob run
-
-## Config & Secret Management
-- View, create, edit, and delete ConfigMaps
-- View, create, edit, and delete Secrets (with sensitive value masking)
-- Apply changes immediately to dependent workloads
-- Compare live vs stored versions of configurations
-- Version history and rollback for configurations
-
-## Security & RBAC Management
-- View all ServiceAccounts, Roles, RoleBindings, ClusterRoles, and ClusterRoleBindings
-- Create and edit RBAC bindings
-- Impersonate a ServiceAccount for troubleshooting
-- Audit who has access to what resources
-- Detect overly permissive RBAC rules
-
-## System Maintenance & Troubleshooting
-- View and edit raw YAML for any editable resource
-- Apply YAML changes directly from the dashboard
-- Restart core components (kube-proxy, CNI, DNS, ingress controllers)
-- View logs for system pods in kube-system and other critical namespaces
-- Node management: drain, cordon, uncordon, taint, and label nodes
-- Trigger garbage collection for unused images and volumes
-- Restart selected namespaces or components in bulk
-
-## Observability Integration
-- Integrated metrics from Prometheus (pod, node, cluster)
-- View container CPU, memory, disk, and network trends
-- View historical data for troubleshooting performance issues
-- Log aggregation and search across namespaces
-- Correlate events, logs, and metrics for incidents
-
-## Backup & Restore
-- Trigger ad-hoc backups of resources or namespaces
-- Restore from previous backups
-- Export full cluster YAML for disaster recovery
-- Export filtered sets of resources for migration
-
-## Advanced Automation
-- Save custom kubectl queries for re-use
-- Define and run preconfigured automation scripts/jobs
-- Trigger webhooks or automation pipelines based on events
-- Schedule recurring administrative tasks
-
-## Audit & Activity Tracking
-- View recent administrative actions taken via Kaptn
-- Search audit history by user, namespace, resource, or action
-- Export audit logs for compliance
-- Detect anomalies in administrative activity
-
----
-
 ## Development
 
 ### Make Targets
@@ -312,11 +194,4 @@ make push-debug      # Push debug image to registry
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- [Kubernetes](https://kubernetes.io/) - The platform this dashboard manages
-- [client-go](https://github.com/kubernetes/client-go) - Official Kubernetes Go client
-- [Vite](https://vitejs.dev/) - Fast frontend build tool
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework
+This project is licensed under the GPL 3.0 license - see the [LICENSE](LICENSE) file for details.
