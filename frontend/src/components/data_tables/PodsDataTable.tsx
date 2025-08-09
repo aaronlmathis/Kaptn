@@ -79,7 +79,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { useShell } from "@/hooks/use-shell"
 import { PodDetailDrawer } from "@/components/viewers/PodDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { usePods } from "@/hooks/use-k8s-data"
+import { usePodsWithWebSocket } from "@/hooks/usePodsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { z } from "zod"
 
@@ -352,7 +352,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 }
 
 export function PodsDataTable() {
-	const { data: pods, loading, error, refetch } = usePods()
+	const { data: pods, loading, error, refetch } = usePodsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 	const { openShell } = useShell()
 

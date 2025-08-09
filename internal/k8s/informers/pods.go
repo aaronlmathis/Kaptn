@@ -34,14 +34,8 @@ func (h *PodEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 
 	h.logger.Debug("Pod added", zap.String("name", pod.Name), zap.String("namespace", pod.Namespace))
 
-	// Convert to summary and broadcast in Stage 2 format
+	// Convert to summary and broadcast
 	summary := h.podToSummary(pod)
-	h.hub.BroadcastToRoom("pods", "podUpdate", map[string]interface{}{
-		"action": "added",
-		"data":   summary,
-	})
-	
-	// Also broadcast to overview room for unified WebSocket support
 	h.hub.BroadcastToRoom("overview", "pod_added", summary)
 }
 
@@ -55,14 +49,8 @@ func (h *PodEventHandler) OnUpdate(oldObj, newObj interface{}) {
 
 	h.logger.Debug("Pod updated", zap.String("name", newPod.Name), zap.String("namespace", newPod.Namespace))
 
-	// Convert to summary and broadcast in Stage 2 format
+	// Convert to summary and broadcast
 	summary := h.podToSummary(newPod)
-	h.hub.BroadcastToRoom("pods", "podUpdate", map[string]interface{}{
-		"action": "modified",
-		"data":   summary,
-	})
-	
-	// Also broadcast to overview room for unified WebSocket support
 	h.hub.BroadcastToRoom("overview", "pod_updated", summary)
 }
 
@@ -76,17 +64,8 @@ func (h *PodEventHandler) OnDelete(obj interface{}) {
 
 	h.logger.Debug("Pod deleted", zap.String("name", pod.Name), zap.String("namespace", pod.Namespace))
 
-	// Broadcast deletion event in Stage 2 format
-	h.hub.BroadcastToRoom("pods", "podUpdate", map[string]interface{}{
-		"action": "deleted",
-		"data": map[string]interface{}{
-			"name":      pod.Name,
-			"namespace": pod.Namespace,
-		},
-	})
-	
-	// Also broadcast to overview room for unified WebSocket support
-	h.hub.BroadcastToRoom("overview", "pod_deleted", map[string]interface{}{
+	// Broadcast deletion event
+	h.hub.BroadcastToRoom("overview", "pod_deleted", map[string]string{
 		"name":      pod.Name,
 		"namespace": pod.Namespace,
 	})
@@ -119,6 +98,16 @@ func (h *PodEventHandler) podToSummary(pod *v1.Pod) map[string]interface{} {
 	// Get status reason
 	statusReason := getStatusReason(pod)
 
+	// Get container information for compatibility
+	containers := []map[string]interface{}{}
+	for _, container := range pod.Spec.Containers {
+		containerInfo := map[string]interface{}{
+			"name":  container.Name,
+			"image": container.Image,
+		}
+		containers = append(containers, containerInfo)
+	}
+
 	return map[string]interface{}{
 		"name":         pod.Name,
 		"namespace":    pod.Namespace,
@@ -135,7 +124,8 @@ func (h *PodEventHandler) podToSummary(pod *v1.Pod) map[string]interface{} {
 			"bytes":          0,
 			"ofLimitPercent": nil,
 		},
-		"statusReason": statusReason,
+		"statusReason":      statusReason,
+		"containers":        containers,
 		// Additional fields for compatibility
 		"podIP":             pod.Status.PodIP,
 		"labels":            pod.Labels,

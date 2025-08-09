@@ -33,11 +33,7 @@ func (h *DeploymentEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 
 	// Convert to summary and broadcast
 	summary := h.deploymentToSummary(deployment)
-	
-	// Broadcast to deployments room
-	h.hub.BroadcastToRoom("deployments", "deployment_added", summary)
-	
-	// Also broadcast to overview room for unified WebSocket support
+	//h.hub.BroadcastToRoom("deployments", "deployment_added", summary)
 	h.hub.BroadcastToRoom("overview", "deployment_added", summary)
 }
 
@@ -53,12 +49,9 @@ func (h *DeploymentEventHandler) OnUpdate(oldObj, newObj interface{}) {
 
 	// Convert to summary and broadcast
 	summary := h.deploymentToSummary(newDeployment)
-	
-	// Broadcast to deployments room
-	h.hub.BroadcastToRoom("deployments", "deployment_updated", summary)
-	
-	// Also broadcast to overview room for unified WebSocket support
+	//h.hub.BroadcastToRoom("deployments", "deployment_updated", summary)
 	h.hub.BroadcastToRoom("overview", "deployment_updated", summary)
+
 }
 
 // OnDelete handles deployment deletion events
@@ -70,17 +63,16 @@ func (h *DeploymentEventHandler) OnDelete(obj interface{}) {
 	}
 
 	h.logger.Debug("Deployment deleted", zap.String("name", deployment.Name), zap.String("namespace", deployment.Namespace))
-
 	// Create deletion event data
 	deletionData := map[string]string{
 		"name":      deployment.Name,
 		"namespace": deployment.Namespace,
 	}
-	
-	// Broadcast to deployments room
-	h.hub.BroadcastToRoom("deployments", "deployment_deleted", deletionData)
-	
-	// Also broadcast to overview room for unified WebSocket support
+	// Broadcast deletion event
+	// h.hub.BroadcastToRoom("deployments", "deployment_deleted", map[string]string{
+	// 	"name":      deployment.Name,
+	// 	"namespace": deployment.Namespace,
+	// })
 	h.hub.BroadcastToRoom("overview", "deployment_deleted", deletionData)
 }
 

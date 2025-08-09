@@ -33,10 +33,6 @@ func (h *ServiceEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 
 	// Convert to summary and broadcast
 	summary := h.serviceToSummary(service)
-	// Broadcast to services room
-	h.hub.BroadcastToRoom("services", "service_added", summary)
-	
-	// Also broadcast to overview room for unified WebSocket support
 	h.hub.BroadcastToRoom("overview", "service_added", summary)
 }
 
@@ -52,10 +48,6 @@ func (h *ServiceEventHandler) OnUpdate(oldObj, newObj interface{}) {
 
 	// Convert to summary and broadcast
 	summary := h.serviceToSummary(newService)
-	// Broadcast to services room
-	h.hub.BroadcastToRoom("services", "service_updated", summary)
-	
-	// Also broadcast to overview room for unified WebSocket support
 	h.hub.BroadcastToRoom("overview", "service_updated", summary)
 }
 
@@ -70,10 +62,6 @@ func (h *ServiceEventHandler) OnDelete(obj interface{}) {
 	h.logger.Debug("Service deleted", zap.String("name", service.Name))
 
 	// Broadcast deletion event
-	// Broadcast to services room  
-	h.hub.BroadcastToRoom("services", "service_deleted", map[string]string{"name": service.Name})
-	
-	// Also broadcast to overview room for unified WebSocket support
 	h.hub.BroadcastToRoom("overview", "service_deleted", map[string]string{"name": service.Name})
 }
 

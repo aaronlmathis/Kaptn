@@ -3,17 +3,121 @@
 import * as React from "react"
 import { SharedProviders } from "@/components/shared-providers"
 import { PodsDataTable } from "@/components/data_tables/PodsDataTable"
-import { SummaryCards } from "@/components/SummaryCards"
-import { useResourceSummary } from "@/hooks/useResourceSummary"
+import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
+import { usePodsWithWebSocket } from "@/hooks/usePodsWithWebSocket"
+import {
+	getPodStatusBadge,
+	getPodPhaseBadge,
+	getPodReadinessBadge,
+	getResourceIcon,
+	getHealthTrendBadge
+} from "@/lib/summary-card-utils"
 
-export function PodsPageContainer() {
-	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('pods')
+// Inner component that can access the namespace context
+function PodsContent() {
+	const { data: pods, loading: isLoading, error, isConnected } = usePodsWithWebSocket(true)
+	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+	
+	// Update lastUpdated when pods change
+	React.useEffect(() => {
+		if (pods.length > 0) {
+			setLastUpdated(new Date().toISOString())
+		}
+	}, [pods])
+	
+	// Generate summary cards from pod data
+	const summaryData: SummaryCard[] = React.useMemo(() => {
+		if (!pods || pods.length === 0) {
+			return [
+				{
+					title: "Total Pods",
+					value: 0,
+					subtitle: "No pods found"
+				},
+				{
+					title: "Running",
+					value: 0,
+					subtitle: "0 running pods"
+				},
+				{
+					title: "Ready",
+					value: "0/0",
+					subtitle: "0% ready"
+				},
+				{
+					title: "Failed",
+					value: 0,
+					subtitle: "0 failed pods"
+				}
+			]
+		}
+
+		const totalPods = pods.length
+		
+		// Count pods by status/phase
+		const runningPods = pods.filter(p => p.status === 'Running').length
+		const pendingPods = pods.filter(p => p.status === 'Pending').length
+		const failedPods = pods.filter(p => p.status === 'Failed').length
+		const succeededPods = pods.filter(p => p.status === 'Succeeded').length
+		
+		// Count ready pods by parsing the ready field (e.g., "1/1", "0/1")
+		const readyStats = pods.reduce((acc, pod) => {
+			const [ready, total] = pod.ready.split('/').map(Number)
+			return {
+				ready: acc.ready + (ready || 0),
+				total: acc.total + (total || 0)
+			}
+		}, { ready: 0, total: 0 })
+		
+		// Count restarts
+		const totalRestarts = pods.reduce((sum, p) => sum + p.restarts, 0)
+
+		return [
+			{
+				title: "Total Pods",
+				value: totalPods,
+				subtitle: `${runningPods}/${totalPods} running`,
+				badge: getPodStatusBadge(runningPods, totalPods),
+				icon: getResourceIcon("pods"),
+				footer: totalPods > 0 ? "All pod resources in cluster" : "No pods found"
+			},
+			{
+				title: "Running Pods",
+				value: runningPods,
+				subtitle: `${Math.round((runningPods / totalPods) * 100)}% running`,
+				badge: getPodPhaseBadge(runningPods, totalPods, "Running"),
+				footer: runningPods > 0 ? "Active and executing workloads" : "No running pods"
+			},
+			{
+				title: "Ready Containers",
+				value: `${readyStats.ready}/${readyStats.total}`,
+				subtitle: readyStats.total > 0 ? `${Math.round((readyStats.ready / readyStats.total) * 100)}% ready` : "No containers",
+				badge: getPodReadinessBadge(readyStats.ready, readyStats.total),
+				footer: readyStats.ready > 0 ? "Containers accepting traffic" : "No ready containers"
+			},
+			{
+				title: "Failed Pods",
+				value: failedPods,
+				subtitle: totalRestarts > 0 ? `${totalRestarts} total restarts` : "No restarts",
+				badge: getPodPhaseBadge(failedPods, totalPods, "Failed"),
+				footer: failedPods === 0 ? "All pods healthy" : "Some pods need attention"
+			}
+		]
+	}, [pods])
 
 	return (
-		<SharedProviders>
+		<>
 			<div className="px-4 lg:px-6">
 				<div className="space-y-2">
-					<h1 className="text-2xl font-bold tracking-tight">Pods</h1>
+					<div className="flex items-center justify-between">
+						<h1 className="text-2xl font-bold tracking-tight">Pods</h1>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
+					</div>
 					<p className="text-muted-foreground">
 						Manage and monitor pod resources in your Kubernetes cluster
 					</p>
@@ -28,6 +132,14 @@ export function PodsPageContainer() {
 			/>
 
 			<PodsDataTable />
+		</>
+	)
+}
+
+export function PodsPageContainer() {
+	return (
+		<SharedProviders>
+			<PodsContent />
 		</SharedProviders>
 	)
 }
