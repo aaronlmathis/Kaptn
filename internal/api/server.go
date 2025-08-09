@@ -212,6 +212,9 @@ func (s *Server) initInformers() error {
 	networkPolicyHandler := informers.NewNetworkPolicyEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddNetworkPolicyEventHandler(networkPolicyHandler)
 
+	loadBalancerHandler := informers.NewLoadBalancerEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddLoadBalancerEventHandler(loadBalancerHandler)
+
 	return nil
 }
 

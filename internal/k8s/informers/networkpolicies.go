@@ -30,23 +30,23 @@ func (h *NetworkPolicyEventHandler) OnAdd(obj interface{}, isInInitialList bool)
 		h.logger.Error("Failed to cast object to NetworkPolicy")
 		return
 	}
-	
+
 	h.logger.Info("Network policy added", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
-	
+
 	summary := h.networkPolicyToSummary(networkPolicy)
 	h.broadcastNetworkPolicyEvent("networkpolicies_added", summary)
 }
 
-// OnUpdate handles network policy update events  
+// OnUpdate handles network policy update events
 func (h *NetworkPolicyEventHandler) OnUpdate(oldObj, newObj interface{}) {
 	networkPolicy, ok := newObj.(*networkingv1.NetworkPolicy)
 	if !ok {
 		h.logger.Error("Failed to cast object to NetworkPolicy")
 		return
 	}
-	
+
 	h.logger.Info("Network policy updated", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
-	
+
 	summary := h.networkPolicyToSummary(networkPolicy)
 	h.broadcastNetworkPolicyEvent("networkpolicies_updated", summary)
 }
@@ -58,9 +58,9 @@ func (h *NetworkPolicyEventHandler) OnDelete(obj interface{}) {
 		h.logger.Error("Failed to cast object to NetworkPolicy")
 		return
 	}
-	
+
 	h.logger.Info("Network policy deleted", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
-	
+
 	summary := h.networkPolicyToSummary(networkPolicy)
 	h.broadcastNetworkPolicyEvent("networkpolicies_deleted", summary)
 }

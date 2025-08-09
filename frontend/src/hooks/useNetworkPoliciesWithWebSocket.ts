@@ -9,14 +9,14 @@ import { getNetworkPolicies, transformNetworkPoliciesToUI, type DashboardNetwork
  */
 export function useNetworkPoliciesWithWebSocket(enableWebSocket: boolean = true) {
 	const { selectedNamespace } = useNamespace();
-	
+
 	// API fetch function
 	const fetchNetworkPolicies = useCallback(async () => {
 		const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
 		const networkPolicies = await getNetworkPolicies(namespace);
 		return transformNetworkPoliciesToUI(networkPolicies);
 	}, [selectedNamespace]);
-	
+
 	// WebSocket data transformer
 	const transformWebSocketData = useCallback((wsData: Record<string, unknown>): DashboardNetworkPolicy => {
 		// Type guards and default values
@@ -28,13 +28,13 @@ export function useNetworkPoliciesWithWebSocket(enableWebSocket: boolean = true)
 		const egressRules = typeof wsData.egressRules === 'number' ? wsData.egressRules : 0;
 		const policyTypes = typeof wsData.policyTypes === 'string' ? wsData.policyTypes : 'Ingress';
 		const affectedPods = typeof wsData.affectedPods === 'number' ? wsData.affectedPods : 0;
-		
+
 		// Calculate age from creation timestamp
 		const ageMs = Date.now() - new Date(creationTimestamp).getTime();
 		const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
 		const ageHours = Math.floor((ageMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 		const ageMinutes = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
-		
+
 		let age: string;
 		if (ageDays > 0) {
 			age = `${ageDays}d`;
@@ -43,7 +43,7 @@ export function useNetworkPoliciesWithWebSocket(enableWebSocket: boolean = true)
 		} else {
 			age = `${ageMinutes}m`;
 		}
-		
+
 		return {
 			id: `${namespace}-${name}`.hashCode(),
 			name: name,
@@ -56,12 +56,12 @@ export function useNetworkPoliciesWithWebSocket(enableWebSocket: boolean = true)
 			affectedPods: affectedPods
 		};
 	}, []);
-	
+
 	// Key function for identifying unique network policies
 	const getItemKey = useCallback((networkPolicy: DashboardNetworkPolicy) => {
 		return `${networkPolicy.namespace}/${networkPolicy.name}`;
 	}, []);
-	
+
 	const result = useResourceWithOverview<DashboardNetworkPolicy>('networkpolicies', {
 		fetchData: fetchNetworkPolicies,
 		transformWebSocketData: enableWebSocket ? transformWebSocketData : undefined,
@@ -69,7 +69,7 @@ export function useNetworkPoliciesWithWebSocket(enableWebSocket: boolean = true)
 		fetchDependencies: [selectedNamespace],
 		debug: false
 	});
-	
+
 	return result;
 }
 
@@ -80,7 +80,7 @@ declare global {
 	}
 }
 
-String.prototype.hashCode = function() {
+String.prototype.hashCode = function () {
 	let hash = 0;
 	if (this.length === 0) return hash;
 	for (let i = 0; i < this.length; i++) {

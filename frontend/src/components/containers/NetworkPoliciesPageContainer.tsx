@@ -15,14 +15,14 @@ import {
 function NetworkPoliciesContent() {
 	const { data: networkPolicies, loading: isLoading, error, isConnected } = useNetworkPoliciesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
-	
+
 	// Update lastUpdated when network policies change
 	React.useEffect(() => {
 		if (networkPolicies.length > 0) {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [networkPolicies])
-	
+
 	// Generate summary cards from network policy data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
 		if (!networkPolicies || networkPolicies.length === 0) {
@@ -54,7 +54,7 @@ function NetworkPoliciesContent() {
 		const policiesWithIngress = networkPolicies.filter(np => np.ingressRules > 0).length
 		const policiesWithEgress = networkPolicies.filter(np => np.egressRules > 0).length
 		const uniqueNamespaces = new Set(networkPolicies.map(np => np.namespace)).size
-		
+
 		// Calculate metrics for badges
 		const ingressPercentage = totalPolicies > 0 ? (policiesWithIngress / totalPolicies) * 100 : 0
 		const egressPercentage = totalPolicies > 0 ? (policiesWithEgress / totalPolicies) * 100 : 0

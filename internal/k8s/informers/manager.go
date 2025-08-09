@@ -212,6 +212,11 @@ func (m *Manager) AddNetworkPolicyEventHandler(handler cache.ResourceEventHandle
 	m.NetworkPoliciesInformer.AddEventHandler(handler)
 }
 
+// AddLoadBalancerEventHandler adds an event handler for LoadBalancer service events
+func (m *Manager) AddLoadBalancerEventHandler(handler cache.ResourceEventHandler) {
+	m.ServicesInformer.AddEventHandler(handler)
+}
+
 // GetNodeLister returns a lister for nodes
 func (m *Manager) GetNodeLister() cache.Indexer {
 	return m.NodesInformer.GetIndexer()
