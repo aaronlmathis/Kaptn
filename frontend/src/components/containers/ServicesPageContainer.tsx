@@ -3,17 +3,92 @@
 import * as React from "react"
 import { SharedProviders } from "@/components/shared-providers"
 import { ServicesDataTable } from "@/components/data_tables/ServicesDataTable"
-import { SummaryCards } from "@/components/SummaryCards"
-import { useResourceSummary } from "@/hooks/useResourceSummary"
+import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
+import { useServicesWithWebSocket } from "@/hooks/useServicesWithWebSocket"
 
-export function ServicesPageContainer() {
-	const { data: summaryData, isLoading, error, lastUpdated } = useResourceSummary('services')
+// Inner component that can access the namespace context
+function ServicesContent() {
+	const { data: services, loading: isLoading, error, isConnected } = useServicesWithWebSocket(true)
+	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+	
+	// Update lastUpdated when services change
+	React.useEffect(() => {
+		if (services.length > 0) {
+			setLastUpdated(new Date().toISOString())
+		}
+	}, [services])
+	
+	// Generate summary cards from service data
+	const summaryData: SummaryCard[] = React.useMemo(() => {
+		if (!services || services.length === 0) {
+			return [
+				{
+					title: "Total Services",
+					value: 0,
+					subtitle: "No services found"
+				},
+				{
+					title: "ClusterIP Services",
+					value: 0,
+					subtitle: "0 ClusterIP services"
+				},
+				{
+					title: "LoadBalancer Services",
+					value: 0,
+					subtitle: "0 LoadBalancer services"
+				},
+				{
+					title: "NodePort Services",
+					value: 0,
+					subtitle: "0 NodePort services"
+				}
+			]
+		}
+
+		const totalServices = services.length
+		const clusterIPServices = services.filter(s => s.type === 'ClusterIP').length
+		const loadBalancerServices = services.filter(s => s.type === 'LoadBalancer').length
+		const nodePortServices = services.filter(s => s.type === 'NodePort').length
+		const externalNameServices = services.filter(s => s.type === 'ExternalName').length
+		const otherServices = totalServices - clusterIPServices - loadBalancerServices - nodePortServices - externalNameServices
+
+		return [
+			{
+				title: "Total Services",
+				value: totalServices,
+				subtitle: `${services.length} services across all types`
+			},
+			{
+				title: "ClusterIP",
+				value: clusterIPServices,
+				subtitle: `${clusterIPServices} internal cluster services`
+			},
+			{
+				title: "LoadBalancer",
+				value: loadBalancerServices,
+				subtitle: `${loadBalancerServices} external load balancer services`
+			},
+			{
+				title: "NodePort",
+				value: nodePortServices,
+				subtitle: `${nodePortServices} node port services`
+			}
+		]
+	}, [services])
 
 	return (
-		<SharedProviders>
+		<>
 			<div className="px-4 lg:px-6">
 				<div className="space-y-2">
-					<h1 className="text-2xl font-bold tracking-tight">Services</h1>
+					<div className="flex items-center justify-between">
+						<h1 className="text-2xl font-bold tracking-tight">Services</h1>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
+					</div>
 					<p className="text-muted-foreground">
 						Manage and monitor service resources in your Kubernetes cluster
 					</p>
@@ -28,6 +103,14 @@ export function ServicesPageContainer() {
 			/>
 
 			<ServicesDataTable />
+		</>
+	)
+}
+
+export function ServicesPageContainer() {
+	return (
+		<SharedProviders>
+			<ServicesContent />
 		</SharedProviders>
 	)
 }

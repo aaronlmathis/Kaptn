@@ -77,7 +77,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ServiceDetailDrawer } from "@/components/viewers/ServiceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useServices } from "@/hooks/use-k8s-data"
+import { useServicesWithWebSocket } from "@/hooks/useServicesWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { serviceSchema } from "@/components/kubernetes-dashboard"
 import { z } from "zod"
@@ -324,7 +324,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof serviceSchema>> }) {
 }
 
 export function ServicesDataTable() {
-	const { data: services, loading, error, refetch } = useServices()
+	const { data: services, loading, error, refetch, isConnected } = useServicesWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -375,11 +375,11 @@ export function ServicesDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		services.map((service) => service.id)
+		services.map((service: z.infer<typeof serviceSchema>) => service.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(services.map((service) => service.id))
+		setSortableIds(services.map((service: z.infer<typeof serviceSchema>) => service.id))
 	}, [services])
 
 	function handleDragEnd(event: DragEndEvent) {
@@ -425,6 +425,12 @@ export function ServicesDataTable() {
 							{table.getFilteredSelectedRowModel().rows.length} of{" "}
 							{table.getFilteredRowModel().rows.length} row(s) selected.
 						</p>
+						{isConnected && (
+							<div className="flex items-center space-x-1 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Live updates</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-2">
 						<DropdownMenu>
