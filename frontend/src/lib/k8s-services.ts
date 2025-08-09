@@ -85,6 +85,18 @@ export interface Ingress {
 	annotations: Record<string, string> | null;
 }
 
+// IngressClass interfaces based on the actual backend API response
+export interface IngressClass {
+	name: string;
+	age: string;
+	creationTimestamp: string;
+	controller: string;
+	isDefault: boolean;
+	parametersKind?: string;
+	parametersName?: string;
+}
+
+
 // NetworkPolicy interfaces based on the actual backend API response
 export interface NetworkPolicy {
 	name: string;
@@ -167,6 +179,16 @@ export interface DashboardIngress {
 	externalIPsDisplay: string;
 }
 
+export interface DashboardIngressClass {
+	id: number;
+	name: string;
+	age: string;
+	controller: string;
+	isDefault: boolean;
+	parametersKind?: string;
+	parametersName?: string;
+}
+
 export interface DashboardNetworkPolicy {
 	id: number;
 	name: string;
@@ -224,6 +246,27 @@ export async function getIngress(namespace: string, name: string): Promise<{ sum
 	const response = await apiClient.get<{ data: { summary: Ingress; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/ingresses/${namespace}/${name}`);
 	return response.data;
 }
+
+// IngressClass API functions
+export async function getIngressClasses(): Promise<IngressClass[]> {
+	try {
+		console.log('🌐 Making API request to /ingress-classes');
+		const response = await apiClient.get<{ data: { items: IngressClass[] }; status: string }>(`/ingress-classes`);
+		console.log('📡 API response:', response);
+		console.log('📊 Response data:', response.data);
+		console.log('📋 Items:', response.data?.items);
+		return response.data?.items || [];
+	} catch (error) {
+		console.error('❌ Failed to fetch ingress classes:', error);
+		return [];
+	}
+}
+
+export async function getIngressClass(namespace: string, name: string): Promise<{ summary: IngressClass; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+	const response = await apiClient.get<{ data: { summary: IngressClass; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/ingress-classes/${name}`);
+	return response.data;
+}
+
 
 // Network Policy operations
 export async function getNetworkPolicies(namespace?: string): Promise<NetworkPolicy[]> {
@@ -313,6 +356,22 @@ export function transformIngressesToUI(ingresses: Ingress[]): DashboardIngress[]
 		paths: ingress.paths,
 		externalIPs: ingress.externalIPs,
 		externalIPsDisplay: ingress.externalIPsDisplay
+	}));
+}
+
+
+export function transformIngressClassesToUI(ingressClasses: IngressClass[]): DashboardIngressClass[] {
+	if (!ingressClasses || !Array.isArray(ingressClasses)) {
+		return [];
+	}
+	return ingressClasses.map((ingressClass, index) => ({
+		id: index,
+		name: ingressClass.name,
+		age: ingressClass.age,
+		controller: ingressClass.controller,
+		isDefault: ingressClass.isDefault,
+		parametersKind: ingressClass.parametersKind,
+		parametersName: ingressClass.parametersName
 	}));
 }
 

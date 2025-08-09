@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
@@ -825,4 +827,146 @@ func (s *Server) handleGetIngress(w http.ResponseWriter, r *http.Request) {
 		"data":   fullDetails,
 		"status": "success",
 	})
+}
+
+// handleListIngressClasses handles GET /api/v1/ingress-classes
+// @Summary List all IngressClasses
+// @Description Lists all IngressClasses in the cluster (cluster-scoped resources).
+// @Tags IngressClasses
+// @Produce json
+// @Success 200 {object} map[string]interface{} "List of IngressClasses"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/ingress-classes [get]
+func (s *Server) handleListIngressClasses(w http.ResponseWriter, r *http.Request) {
+	ingressClasses, err := s.resourceManager.ListIngressClasses(r.Context())
+	if err != nil {
+		s.logger.Error("Failed to list ingress classes", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				"items": []interface{}{},
+			},
+			"status": "error",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	// Convert to response format
+	responses := make([]map[string]interface{}, 0, len(ingressClasses))
+	for _, ic := range ingressClasses {
+		responses = append(responses, s.ingressClassToResponse(ic))
+	}
+
+	// Create response
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items": responses,
+		},
+		"status": "success",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetIngressClass handles GET /api/v1/ingress-classes/{name}
+// @Summary Get IngressClass details
+// @Description Get details and summary for a specific IngressClass.
+// @Tags IngressClasses
+// @Produce json
+// @Param name path string true "IngressClass name"
+// @Success 200 {object} map[string]interface{} "IngressClass details"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/ingress-classes/{name} [get]
+func (s *Server) handleGetIngressClass(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	if name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "name is required",
+			"status": "error",
+		})
+		return
+	}
+
+	// Get ingress class from resource manager
+	ingressClassObj, err := s.resourceManager.GetIngressClass(r.Context(), name)
+	if err != nil {
+		s.logger.Error("Failed to get ingress class",
+			zap.String("name", name),
+			zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  err.Error(),
+			"status": "error",
+		})
+		return
+	}
+
+	// Convert to enhanced summary
+	summary := s.ingressClassToResponse(ingressClassObj)
+
+	// Add full ingress class spec for detailed view
+	fullDetails := map[string]interface{}{
+		"summary": summary,
+		"spec":    ingressClassObj.(map[string]interface{})["spec"],
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"data":   fullDetails,
+		"status": "success",
+	})
+}
+
+// ingressClassToResponse converts an IngressClass object to response format
+func (s *Server) ingressClassToResponse(ingressClassObj interface{}) map[string]interface{} {
+	ic := ingressClassObj.(map[string]interface{})
+
+	// Calculate age
+	creationTime, _ := ic["creationTimestamp"].(time.Time)
+	age := time.Since(creationTime)
+
+	var ageStr string
+	if age < time.Minute {
+		ageStr = fmt.Sprintf("%ds", int(age.Seconds()))
+	} else if age < time.Hour {
+		ageStr = fmt.Sprintf("%dm", int(age.Minutes()))
+	} else if age < 24*time.Hour {
+		ageStr = fmt.Sprintf("%dh", int(age.Hours()))
+	} else {
+		ageStr = fmt.Sprintf("%dd", int(age.Hours()/24))
+	}
+
+	response := map[string]interface{}{
+		"id":                ic["id"],
+		"name":              ic["name"],
+		"controller":        ic["controller"],
+		"isDefault":         ic["isDefault"],
+		"parameters":        ic["parameters"],
+		"annotations":       ic["annotations"],
+		"labels":            ic["labels"],
+		"age":               ageStr,
+		"creationTimestamp": creationTime,
+	}
+
+	// Extract parameters fields for frontend compatibility
+	if params, ok := ic["parameters"].(map[string]interface{}); ok && params != nil {
+		if kind, exists := params["kind"]; exists {
+			response["parametersKind"] = kind
+		}
+		if name, exists := params["name"]; exists {
+			response["parametersName"] = name
+		}
+	}
+
+	return response
 }

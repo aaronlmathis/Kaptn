@@ -1418,3 +1418,87 @@ func (rm *ResourceManager) GetAPIResource(ctx context.Context, name, group strin
 
 	return nil, fmt.Errorf("API resource %s not found in group %s", name, group)
 }
+
+// ListIngressClasses lists all IngressClasses in the cluster (IngressClasses are cluster-scoped)
+func (rm *ResourceManager) ListIngressClasses(ctx context.Context) ([]interface{}, error) {
+	ingressClasses, err := rm.kubeClient.NetworkingV1().IngressClasses().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list ingress classes: %w", err)
+	}
+
+	var result []interface{}
+	for _, ic := range ingressClasses.Items {
+		// Convert to map for consistent API response format
+		ingressClassMap := map[string]interface{}{
+			"id":                ic.Name, // Use name as ID since IngressClasses are cluster-scoped
+			"name":              ic.Name,
+			"controller":        ic.Spec.Controller,
+			"isDefault":         false,
+			"parameters":        nil,
+			"annotations":       ic.Annotations,
+			"labels":            ic.Labels,
+			"creationTimestamp": ic.CreationTimestamp.Time,
+		}
+
+		// Check if it's the default ingress class
+		if ic.Annotations != nil {
+			if defaultAnnotation, exists := ic.Annotations["ingressclass.kubernetes.io/is-default-class"]; exists {
+				ingressClassMap["isDefault"] = defaultAnnotation == "true"
+			}
+		}
+
+		// Add parameters if they exist
+		if ic.Spec.Parameters != nil {
+			ingressClassMap["parameters"] = map[string]interface{}{
+				"kind":      ic.Spec.Parameters.Kind,
+				"name":      ic.Spec.Parameters.Name,
+				"namespace": ic.Spec.Parameters.Namespace,
+				"scope":     ic.Spec.Parameters.Scope,
+			}
+		}
+
+		result = append(result, ingressClassMap)
+	}
+
+	return result, nil
+}
+
+// GetIngressClass gets a specific IngressClass by name
+func (rm *ResourceManager) GetIngressClass(ctx context.Context, name string) (interface{}, error) {
+	ingressClass, err := rm.kubeClient.NetworkingV1().IngressClasses().Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ingress class %s: %w", name, err)
+	}
+
+	// Convert to map for consistent API response format
+	ingressClassMap := map[string]interface{}{
+		"id":                ingressClass.Name,
+		"name":              ingressClass.Name,
+		"controller":        ingressClass.Spec.Controller,
+		"isDefault":         false,
+		"parameters":        nil,
+		"annotations":       ingressClass.Annotations,
+		"labels":            ingressClass.Labels,
+		"creationTimestamp": ingressClass.CreationTimestamp.Time,
+		"spec":              ingressClass.Spec,
+	}
+
+	// Check if it's the default ingress class
+	if ingressClass.Annotations != nil {
+		if defaultAnnotation, exists := ingressClass.Annotations["ingressclass.kubernetes.io/is-default-class"]; exists {
+			ingressClassMap["isDefault"] = defaultAnnotation == "true"
+		}
+	}
+
+	// Add parameters if they exist
+	if ingressClass.Spec.Parameters != nil {
+		ingressClassMap["parameters"] = map[string]interface{}{
+			"kind":      ingressClass.Spec.Parameters.Kind,
+			"name":      ingressClass.Spec.Parameters.Name,
+			"namespace": ingressClass.Spec.Parameters.Namespace,
+			"scope":     ingressClass.Spec.Parameters.Scope,
+		}
+	}
+
+	return ingressClassMap, nil
+}

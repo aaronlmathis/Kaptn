@@ -206,6 +206,12 @@ func (s *Server) initInformers() error {
 	ingressHandler := informers.NewIngressEventHandler(s.logger, s.wsHub.BroadcastToRoom)
 	s.informerManager.AddIngressEventHandler(ingressHandler)
 
+	ingressClassHandler := informers.NewIngressClassEventHandler(s.logger, s.wsHub.BroadcastToRoom)
+	s.informerManager.AddIngressClassEventHandler(ingressClassHandler)
+
+	networkPolicyHandler := informers.NewNetworkPolicyEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddNetworkPolicyEventHandler(networkPolicyHandler)
+
 	return nil
 }
 
@@ -460,6 +466,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/ingresses", s.handleListAllIngresses)
 			r.Get("/ingresses/{namespace}", s.handleListIngresses)
 			r.Get("/ingresses/{namespace}/{name}", s.handleGetIngress)
+			r.Get("/ingress-classes", s.handleListIngressClasses)
+			r.Get("/ingress-classes/{name}", s.handleGetIngressClass)
 			r.Get("/endpoints", s.handleListEndpoints)
 			r.Get("/endpoints/{namespace}/{name}", s.handleGetEndpoints)
 			r.Get("/endpoint-slices", s.handleListEndpointSlices)

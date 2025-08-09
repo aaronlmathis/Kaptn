@@ -35,7 +35,9 @@ type Manager struct {
 	CronJobsInformer       cache.SharedIndexInformer
 
 	// Tier 3: Optional Resources (Consider for future implementation)
-	IngressesInformer    cache.SharedIndexInformer
+	IngressesInformer       cache.SharedIndexInformer
+	IngressClassesInformer  cache.SharedIndexInformer
+	NetworkPoliciesInformer cache.SharedIndexInformer
 	// PVCsInformer         cache.SharedIndexInformer
 
 	// Context for cancellation
@@ -73,7 +75,9 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface) *Manager {
 		CronJobsInformer:       factory.Batch().V1().CronJobs().Informer(),
 
 		// Tier 3: Optional Resources
-		IngressesInformer:      factory.Networking().V1().Ingresses().Informer(),
+		IngressesInformer:       factory.Networking().V1().Ingresses().Informer(),
+		IngressClassesInformer:  factory.Networking().V1().IngressClasses().Informer(),
+		NetworkPoliciesInformer: factory.Networking().V1().NetworkPolicies().Informer(),
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -110,6 +114,8 @@ func (m *Manager) Start() error {
 
 		// Tier 3: Optional Resources
 		m.IngressesInformer.HasSynced,
+		m.IngressClassesInformer.HasSynced,
+		m.NetworkPoliciesInformer.HasSynced,
 	}
 
 	if !cache.WaitForCacheSync(m.ctx.Done(), cacheSyncs...) {
@@ -196,6 +202,16 @@ func (m *Manager) AddIngressEventHandler(handler cache.ResourceEventHandler) {
 	m.IngressesInformer.AddEventHandler(handler)
 }
 
+// AddIngressClassEventHandler adds an event handler for ingress class events
+func (m *Manager) AddIngressClassEventHandler(handler cache.ResourceEventHandler) {
+	m.IngressClassesInformer.AddEventHandler(handler)
+}
+
+// AddNetworkPolicyEventHandler adds an event handler for network policy events
+func (m *Manager) AddNetworkPolicyEventHandler(handler cache.ResourceEventHandler) {
+	m.NetworkPoliciesInformer.AddEventHandler(handler)
+}
+
 // GetNodeLister returns a lister for nodes
 func (m *Manager) GetNodeLister() cache.Indexer {
 	return m.NodesInformer.GetIndexer()
@@ -264,4 +280,14 @@ func (m *Manager) GetEndpointSliceLister() cache.Indexer {
 // GetIngressLister returns a lister for ingresses
 func (m *Manager) GetIngressLister() cache.Indexer {
 	return m.IngressesInformer.GetIndexer()
+}
+
+// GetIngressClassLister returns a lister for ingress classes
+func (m *Manager) GetIngressClassLister() cache.Indexer {
+	return m.IngressClassesInformer.GetIndexer()
+}
+
+// GetNetworkPolicyLister returns a lister for network policies
+func (m *Manager) GetNetworkPolicyLister() cache.Indexer {
+	return m.NetworkPoliciesInformer.GetIndexer()
 }

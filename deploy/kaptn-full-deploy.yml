@@ -11,28 +11,19 @@ metadata:
   name: kaptn-sa
   namespace: kaptn
 ---
-# 3. ClusterRole (full access needed by Kaptn UI)
+# 3. ClusterRole (full admin access)
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: ClusterRoleBinding
 metadata:
-  name: kaptn-read-cluster
-rules:
-  # Core resources used in overviews
-  - apiGroups: [""]
-    resources: ["pods","nodes","namespaces","resourcequotas","services","endpoints","events", "configmaps","persistentvolumes"]
-    verbs: ["get","list","watch"]
-  # Workloads
-  - apiGroups: ["apps"]
-    resources: ["deployments","daemonsets","statefulsets","replicasets"]
-    verbs: ["get","list","watch"]
-  # Metrics API
-  - apiGroups: ["metrics.k8s.io"]
-    resources: ["pods","nodes"]
-    verbs: ["get","list","watch"]
-  # Networking
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies","ingresses","ingressclasses"]
-    verbs: ["get","list","watch"]
+  name: kaptn-sa-cluster-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: kaptn-sa
+    namespace: kaptn
 ---
 # 4. ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

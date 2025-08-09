@@ -74,11 +74,10 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { NetworkPolicyDetailDrawer } from "@/components/viewers/NetworkPolicyDetailDrawer"
+import { IngressClassDetailDrawer } from "@/components/viewers/IngressClassDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { useNetworkPoliciesWithWebSocket } from "@/hooks/useNetworkPoliciesWithWebSocket"
-import { useNamespace } from "@/contexts/namespace-context"
-import { networkPolicySchema } from "@/lib/schemas/networkpolicy"
+import { useIngressClassesWithWebSocket } from "@/hooks/useIngressClassesWithWebSocket"
+import { ingressClassSchema } from "@/lib/schemas/ingress-class"
 import { z } from "zod"
 
 // Drag handle component
@@ -101,16 +100,14 @@ function DragHandle({ id }: { id: number }) {
 	)
 }
 
-// Column definitions for NetworkPolicies table
+// Column definitions for ingress classes table
 const createColumns = (
-	onViewDetails: (networkPolicy: z.infer<typeof networkPolicySchema>) => void
-): ColumnDef<z.infer<typeof networkPolicySchema>>[] => [
+	onViewDetails: (ingressClass: z.infer<typeof ingressClassSchema>) => void
+): ColumnDef<z.infer<typeof ingressClassSchema>>[] => [
 		{
 			id: "drag",
 			header: () => null,
 			cell: ({ row }) => <DragHandle id={row.original.id} />,
-			size: 50,
-			maxSize: 50,
 		},
 		{
 			id: "select",
@@ -137,12 +134,10 @@ const createColumns = (
 			),
 			enableSorting: false,
 			enableHiding: false,
-			size: 50,
-			maxSize: 50,
 		},
 		{
 			accessorKey: "name",
-			header: "Network Policy Name",
+			header: "Class Name",
 			cell: ({ row }) => {
 				return (
 					<button
@@ -156,47 +151,34 @@ const createColumns = (
 			enableHiding: false,
 		},
 		{
-			accessorKey: "namespace",
-			header: "Namespace",
+			accessorKey: "controller",
+			header: "Controller",
 			cell: ({ row }) => (
-				<Badge variant="outline" className="text-muted-foreground px-1.5">
-					{row.original.namespace}
-				</Badge>
+				<div className="text-sm font-mono">{row.original.controller}</div>
 			),
 		},
 		{
-			accessorKey: "podSelector",
-			header: "Pod Selector",
+			accessorKey: "isDefault",
+			header: "Default",
 			cell: ({ row }) => (
-				<div className="text-sm">{row.original.podSelector}</div>
+				<div className="flex items-center">
+					{row.original.isDefault ? (
+						<Badge variant="default" className="text-xs">
+							Default
+						</Badge>
+					) : (
+						<span className="text-muted-foreground text-xs">-</span>
+					)}
+				</div>
 			),
 		},
 		{
-			accessorKey: "ingressRules",
-			header: "Ingress Rules",
+			accessorKey: "parametersRef",
+			header: "Parameters",
 			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.ingressRules}</div>
-			),
-		},
-		{
-			accessorKey: "egressRules",
-			header: "Egress Rules",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.egressRules}</div>
-			),
-		},
-		{
-			accessorKey: "policyTypes",
-			header: "Policy Types",
-			cell: ({ row }) => (
-				<div className="text-sm">{row.original.policyTypes}</div>
-			),
-		},
-		{
-			accessorKey: "affectedPods",
-			header: "Affected Pods",
-			cell: ({ row }) => (
-				<div className="font-mono text-sm">{row.original.affectedPods}</div>
+				<div className="text-sm">
+					{row.original.parametersRef || <span className="text-muted-foreground">None</span>}
+				</div>
 			),
 		},
 		{
@@ -229,8 +211,8 @@ const createColumns = (
 						</DropdownMenuItem>
 						<ResourceYamlEditor
 							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="NetworkPolicy"
+							namespace=""
+							resourceKind="IngressClass"
 						>
 							<button
 								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
@@ -244,6 +226,10 @@ const createColumns = (
 								Edit YAML
 							</button>
 						</ResourceYamlEditor>
+						<DropdownMenuItem>
+							<IconRefresh className="size-4 mr-2" />
+							Restart
+						</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem className="text-red-600">
 							<IconTrash className="size-4 mr-2" />
@@ -256,7 +242,7 @@ const createColumns = (
 	]
 
 // Draggable row component
-function DraggableRow({ row }: { row: Row<z.infer<typeof networkPolicySchema>> }) {
+function DraggableRow({ row }: { row: Row<z.infer<typeof ingressClassSchema>> }) {
 	const {
 		transform,
 		transition,
@@ -287,20 +273,19 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof networkPolicySchema>> }
 	)
 }
 
-export function NetworkPoliciesDataTable() {
-	const { data: networkPolicies, loading, error, refetch, isConnected } = useNetworkPoliciesWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+export function IngressClassesDataTable() {
+	const { data: ingressClasses, loading, error, refetch, isConnected } = useIngressClassesWithWebSocket(true)
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
-	const [selectedNetworkPolicyForDetails, setSelectedNetworkPolicyForDetails] = React.useState<z.infer<typeof networkPolicySchema> | null>(null)
+	const [selectedIngressClassForDetails, setSelectedIngressClassForDetails] = React.useState<z.infer<typeof ingressClassSchema> | null>(null)
 
 	// Handle opening detail drawer
-	const handleViewDetails = React.useCallback((networkPolicy: z.infer<typeof networkPolicySchema>) => {
-		setSelectedNetworkPolicyForDetails(networkPolicy)
+	const handleViewDetails = React.useCallback((ingressClass: z.infer<typeof ingressClassSchema>) => {
+		setSelectedIngressClassForDetails(ingressClass)
 		setDetailDrawerOpen(true)
 	}, [])
 
@@ -311,7 +296,7 @@ export function NetworkPoliciesDataTable() {
 	)
 
 	const table = useReactTable({
-		data: networkPolicies,
+		data: ingressClasses,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -339,12 +324,12 @@ export function NetworkPoliciesDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		networkPolicies.map((networkPolicy) => networkPolicy.id)
+		ingressClasses.map((ingressClass) => ingressClass.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(networkPolicies.map((networkPolicy) => networkPolicy.id))
-	}, [networkPolicies])
+		setSortableIds(ingressClasses.map((ingressClass) => ingressClass.id))
+	}, [ingressClasses])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -362,7 +347,7 @@ export function NetworkPoliciesDataTable() {
 			<div className="px-4 lg:px-6">
 				<div className="flex items-center justify-center py-10">
 					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading network policies...</span>
+					<span className="ml-2">Loading ingress classes...</span>
 				</div>
 			</div>
 		)
@@ -476,7 +461,7 @@ export function NetworkPoliciesDataTable() {
 													colSpan={columns.length}
 													className="h-24 text-center"
 												>
-													No network policies found in {selectedNamespace === 'all' ? 'any namespace' : `namespace "${selectedNamespace}"`}.
+													No ingress classes found in cluster.
 												</TableCell>
 											</TableRow>
 										)}
@@ -567,15 +552,15 @@ export function NetworkPoliciesDataTable() {
 				</div>
 			</div>
 
-			{/* Controlled detail drawer for full network policy details */}
-			{selectedNetworkPolicyForDetails && (
-				<NetworkPolicyDetailDrawer
-					item={selectedNetworkPolicyForDetails}
+			{/* Controlled detail drawer for full ingress class details */}
+			{selectedIngressClassForDetails && (
+				<IngressClassDetailDrawer
+					item={selectedIngressClassForDetails}
 					open={detailDrawerOpen}
-					onOpenChange={(open: boolean) => {
+					onOpenChange={(open) => {
 						setDetailDrawerOpen(open)
 						if (!open) {
-							setSelectedNetworkPolicyForDetails(null)
+							setSelectedIngressClassForDetails(null)
 						}
 					}}
 				/>

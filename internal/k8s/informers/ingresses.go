@@ -29,27 +29,27 @@ func (h *IngressEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		h.logger.Error("Failed to cast object to Ingress")
 		return
 	}
-	
+
 	h.logger.Info("Ingress added",
 		zap.String("name", ingress.Name),
 		zap.String("namespace", ingress.Namespace))
-	
+
 	summary := h.ingressToSummary(ingress)
 	h.broadcast("overview", "ingress_added", summary)
 }
 
-// OnUpdate handles ingress update events  
+// OnUpdate handles ingress update events
 func (h *IngressEventHandler) OnUpdate(oldObj, newObj interface{}) {
 	ingress, ok := newObj.(*networkingv1.Ingress)
 	if !ok {
 		h.logger.Error("Failed to cast object to Ingress")
 		return
 	}
-	
+
 	h.logger.Info("Ingress updated",
 		zap.String("name", ingress.Name),
 		zap.String("namespace", ingress.Namespace))
-	
+
 	summary := h.ingressToSummary(ingress)
 	h.broadcast("overview", "ingress_updated", summary)
 }
@@ -70,11 +70,11 @@ func (h *IngressEventHandler) OnDelete(obj interface{}) {
 			return
 		}
 	}
-	
+
 	h.logger.Info("Ingress deleted",
 		zap.String("name", ingress.Name),
 		zap.String("namespace", ingress.Namespace))
-	
+
 	summary := h.ingressToSummary(ingress)
 	h.broadcast("overview", "ingress_deleted", summary)
 }
@@ -96,7 +96,7 @@ func (h *IngressEventHandler) ingressToSummary(ingress *networkingv1.Ingress) ma
 		if rule.Host != "" {
 			hosts = append(hosts, rule.Host)
 		}
-		
+
 		if rule.HTTP != nil {
 			for _, path := range rule.HTTP.Paths {
 				if path.Path != "" {
@@ -136,16 +136,16 @@ func (h *IngressEventHandler) ingressToSummary(ingress *networkingv1.Ingress) ma
 	}
 
 	return map[string]interface{}{
-		"name":                ingress.Name,
-		"namespace":           ingress.Namespace,
-		"creationTimestamp":   ingress.CreationTimestamp.Format(time.RFC3339),
-		"ingressClass":        ingressClass,
-		"hosts":               hosts,
-		"hostsDisplay":        hostsDisplay,
-		"paths":               paths,
-		"externalIPs":         externalIPs,
-		"externalIPsDisplay":  externalIPsDisplay,
-		"rules":               len(ingress.Spec.Rules),
-		"tlsHosts":            len(ingress.Spec.TLS),
+		"name":               ingress.Name,
+		"namespace":          ingress.Namespace,
+		"creationTimestamp":  ingress.CreationTimestamp.Format(time.RFC3339),
+		"ingressClass":       ingressClass,
+		"hosts":              hosts,
+		"hostsDisplay":       hostsDisplay,
+		"paths":              paths,
+		"externalIPs":        externalIPs,
+		"externalIPsDisplay": externalIPsDisplay,
+		"rules":              len(ingress.Spec.Rules),
+		"tlsHosts":           len(ingress.Spec.TLS),
 	}
 }

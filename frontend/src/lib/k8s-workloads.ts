@@ -10,6 +10,7 @@
  * - Jobs
  * - CronJobs
  * - Ingresses
+ * - IngressClasses
  */
 
 import { apiClient } from './api-client';

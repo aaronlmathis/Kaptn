@@ -480,6 +480,12 @@ export function IngressesDataTable() {
 					<div className="flex-1 text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
+						{isConnected && (
+							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-6 lg:space-x-8">
 						<div className="flex items-center space-x-2">
