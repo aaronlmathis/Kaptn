@@ -51,6 +51,7 @@ type Server struct {
 	summaryService   *summaries.SummaryService
 	authMiddleware   *auth.Middleware
 	oidcClient       *auth.OIDCClient
+	sessionManager   *auth.SessionManager
 }
 
 // NewServer creates a new API server
@@ -289,6 +290,22 @@ func (s *Server) initSummaryService() error {
 func (s *Server) initAuth() error {
 	authMode := auth.AuthMode(s.config.Security.AuthMode)
 
+	// Initialize session manager if we have a cookie secret
+	if s.config.Server.CookieSecret != "" {
+		sessionTTL, err := time.ParseDuration(s.config.Server.SessionTTL)
+		if err != nil {
+			s.logger.Warn("Invalid session TTL, using default 12h", zap.String("ttl", s.config.Server.SessionTTL))
+			sessionTTL = 12 * time.Hour
+		}
+
+		s.sessionManager, err = auth.NewSessionManager(s.logger, s.config.Server.CookieSecret, sessionTTL)
+		if err != nil {
+			return fmt.Errorf("failed to initialize session manager: %w", err)
+		}
+
+		s.logger.Info("Session manager initialized", zap.Duration("ttl", sessionTTL))
+	}
+
 	// Initialize OIDC client if auth mode is OIDC
 	if authMode == auth.AuthModeOIDC {
 		oidcConfig := auth.OIDCConfig{
@@ -310,8 +327,22 @@ func (s *Server) initAuth() error {
 		s.logger.Info("OIDC authentication initialized")
 	}
 
+	// Initialize authorization resolver
+	var authzResolver *auth.AuthzResolver
+	if authMode == auth.AuthModeOIDC && s.config.Authz.Mode != "" {
+		authzResolver = auth.NewAuthzResolver(
+			&s.config.Authz,
+			&s.config.Bindings,
+			s.kubeClient,
+			s.logger,
+		)
+		s.logger.Info("Authorization resolver initialized",
+			zap.String("mode", s.config.Authz.Mode),
+			zap.String("bindings_source", s.config.Bindings.Source))
+	}
+
 	// Initialize authentication middleware
-	s.authMiddleware = auth.NewMiddleware(s.logger, authMode, s.oidcClient)
+	s.authMiddleware = auth.NewMiddleware(s.logger, authMode, s.oidcClient, s.sessionManager, authzResolver, s.config.Security.UsernameFormat)
 
 	// Set authentication middleware on WebSocket hub
 	s.wsHub.SetAuthMiddleware(s.authMiddleware)
@@ -466,6 +497,14 @@ func (s *Server) setupRoutes() {
 		r.Post("/auth/callback", s.handleAuthCallback)
 		r.Post("/auth/logout", s.handleLogout)
 		r.Get("/auth/me", s.handleMe)
+
+		// Admin endpoints (require authentication)
+		r.Group(func(r chi.Router) {
+			if s.config.Security.AuthMode != "none" {
+				r.Use(s.authMiddleware.RequireAuth)
+			}
+			r.Get("/admin/authz/preview", s.handleAuthzPreview)
+		})
 
 		// Read-only endpoints (require read permissions)
 		r.Group(func(r chi.Router) {

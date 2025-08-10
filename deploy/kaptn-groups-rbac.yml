@@ -1,0 +1,155 @@
+---
+# Kaptn Standard RBAC Group Definitions
+# This file defines ClusterRoles and example bindings for all Kaptn groups
+# Replace "example-namespace" with actual namespaces when applying
+
+# ============================================================================
+# 1. kaptn-admins ClusterRole (namespace-scoped admin, no cluster-wide access)
+# ============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-admin
+rules:
+# Workloads
+- apiGroups: [""]
+  resources: ["pods","pods/log","pods/exec","pods/portforward","services","endpoints","persistentvolumeclaims","configmaps","secrets","events"]
+  verbs: ["*"]
+- apiGroups: ["apps"]
+  resources: ["deployments","statefulsets","daemonsets","replicasets"]
+  verbs: ["*"]
+- apiGroups: ["batch"]
+  resources: ["jobs","cronjobs"]
+  verbs: ["*"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses","networkpolicies"]
+  verbs: ["*"]
+# Namespace-scoped RBAC (can manage roles within their namespace)
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles","rolebindings"]
+  verbs: ["*"]
+
+---
+# ============================================================================
+# 2. kaptn-developers ClusterRole (workload management, limited secrets)
+# ============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-developer
+rules:
+# Workloads - full access
+- apiGroups: [""]
+  resources: ["pods","pods/log","pods/exec","services","endpoints","events"]
+  verbs: ["get","list","watch","create","update","patch","delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments","statefulsets","daemonsets","replicasets"]
+  verbs: ["get","list","watch","create","update","patch","delete"]
+- apiGroups: ["batch"]
+  resources: ["jobs","cronjobs"]
+  verbs: ["get","list","watch","create","update","patch","delete"]
+# Networking
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get","list","watch","create","update","patch","delete"]
+# Storage - can create/delete PVCs
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["create","get","list","watch","delete"]
+# Config - full configmaps, limited secrets
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create","get","list"] # no update/delete on secrets they don't own
+
+---
+# ============================================================================
+# 3. kaptn-viewers ClusterRole (read-only access)
+# ============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-viewer
+rules:
+# All workload resources - read-only
+- apiGroups: [""]
+  resources: ["pods","pods/log","services","endpoints","persistentvolumeclaims","configmaps","secrets","events"]
+  verbs: ["get","list","watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments","statefulsets","daemonsets","replicasets"]
+  verbs: ["get","list","watch"]
+- apiGroups: ["batch"]
+  resources: ["jobs","cronjobs"]
+  verbs: ["get","list","watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses","networkpolicies"]
+  verbs: ["get","list","watch"]
+
+---
+# ============================================================================
+# Example RoleBindings for namespace-scoped access
+# Apply these per namespace where users should have access
+# ============================================================================
+
+# Example: Bind kaptn-admins to "example-namespace"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kaptn-admin-binding
+  namespace: example-namespace
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-admin
+subjects:
+- kind: Group
+  name: kaptn-admins
+
+---
+# Example: Bind kaptn-developers to "example-namespace"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kaptn-developer-binding
+  namespace: example-namespace
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-developer
+subjects:
+- kind: Group
+  name: kaptn-developers
+
+---
+# Example: Bind kaptn-viewers to "example-namespace"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kaptn-viewer-binding
+  namespace: example-namespace
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-viewer
+subjects:
+- kind: Group
+  name: kaptn-viewers
+
+---
+# ============================================================================
+# Cluster-wide viewer access (optional)
+# Use this if you want viewers to see resources across all namespaces
+# ============================================================================
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRoleBinding
+# metadata:
+#   name: kaptn-viewers-cluster-readonly
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: ClusterRole
+#   name: view  # Use built-in 'view' ClusterRole for cluster-wide read access
+# subjects:
+# - kind: Group
+#   name: kaptn-viewers

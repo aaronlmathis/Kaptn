@@ -7,6 +7,7 @@ import (
 // User represents an authenticated user
 type User struct {
 	ID     string                 `json:"id"`
+	Sub    string                 `json:"sub"` // OIDC subject identifier
 	Email  string                 `json:"email"`
 	Name   string                 `json:"name"`
 	Groups []string               `json:"groups"`

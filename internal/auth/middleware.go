@@ -22,20 +22,26 @@ const (
 
 // Middleware provides authentication and authorization middleware
 type Middleware struct {
-	logger     *zap.Logger
-	authMode   AuthMode
-	oidcClient *OIDCClient
-	rateLimits map[string]*rate.Limiter
-	rateMutex  sync.RWMutex
+	logger         *zap.Logger
+	authMode       AuthMode
+	oidcClient     *OIDCClient
+	sessionManager *SessionManager
+	authzResolver  *AuthzResolver
+	usernameFormat string
+	rateLimits     map[string]*rate.Limiter
+	rateMutex      sync.RWMutex
 }
 
 // NewMiddleware creates a new authentication middleware
-func NewMiddleware(logger *zap.Logger, authMode AuthMode, oidcClient *OIDCClient) *Middleware {
+func NewMiddleware(logger *zap.Logger, authMode AuthMode, oidcClient *OIDCClient, sessionManager *SessionManager, authzResolver *AuthzResolver, usernameFormat string) *Middleware {
 	return &Middleware{
-		logger:     logger,
-		authMode:   authMode,
-		oidcClient: oidcClient,
-		rateLimits: make(map[string]*rate.Limiter),
+		logger:         logger,
+		authMode:       authMode,
+		oidcClient:     oidcClient,
+		sessionManager: sessionManager,
+		authzResolver:  authzResolver,
+		usernameFormat: usernameFormat,
+		rateLimits:     make(map[string]*rate.Limiter),
 	}
 }
 
@@ -58,14 +64,55 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 			}
 
 		case AuthModeOIDC:
-			// Extract and validate JWT token
-			user, err := m.authenticateFromToken(ctx, r)
-			if err != nil {
-				m.logger.Debug("Token authentication failed", zap.Error(err))
-				m.writeUnauthorized(w, "Invalid or missing authentication token")
-				return
+			// Try session cookie first, then fall back to Bearer token
+			var user *User
+			var err error
+
+			// Try to authenticate from session cookie
+			if m.sessionManager != nil {
+				if session, sessionErr := m.sessionManager.GetSessionFromCookie(r); sessionErr == nil {
+					user = session.ToUser()
+					m.logger.Debug("Authenticated via session cookie", zap.String("userId", user.ID))
+				} else {
+					m.logger.Debug("Session cookie authentication failed", zap.Error(sessionErr))
+				}
 			}
+
+			// If no session cookie or session invalid, try Bearer token
+			if user == nil {
+				user, err = m.authenticateFromToken(ctx, r)
+				if err != nil {
+					m.logger.Debug("Token authentication failed", zap.Error(err))
+					// Only return error if both session and token auth failed
+					m.writeUnauthorized(w, "Invalid or missing authentication")
+					return
+				}
+				if user != nil {
+					m.logger.Debug("Authenticated via Bearer token", zap.String("userId", user.ID))
+				}
+			}
+
 			if user != nil {
+				// Resolve authorization using the configured resolver
+				if m.authzResolver != nil {
+					authzResult, authzErr := m.authzResolver.ResolveAuthorization(ctx, user, m.usernameFormat)
+					if authzErr != nil {
+						m.logger.Warn("Authorization resolution failed",
+							zap.String("userId", user.ID),
+							zap.String("email", user.Email),
+							zap.Error(authzErr))
+						// Still allow the user through with original groups, but log the issue
+					} else {
+						// Update user with resolved authorization info
+						user.Groups = authzResult.Groups
+						m.logger.Debug("Authorization resolved",
+							zap.String("userId", user.ID),
+							zap.String("username", authzResult.Username),
+							zap.Strings("groups", authzResult.Groups),
+							zap.Strings("namespaces", authzResult.Namespaces))
+					}
+				}
+
 				ctx = WithUser(ctx, user)
 			}
 

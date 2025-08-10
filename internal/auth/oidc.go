@@ -166,14 +166,34 @@ func (c *OIDCClient) extractGroups(claims map[string]interface{}) []string {
 	return groups
 }
 
-// GetAuthURL returns the OAuth2 authorization URL for login
-func (c *OIDCClient) GetAuthURL(state string) string {
-	return c.oauth2Cfg.AuthCodeURL(state)
+// GetAuthURL returns the OAuth2 authorization URL with PKCE for login
+func (c *OIDCClient) GetAuthURL(state string, pkceParams *PKCEParams) string {
+	// Add PKCE parameters to OAuth2 config
+	authURL := c.oauth2Cfg.AuthCodeURL(state,
+		oauth2.SetAuthURLParam("code_challenge", pkceParams.CodeChallenge),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+		oauth2.SetAuthURLParam("nonce", pkceParams.Nonce),
+	)
+
+	c.logger.Debug("Generated auth URL with PKCE",
+		zap.String("state", state),
+		zap.String("nonce", pkceParams.Nonce))
+
+	return authURL
 }
 
-// ExchangeCode exchanges an authorization code for tokens
-func (c *OIDCClient) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
-	return c.oauth2Cfg.Exchange(ctx, code)
+// ExchangeCodeWithPKCE exchanges an authorization code for tokens using PKCE
+func (c *OIDCClient) ExchangeCodeWithPKCE(ctx context.Context, code string, codeVerifier string) (*oauth2.Token, error) {
+	// Add PKCE code verifier to the token exchange
+	token, err := c.oauth2Cfg.Exchange(ctx, code,
+		oauth2.SetAuthURLParam("code_verifier", codeVerifier),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code with PKCE: %w", err)
+	}
+
+	c.logger.Debug("Successfully exchanged code for tokens with PKCE")
+	return token, nil
 }
 
 // GetUserInfo retrieves user information using the access token

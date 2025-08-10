@@ -13,6 +13,8 @@ import (
 type Config struct {
 	Server       ServerConfig       `yaml:"server"`
 	Security     SecurityConfig     `yaml:"security"`
+	Authz        AuthzConfig        `yaml:"authz"`
+	Bindings     BindingsConfig     `yaml:"bindings"`
 	Kubernetes   KubernetesConfig   `yaml:"kubernetes"`
 	Features     FeaturesConfig     `yaml:"features"`
 	RateLimits   RateLimitsConfig   `yaml:"rate_limits"`
@@ -24,9 +26,11 @@ type Config struct {
 
 // ServerConfig represents the server configuration
 type ServerConfig struct {
-	Addr     string     `yaml:"addr"`
-	BasePath string     `yaml:"base_path"`
-	CORS     CORSConfig `yaml:"cors"`
+	Addr         string     `yaml:"addr"`
+	BasePath     string     `yaml:"base_path"`
+	CORS         CORSConfig `yaml:"cors"`
+	CookieSecret string     `yaml:"cookie_secret"`
+	SessionTTL   string     `yaml:"session_ttl"`
 }
 
 // CORSConfig represents the CORS configuration
@@ -37,9 +41,10 @@ type CORSConfig struct {
 
 // SecurityConfig represents the security configuration
 type SecurityConfig struct {
-	AuthMode string     `yaml:"auth_mode"`
-	OIDC     OIDCConfig `yaml:"oidc"`
-	TLS      TLSConfig  `yaml:"tls"`
+	AuthMode       string     `yaml:"auth_mode"`
+	OIDC           OIDCConfig `yaml:"oidc"`
+	TLS            TLSConfig  `yaml:"tls"`
+	UsernameFormat string     `yaml:"username_format"`
 }
 
 // OIDCConfig represents the OIDC configuration
@@ -58,6 +63,32 @@ type TLSConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 	CertFile string `yaml:"cert_file"`
 	KeyFile  string `yaml:"key_file"`
+}
+
+// AuthzConfig represents authorization configuration
+type AuthzConfig struct {
+	Mode                  string   `yaml:"mode"`                    // "idp_groups" or "user_bindings"
+	GroupsFilter          []string `yaml:"groups_filter"`           // Filter allowed groups in idp_groups mode
+	GroupsPrefixAllowlist []string `yaml:"groups_prefix_allowlist"` // e.g. ["kaptn-", "oncall-"]
+	DefaultGroups         []string `yaml:"default_groups"`          // e.g. ["kaptn-viewers"] or empty for deny
+}
+
+// BindingsConfig represents user bindings configuration
+type BindingsConfig struct {
+	Source    string           `yaml:"source"` // "configmap" or "sqlite"
+	ConfigMap ConfigMapBinding `yaml:"configmap"`
+	SQLite    SQLiteBinding    `yaml:"sqlite"`
+}
+
+// ConfigMapBinding represents ConfigMap-based user bindings
+type ConfigMapBinding struct {
+	Namespace string `yaml:"namespace"`
+	Name      string `yaml:"name"`
+}
+
+// SQLiteBinding represents SQLite-based user bindings
+type SQLiteBinding struct {
+	DSN string `yaml:"dsn"`
 }
 
 // KubernetesConfig represents the Kubernetes configuration
@@ -127,15 +158,18 @@ func LoadFromFile(configPath string) (*Config, error) {
 func loadWithDefaults(configPath string) (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Addr:     getEnv("KAD_SERVER_ADDR", "0.0.0.0:8080"),
-			BasePath: getEnv("KAD_BASE_PATH", "/"),
+			Addr:         getEnv("KAD_SERVER_ADDR", "0.0.0.0:8080"),
+			BasePath:     getEnv("KAD_BASE_PATH", "/"),
+			CookieSecret: getEnv("KAD_COOKIE_SECRET", ""), // Required in production
+			SessionTTL:   getEnv("KAD_SESSION_TTL", "12h"),
 			CORS: CORSConfig{
 				AllowOrigins: []string{"*"},
 				AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			},
 		},
 		Security: SecurityConfig{
-			AuthMode: getEnv("KAD_AUTH_MODE", "none"),
+			AuthMode:       getEnv("KAD_AUTH_MODE", "none"),
+			UsernameFormat: getEnv("KAD_USERNAME_FORMAT", "oidc:{sub}"), // prefer sub over email
 			OIDC: OIDCConfig{
 				Issuer:       getEnv("KAD_OIDC_ISSUER", ""),
 				ClientID:     getEnv("KAD_OIDC_CLIENT_ID", ""),
@@ -148,6 +182,21 @@ func loadWithDefaults(configPath string) (*Config, error) {
 				Enabled:  getEnvBool("KAD_TLS_ENABLED", false),
 				CertFile: getEnv("KAD_TLS_CERT_FILE", ""),
 				KeyFile:  getEnv("KAD_TLS_KEY_FILE", ""),
+			},
+		},
+		Authz: AuthzConfig{
+			Mode:                  getEnv("KAD_AUTHZ_MODE", "idp_groups"),                       // idp_groups | user_bindings
+			GroupsPrefixAllowlist: getEnvStringSlice("KAD_GROUPS_PREFIX_ALLOWLIST", []string{}), // e.g. ["kaptn-","oncall-"]
+			DefaultGroups:         getEnvStringSlice("KAD_DEFAULT_GROUPS", []string{}),          // e.g. ["kaptn-viewers"] or empty for deny
+		},
+		Bindings: BindingsConfig{
+			Source: getEnv("KAD_BINDINGS_SOURCE", "configmap"), // configmap | sqlite
+			ConfigMap: ConfigMapBinding{
+				Namespace: getEnv("KAD_BINDINGS_CONFIGMAP_NAMESPACE", "kaptn"),
+				Name:      getEnv("KAD_BINDINGS_CONFIGMAP_NAME", "kaptn-authz"),
+			},
+			SQLite: SQLiteBinding{
+				DSN: getEnv("KAD_BINDINGS_SQLITE_DSN", "file:/data/kaptn.db?_fk=1"),
 			},
 		},
 		Kubernetes: KubernetesConfig{
@@ -274,8 +323,17 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	if envValue := os.Getenv("KAD_BASE_PATH"); envValue != "" {
 		result.Server.BasePath = envValue
 	}
+	if envValue := os.Getenv("KAD_COOKIE_SECRET"); envValue != "" {
+		result.Server.CookieSecret = envValue
+	}
+	if envValue := os.Getenv("KAD_SESSION_TTL"); envValue != "" {
+		result.Server.SessionTTL = envValue
+	}
 	if envValue := os.Getenv("KAD_AUTH_MODE"); envValue != "" {
 		result.Security.AuthMode = envValue
+	}
+	if envValue := os.Getenv("KAD_USERNAME_FORMAT"); envValue != "" {
+		result.Security.UsernameFormat = envValue
 	}
 	if envValue := os.Getenv("KAD_KUBE_MODE"); envValue != "" {
 		result.Kubernetes.Mode = envValue
@@ -356,6 +414,47 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 		result.Security.OIDC.Scopes = scopes
 	}
 
+	// Handle Authz configuration
+	if envValue := os.Getenv("KAD_AUTHZ_MODE"); envValue != "" {
+		result.Authz.Mode = envValue
+	}
+	if envValue := os.Getenv("KAD_GROUPS_PREFIX_ALLOWLIST"); envValue != "" {
+		parts := strings.Split(envValue, ",")
+		var prefixes []string
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				prefixes = append(prefixes, trimmed)
+			}
+		}
+		result.Authz.GroupsPrefixAllowlist = prefixes
+	}
+	if envValue := os.Getenv("KAD_DEFAULT_GROUPS"); envValue != "" {
+		parts := strings.Split(envValue, ",")
+		var groups []string
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				groups = append(groups, trimmed)
+			}
+		}
+		result.Authz.DefaultGroups = groups
+	}
+
+	// Handle Bindings configuration
+	if envValue := os.Getenv("KAD_BINDINGS_SOURCE"); envValue != "" {
+		result.Bindings.Source = envValue
+	}
+	if envValue := os.Getenv("KAD_BINDINGS_CONFIGMAP_NAMESPACE"); envValue != "" {
+		result.Bindings.ConfigMap.Namespace = envValue
+	}
+	if envValue := os.Getenv("KAD_BINDINGS_CONFIGMAP_NAME"); envValue != "" {
+		result.Bindings.ConfigMap.Name = envValue
+	}
+	if envValue := os.Getenv("KAD_BINDINGS_SQLITE_DSN"); envValue != "" {
+		result.Bindings.SQLite.DSN = envValue
+	}
+
 	return &result
 }
 
@@ -364,11 +463,29 @@ func (c *Config) Validate() error {
 	if c.Server.Addr == "" {
 		return fmt.Errorf("server address cannot be empty")
 	}
+
+	// Validate session configuration for OIDC auth
+	if c.Security.AuthMode == "oidc" {
+		if c.Server.CookieSecret == "" {
+			return fmt.Errorf("cookie secret is required when auth mode is 'oidc'")
+		}
+		if len(c.Server.CookieSecret) < 32 {
+			return fmt.Errorf("cookie secret must be at least 32 characters long")
+		}
+	}
+
 	if c.Kubernetes.Mode != "incluster" && c.Kubernetes.Mode != "kubeconfig" {
 		return fmt.Errorf("kubernetes mode must be 'incluster' or 'kubeconfig'")
 	}
 	if c.Security.AuthMode != "none" && c.Security.AuthMode != "header" && c.Security.AuthMode != "oidc" {
 		return fmt.Errorf("auth mode must be 'none', 'header', or 'oidc'")
+	}
+
+	// Validate username format
+	if c.Security.UsernameFormat != "" {
+		if !strings.Contains(c.Security.UsernameFormat, "{sub}") && !strings.Contains(c.Security.UsernameFormat, "{email}") {
+			return fmt.Errorf("username format must contain '{sub}' or '{email}' placeholder")
+		}
 	}
 
 	// Validate OIDC configuration if OIDC auth mode is enabled
@@ -378,6 +495,33 @@ func (c *Config) Validate() error {
 		}
 		if c.Security.OIDC.ClientID == "" {
 			return fmt.Errorf("OIDC client ID is required when auth mode is 'oidc'")
+		}
+	}
+
+	// Validate authorization configuration
+	if c.Authz.Mode != "idp_groups" && c.Authz.Mode != "user_bindings" {
+		return fmt.Errorf("authz mode must be 'idp_groups' or 'user_bindings'")
+	}
+
+	// Validate bindings configuration if using user_bindings mode
+	if c.Authz.Mode == "user_bindings" {
+		if c.Bindings.Source != "configmap" && c.Bindings.Source != "sqlite" {
+			return fmt.Errorf("bindings source must be 'configmap' or 'sqlite'")
+		}
+
+		if c.Bindings.Source == "configmap" {
+			if c.Bindings.ConfigMap.Namespace == "" {
+				return fmt.Errorf("bindings configmap namespace is required")
+			}
+			if c.Bindings.ConfigMap.Name == "" {
+				return fmt.Errorf("bindings configmap name is required")
+			}
+		}
+
+		if c.Bindings.Source == "sqlite" {
+			if c.Bindings.SQLite.DSN == "" {
+				return fmt.Errorf("bindings sqlite DSN is required")
+			}
 		}
 	}
 

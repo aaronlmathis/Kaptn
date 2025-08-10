@@ -1,0 +1,91 @@
+---
+# Kaptn namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kaptn
+---
+# ServiceAccount for Kaptn backend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kaptn-backend
+  namespace: kaptn
+---
+# ClusterRole for impersonation (minimal RBAC for Kaptn itself)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-impersonator
+rules:
+# Impersonation permissions (core requirement)
+- apiGroups: [""]
+  resources: ["users", "groups", "serviceaccounts"]
+  verbs: ["impersonate"]
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["userextras/*"]
+  verbs: ["impersonate"]
+
+# Minimal discovery reads for Kaptn itself (if needed by the app)
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["", "apps", "batch", "rbac.authorization.k8s.io", "apiextensions.k8s.io"]
+  resources: ["*"]
+  verbs: ["list", "watch"] # keep minimal
+
+# SelfSubjectAccessReview for authorization checks
+- apiGroups: ["authorization.k8s.io"]
+  resources: ["selfsubjectaccessreviews"]
+  verbs: ["create"]
+---
+# ClusterRoleBinding for Kaptn ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-impersonator-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-impersonator
+subjects:
+- kind: ServiceAccount
+  name: kaptn-backend
+  namespace: kaptn
+---
+# Example: Super Admin group binding (cluster-admin for kaptn-super-admins)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-super-admins-cluster-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: Group
+  name: kaptn-super-admins
+---
+# Example: ConfigMap for user bindings (when using user_bindings mode)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-authz
+  namespace: kaptn
+data:
+  users.yaml: |
+    # Example user to group mappings
+    # Format:
+    # - sub: "<oidc-subject-id>"  # preferred (immutable)
+    #   email: "<email>"          # fallback (can change)
+    #   groups: ["group1", "group2"]
+    
+    # Gmail example (no groups from IdP, use bindings)
+    - sub: "1134123412341234"
+      email: "user@gmail.com"
+      groups: ["kaptn-viewers"]
+      
+    # Another example
+    - sub: "9876543210987654"
+      email: "admin@company.com"
+      groups: ["kaptn-super-admins"]

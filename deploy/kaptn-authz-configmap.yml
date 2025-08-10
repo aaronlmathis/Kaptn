@@ -1,0 +1,62 @@
+---
+# Sample ConfigMap for Kaptn user authorization bindings
+# This demonstrates the user_bindings authz mode
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-authz
+  namespace: kaptn
+data:
+  # Binding by email address
+  "admin@example.com": |
+    {
+      "user_id": "admin@example.com",
+      "email": "admin@example.com",
+      "groups": ["kaptn-admins"],
+      "namespaces": []
+    }
+  
+  "developer@example.com": |
+    {
+      "user_id": "developer@example.com", 
+      "email": "developer@example.com",
+      "groups": ["kaptn-developers"],
+      "namespaces": ["development", "staging"]
+    }
+  
+  "viewer@example.com": |
+    {
+      "user_id": "viewer@example.com",
+      "email": "viewer@example.com", 
+      "groups": ["kaptn-viewers"],
+      "namespaces": ["development"]
+    }
+  
+  # Binding by OIDC subject ID (Google OAuth2 example)
+  "google-oauth2|123456789": |
+    {
+      "user_id": "google-oauth2|123456789",
+      "email": "admin@company.com",
+      "groups": ["kaptn-admins"],
+      "namespaces": []
+    }
+  
+  # Example multi-group user (DevOps engineer)
+  "devops@example.com": |
+    {
+      "user_id": "devops@example.com",
+      "email": "devops@example.com",
+      "groups": ["kaptn-developers", "kaptn-admins"],
+      "namespaces": ["development", "staging", "production"]
+    }
+
+---
+# Create the kaptn namespace if it doesn't exist
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kaptn
+  labels:
+    name: kaptn
+    app.kubernetes.io/name: kaptn
+    app.kubernetes.io/component: namespace
