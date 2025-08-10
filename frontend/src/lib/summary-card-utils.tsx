@@ -125,8 +125,48 @@ export function getServiceTypeBadge(count: number, total: number, type: "Cluster
 	}
 }
 
+// Gateway-specific badges
+export function getGatewayStatusBadge(total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconRoute className="size-3" />, "No Gateways")
+
+	if (total >= 10) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Well Configured")
+	} else if (total >= 5) {
+		return createBadge("info", <IconRoute className="size-3" />, "Active")
+	} else {
+		return createBadge("warning", <IconRoute className="size-3" />, "Limited")
+	}
+}
+
+export function getGatewayServerTypeBadge(count: number, total: number, type: "HTTP" | "HTTPS" | "TCP"): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconRoute className="size-3" />, "None")
+
+	switch (type) {
+		case "HTTP":
+			if (count > 0) {
+				return createBadge("info", <IconNetwork className="size-3" />, "HTTP Traffic")
+			} else {
+				return createBadge("info", <IconNetwork className="size-3" />, "No HTTP")
+			}
+		case "HTTPS":
+			if (count > 0) {
+				return createBadge("healthy", <IconShield className="size-3" />, "Secured")
+			} else {
+				return createBadge("warning", <IconShield className="size-3" />, "Not Secured")
+			}
+		case "TCP":
+			if (count > 0) {
+				return createBadge("info", <IconRoute className="size-3" />, "TCP Direct")
+			} else {
+				return createBadge("info", <IconRoute className="size-3" />, "No TCP")
+			}
+		default:
+			return createBadge("info", <IconRoute className="size-3" />, "Unknown")
+	}
+}
+
 // Generic resource icons
-export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints" | "daemonsets" | "cronjobs" | "endpointslices" | "ingresses" | "ingressclasses" | "networkpolicies" | "loadbalancers" | "persistentvolumes" | "persistentvolumeclaims" | "storageclasses" | "volumesnapshots" | "volumesnapshotclasses" | "namespaces" | "resourcequotas"): React.ReactNode {
+export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints" | "daemonsets" | "cronjobs" | "endpointslices" | "ingresses" | "ingressclasses" | "networkpolicies" | "loadbalancers" | "persistentvolumes" | "persistentvolumeclaims" | "storageclasses" | "volumesnapshots" | "volumesnapshotclasses" | "namespaces" | "resourcequotas" | "gateways" | "virtualservices"): React.ReactNode {
 	switch (type) {
 		case "deployments":
 			return <IconCube className="size-4" />
@@ -174,6 +214,10 @@ export function getResourceIcon(type: "deployments" | "services" | "pods" | "nod
 			return <IconShield className="size-4" />
 		case "resourcequotas":
 			return <IconDatabase className="size-4" />
+		case "gateways":
+			return <IconRoute className="size-4" />
+		case "virtualservices":
+			return <IconRoute className="size-4" />
 		default:
 			return null
 	}
@@ -378,5 +422,44 @@ export function getConnectionStatusBadge(isConnected: boolean): React.ReactNode 
 		return createBadge("healthy", <IconActivity className="size-3" />, "Live")
 	} else {
 		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Disconnected")
+	}
+}
+
+// Virtual Service-specific badges
+export function getVirtualServiceStatusBadge(total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconRoute className="size-3" />, "No Virtual Services")
+
+	if (total >= 20) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Well Configured")
+	} else if (total >= 10) {
+		return createBadge("info", <IconRoute className="size-3" />, "Active Routing")
+	} else if (total >= 1) {
+		return createBadge("warning", <IconRoute className="size-3" />, "Limited Routing")
+	} else {
+		return createBadge("info", <IconRoute className="size-3" />, "No Routing")
+	}
+}
+
+export function getVirtualServiceHostsBadge(uniqueHosts: number, totalHosts: number): React.ReactNode {
+	if (totalHosts === 0) return createBadge("info", <IconNetwork className="size-3" />, "No Hosts")
+
+	if (uniqueHosts === totalHosts) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Unique Hosts")
+	} else if (uniqueHosts >= totalHosts * 0.8) {
+		return createBadge("info", <IconNetwork className="size-3" />, "Mostly Unique")
+	} else {
+		return createBadge("warning", <IconCopy className="size-3" />, "Duplicated Hosts")
+	}
+}
+
+export function getVirtualServiceGatewaysBadge(gatewayCount: number): React.ReactNode {
+	if (gatewayCount === 0) return createBadge("warning", <IconRoute className="size-3" />, "No Gateways")
+
+	if (gatewayCount >= 5) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Well Connected")
+	} else if (gatewayCount >= 2) {
+		return createBadge("info", <IconRoute className="size-3" />, "Multi-Gateway")
+	} else {
+		return createBadge("warning", <IconRoute className="size-3" />, "Single Gateway")
 	}
 }

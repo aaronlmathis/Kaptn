@@ -4,6 +4,7 @@ import * as React from "react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { NavigationProvider } from "@/contexts/navigation-context"
 import { NamespaceProvider } from "@/contexts/namespace-context"
+import { CapabilitiesProvider } from "@/contexts/capabilities-context"
 import { ShellProvider } from "@/contexts/shell-context"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -45,17 +46,19 @@ function AppContent({ children }: { children: React.ReactNode }) {
 export function SharedProviders({ children }: SharedProvidersProps) {
 	return (
 		<ThemeProvider defaultTheme="system" storageKey="k8s-dashboard-theme">
-			<NavigationProvider>
-				<NamespaceProvider>
-					<ShellProvider>
-						<AppContent>
-							{children}
-						</AppContent>
-						<Toaster />
-						<PodShellManager />
-					</ShellProvider>
-				</NamespaceProvider>
-			</NavigationProvider>
+			<CapabilitiesProvider>
+				<NavigationProvider>
+					<NamespaceProvider>
+						<ShellProvider>
+							<AppContent>
+								{children}
+							</AppContent>
+							<Toaster />
+							<PodShellManager />
+						</ShellProvider>
+					</NamespaceProvider>
+				</NavigationProvider>
+			</CapabilitiesProvider>
 		</ThemeProvider>
 	)
 }

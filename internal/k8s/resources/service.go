@@ -368,6 +368,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		// Convert map to unstructured
 		unstructuredGateway := &unstructured.Unstructured{Object: gatewayObj}
 		obj = rm.stripManagedFields(unstructuredGateway)
+	case "VirtualService":
+		// Get Istio VirtualService using dynamic client
+		virtualServiceObj, err := rm.getIstioVirtualService(ctx, namespace, name)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert map to unstructured
+		unstructuredVirtualService := &unstructured.Unstructured{Object: virtualServiceObj}
+		obj = rm.stripManagedFields(unstructuredVirtualService)
 	case "Endpoints":
 		endpoints, err := rm.kubeClient.CoreV1().Endpoints(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
@@ -886,6 +896,35 @@ func (rm *ResourceManager) getIstioGateway(ctx context.Context, namespace, name 
 	}
 
 	return gatewayObj, nil
+}
+
+// getIstioVirtualService gets an Istio VirtualService resource
+func (rm *ResourceManager) getIstioVirtualService(ctx context.Context, namespace, name string) (map[string]interface{}, error) {
+	virtualServiceGVR := schema.GroupVersionResource{
+		Group:    "networking.istio.io",
+		Version:  "v1beta1",
+		Resource: "virtualservices",
+	}
+
+	virtualService, err := rm.dynamicClient.Resource(virtualServiceGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a deep copy and add type indicator
+	virtualServiceCopy := virtualService.DeepCopy()
+	virtualServiceObj := virtualServiceCopy.Object
+	if metadata, ok := virtualServiceObj["metadata"].(map[string]interface{}); ok {
+		if annotations, ok := metadata["annotations"].(map[string]interface{}); ok {
+			annotations["kaptn.io/resource-type"] = "istio-virtualservice"
+		} else {
+			metadata["annotations"] = map[string]interface{}{
+				"kaptn.io/resource-type": "istio-virtualservice",
+			}
+		}
+	}
+
+	return virtualServiceObj, nil
 }
 
 // GetPodLogs retrieves logs for a pod

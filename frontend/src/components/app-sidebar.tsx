@@ -21,26 +21,34 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } fr
 import { Separator } from "./ui/separator";
 import { AppLogo } from "@/components/AppLogo";
 import { useNavigation } from "@/contexts/navigation-context";
+import { useCapabilities } from "@/hooks/use-capabilities";
 
-const data = {
-  user: { name: "kubernetes-admin", email: "admin@k8s.local", avatar: "/avatars/k8s-admin.jpg" },
-  navMain: [
-    { title: "Dashboard", url: "/", icon: IconDashboard },
-    {
-      title: "Workloads",
-      url: "#",
-      icon: IconCloudComputing,
-      items: [
-        { title: "Pods", url: "/pods" },
-        { title: "Deployments", url: "/deployments" },
-        { title: "ReplicaSets", url: "/replicasets" },
-        { title: "StatefulSets", url: "/statefulsets" },
-        { title: "DaemonSets", url: "/daemonsets" },
-        { title: "Jobs", url: "/jobs" },
-        { title: "CronJobs", url: "/cronjobs" },
-      ],
-    },
-    {
+export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
+  const { isMenuExpanded } = useNavigation();
+  const { capabilities } = useCapabilities();
+
+  // Build navigation data dynamically based on capabilities
+  const getNavigationData = () => {
+    const baseNavMain = [
+      { title: "Dashboard", url: "/", icon: IconDashboard },
+      {
+        title: "Workloads",
+        url: "#",
+        icon: IconCloudComputing,
+        items: [
+          { title: "Pods", url: "/pods" },
+          { title: "Deployments", url: "/deployments" },
+          { title: "ReplicaSets", url: "/replicasets" },
+          { title: "StatefulSets", url: "/statefulsets" },
+          { title: "DaemonSets", url: "/daemonsets" },
+          { title: "Jobs", url: "/jobs" },
+          { title: "CronJobs", url: "/cronjobs" },
+        ],
+      },
+    ];
+
+    // Base Services navigation
+    const servicesNav = {
       title: "Services",
       url: "/services",
       icon: IconTopologyStar,
@@ -53,79 +61,94 @@ const data = {
         { title: "Network Policies", url: "/network-policies" },
         { title: "Load Balancers", url: "/load-balancers" },
       ],
-    },
-    {
-      title: "Config & Storage",
-      url: "#",
-      icon: IconDatabase,
-      items: [
-        { title: "ConfigMaps", url: "/config-maps" },
-        { title: "Secrets", url: "/secrets" },
-        { title: "Persistent Volumes", url: "/persistent-volumes" },
-        { title: "Persistent Volume Claims", url: "/persistent-volume-claims" },
-        { title: "Storage Classes", url: "/storage-classes" },
-        { title: "Volume Snapshots", url: "/volume-snapshots" },
-        { title: "Volume Snapshot Classes", url: "/volume-snapshot-classes" },
-        { title: "CSI Drivers", url: "/csi-drivers" },
-      ],
-    },
-    {
-      title: "Cluster",
-      url: "/cluster",
-      icon: IconHexagons,
-      items: [
-        { title: "Cluster Overview", url: "/overview" },
-        { title: "Nodes", url: "/nodes" },
-        { title: "Namespaces", url: "/namespaces" },
-        { title: "Resource Quotas", url: "/resource-quotas" },
-        { title: "API Resources", url: "/api-resources" },
-        { title: "CRDs", url: "/crds" },
-        { title: "Roles & RoleBindings", url: "/roles" },
-        { title: "ClusterRoles & Bindings", url: "/cluster-roles" },
-        { title: "Events", url: "/events" },
-        { title: "Component Status", url: "/component-status" },
-        { title: "Certificates", url: "/certificates" },
-        { title: "Version & Upgrades", url: "/version-upgrades" },
-        { title: "Cluster Metrics", url: "/metrics" },
-      ],
-    },
-  ],
-  navSecondary: [
-    {
-      title: "Access Control",
-      url: "#",
-      icon: IconShield,
-      items: [
-        { title: "RBAC", url: "/rbac" },
-        { title: "Service Accounts", url: "/service-accounts" },
-        { title: "Pod Security", url: "/pod-security" },
-      ],
-    },
-    {
-      title: "Monitoring",
-      url: "#",
-      icon: IconChartBar,
-      items: [
-        { title: "Metrics", url: "/metrics" },
-        { title: "Logs", url: "/logs" },
-        { title: "Events", url: "/events" },
-      ],
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: IconSettings,
-      items: [
-        { title: "Cluster Settings", url: "/cluster-settings" },
-        { title: "User Management", url: "/user-management" },
-        { title: "API Settings", url: "/api-settings" },
-      ],
-    },
-  ],
-};
+    };
 
-export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
-  const { isMenuExpanded } = useNavigation();
+    // Add Istio items if installed and in use
+    if (capabilities?.istio?.installed && capabilities?.istio?.used) {
+      servicesNav.items.push(
+        { title: "Virtual Services", url: "/virtual-services" },
+        { title: "Gateways", url: "/gateways" }
+      );
+    }
+
+    const restNavMain = [
+      servicesNav,
+      {
+        title: "Config & Storage",
+        url: "#",
+        icon: IconDatabase,
+        items: [
+          { title: "ConfigMaps", url: "/config-maps" },
+          { title: "Secrets", url: "/secrets" },
+          { title: "Persistent Volumes", url: "/persistent-volumes" },
+          { title: "Persistent Volume Claims", url: "/persistent-volume-claims" },
+          { title: "Storage Classes", url: "/storage-classes" },
+          { title: "Volume Snapshots", url: "/volume-snapshots" },
+          { title: "Volume Snapshot Classes", url: "/volume-snapshot-classes" },
+          { title: "CSI Drivers", url: "/csi-drivers" },
+        ],
+      },
+      {
+        title: "Cluster",
+        url: "/cluster",
+        icon: IconHexagons,
+        items: [
+          { title: "Cluster Overview", url: "/overview" },
+          { title: "Nodes", url: "/nodes" },
+          { title: "Namespaces", url: "/namespaces" },
+          { title: "Resource Quotas", url: "/resource-quotas" },
+          { title: "API Resources", url: "/api-resources" },
+          { title: "CRDs", url: "/crds" },
+          { title: "Roles & RoleBindings", url: "/roles" },
+          { title: "ClusterRoles & Bindings", url: "/cluster-roles" },
+          { title: "Events", url: "/events" },
+          { title: "Component Status", url: "/component-status" },
+          { title: "Certificates", url: "/certificates" },
+          { title: "Version & Upgrades", url: "/version-upgrades" },
+          { title: "Cluster Metrics", url: "/metrics" },
+        ],
+      },
+    ];
+
+    return {
+      user: { name: "kubernetes-admin", email: "admin@k8s.local", avatar: "/avatars/k8s-admin.jpg" },
+      navMain: [...baseNavMain, ...restNavMain],
+      navSecondary: [
+        {
+          title: "Access Control",
+          url: "#",
+          icon: IconShield,
+          items: [
+            { title: "RBAC", url: "/rbac" },
+            { title: "Service Accounts", url: "/service-accounts" },
+            { title: "Pod Security", url: "/pod-security" },
+          ],
+        },
+        {
+          title: "Monitoring",
+          url: "#",
+          icon: IconChartBar,
+          items: [
+            { title: "Metrics", url: "/metrics" },
+            { title: "Logs", url: "/logs" },
+            { title: "Events", url: "/events" },
+          ],
+        },
+        {
+          title: "Settings",
+          url: "#",
+          icon: IconSettings,
+          items: [
+            { title: "Cluster Settings", url: "/cluster-settings" },
+            { title: "User Management", url: "/user-management" },
+            { title: "API Settings", url: "/api-settings" },
+          ],
+        },
+      ],
+    };
+  };
+
+  const data = getNavigationData();
   return (
     <Sidebar className="group" collapsible="icon" data-expanded={isMenuExpanded("ROOT") ? "true" : "false"} {...props}>
       <SidebarHeader>

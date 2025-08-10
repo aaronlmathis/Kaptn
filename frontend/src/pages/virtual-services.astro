@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/main.astro";
+import { VirtualServicesPageContainer } from "@/components/containers/VirtualServicesPageContainer";
+
+const title = "Virtual Services";
+---
+
+<Layout title={title}>
+	<VirtualServicesPageContainer client:load />
+</Layout>

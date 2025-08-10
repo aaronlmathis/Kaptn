@@ -56,6 +56,9 @@ type Manager struct {
 	VolumeSnapshotsInformer       cache.SharedIndexInformer
 	VolumeSnapshotClassesInformer cache.SharedIndexInformer
 
+	// Istio Resources (CRDs)
+	GatewaysInformer cache.SharedIndexInformer
+
 	// Context for cancellation
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -85,6 +88,13 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient d
 		Group:    "snapshot.storage.k8s.io",
 		Version:  "v1",
 		Resource: "volumesnapshotclasses",
+	}
+
+	// Define Istio GVRs
+	gatewayGVR := schema.GroupVersionResource{
+		Group:    "networking.istio.io",
+		Version:  "v1beta1",
+		Resource: "gateways",
 	}
 
 	manager := &Manager{
@@ -131,8 +141,13 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient d
 		manager.VolumeSnapshotsInformer = dynamicFactory.ForResource(volumeSnapshotGVR).Informer()
 		manager.VolumeSnapshotClassesInformer = dynamicFactory.ForResource(volumeSnapshotClassGVR).Informer()
 		logger.Info("Volume snapshot informers created successfully")
+
+		// Add Istio gateway informer
+		logger.Info("Creating Istio gateway informer")
+		manager.GatewaysInformer = dynamicFactory.ForResource(gatewayGVR).Informer()
+		logger.Info("Istio gateway informer created successfully")
 	} else {
-		logger.Warn("Dynamic client not available, volume snapshot informers will not be created")
+		logger.Warn("Dynamic client not available, volume snapshot and Istio gateway informers will not be created")
 	}
 
 	return manager
@@ -188,6 +203,11 @@ func (m *Manager) Start() error {
 	}
 	if m.VolumeSnapshotClassesInformer != nil {
 		cacheSyncs = append(cacheSyncs, m.VolumeSnapshotClassesInformer.HasSynced)
+	}
+
+	// Add Istio gateway informer if available
+	if m.GatewaysInformer != nil {
+		cacheSyncs = append(cacheSyncs, m.GatewaysInformer.HasSynced)
 	}
 
 	if !cache.WaitForCacheSync(m.ctx.Done(), cacheSyncs...) {
@@ -332,6 +352,17 @@ func (m *Manager) AddVolumeSnapshotClassEventHandler(handler cache.ResourceEvent
 	}
 }
 
+// AddGatewayEventHandler adds an event handler for gateway events
+func (m *Manager) AddGatewayEventHandler(handler cache.ResourceEventHandler) {
+	m.logger.Info("AddGatewayEventHandler called")
+	if m.GatewaysInformer != nil {
+		m.logger.Info("Adding gateway event handler to informer")
+		m.GatewaysInformer.AddEventHandler(handler)
+	} else {
+		m.logger.Warn("Gateways informer is nil, cannot add event handler")
+	}
+}
+
 // GetNodeLister returns a lister for nodes
 func (m *Manager) GetNodeLister() cache.Indexer {
 	return m.NodesInformer.GetIndexer()
@@ -445,4 +476,12 @@ func (m *Manager) GetVolumeSnapshotLister() cache.Indexer {
 // GetVolumeSnapshotClassLister returns a lister for volume snapshot classes
 func (m *Manager) GetVolumeSnapshotClassLister() cache.Indexer {
 	return m.VolumeSnapshotClassesInformer.GetIndexer()
+}
+
+// GetGatewayLister returns a lister for gateways
+func (m *Manager) GetGatewayLister() cache.Indexer {
+	if m.GatewaysInformer != nil {
+		return m.GatewaysInformer.GetIndexer()
+	}
+	return nil
 }

@@ -12,6 +12,7 @@ Kaptn intends to be a secure, production-ready **Kubernetes admin dashboard** th
 - **Easy deployment** - Helm chart for in-cluster deployment
 - **Multiple modes** - Container deployment or desktop app (Wails2)
 - **Observability** - Integration with prometheus, grafana, and opentelemetry tracing
+- **Istio Service Mesh** - Full support for Istio Service Mesh - VirtualService and Gateways
 
 **Current Dashboard**
 

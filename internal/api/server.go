@@ -244,6 +244,11 @@ func (s *Server) initInformers() error {
 	s.informerManager.AddVolumeSnapshotClassEventHandler(volumeSnapshotClassHandler)
 	s.logger.Info("Volume snapshot event handlers registered")
 
+	s.logger.Info("Registering Istio gateway event handler")
+	gatewayHandler := informers.NewGatewayEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddGatewayEventHandler(gatewayHandler)
+	s.logger.Info("Istio gateway event handler registered")
+
 	return nil
 }
 
@@ -468,6 +473,9 @@ func (s *Server) setupRoutes() {
 				r.Use(s.authMiddleware.RequireAuth)
 			}
 
+			// Capabilities endpoint
+			r.Get("/capabilities", s.handleGetCapabilities)
+
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)
 			r.Get("/pods", s.handleListPods)
@@ -535,6 +543,14 @@ func (s *Server) setupRoutes() {
 
 			// Analytics endpoints
 			r.Get("/analytics/visitors", s.handleGetVisitors)
+
+			// Istio endpoints
+			r.Get("/istio/virtualservices", s.handleListVirtualServices)
+			r.Get("/istio/virtualservices/{namespace}/{name}", s.handleGetVirtualService)
+			r.Get("/istio/virtualservices/{namespace}/{name}/yaml", s.handleGetVirtualServiceYAML)
+			r.Get("/istio/gateways", s.handleListGateways)
+			r.Get("/istio/gateways/{namespace}/{name}", s.handleGetGateway)
+			r.Get("/istio/gateways/{namespace}/{name}/yaml", s.handleGetGatewayYAML)
 
 			// Summary endpoints
 			r.Get("/summaries/cards", s.handleGetSummaryCards)

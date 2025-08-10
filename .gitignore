@@ -400,3 +400,4 @@ internal_docs/
 /reports/
 *.crt
 *.key
+certs/
