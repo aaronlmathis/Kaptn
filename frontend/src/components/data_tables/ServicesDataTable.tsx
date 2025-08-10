@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,13 +28,14 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +59,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -77,6 +76,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ServiceDetailDrawer } from "@/components/viewers/ServiceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { useServicesWithWebSocket } from "@/hooks/useServicesWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { serviceSchema } from "@/components/kubernetes-dashboard"
@@ -331,6 +331,8 @@ export function ServicesDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [typeFilter, setTypeFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedServiceForDetails, setSelectedServiceForDetails] = React.useState<z.infer<typeof serviceSchema> | null>(null)
 
@@ -346,8 +348,43 @@ export function ServicesDataTable() {
 		[handleViewDetails]
 	)
 
+	// Filter options for service types
+	const serviceTypes: FilterOption[] = React.useMemo(() => {
+		const types = new Set(services.map(service => service.type))
+		return Array.from(types).sort().map(type => ({
+			value: type,
+			label: type,
+			badge: getServiceTypeBadge(type)
+		}))
+	}, [services])
+
+	// Filter data based on global filter and type filter
+	const filteredData = React.useMemo(() => {
+		let filtered = services
+
+		// Apply type filter
+		if (typeFilter !== "all") {
+			filtered = filtered.filter(service => service.type === typeFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(service =>
+				service.name.toLowerCase().includes(searchTerm) ||
+				service.namespace.toLowerCase().includes(searchTerm) ||
+				service.type.toLowerCase().includes(searchTerm) ||
+				service.clusterIP.toLowerCase().includes(searchTerm) ||
+				service.externalIP.toLowerCase().includes(searchTerm) ||
+				service.ports.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [services, typeFilter, globalFilter])
+
 	const table = useReactTable({
-		data: services,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -366,6 +403,56 @@ export function ServicesDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Bulk actions for services
+	const serviceBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for services:', selectedServices.map(s => s.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Service Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedServices.map(s => s.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied service names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "restart-services",
+			label: "Restart Selected Services",
+			icon: <IconRefresh className="size-4" />,
+			action: () => {
+				const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Restart services:', selectedServices.map(s => `${s.name} in ${s.namespace}`))
+				// TODO: Implement bulk service restart
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-services",
+			label: "Delete Selected Services",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete services:', selectedServices.map(s => `${s.name} in ${s.namespace}`))
+				// TODO: Implement bulk service deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -418,59 +505,32 @@ export function ServicesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Live updates</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search services by name, namespace, type, cluster IP, external IP, or ports... (Press '/' to focus)"
+					categoryFilter={typeFilter}
+					onCategoryFilterChange={setTypeFilter}
+					categoryLabel="Filter by type"
+					categoryOptions={serviceTypes}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={serviceBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
