@@ -356,7 +356,7 @@ const createColumns = (
 								<AlertDialogFooter>
 									<AlertDialogCancel>Cancel</AlertDialogCancel>
 									<AlertDialogAction 
-										onClick={() => handleDeleteSecret(row.original)}
+										onClick={() => onDeleteSecret(row.original)}
 										className="bg-red-600 hover:bg-red-700 text-white"
 									>
 										Delete Secret
@@ -503,8 +503,8 @@ export function SecretsDataTable() {
 
 	// Create columns with the callbacks
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleEditSecret),
-		[handleViewDetails, handleEditSecret]
+		() => createColumns(handleViewDetails, handleEditSecret, handleDeleteSecret),
+		[handleViewDetails, handleEditSecret, handleDeleteSecret]
 	)
 
 	// Filter data based on global filter and type filter
@@ -560,6 +560,29 @@ export function SecretsDataTable() {
 	React.useEffect(() => {
 		setSortableIds(secrets.map((secret) => secret.id))
 	}, [secrets])
+
+	// Handle keyboard events for delete functionality
+	React.useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			// Only handle delete key if we have selected rows and no modal is open
+			if (event.key === 'Delete' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+				const selectedRows = table.getFilteredSelectedRowModel().rows
+				if (selectedRows.length > 0) {
+					event.preventDefault()
+					// Trigger the bulk delete dialog
+					const deleteButton = document.querySelector('[data-delete-trigger]') as HTMLButtonElement
+					if (deleteButton && !deleteButton.disabled) {
+						deleteButton.click()
+					}
+				}
+			}
+		}
+
+		document.addEventListener('keydown', handleKeyDown)
+		return () => {
+			document.removeEventListener('keydown', handleKeyDown)
+		}
+	}, [table])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -652,14 +675,37 @@ export function SecretsDataTable() {
 							<IconPlus className="size-4" />
 							<span className="hidden sm:inline">New Secret</span>
 						</Button>
-						<Button
-							variant="outline"
-							disabled={selectedRowsCount === 0}
-							className="gap-2 text-red-600"
-						>
-							<IconTrash className="size-4" />
-							<span className="hidden sm:inline">Delete ({selectedRowsCount})</span>
-						</Button>
+						<AlertDialog>
+							<AlertDialogTrigger asChild>
+								<Button
+									variant="outline"
+									disabled={selectedRowsCount === 0}
+									className="gap-2 text-red-600"
+									data-delete-trigger
+								>
+									<IconTrash className="size-4" />
+									<span className="hidden sm:inline">Delete ({selectedRowsCount})</span>
+								</Button>
+							</AlertDialogTrigger>
+							<AlertDialogContent>
+								<AlertDialogHeader>
+									<AlertDialogTitle>Delete {selectedRowsCount} Secret{selectedRowsCount > 1 ? 's' : ''}</AlertDialogTitle>
+									<AlertDialogDescription>
+										Are you sure you want to delete {selectedRowsCount} secret{selectedRowsCount > 1 ? 's' : ''}? 
+										This action cannot be undone and will permanently remove {selectedRowsCount > 1 ? 'these secrets' : 'this secret'} and all {selectedRowsCount > 1 ? 'their' : 'its'} data.
+									</AlertDialogDescription>
+								</AlertDialogHeader>
+								<AlertDialogFooter>
+									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogAction 
+										onClick={() => handleBulkDelete(table)}
+										className="bg-red-600 hover:bg-red-700 text-white"
+									>
+										Delete Secret{selectedRowsCount > 1 ? 's' : ''}
+									</AlertDialogAction>
+								</AlertDialogFooter>
+							</AlertDialogContent>
+						</AlertDialog>
 					</div>
 				</div>
 

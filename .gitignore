@@ -398,3 +398,5 @@ docs/
 code_review/
 internal_docs/
 /reports/
+*.crt
+*.key

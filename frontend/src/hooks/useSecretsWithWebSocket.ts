@@ -26,12 +26,21 @@ export function useSecretsWithWebSocket(enableWebSocket: boolean = true) {
 
 		// Secret-specific field transformations
 		const type = typeof wsData.type === 'string' ? wsData.type : 'Opaque';
-		const keysCount = typeof wsData.keysCount === 'number' ? wsData.keysCount : 0;
-		const dataSize = typeof wsData.dataSize === 'string' ? wsData.dataSize : '0 B';
-		const dataSizeBytes = typeof wsData.dataSizeBytes === 'number' ? wsData.dataSizeBytes : 0;
+		const keyCount = typeof wsData.keyCount === 'number' ? wsData.keyCount : 
+			typeof wsData.keysCount === 'number' ? wsData.keysCount : 0;
 		const keys = Array.isArray(wsData.keys) ? wsData.keys as string[] : [];
-		const labelsCount = typeof wsData.labelsCount === 'number' ? wsData.labelsCount : 0;
-		const annotationsCount = typeof wsData.annotationsCount === 'number' ? wsData.annotationsCount : 0;
+		
+		// Calculate estimated data size
+		const estimatedSizeBytes = keyCount * 512; // Rough estimate
+		const dataSize = estimatedSizeBytes < 1024 ? `${estimatedSizeBytes} B` :
+			estimatedSizeBytes < 1024 * 1024 ? `${(estimatedSizeBytes / 1024).toFixed(1)} KB` :
+			`${(estimatedSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+
+		// Handle labels and annotations
+		const labels = wsData.labels as Record<string, string> | null;
+		const annotations = wsData.annotations as Record<string, string> | null;
+		const labelsCount = labels ? Object.keys(labels).length : 0;
+		const annotationsCount = annotations ? Object.keys(annotations).length : 0;
 
 		// Calculate age from creation timestamp
 		const ageMs = Date.now() - new Date(creationTimestamp).getTime();
@@ -53,9 +62,9 @@ export function useSecretsWithWebSocket(enableWebSocket: boolean = true) {
 			name: name,
 			namespace: namespace,
 			type: type,
-			keysCount: keysCount,
+			keysCount: keyCount,
 			dataSize: dataSize,
-			dataSizeBytes: dataSizeBytes,
+			dataSizeBytes: estimatedSizeBytes,
 			keys: keys,
 			age: age,
 			labelsCount: labelsCount,

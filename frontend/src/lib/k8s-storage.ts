@@ -459,19 +459,19 @@ export function transformCSIDriversToUI(csiDrivers: CSIDriver[]): DashboardCSIDr
 
 // Secret interfaces based on Kubernetes API structure
 export interface Secret {
+	id: string;
 	name: string;
 	namespace: string;
 	type: string;
-	keysCount: number;
-	dataSize: string;
-	dataSizeBytes: number;
 	keys: string[];
+	keyCount: number;
 	age: string;
-	labelsCount: number;
-	annotationsCount: number;
-	creationTimestamp: string;
+	ageTimestamp: string;
 	labels: Record<string, string> | null;
 	annotations: Record<string, string> | null;
+	creationTimestamp: string;
+	resourceVersion: string;
+	uid: string;
 }
 
 export interface DashboardSecret {
@@ -595,17 +595,25 @@ export async function deleteSecret(namespace: string, name: string): Promise<voi
 // ===== SECRET TRANSFORM FUNCTIONS =====
 
 export function transformSecretsToUI(secrets: Secret[]): DashboardSecret[] {
-	return secrets.map((secret) => ({
-		id: `${secret.namespace}-${secret.name}`,
-		name: secret.name,
-		namespace: secret.namespace,
-		type: secret.type,
-		keysCount: secret.keysCount,
-		dataSize: secret.dataSize,
-		dataSizeBytes: secret.dataSizeBytes,
-		keys: secret.keys,
-		age: secret.age,
-		labelsCount: secret.labelsCount,
-		annotationsCount: secret.annotationsCount
-	}));
+	return secrets.map((secret) => {
+		// Calculate data size based on number of keys (rough estimation)
+		const estimatedSizeBytes = secret.keyCount * 512; // Rough estimate
+		const dataSize = estimatedSizeBytes < 1024 ? `${estimatedSizeBytes} B` :
+			estimatedSizeBytes < 1024 * 1024 ? `${(estimatedSizeBytes / 1024).toFixed(1)} KB` :
+			`${(estimatedSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+
+		return {
+			id: `${secret.namespace}-${secret.name}`,
+			name: secret.name,
+			namespace: secret.namespace,
+			type: secret.type,
+			keysCount: secret.keyCount,
+			dataSize: dataSize,
+			dataSizeBytes: estimatedSizeBytes,
+			keys: secret.keys,
+			age: secret.age,
+			labelsCount: secret.labels ? Object.keys(secret.labels).length : 0,
+			annotationsCount: secret.annotations ? Object.keys(secret.annotations).length : 0
+		};
+	});
 }

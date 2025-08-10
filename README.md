@@ -15,18 +15,33 @@ Kaptn intends to be a secure, production-ready **Kubernetes admin dashboard** th
 
 **Current Dashboard**
 
+Features live updates via kubernetes informer + websockets.
+
 ![Kubernetes Admin Dashboard Screenshot](images/kaptn_demo_1024.gif)
 
 **Edit YAML / Pod Details**
+
+Quick / Detailed views for all resources including ability to quick-edit YAML and perform actions.
 
 ![Kubernetes Admin - Edit YAML / Pod Details](images/kaptn_edit_yaml.png)
 
 **Cloud Shell Exec**
 
+
+Secure cloudshell to connect to containers/pods via bash or sh.
+
 ![Kubernetes Admin - Cloud Shell Exec](images/Kaptain_Shell_Exec.png)
 
 **Resource Page (Services)**
+
+
 ![Resource Page - Services](images/kaptn-dash-services.png)
+
+**Secrets**
+
+Manage/Add/Edit secrets securely (RBAC Enforced access) with the secrets page.
+
+![Secrets Page](images/Kaptn_Secrets_Page.gif)
 
 ---
 
