@@ -1,0 +1,35 @@
+---
+# ServiceAccount and RBAC for Kaptn Backend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kaptn-backend
+  namespace: kaptn
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-backend-admin
+rules:
+  # Full cluster-admin rights
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+
+  # Full impersonation rights
+  - apiGroups: [""]
+    resources: ["users", "groups", "serviceaccounts"]
+    verbs: ["impersonate"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-backend-admin-binding
+subjects:
+  - kind: ServiceAccount
+    name: kaptn-backend
+    namespace: kaptn
+roleRef:
+  kind: ClusterRole
+  name: kaptn-backend-admin
+  apiGroup: rbac.authorization.k8s.io

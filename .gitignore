@@ -401,3 +401,4 @@ internal_docs/
 *.crt
 *.key
 certs/
+*.bak
