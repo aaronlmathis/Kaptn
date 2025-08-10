@@ -200,6 +200,9 @@ func (s *Server) initInformers() error {
 	configMapHandler := informers.NewConfigMapEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddConfigMapEventHandler(configMapHandler)
 
+	secretHandler := informers.NewSecretEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddSecretEventHandler(secretHandler)
+
 	endpointHandler := informers.NewEndpointEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddEndpointEventHandler(endpointHandler)
 
@@ -503,6 +506,11 @@ func (s *Server) setupRoutes() {
 			r.Get("/endpoint-slices/{namespace}/{name}", s.handleGetEndpointSlice)
 			r.Get("/config-maps", s.handleListConfigMaps)
 			r.Get("/config-maps/{namespace}/{name}", s.handleGetConfigMap)
+			r.Get("/secrets", s.handleListSecrets)
+			r.Get("/secrets/types", s.handleListSecretTypes)
+			r.Get("/secrets/{namespace}/{name}", s.handleGetSecret)
+			r.Get("/secrets/{namespace}/{name}/data/{key}", s.handleGetSecretData)
+			r.Get("/secrets/{namespace}/{name}/usage", s.handleGetSecretUsageExamples)
 			r.Get("/network-policies", s.handleListNetworkPolicies)
 			r.Get("/network-policies/{namespace}/{name}", s.handleGetNetworkPolicy)
 			r.Get("/persistent-volumes", s.handleListPersistentVolumes)
@@ -538,6 +546,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/stream/pods", s.handlePodsWebSocket)
 			r.Get("/stream/services", s.handleServicesWebSocket)
 			r.Get("/stream/deployments", s.handleDeploymentsWebSocket)
+			r.Get("/stream/secrets", s.handleSecretsWebSocket)
 			r.Get("/stream/overview", s.handleOverviewWebSocket)
 			r.Get("/stream/jobs/{jobId}", s.handleJobWebSocket)
 			r.Get("/stream/logs/{streamId}", s.handleLogsWebSocket)
@@ -564,6 +573,11 @@ func (s *Server) setupRoutes() {
 			r.Get("/exec/{sessionId}", s.handleExecWebSocket)
 			r.Post("/logs/stream", s.handleStartLogStream)
 			r.Delete("/logs/stream/{streamId}", s.handleStopLogStream)
+
+			// Secrets management endpoints
+			r.Post("/secrets", s.handleCreateSecret)
+			r.Put("/secrets/{namespace}/{name}", s.handleUpdateSecret)
+			r.Delete("/secrets/{namespace}/{name}", s.handleDeleteSecret)
 		})
 
 		// Apply endpoints (require write permissions with higher rate limits)

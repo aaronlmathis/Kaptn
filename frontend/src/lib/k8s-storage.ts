@@ -454,3 +454,158 @@ export function transformCSIDriversToUI(csiDrivers: CSIDriver[]): DashboardCSIDr
 		annotationsCount: csi.annotationsCount
 	}));
 }
+
+// ===== SECRET INTERFACES =====
+
+// Secret interfaces based on Kubernetes API structure
+export interface Secret {
+	name: string;
+	namespace: string;
+	type: string;
+	keysCount: number;
+	dataSize: string;
+	dataSizeBytes: number;
+	keys: string[];
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+	creationTimestamp: string;
+	labels: Record<string, string> | null;
+	annotations: Record<string, string> | null;
+}
+
+export interface DashboardSecret {
+	id: string;
+	name: string;
+	namespace: string;
+	type: string;
+	keysCount: number;
+	dataSize: string;
+	dataSizeBytes: number;
+	keys: string[];
+	age: string;
+	labelsCount: number;
+	annotationsCount: number;
+}
+
+export interface SecretData {
+	[key: string]: string;
+}
+
+export interface SecretUsage {
+	asVolume: string;
+	asEnvVar: string;
+	typeSpecific?: string;
+}
+
+export interface SecretType {
+	name: string;
+	description: string;
+	usage: string;
+}
+
+export interface SecretDetails {
+	metadata: Record<string, unknown>;
+	spec: Record<string, unknown>;
+	summary: Record<string, unknown>;
+}
+
+// ===== SECRET SERVICE METHODS =====
+
+export async function getSecrets(namespace?: string): Promise<Secret[]> {
+	try {
+		const endpoint = namespace ? `/secrets?namespace=${namespace}` : '/secrets';
+		const response = await apiClient.get<{ data: { items: Secret[] }; status: string }>(endpoint);
+		return response.data?.items || [];
+	} catch (error) {
+		console.error('Failed to fetch secrets:', error);
+		throw error;
+	}
+}
+
+export async function getSecret(namespace: string, name: string): Promise<SecretDetails> {
+	try {
+		const response = await apiClient.get<{ data: SecretDetails; status: string }>(`/secrets/${namespace}/${name}`);
+		return response.data;
+	} catch (error) {
+		console.error(`Failed to fetch secret ${namespace}/${name}:`, error);
+		throw error;
+	}
+}
+
+export async function getSecretData(namespace: string, name: string, key: string): Promise<SecretData> {
+	try {
+		const response = await apiClient.get<{ data: SecretData; status: string }>(`/secrets/${namespace}/${name}/data/${key}`);
+		return response.data;
+	} catch (error) {
+		console.error(`Failed to fetch secret data ${namespace}/${name}/${key}:`, error);
+		throw error;
+	}
+}
+
+export async function getSecretUsage(namespace: string, name: string): Promise<SecretUsage> {
+	try {
+		const response = await apiClient.get<{ data: SecretUsage; status: string }>(`/secrets/${namespace}/${name}/usage`);
+		return response.data;
+	} catch (error) {
+		console.error(`Failed to fetch secret usage ${namespace}/${name}:`, error);
+		throw error;
+	}
+}
+
+export async function getSecretTypes(): Promise<SecretType[]> {
+	try {
+		const response = await apiClient.get<{ data: { items: SecretType[] }; status: string }>('/secrets/types');
+		return response.data?.items || [];
+	} catch (error) {
+		console.error('Failed to fetch secret types:', error);
+		throw error;
+	}
+}
+
+export async function createSecret(secret: Partial<Secret>): Promise<Secret> {
+	try {
+		const response = await apiClient.post<{ data: Secret; status: string }>('/secrets', secret);
+		return response.data;
+	} catch (error) {
+		console.error('Failed to create secret:', error);
+		throw error;
+	}
+}
+
+export async function updateSecret(namespace: string, name: string, secret: Partial<Secret>): Promise<Secret> {
+	try {
+		const response = await apiClient.put<{ data: Secret; status: string }>(`/secrets/${namespace}/${name}`, secret);
+		return response.data;
+	} catch (error) {
+		console.error(`Failed to update secret ${namespace}/${name}:`, error);
+		throw error;
+	}
+}
+
+export async function deleteSecret(namespace: string, name: string): Promise<void> {
+	try {
+		await apiClient.delete(`/secrets/${namespace}/${name}`);
+	} catch (error) {
+		console.error(`Failed to delete secret ${namespace}/${name}:`, error);
+		throw error;
+	}
+}
+
+// ===== SECRET TRANSFORM FUNCTIONS =====
+
+export function transformSecretsToUI(secrets: Secret[]): DashboardSecret[] {
+	return secrets.map((secret) => ({
+		id: `${secret.namespace}-${secret.name}`,
+		name: secret.name,
+		namespace: secret.namespace,
+		type: secret.type,
+		keysCount: secret.keysCount,
+		dataSize: secret.dataSize,
+		dataSizeBytes: secret.dataSizeBytes,
+		keys: secret.keys,
+		age: secret.age,
+		labelsCount: secret.labelsCount,
+		annotationsCount: secret.annotationsCount
+	}));
+}

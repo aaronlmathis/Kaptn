@@ -134,6 +134,19 @@ type EndpointsFilterOptions struct {
 	Search        string // Text search across name, namespace, labels
 }
 
+// SecretFilterOptions represents filtering options for secrets
+type SecretFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, type, keys, age)
+	Order         string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, labels
+	Type          string // Filter by secret type (Opaque, kubernetes.io/tls, etc.)
+}
+
 // FilterPods filters a list of pods based on the given options
 func FilterPods(pods []v1.Pod, options PodFilterOptions) ([]v1.Pod, error) {
 	var filtered []v1.Pod
@@ -1826,6 +1839,170 @@ func sortResourceQuotas(resourceQuotas []v1.ResourceQuota, sortField, order stri
 			less = resourceQuotas[i].CreationTimestamp.Time.After(resourceQuotas[j].CreationTimestamp.Time)
 		default:
 			less = resourceQuotas[i].Name < resourceQuotas[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// FilterSecrets filters a list of secrets based on the given options
+func FilterSecrets(secrets []v1.Secret, options SecretFilterOptions) ([]v1.Secret, error) {
+	var filtered []v1.Secret
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, secret := range secrets {
+		// Filter by namespace
+		if options.Namespace != "" && secret.Namespace != options.Namespace {
+			continue
+		}
+
+		// Filter by type
+		if options.Type != "" && string(secret.Type) != options.Type {
+			continue
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(secret.Labels)) {
+			continue
+		}
+
+		// Apply field selector
+		if fieldSelector != nil {
+			fields := fields.Set{
+				"metadata.name":      secret.Name,
+				"metadata.namespace": secret.Namespace,
+				"type":               string(secret.Type),
+			}
+			if !fieldSelector.Matches(fields) {
+				continue
+			}
+		}
+
+		// Apply text search
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(secret.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(secret.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in type
+			if !found && strings.Contains(strings.ToLower(string(secret.Type)), searchLower) {
+				found = true
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range secret.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			// Search in annotations
+			if !found {
+				for key, value := range secret.Annotations {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			// Search in data keys (but not values for security)
+			if !found {
+				for key := range secret.Data {
+					if strings.Contains(strings.ToLower(key), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, secret)
+	}
+
+	// Sort
+	sortSecrets(filtered, options.Sort, options.Order)
+
+	// Paginate
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []v1.Secret{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// sortSecrets sorts secrets by the specified field and order
+func sortSecrets(secrets []v1.Secret, sortField, order string) {
+	if sortField == "" {
+		sortField = "name"
+	}
+	if order == "" {
+		order = "asc"
+	}
+
+	sort.Slice(secrets, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = secrets[i].Name < secrets[j].Name
+		case "namespace":
+			less = secrets[i].Namespace < secrets[j].Namespace
+		case "type":
+			less = string(secrets[i].Type) < string(secrets[j].Type)
+		case "keys":
+			less = len(secrets[i].Data) < len(secrets[j].Data)
+		case "age":
+			less = secrets[i].CreationTimestamp.Time.After(secrets[j].CreationTimestamp.Time)
+		default:
+			less = secrets[i].Name < secrets[j].Name
 		}
 
 		if order == "desc" {

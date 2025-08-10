@@ -1085,6 +1085,73 @@ func (rm *ResourceManager) ListConfigMaps(ctx context.Context, namespace string)
 	return configMaps, nil
 }
 
+// ListSecrets retrieves secrets from the specified namespace
+func (rm *ResourceManager) ListSecrets(ctx context.Context, namespace string) ([]v1.Secret, error) {
+	var secrets []v1.Secret
+
+	if namespace != "" {
+		// Get secrets from specific namespace
+		secretList, err := rm.kubeClient.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list secrets in namespace %s: %w", namespace, err)
+		}
+		if secretList.Items == nil {
+			secrets = []v1.Secret{}
+		} else {
+			secrets = secretList.Items
+		}
+	} else {
+		// Get secrets from all namespaces
+		secretList, err := rm.kubeClient.CoreV1().Secrets("").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list secrets: %w", err)
+		}
+		if secretList.Items == nil {
+			secrets = []v1.Secret{}
+		} else {
+			secrets = secretList.Items
+		}
+	}
+
+	return secrets, nil
+}
+
+// GetSecret gets a specific secret
+func (rm *ResourceManager) GetSecret(ctx context.Context, namespace, name string) (*v1.Secret, error) {
+	secret, err := rm.kubeClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get secret %s in namespace %s: %w", name, namespace, err)
+	}
+	return secret, nil
+}
+
+// CreateSecret creates a new secret
+func (rm *ResourceManager) CreateSecret(ctx context.Context, secret *v1.Secret) (*v1.Secret, error) {
+	createdSecret, err := rm.kubeClient.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secret %s in namespace %s: %w", secret.Name, secret.Namespace, err)
+	}
+	return createdSecret, nil
+}
+
+// UpdateSecret updates an existing secret
+func (rm *ResourceManager) UpdateSecret(ctx context.Context, secret *v1.Secret) (*v1.Secret, error) {
+	updatedSecret, err := rm.kubeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update secret %s in namespace %s: %w", secret.Name, secret.Namespace, err)
+	}
+	return updatedSecret, nil
+}
+
+// DeleteSecret deletes a secret
+func (rm *ResourceManager) DeleteSecret(ctx context.Context, namespace, name string, deleteOptions metav1.DeleteOptions) error {
+	err := rm.kubeClient.CoreV1().Secrets(namespace).Delete(ctx, name, deleteOptions)
+	if err != nil {
+		return fmt.Errorf("failed to delete secret %s in namespace %s: %w", name, namespace, err)
+	}
+	return nil
+}
+
 // deleteEndpointSlice deletes an EndpointSlice resource
 func (rm *ResourceManager) deleteEndpointSlice(ctx context.Context, namespace, name string, deleteOptions metav1.DeleteOptions) error {
 	endpointSlicesGVR := schema.GroupVersionResource{
