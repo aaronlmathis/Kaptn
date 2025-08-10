@@ -26,15 +26,15 @@ export function useSecretsWithWebSocket(enableWebSocket: boolean = true) {
 
 		// Secret-specific field transformations
 		const type = typeof wsData.type === 'string' ? wsData.type : 'Opaque';
-		const keyCount = typeof wsData.keyCount === 'number' ? wsData.keyCount : 
+		const keyCount = typeof wsData.keyCount === 'number' ? wsData.keyCount :
 			typeof wsData.keysCount === 'number' ? wsData.keysCount : 0;
 		const keys = Array.isArray(wsData.keys) ? wsData.keys as string[] : [];
-		
+
 		// Calculate estimated data size
 		const estimatedSizeBytes = keyCount * 512; // Rough estimate
 		const dataSize = estimatedSizeBytes < 1024 ? `${estimatedSizeBytes} B` :
 			estimatedSizeBytes < 1024 * 1024 ? `${(estimatedSizeBytes / 1024).toFixed(1)} KB` :
-			`${(estimatedSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+				`${(estimatedSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 
 		// Handle labels and annotations
 		const labels = wsData.labels as Record<string, string> | null;
@@ -42,19 +42,21 @@ export function useSecretsWithWebSocket(enableWebSocket: boolean = true) {
 		const labelsCount = labels ? Object.keys(labels).length : 0;
 		const annotationsCount = annotations ? Object.keys(annotations).length : 0;
 
-		// Calculate age from creation timestamp
-		const ageMs = Date.now() - new Date(creationTimestamp).getTime();
-		const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-		const ageHours = Math.floor((ageMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-		const ageMinutes = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
+		// Calculate age from creation timestamp - only on client side to avoid hydration mismatch
+		let age: string = '0m';
+		if (typeof window !== 'undefined') {
+			const ageMs = Date.now() - new Date(creationTimestamp).getTime();
+			const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+			const ageHours = Math.floor((ageMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+			const ageMinutes = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
 
-		let age: string;
-		if (ageDays > 0) {
-			age = `${ageDays}d`;
-		} else if (ageHours > 0) {
-			age = `${ageHours}h`;
-		} else {
-			age = `${ageMinutes}m`;
+			if (ageDays > 0) {
+				age = `${ageDays}d`;
+			} else if (ageHours > 0) {
+				age = `${ageHours}h`;
+			} else {
+				age = `${ageMinutes}m`;
+			}
 		}
 
 		return {

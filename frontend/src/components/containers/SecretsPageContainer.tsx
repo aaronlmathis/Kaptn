@@ -30,7 +30,7 @@ function getSecretTypeBadge(type: string) {
 
 // Inner component that can access the namespace context
 function SecretsContent() {
-	const { data: secrets, loading: isLoading, error, isConnected } = useSecretsWithWebSocket(true)
+	const { data: secrets, loading: isLoading, error, isConnected, refetch } = useSecretsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 
 	// Update lastUpdated when secrets change
@@ -168,7 +168,7 @@ function SecretsContent() {
 							<span>Secret values are hidden by default for security. Click to reveal individual values.</span>
 						</div>
 					</div>
-					{lastUpdated && (
+					{lastUpdated && typeof window !== 'undefined' && (
 						<div className="text-sm text-muted-foreground">
 							Last updated: {new Date(lastUpdated).toLocaleTimeString()}
 						</div>
@@ -184,7 +184,13 @@ function SecretsContent() {
 				lastUpdated={lastUpdated}
 			/>
 
-			<SecretsDataTable />
+			<SecretsDataTable
+				secrets={secrets}
+				loading={isLoading}
+				error={error}
+				refetch={refetch}
+				isConnected={isConnected}
+			/>
 		</div>
 	)
 }

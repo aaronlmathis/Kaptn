@@ -105,6 +105,14 @@ import { type DashboardSecret, deleteSecret } from "@/lib/k8s-storage"
 import { toast } from "sonner"
 import { useNamespace } from "@/contexts/namespace-context"
 
+interface SecretsDataTableProps {
+	secrets?: DashboardSecret[]
+	loading?: boolean
+	error?: string | null
+	refetch?: () => Promise<void>
+	isConnected?: boolean
+}
+
 // Drag handle component
 function DragHandle({ id }: { id: string }) {
 	const { attributes, listeners } = useSortable({
@@ -349,13 +357,13 @@ const createColumns = (
 								<AlertDialogHeader>
 									<AlertDialogTitle>Delete Secret</AlertDialogTitle>
 									<AlertDialogDescription>
-										Are you sure you want to delete the secret "{row.original.name}" in namespace "{row.original.namespace}"? 
+										Are you sure you want to delete the secret "{row.original.name}" in namespace "{row.original.namespace}"?
 										This action cannot be undone and will permanently remove the secret and all its data.
 									</AlertDialogDescription>
 								</AlertDialogHeader>
 								<AlertDialogFooter>
 									<AlertDialogCancel>Cancel</AlertDialogCancel>
-									<AlertDialogAction 
+									<AlertDialogAction
 										onClick={() => onDeleteSecret(row.original)}
 										className="bg-red-600 hover:bg-red-700 text-white"
 									>
@@ -402,8 +410,16 @@ function DraggableRow({ row }: { row: Row<DashboardSecret> }) {
 	)
 }
 
-export function SecretsDataTable() {
-	const { data: secrets, loading, error, refetch, isConnected } = useSecretsWithWebSocket(true)
+export function SecretsDataTable(props: SecretsDataTableProps) {
+	// Use props if provided, otherwise fall back to hook
+	const hookData = useSecretsWithWebSocket(!props.secrets)
+	const { data: secrets, loading, error, refetch, isConnected } = props.secrets ? {
+		data: props.secrets,
+		loading: props.loading || false,
+		error: props.error || null,
+		refetch: props.refetch || (() => Promise.resolve()),
+		isConnected: props.isConnected || false
+	} : hookData
 	const { selectedNamespace } = useNamespace()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
@@ -467,18 +483,18 @@ export function SecretsDataTable() {
 	const handleBulkDelete = React.useCallback(async (tableInstance: any) => {
 		const selectedRows = tableInstance.getFilteredSelectedRowModel().rows
 		const secretsToDelete = selectedRows.map((row: any) => row.original)
-		
+
 		try {
 			// Delete all selected secrets
 			await Promise.all(
 				secretsToDelete.map((secret: DashboardSecret) => deleteSecret(secret.namespace, secret.name))
 			)
-			
+
 			toast.success("Secrets deleted", {
 				description: `${secretsToDelete.length} secret(s) have been deleted successfully`,
 				duration: 3000,
 			})
-			
+
 			// Clear selection and refresh data
 			setRowSelection({})
 			refetch()
@@ -691,13 +707,13 @@ export function SecretsDataTable() {
 								<AlertDialogHeader>
 									<AlertDialogTitle>Delete {selectedRowsCount} Secret{selectedRowsCount > 1 ? 's' : ''}</AlertDialogTitle>
 									<AlertDialogDescription>
-										Are you sure you want to delete {selectedRowsCount} secret{selectedRowsCount > 1 ? 's' : ''}? 
+										Are you sure you want to delete {selectedRowsCount} secret{selectedRowsCount > 1 ? 's' : ''}?
 										This action cannot be undone and will permanently remove {selectedRowsCount > 1 ? 'these secrets' : 'this secret'} and all {selectedRowsCount > 1 ? 'their' : 'its'} data.
 									</AlertDialogDescription>
 								</AlertDialogHeader>
 								<AlertDialogFooter>
 									<AlertDialogCancel>Cancel</AlertDialogCancel>
-									<AlertDialogAction 
+									<AlertDialogAction
 										onClick={() => handleBulkDelete(table)}
 										className="bg-red-600 hover:bg-red-700 text-white"
 									>

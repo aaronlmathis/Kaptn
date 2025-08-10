@@ -600,7 +600,7 @@ export function transformSecretsToUI(secrets: Secret[]): DashboardSecret[] {
 		const estimatedSizeBytes = secret.keyCount * 512; // Rough estimate
 		const dataSize = estimatedSizeBytes < 1024 ? `${estimatedSizeBytes} B` :
 			estimatedSizeBytes < 1024 * 1024 ? `${(estimatedSizeBytes / 1024).toFixed(1)} KB` :
-			`${(estimatedSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+				`${(estimatedSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 
 		return {
 			id: `${secret.namespace}-${secret.name}`,

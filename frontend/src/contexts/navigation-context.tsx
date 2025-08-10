@@ -36,16 +36,23 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 		return window.location.pathname || "/";
 	});
 
-	// Restore per-menu state from storage (no route inference yet)
-	const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => {
-		try {
-			const raw = typeof localStorage !== "undefined" ? localStorage.getItem("kaptn.sidebar.menus") : null;
-			if (raw) return JSON.parse(raw);
-		} catch { }
-		return {};
-	});
-
+	// Restore per-menu state from storage ONLY after hydration
+	const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
 	const [isHydrated, setIsHydrated] = useState(false);
+
+	// Load saved menu state after hydration to prevent SSR mismatch
+	useEffect(() => {
+		if (typeof window !== "undefined") {
+			try {
+				const raw = localStorage.getItem("kaptn.sidebar.menus");
+				if (raw) {
+					setExpandedMenus(JSON.parse(raw));
+				}
+			} catch {
+				// Ignore localStorage errors
+			}
+		}
+	}, []);
 
 	// Simple breadcrumbs (trim as you like)
 	const breadcrumbsMap: Record<string, BreadcrumbItem[]> = useMemo(

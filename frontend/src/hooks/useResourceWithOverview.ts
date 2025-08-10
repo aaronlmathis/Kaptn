@@ -1,28 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOverviewWebSocket, type OverviewWebSocketEvent } from './useOverviewWebSocket';
-import { useNamespace } from '@/contexts/namespace-context';
 
 export interface UseResourceWithOverviewOptions<T> {
 	/**
 	 * Function to fetch initial data via API
 	 */
 	fetchData: () => Promise<T[]>;
-	
+
 	/**
 	 * Function to transform WebSocket data to match the expected type
 	 */
 	transformWebSocketData?: (wsData: any) => T;
-	
+
 	/**
 	 * Function to determine if two items are the same (for updates)
 	 */
 	getItemKey: (item: T) => string;
-	
+
 	/**
 	 * Dependencies for the fetchData function
 	 */
 	fetchDependencies?: any[];
-	
+
 	/**
 	 * Whether to enable debug logging
 	 */
@@ -52,12 +51,12 @@ export function useResourceWithOverview<T>(
 		fetchDependencies = [],
 		debug = false
 	} = options;
-	
+
 	const [data, setData] = useState<T[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const dataRef = useRef<T[]>([]);
-	
+
 	const { isConnected, subscribe } = useOverviewWebSocket({ debug });
 
 	const log = useCallback((message: string, ...args: any[]) => {
@@ -72,10 +71,10 @@ export function useResourceWithOverview<T>(
 			setLoading(true);
 			setError(null);
 			log('Fetching initial data via API...');
-			
+
 			const result = await fetchData();
 			log('API data fetched:', result.length, 'items');
-			
+
 			setData(result);
 			dataRef.current = result;
 		} catch (err) {
@@ -85,22 +84,20 @@ export function useResourceWithOverview<T>(
 		} finally {
 			setLoading(false);
 		}
-	}, [fetchData, resource, log]);
-
-	// Handle overview WebSocket events
+	}, [fetchData, resource, log]);	// Handle overview WebSocket events
 	const handleOverviewEvent = useCallback((event: OverviewWebSocketEvent) => {
 		log('Overview event received:', event);
-		
+
 		// Only handle events for our resource type
 		if (event.resource !== resource) {
 			return;
 		}
-		
+
 		if (event.action === 'added') {
 			log('Adding new item:', event.data.name);
 			const newItem = transformWebSocketData(event.data);
 			const itemKey = getItemKey(newItem);
-			
+
 			setData(prevData => {
 				// Check if item already exists (prevent duplicates)
 				const existingIndex = prevData.findIndex(item => getItemKey(item) === itemKey);
@@ -111,7 +108,7 @@ export function useResourceWithOverview<T>(
 					dataRef.current = updatedData;
 					return updatedData;
 				}
-				
+
 				const updatedData = [...prevData, newItem];
 				dataRef.current = updatedData;
 				return updatedData;
@@ -120,7 +117,7 @@ export function useResourceWithOverview<T>(
 			log('Updating existing item:', event.data.name);
 			const updatedItem = transformWebSocketData(event.data);
 			const itemKey = getItemKey(updatedItem);
-			
+
 			setData(prevData => {
 				const existingIndex = prevData.findIndex(item => getItemKey(item) === itemKey);
 				if (existingIndex !== -1) {
@@ -129,7 +126,7 @@ export function useResourceWithOverview<T>(
 					dataRef.current = updatedData;
 					return updatedData;
 				}
-				
+
 				log('Item not found for update, adding instead');
 				const updatedData = [...prevData, updatedItem];
 				dataRef.current = updatedData;
@@ -140,13 +137,13 @@ export function useResourceWithOverview<T>(
 			const deletedItem = transformWebSocketData(event.data);
 			const itemKey = getItemKey(deletedItem);
 			log('Delete item key:', itemKey);
-			
+
 			setData(prevData => {
 				// If the delete key contains undefined namespace, try to find by name only
 				if (itemKey.includes('undefined/')) {
 					const itemName = event.data.name;
 					log('Delete key has undefined namespace, trying to match by name:', itemName);
-					
+
 					const updatedData = prevData.filter(item => {
 						const currentKey = getItemKey(item);
 						// Extract name from the key (assuming format is "namespace/name")
@@ -157,7 +154,7 @@ export function useResourceWithOverview<T>(
 					dataRef.current = updatedData;
 					return updatedData;
 				}
-				
+
 				// Normal deletion by full key
 				const updatedData = prevData.filter(item => {
 					const currentKey = getItemKey(item);
@@ -169,12 +166,12 @@ export function useResourceWithOverview<T>(
 			});
 		}
 	}, [resource, transformWebSocketData, getItemKey, log]);
-	
+
 	// Set up overview WebSocket subscription
 	useEffect(() => {
 		log('Setting up overview WebSocket subscription');
 		const unsubscribe = subscribe(resource, handleOverviewEvent);
-		
+
 		return () => {
 			log('Cleaning up overview WebSocket subscription');
 			unsubscribe();
@@ -185,7 +182,7 @@ export function useResourceWithOverview<T>(
 	useEffect(() => {
 		refetch();
 	}, [refetch, ...fetchDependencies]); // eslint-disable-line react-hooks/exhaustive-deps
-	
+
 	return {
 		data,
 		loading,

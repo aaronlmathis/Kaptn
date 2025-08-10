@@ -134,14 +134,15 @@ export function SecretDetailDrawer({ item, open, onOpenChange }: SecretDetailDra
 					<IconShieldLock className="size-4 text-orange-600 dark:text-orange-400" />
 					<span>Secret values are hidden by default for security. Click to reveal individual values.</span>
 				</div>
-				<div className="space-y-3">
+				<div className="space-y-3 overflow-hidden">
 					{item.keys.map((key, index) => (
-						<SecretValue
-							key={index}
-							secretKey={key}
-							namespace={item.namespace}
-							secretName={item.name}
-						/>
+						<div key={index} className="min-w-0">
+							<SecretValue
+								secretKey={key}
+								namespace={item.namespace}
+								secretName={item.name}
+							/>
+						</div>
 					))}
 				</div>
 			</div>
@@ -268,7 +269,7 @@ spec:
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>
-			<DrawerContent className="flex flex-col h-full max-w-2xl">
+			<DrawerContent className="flex flex-col h-full max-w-2xl overflow-hidden">
 				{/* Header with title/description */}
 				<DrawerHeader className="flex justify-between items-start flex-shrink-0">
 					<div className="space-y-1">
@@ -283,7 +284,7 @@ spec:
 				</DrawerHeader>
 
 				{/* Tabs for different views */}
-				<div className="flex-1 min-h-0 px-6">
+				<div className="flex-1 min-h-0 px-6 overflow-hidden">
 					<Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
 						<TabsList className="grid w-full grid-cols-4">
 							<TabsTrigger value="overview">Overview</TabsTrigger>
@@ -292,7 +293,7 @@ spec:
 							<TabsTrigger value="usage">Usage</TabsTrigger>
 						</TabsList>
 
-						<div className="flex-1 min-h-0 mt-4">
+						<div className="flex-1 min-h-0 mt-4 overflow-hidden">
 							<TabsContent value="overview" className="h-full">
 								<ScrollArea className="h-full">
 									<div className="text-sm">
@@ -322,6 +323,7 @@ spec:
 								<ScrollArea className="h-full">
 									{dataTabContent}
 									<ScrollBar orientation="vertical" />
+									<ScrollBar orientation="horizontal" />
 								</ScrollArea>
 							</TabsContent>
 

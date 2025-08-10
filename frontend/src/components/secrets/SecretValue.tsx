@@ -332,7 +332,7 @@ export function SecretValue({ secretKey, namespace, secretName }: SecretValuePro
 								</div>
 							) : (
 								<div className="relative">
-									<pre className="text-xs bg-muted p-3 rounded border overflow-x-auto max-h-48 overflow-y-auto">
+									<pre className="text-xs bg-muted p-3 rounded border overflow-x-auto max-h-48 overflow-y-auto break-all whitespace-pre-wrap w-full min-w-0">
 										{displayData}
 									</pre>
 									{displayData.length > 1000 && (
