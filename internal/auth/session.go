@@ -277,6 +277,7 @@ func (sm *SessionManager) GetMinimalUserFromRequest(r *http.Request) *MinimalUse
 					ID:              claims.UserID,
 					Email:           claims.Email,
 					Name:            claims.Name,
+					Picture:         claims.Picture,
 					IsAuthenticated: true,
 				}
 			}
@@ -303,6 +304,7 @@ type MinimalUser struct {
 	ID              string `json:"id"`
 	Email           string `json:"email"`
 	Name            string `json:"name,omitempty"`
+	Picture         string `json:"picture,omitempty"`
 	IsAuthenticated bool   `json:"isAuthenticated"`
 }
 

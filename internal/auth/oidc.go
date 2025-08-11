@@ -106,6 +106,19 @@ func (c *OIDCClient) VerifyToken(ctx context.Context, tokenString string) (*User
 		return nil, fmt.Errorf("failed to extract claims: %w", err)
 	}
 
+	// Debug: Log all claims received from Google
+	c.logger.Info("Google OAuth claims received", 
+		zap.Any("all_claims", claims))
+	
+	// Specifically check for picture in ID token claims
+	if pictureRaw, exists := claims["picture"]; exists {
+		c.logger.Info("Picture field found in ID token claims", 
+			zap.Any("picture_raw", pictureRaw),
+			zap.String("picture_type", fmt.Sprintf("%T", pictureRaw)))
+	} else {
+		c.logger.Info("Picture field NOT found in ID token claims")
+	}
+
 	user := &User{
 		Claims: claims,
 	}
@@ -122,6 +135,11 @@ func (c *OIDCClient) VerifyToken(ctx context.Context, tokenString string) (*User
 	}
 	if picture, ok := claims["picture"].(string); ok {
 		user.Picture = picture
+		c.logger.Info("Picture URL extracted from claims", 
+			zap.String("picture", picture))
+	} else {
+		c.logger.Warn("No picture claim found or not a string", 
+			zap.Any("picture_claim", claims["picture"]))
 	}
 
 	// Extract groups from various possible claim names
@@ -213,6 +231,19 @@ func (c *OIDCClient) GetUserInfo(ctx context.Context, accessToken string) (*User
 		return nil, fmt.Errorf("failed to extract user info claims: %w", err)
 	}
 
+	// Debug: Log all userinfo claims
+	c.logger.Info("UserInfo endpoint claims received", 
+		zap.Any("userinfo_claims", claims))
+	
+	// Specifically check for picture in userinfo claims
+	if pictureRaw, exists := claims["picture"]; exists {
+		c.logger.Info("Picture field found in userinfo claims", 
+			zap.Any("picture_raw", pictureRaw),
+			zap.String("picture_type", fmt.Sprintf("%T", pictureRaw)))
+	} else {
+		c.logger.Info("Picture field NOT found in userinfo claims")
+	}
+
 	user := &User{
 		Claims: claims,
 	}
@@ -226,6 +257,14 @@ func (c *OIDCClient) GetUserInfo(ctx context.Context, accessToken string) (*User
 	}
 	if name, ok := claims["name"].(string); ok {
 		user.Name = name
+	}
+	if picture, ok := claims["picture"].(string); ok {
+		user.Picture = picture
+		c.logger.Info("Picture URL extracted from userinfo", 
+			zap.String("picture", picture))
+	} else {
+		c.logger.Warn("No picture in userinfo claims", 
+			zap.Any("picture_claim", claims["picture"]))
 	}
 
 	// Extract groups

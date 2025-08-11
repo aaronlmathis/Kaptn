@@ -96,14 +96,16 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 					if accessToken != "" {
 						if claims, tokenErr := tokenManager.ValidateAccessToken(accessToken); tokenErr == nil {
 							user = &User{
-								ID:     claims.UserID,
-								Email:  claims.Email,
-								Name:   claims.Name,
-								Groups: claims.Roles, // Use roles as groups
+								ID:      claims.UserID,
+								Email:   claims.Email,
+								Name:    claims.Name,
+								Picture: claims.Picture,
+								Groups:  claims.Roles, // Use roles as groups
 								Claims: map[string]interface{}{
 									"sub":         claims.UserID,
 									"email":       claims.Email,
 									"name":        claims.Name,
+									"picture":     claims.Picture,
 									"roles":       claims.Roles,
 									"perms":       claims.Perms,
 									"session_ver": claims.SessionVer,

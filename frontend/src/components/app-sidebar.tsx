@@ -22,10 +22,20 @@ import { Separator } from "./ui/separator";
 import { AppLogo } from "@/components/AppLogo";
 import { useNavigation } from "@/contexts/navigation-context";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useAuth } from "@/hooks/useAuth";
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { isMenuExpanded } = useNavigation();
   const { capabilities } = useCapabilities();
+  const { user, authMode } = useAuth();
+
+  // Debug: Log user data in sidebar
+  React.useEffect(() => {
+    if (user) {
+      console.log('🔍 User data in sidebar:', user);
+      console.log('🔍 Picture URL:', user.picture);
+    }
+  }, [user]);
 
   // Build navigation data dynamically based on capabilities
   const getNavigationData = () => {
@@ -111,7 +121,11 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     ];
 
     return {
-      user: { name: "kubernetes-admin", email: "admin@k8s.local", avatar: "/avatars/k8s-admin.jpg" },
+      user: {
+        name: user?.name || "Unknown User",
+        email: user?.email || "no-email@localhost",
+        avatar: user?.picture || "/avatars/default-user.jpg"
+      },
       navMain: [...baseNavMain, ...restNavMain],
       navSecondary: [
         {

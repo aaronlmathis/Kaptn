@@ -125,6 +125,46 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.Info("User after ID token verification", 
+		zap.String("id", user.ID),
+		zap.String("email", user.Email),
+		zap.String("name", user.Name),
+		zap.String("picture", user.Picture))
+
+	// Also fetch user info from userinfo endpoint to get additional claims like picture
+	if token.AccessToken != "" {
+		s.logger.Info("Fetching additional user info from userinfo endpoint")
+		userInfoUser, err := s.oidcClient.GetUserInfo(r.Context(), token.AccessToken)
+		if err != nil {
+			s.logger.Warn("Failed to fetch userinfo (continuing with ID token claims)", zap.Error(err))
+		} else {
+			s.logger.Info("User info from userinfo endpoint", 
+				zap.String("id", userInfoUser.ID),
+				zap.String("email", userInfoUser.Email),
+				zap.String("name", userInfoUser.Name),
+				zap.String("picture", userInfoUser.Picture))
+
+			// Merge userinfo claims into user object (userinfo takes precedence for profile data)
+			if userInfoUser.Picture != "" {
+				s.logger.Info("Updating user picture from userinfo", 
+					zap.String("old_picture", user.Picture),
+					zap.String("new_picture", userInfoUser.Picture))
+				user.Picture = userInfoUser.Picture
+			}
+			if userInfoUser.Name != "" {
+				user.Name = userInfoUser.Name
+			}
+			if userInfoUser.Email != "" {
+				user.Email = userInfoUser.Email
+			}
+			s.logger.Info("Final user profile after merging", 
+				zap.String("id", user.ID),
+				zap.String("email", user.Email),
+				zap.String("name", user.Name),
+				zap.String("picture", user.Picture))
+		}
+	}
+
 	s.logger.Info("User authenticated via OIDC",
 		zap.String("userId", user.ID),
 		zap.String("email", user.Email),
@@ -279,6 +319,15 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	
+	// Debug: Log what we're sending to frontend
+	s.logger.Info("Sending user data to frontend via /me endpoint", 
+		zap.String("id", user.ID),
+		zap.String("email", user.Email),
+		zap.String("name", user.Name),
+		zap.String("picture", user.Picture),
+		zap.String("auth_method", authMethod))
+	
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"authenticated": true,
 		"user": map[string]interface{}{

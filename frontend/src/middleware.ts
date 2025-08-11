@@ -5,6 +5,7 @@ interface User {
 	id: string;
 	email: string;
 	name?: string;
+	picture?: string;
 	roles?: string[];
 	perms?: string[];
 }
@@ -13,6 +14,7 @@ interface AccessTokenClaims {
 	sub: string;
 	email: string;
 	name?: string;
+	picture?: string;
 	roles: string[];
 	perms: string[];
 	session_ver: number;
@@ -61,6 +63,7 @@ function createUserSnapshot(claims: AccessTokenClaims): User {
 		id: claims.sub,
 		email: claims.email,
 		name: claims.name,
+		picture: claims.picture,
 		roles: claims.roles || [],
 		perms: claims.perms || [],
 	};

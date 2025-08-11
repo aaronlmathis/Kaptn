@@ -168,7 +168,7 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			},
 		},
 		Security: SecurityConfig{
-			AuthMode:       getEnv("KAD_AUTH_MODE", "none"),
+			AuthMode:       getEnv("KAD_AUTH_MODE", "oidc"),
 			UsernameFormat: getEnv("KAD_USERNAME_FORMAT", "oidc:{sub}"), // prefer sub over email
 			OIDC: OIDCConfig{
 				Issuer:       getEnv("KAD_OIDC_ISSUER", ""),

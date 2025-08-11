@@ -51,6 +51,7 @@ type AccessTokenClaims struct {
 	UserID     string   `json:"sub"`
 	Email      string   `json:"email"`
 	Name       string   `json:"name,omitempty"`
+	Picture    string   `json:"picture,omitempty"`
 	Roles      []string `json:"roles"`
 	Perms      []string `json:"perms"`
 	SessionVer int64    `json:"session_ver"`
@@ -136,6 +137,7 @@ func (tm *TokenManager) CreateAccessToken(user *User, sessionVer int64, traceID 
 		UserID:     user.ID,
 		Email:      user.Email,
 		Name:       user.Name,
+		Picture:    user.Picture,
 		Roles:      roles,
 		Perms:      perms,
 		SessionVer: sessionVer,

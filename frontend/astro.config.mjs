@@ -11,5 +11,20 @@ export default defineConfig({
   vite: {
     // @ts-ignore
     plugins: [tailwindcss()],
+    server: {
+      proxy: {
+        // Proxy API calls to backend
+        '/api': {
+          target: 'http://localhost:8080',
+          changeOrigin: true,
+        },
+        // Proxy WebSocket connections
+        '/stream': {
+          target: 'http://localhost:8080',
+          changeOrigin: true,
+          ws: true,
+        },
+      },
+    },
   },
 });

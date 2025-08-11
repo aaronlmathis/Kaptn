@@ -4,6 +4,7 @@ interface User {
 	id: string
 	email: string
 	name?: string
+	picture?: string
 	groups?: string[]
 	roles?: string[]
 	perms?: string[]
@@ -34,6 +35,7 @@ interface InjectedSession {
 	id?: string
 	email?: string
 	name?: string
+	picture?: string
 	isAuthenticated: boolean
 	authMode: 'none' | 'header' | 'oidc'
 }
@@ -145,7 +147,8 @@ export function useAuth() {
 					user: injectedSession.isAuthenticated ? {
 						id: injectedSession.id || '',
 						email: injectedSession.email || '',
-						name: injectedSession.name
+						name: injectedSession.name,
+						picture: injectedSession.picture
 					} : null,
 					error: null,
 					authMode: injectedSession.authMode,
@@ -205,16 +208,22 @@ export function useAuth() {
 				// The API returns { authenticated: true, user: {...} }
 				const user = data.user || data
 
+				// Debug: Log the raw user data from Google
+				console.log('🔍 Raw user data from backend:', user)
+
 				// Create minimal user object without sensitive claims
 				const safeUser: User = {
 					id: user.id || user.sub,
 					email: user.email,
 					name: user.name,
+					picture: user.picture,
 					// Only include basic role/permission info, not full JWT claims
 					groups: user.groups || [],
 					roles: user.roles || user.groups || [],
 					perms: user.perms || [],
 				}
+
+				console.log('🔍 Safe user object created:', safeUser)
 
 				setAuthState({
 					isAuthenticated: true,
