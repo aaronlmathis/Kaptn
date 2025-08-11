@@ -277,10 +277,9 @@ func (m *Middleware) SecureHeaders(next http.Handler) http.Handler {
 			"frame-ancestors 'none';"
 		w.Header().Set("Content-Security-Policy", csp)
 
-		// HSTS header for HTTPS
-		if r.TLS != nil {
-			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-		}
+		// HSTS header - unconditional in production for security
+		// Note: This should be behind a load balancer that terminates TLS in production
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 
 		next.ServeHTTP(w, r)
 	})

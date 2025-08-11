@@ -35,10 +35,42 @@ export class ApiClient {
 			headers.Authorization = `Bearer ${this.token}`;
 		}
 
-		const response = await fetch(url, {
+		// Always include credentials for cookie-based auth
+		const defaultOptions = {
+			credentials: 'include' as const,
 			...options,
 			headers,
-		});
+		};
+
+		// First attempt
+		let response = await fetch(url, defaultOptions);
+
+		// If 401, try to refresh and retry once
+		if (response.status === 401 && !endpoint.includes('/auth/refresh')) {
+			console.log('API request received 401, attempting token refresh...');
+			
+			try {
+				const refreshResponse = await fetch('/api/v1/auth/refresh', {
+					method: 'POST',
+					credentials: 'include',
+				});
+
+				if (refreshResponse.ok) {
+					console.log('Token refresh successful, retrying original request...');
+					// Retry original request with new tokens
+					response = await fetch(url, defaultOptions);
+				} else {
+					console.log('Token refresh failed, redirecting to login');
+					// Refresh failed - redirect to login
+					window.location.href = '/login';
+					throw new Error('Authentication session expired');
+				}
+			} catch (refreshError) {
+				console.error('Refresh attempt failed:', refreshError);
+				window.location.href = '/login';
+				throw new Error('Authentication session expired');
+			}
+		}
 
 		if (!response.ok) {
 			let errorMessage = `HTTP ${response.status}`;
@@ -67,14 +99,14 @@ export class ApiClient {
 		return this.request<T>(endpoint);
 	}
 
-	async post<T>(endpoint: string, data?: any): Promise<T> {
+	async post<T>(endpoint: string, data?: unknown): Promise<T> {
 		return this.request<T>(endpoint, {
 			method: 'POST',
 			body: data ? JSON.stringify(data) : undefined,
 		});
 	}
 
-	async put<T>(endpoint: string, data?: any): Promise<T> {
+	async put<T>(endpoint: string, data?: unknown): Promise<T> {
 		return this.request<T>(endpoint, {
 			method: 'PUT',
 			body: data ? JSON.stringify(data) : undefined,

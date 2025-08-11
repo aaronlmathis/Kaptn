@@ -475,15 +475,27 @@ func (s *Server) setupMiddleware() {
 	// Impersonation middleware (adds impersonated K8s clients to context)
 	s.router.Use(s.ImpersonationMiddleware)
 
-	// CORS middleware
+	// CORS middleware - removed wildcard, same-origin only for security
 	s.router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token")
-
+			// For same-origin deployment, we disable CORS entirely
+			// All requests should come from the same origin that serves the static files
+			
+			// Set credentials flag for cookie-based auth
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			
+			// Handle preflight OPTIONS requests
 			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
+				// Only allow same-origin requests
+				origin := r.Header.Get("Origin")
+				if origin == "" {
+					// Same-origin requests don't send Origin header
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				
+				// Reject cross-origin preflight requests
+				w.WriteHeader(http.StatusForbidden)
 				return
 			}
 
