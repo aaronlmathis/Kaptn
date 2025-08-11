@@ -121,7 +121,16 @@ export function NamespaceSwitcher() {
 						{allOptions.map((option, index) => (
 							<DropdownMenuItem
 								key={option.value}
-								onClick={() => setSelectedNamespace(option.value)}
+								onClick={() => {
+									setSelectedNamespace(option.value)
+									// Force page reload to update content with new namespace
+									if (typeof window !== 'undefined') {
+										// Small delay to ensure state is saved
+										setTimeout(() => {
+											window.location.reload()
+										}, 100)
+									}
+								}}
 								className="gap-2 p-2"
 							>
 								<div className="flex size-6 items-center justify-center rounded-md border">

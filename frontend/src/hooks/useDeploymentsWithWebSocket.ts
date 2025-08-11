@@ -9,30 +9,30 @@ import { getDeployments, transformDeploymentsToUI, type DashboardDeployment } fr
  */
 export function useDeploymentsWithWebSocket(enableWebSocket: boolean = true) {
 	const { selectedNamespace } = useNamespace();
-	
+
 	// API fetch function
 	const fetchDeployments = useCallback(async () => {
 		const namespace = selectedNamespace === 'all' ? undefined : selectedNamespace;
 		const deployments = await getDeployments(namespace);
 		return transformDeploymentsToUI(deployments);
 	}, [selectedNamespace]);
-	
+
 	// WebSocket data transformer
 	const transformWebSocketData = useCallback((wsData: any): DashboardDeployment => {
 		// The WebSocket data comes from the informer which has the structure defined in deployments.go
 		// Transform it to match the DashboardDeployment interface
-		
+
 		const ready = wsData.replicas?.ready || 0;
 		const desired = wsData.replicas?.desired || 0;
 		const available = wsData.replicas?.available || 0;
 		const updated = wsData.replicas?.updated || 0;
-		
+
 		// Calculate age from creation timestamp
 		const ageMs = Date.now() - new Date(wsData.creationTimestamp).getTime();
 		const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
 		const ageHours = Math.floor((ageMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 		const ageMinutes = Math.floor((ageMs % (1000 * 60 * 60)) / (1000 * 60));
-		
+
 		let age: string;
 		if (ageDays > 0) {
 			age = `${ageDays}d`;
@@ -41,10 +41,10 @@ export function useDeploymentsWithWebSocket(enableWebSocket: boolean = true) {
 		} else {
 			age = `${ageMinutes}m`;
 		}
-		
+
 		// Get the first image or empty string
 		const image = wsData.images && wsData.images.length > 0 ? wsData.images[0] : '';
-		
+
 		return {
 			id: `${wsData.namespace}-${wsData.name}`.hashCode(), // Simple hash for ID
 			name: wsData.name,
@@ -56,12 +56,12 @@ export function useDeploymentsWithWebSocket(enableWebSocket: boolean = true) {
 			image: image
 		};
 	}, []);
-	
+
 	// Key function for identifying unique deployments
 	const getItemKey = useCallback((deployment: DashboardDeployment) => {
 		return `${deployment.namespace}/${deployment.name}`;
 	}, []);
-	
+
 	const result = useResourceWithOverview<DashboardDeployment>('deployments', {
 		fetchData: fetchDeployments,
 		transformWebSocketData: enableWebSocket ? transformWebSocketData : undefined,
@@ -69,7 +69,7 @@ export function useDeploymentsWithWebSocket(enableWebSocket: boolean = true) {
 		fetchDependencies: [selectedNamespace],
 		debug: false // Debug disabled
 	});
-	
+
 	return result;
 }
 
@@ -80,7 +80,7 @@ declare global {
 	}
 }
 
-String.prototype.hashCode = function() {
+String.prototype.hashCode = function () {
 	let hash = 0;
 	if (this.length === 0) return hash;
 	for (let i = 0; i < this.length; i++) {

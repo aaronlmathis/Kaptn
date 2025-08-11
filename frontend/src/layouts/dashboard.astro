@@ -18,6 +18,16 @@ const { title } = Astro.props;
 		<title>{title}</title>
 		<ViewTransitions />
 
+		<!-- View transition script to trigger React updates -->
+		<script is:inline>
+			document.addEventListener("astro:page-load", () => {
+				// Force React components to update after view transitions
+				if (typeof window !== "undefined") {
+					window.dispatchEvent(new CustomEvent("astro-page-load"));
+				}
+			});
+		</script>
+
 		<!-- Prevent theme flash by setting theme immediately -->
 		<script is:inline>
 			(function () {
