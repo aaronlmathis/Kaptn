@@ -161,6 +161,7 @@ func (h *SessionInjectionHandler) injectSessionData(content string, sessionData 
 		"id":              sessionData.ID,
 		"email":           sessionData.Email,
 		"name":            sessionData.Name,
+		"picture":         sessionData.Picture,
 		"isAuthenticated": sessionData.IsAuthenticated,
 		"authMode":        h.authMode,
 	}

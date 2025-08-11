@@ -107,12 +107,12 @@ func (c *OIDCClient) VerifyToken(ctx context.Context, tokenString string) (*User
 	}
 
 	// Debug: Log all claims received from Google
-	c.logger.Info("Google OAuth claims received", 
+	c.logger.Info("Google OAuth claims received",
 		zap.Any("all_claims", claims))
-	
+
 	// Specifically check for picture in ID token claims
 	if pictureRaw, exists := claims["picture"]; exists {
-		c.logger.Info("Picture field found in ID token claims", 
+		c.logger.Info("Picture field found in ID token claims",
 			zap.Any("picture_raw", pictureRaw),
 			zap.String("picture_type", fmt.Sprintf("%T", pictureRaw)))
 	} else {
@@ -135,10 +135,10 @@ func (c *OIDCClient) VerifyToken(ctx context.Context, tokenString string) (*User
 	}
 	if picture, ok := claims["picture"].(string); ok {
 		user.Picture = picture
-		c.logger.Info("Picture URL extracted from claims", 
+		c.logger.Info("Picture URL extracted from claims",
 			zap.String("picture", picture))
 	} else {
-		c.logger.Warn("No picture claim found or not a string", 
+		c.logger.Warn("No picture claim found or not a string",
 			zap.Any("picture_claim", claims["picture"]))
 	}
 
@@ -232,12 +232,12 @@ func (c *OIDCClient) GetUserInfo(ctx context.Context, accessToken string) (*User
 	}
 
 	// Debug: Log all userinfo claims
-	c.logger.Info("UserInfo endpoint claims received", 
+	c.logger.Info("UserInfo endpoint claims received",
 		zap.Any("userinfo_claims", claims))
-	
+
 	// Specifically check for picture in userinfo claims
 	if pictureRaw, exists := claims["picture"]; exists {
-		c.logger.Info("Picture field found in userinfo claims", 
+		c.logger.Info("Picture field found in userinfo claims",
 			zap.Any("picture_raw", pictureRaw),
 			zap.String("picture_type", fmt.Sprintf("%T", pictureRaw)))
 	} else {
@@ -260,10 +260,10 @@ func (c *OIDCClient) GetUserInfo(ctx context.Context, accessToken string) (*User
 	}
 	if picture, ok := claims["picture"].(string); ok {
 		user.Picture = picture
-		c.logger.Info("Picture URL extracted from userinfo", 
+		c.logger.Info("Picture URL extracted from userinfo",
 			zap.String("picture", picture))
 	} else {
-		c.logger.Warn("No picture in userinfo claims", 
+		c.logger.Warn("No picture in userinfo claims",
 			zap.Any("picture_claim", claims["picture"]))
 	}
 
