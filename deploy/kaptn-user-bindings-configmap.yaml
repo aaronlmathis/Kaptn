@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-user-bindings
+  namespace: default
+data:
+  # User bindings in JSON format
+  # Each key should be a username, each value should be binding info
+  bindings.json: |
+    {
+      "sub:116592352082924178452": {
+        "cluster_roles": ["cluster-admin"],
+        "namespace_roles": {},
+        "groups": ["kaptn-super-admins"]
+      },
+      "email:aaron.mathis@gmail.com": {
+        "cluster_roles": ["cluster-admin"],
+        "namespace_roles": {},
+        "groups": ["kaptn-super-admins"]
+      }
+    }

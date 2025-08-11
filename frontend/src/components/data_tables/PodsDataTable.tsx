@@ -452,7 +452,7 @@ export function PodsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				<DataTableFilters
+				{/* <DataTableFilters
 					globalFilter={globalFilter}
 					onGlobalFilterChange={setGlobalFilter}
 					searchPlaceholder="Search services by name, namespace, type, cluster IP, external IP, or ports... (Press '/' to focus)"
@@ -470,13 +470,13 @@ export function PodsDataTable() {
 					isRefreshing={loading}
 				>
 					{/* Real-time updates indicator */}
-					{/* {isConnected && (
+				{/* {isConnected && (
 										<div className="flex items-center space-x-1 text-xs text-green-600">
 											<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
 											<span>Live updates</span>
 										</div>
 									)} */}
-				</DataTableFilters>
+				{/* </DataTableFilters> */}
 				{/* Table controls */}
 				<div className="flex items-center justify-between">
 					<div className="flex items-center space-x-2">
@@ -652,18 +652,20 @@ export function PodsDataTable() {
 			</div>
 
 			{/* Controlled detail drawer for full pod details */}
-			{selectedPodForDetails && (
-				<PodDetailDrawer
-					item={selectedPodForDetails}
-					open={detailDrawerOpen}
-					onOpenChange={(open) => {
-						setDetailDrawerOpen(open)
-						if (!open) {
-							setSelectedPodForDetails(null)
-						}
-					}}
-				/>
-			)}
-		</div>
+			{
+				selectedPodForDetails && (
+					<PodDetailDrawer
+						item={selectedPodForDetails}
+						open={detailDrawerOpen}
+						onOpenChange={(open) => {
+							setDetailDrawerOpen(open)
+							if (!open) {
+								setSelectedPodForDetails(null)
+							}
+						}}
+					/>
+				)
+			}
+		</div >
 	)
 }

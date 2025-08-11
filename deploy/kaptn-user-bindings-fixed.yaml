@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-user-bindings
+  namespace: default
+data:
+  # The key must match what the system looks for: user.Sub, user.Email, or user.ID
+  # Each value must be a JSON UserBinding object
+  
+  # Binding by Google OAuth2 subject ID (preferred - immutable and ConfigMap-safe)
+  "116592352082924178452": |
+    {
+      "user_id": "116592352082924178452",
+      "email": "aaron.mathis@gmail.com",
+      "groups": ["kaptn-super-admins"]
+    }
