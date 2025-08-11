@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useResourceWithOverview } from './useResourceWithOverview';
-import { useNamespace } from '@/contexts/namespace-context';
+import { useNamespaceUpdates } from '@/contexts/namespace-context';
 import { getPods, transformPodsToUI, type DashboardPod } from '@/lib/k8s-workloads';
 
 /**
@@ -8,7 +8,7 @@ import { getPods, transformPodsToUI, type DashboardPod } from '@/lib/k8s-workloa
  * Connects to the unified overview stream for real-time updates
  */
 export function usePodsWithWebSocket(enableWebSocket: boolean = true) {
-	const { selectedNamespace } = useNamespace();
+	const { selectedNamespace, updateTrigger } = useNamespaceUpdates();
 	
 	// API fetch function
 	const fetchPods = useCallback(async () => {
@@ -80,7 +80,7 @@ export function usePodsWithWebSocket(enableWebSocket: boolean = true) {
 		fetchData: fetchPods,
 		transformWebSocketData: enableWebSocket ? transformWebSocketData : undefined,
 		getItemKey,
-		fetchDependencies: [selectedNamespace],
+		fetchDependencies: [selectedNamespace, updateTrigger],
 		debug: false // Debug disabled
 	});
 	

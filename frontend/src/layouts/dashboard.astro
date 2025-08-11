@@ -1,7 +1,7 @@
 ---
 import "../styles/global.css";
-import { ThemeProvider } from "@/components/theme-provider";
 import { ViewTransitions } from "astro:transitions";
+import { DashboardLayout } from "@/components/dashboard-layout";
 
 export interface Props {
 	title: string;
@@ -56,6 +56,8 @@ const { title } = Astro.props;
 		</script>
 	</head>
 	<body>
-		<slot />
+		<DashboardLayout client:load>
+			<slot />
+		</DashboardLayout>
 	</body>
 </html>
