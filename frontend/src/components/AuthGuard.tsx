@@ -9,7 +9,7 @@ interface AuthGuardProps {
 export function AuthGuard({ children, fallback }: AuthGuardProps) {
 	const { isAuthenticated, isLoading, error, authMode } = useAuth()
 
-	// Show loading state
+	// Show loading state while checking authentication
 	if (isLoading) {
 		return (
 			<div className="flex h-screen items-center justify-center">
@@ -21,7 +21,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 		)
 	}
 
-	// Show error state
+	// Show error state if there was an authentication error
 	if (error) {
 		return (
 			<div className="flex h-screen items-center justify-center">
@@ -49,18 +49,32 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 		return <>{children}</>
 	}
 
-	// Redirect to login if not authenticated (for header/oidc auth modes)
+	// This is now primarily cosmetic - the real authentication is handled by Astro middleware
+	// The middleware should have already redirected unauthenticated users
+	// This component mainly handles loading states and provides fallback UI
+	
 	if (!isAuthenticated) {
+		// If we reach here and user is not authenticated, show fallback or redirect
+		// This should rarely happen with proper Astro middleware in place
+		console.warn('AuthGuard: User not authenticated - middleware may not be working correctly')
+		
 		if (typeof window !== 'undefined') {
-			window.location.href = '/login'
+			// Client-side redirect as fallback
+			setTimeout(() => {
+				window.location.href = '/login'
+			}, 1000)
 		}
+		
 		return fallback || (
 			<div className="flex h-screen items-center justify-center">
-				<p className="text-sm text-gray-600">Redirecting to login...</p>
+				<div className="flex flex-col items-center space-y-4">
+					<p className="text-sm text-gray-600">Redirecting to login...</p>
+					<div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></div>
+				</div>
 			</div>
 		)
 	}
 
-	// Render children if authenticated
+	// User is authenticated - render children
 	return <>{children}</>
 }

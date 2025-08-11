@@ -64,17 +64,52 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 			}
 
 		case AuthModeOIDC:
-			// Try session cookie first, then fall back to Bearer token
+			// Try access token cookie first, then session cookie (legacy), then Bearer token
 			var user *User
 			var err error
 
-			// Try to authenticate from session cookie
+			// Try to authenticate from new access token cookie
 			if m.sessionManager != nil {
-				if session, sessionErr := m.sessionManager.GetSessionFromCookie(r); sessionErr == nil {
-					user = session.ToUser()
-					m.logger.Debug("Authenticated via session cookie", zap.String("userId", user.ID))
-				} else {
-					m.logger.Debug("Session cookie authentication failed", zap.Error(sessionErr))
+				// Get token manager for new authentication
+				tokenManager := m.sessionManager.GetTokenManager()
+				if tokenManager != nil {
+					accessToken, _ := tokenManager.GetTokensFromCookies(r)
+					if accessToken != "" {
+						if claims, tokenErr := tokenManager.ValidateAccessToken(accessToken); tokenErr == nil {
+							user = &User{
+								ID:     claims.UserID,
+								Email:  claims.Email,
+								Name:   claims.Name,
+								Groups: claims.Roles, // Use roles as groups
+								Claims: map[string]interface{}{
+									"sub":         claims.UserID,
+									"email":       claims.Email,
+									"name":        claims.Name,
+									"roles":       claims.Roles,
+									"perms":       claims.Perms,
+									"session_ver": claims.SessionVer,
+									"jti":         claims.JTI,
+									"trace_id":    claims.TraceID,
+								},
+							}
+							m.logger.Debug("Authenticated via access token",
+								zap.String("userId", user.ID),
+								zap.String("jti", claims.JTI),
+								zap.String("trace_id", claims.TraceID))
+						} else {
+							m.logger.Debug("Access token authentication failed", zap.Error(tokenErr))
+						}
+					}
+				}
+				
+				// Fallback to legacy session cookie authentication
+				if user == nil {
+					if session, sessionErr := m.sessionManager.GetSessionFromCookie(r); sessionErr == nil {
+						user = session.ToUser()
+						m.logger.Debug("Authenticated via legacy session cookie", zap.String("userId", user.ID))
+					} else {
+						m.logger.Debug("Session cookie authentication failed", zap.Error(sessionErr))
+					}
 				}
 			}
 
@@ -83,7 +118,7 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 				user, err = m.authenticateFromToken(ctx, r)
 				if err != nil {
 					m.logger.Debug("Token authentication failed", zap.Error(err))
-					// Only return error if both session and token auth failed
+					// Only return error if all auth methods failed
 					m.writeUnauthorized(w, "Invalid or missing authentication")
 					return
 				}

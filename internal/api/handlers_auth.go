@@ -118,17 +118,17 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	// For now, the middleware will handle authorization resolution on subsequent requests
 	s.logger.Debug("User groups will be resolved by middleware on subsequent requests")
 
-	// Create session JWT (this will be enhanced in Phase 3)
+	// Create dual token session (enhanced for Phase 3)
 	if s.sessionManager != nil {
-		sessionToken, err := s.sessionManager.CreateSession(user)
+		accessToken, refreshToken, err := s.sessionManager.CreateDualTokenSession(user, r)
 		if err != nil {
 			s.logger.Error("Failed to create session", zap.Error(err))
 			http.Error(w, "Failed to create session", http.StatusInternalServerError)
 			return
 		}
 
-		// Set secure session cookie
-		s.sessionManager.SetSessionCookie(w, sessionToken, r.TLS != nil)
+		// Set secure session cookies
+		s.sessionManager.SetDualTokenCookies(w, accessToken, refreshToken, r.TLS != nil)
 
 		// Redirect to dashboard after successful login
 		http.Redirect(w, r, "/", http.StatusFound)
@@ -141,10 +141,56 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST requests
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.sessionManager == nil {
+		http.Error(w, "Session manager not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Attempt to refresh tokens using refresh token from cookies
+	newAccessToken, newRefreshToken, userID, err := s.sessionManager.RefreshSessionFromToken(r)
+	if err != nil {
+		s.logger.Warn("Token refresh failed", zap.Error(err))
+		
+		// Clear cookies and return 401 to force re-authentication
+		s.sessionManager.ClearSessionCookie(w)
+		http.Error(w, "Token refresh failed", http.StatusUnauthorized)
+		return
+	}
+
+	// Set new cookies
+	s.sessionManager.SetDualTokenCookies(w, newAccessToken, newRefreshToken, r.TLS != nil)
+
+	s.logger.Info("Tokens refreshed successfully",
+		zap.String("user_id", userID))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Tokens refreshed successfully",
+	})
+}
+
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	// Clear session cookie if session manager exists
+	// Get current user for session invalidation
+	user, userOk := auth.UserFromContext(r.Context())
+	
+	// Clear session cookies
 	if s.sessionManager != nil {
 		s.sessionManager.ClearSessionCookie(w)
+		
+		// Invalidate all user sessions if we have user context
+		if userOk && user != nil {
+			s.sessionManager.InvalidateUserSessions(user.ID)
+			s.logger.Info("User sessions invalidated on logout",
+				zap.String("user_id", user.ID))
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -259,5 +305,44 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleJWKS provides the JSON Web Key Set for token verification
+func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
+	if s.sessionManager == nil {
+		http.Error(w, "Session manager not available", http.StatusInternalServerError)
+		return
+	}
+
+	tokenManager := s.sessionManager.GetTokenManager()
+	if tokenManager == nil {
+		http.Error(w, "Token manager not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Get public key in PEM format
+	publicKeyPEM, err := tokenManager.GetPublicKeyPEM()
+	if err != nil {
+		s.logger.Error("Failed to get public key", zap.Error(err))
+		http.Error(w, "Failed to get public key", http.StatusInternalServerError)
+		return
+	}
+
+	// Create JWK response (simplified - in production, use proper JWK library)
+	jwk := map[string]interface{}{
+		"kty": "RSA",
+		"use": "sig",
+		"kid": tokenManager.GetKeyID(),
+		"alg": "RS256",
+		"pem": publicKeyPEM, // Include PEM for easier verification
+	}
+
+	response := map[string]interface{}{
+		"keys": []interface{}{jwk},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "public, max-age=3600") // Cache for 1 hour
 	json.NewEncoder(w).Encode(response)
 }

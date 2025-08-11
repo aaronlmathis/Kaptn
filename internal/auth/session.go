@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Session represents a user session
+// Session represents a user session (legacy - kept for backward compatibility)
 type Session struct {
 	Sub       string    `json:"sub"`
 	Email     string    `json:"email"`
@@ -23,64 +23,113 @@ type Session struct {
 }
 
 // SessionManager handles session creation and validation
+// This is the legacy session manager - new implementations should use TokenManager
 type SessionManager struct {
 	logger     *zap.Logger
 	secret     []byte
 	sessionTTL time.Duration
+	
+	// New dual-token system
+	tokenManager *TokenManager
 }
 
-// NewSessionManager creates a new session manager
+// NewSessionManager creates a new session manager with dual token support
 func NewSessionManager(logger *zap.Logger, secret string, sessionTTL time.Duration) (*SessionManager, error) {
 	if len(secret) < 32 {
 		return nil, fmt.Errorf("session secret must be at least 32 characters")
 	}
 
+	// Create token manager with short access tokens and longer refresh tokens
+	accessTokenTTL := 15 * time.Minute  // 15 minute access tokens
+	refreshTokenTTL := 7 * 24 * time.Hour  // 7 day refresh tokens
+	
+	tokenManager, err := NewTokenManager(logger, accessTokenTTL, refreshTokenTTL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token manager: %w", err)
+	}
+
 	return &SessionManager{
-		logger:     logger,
-		secret:     []byte(secret),
-		sessionTTL: sessionTTL,
+		logger:       logger,
+		secret:       []byte(secret),
+		sessionTTL:   sessionTTL,
+		tokenManager: tokenManager,
 	}, nil
 }
 
-// CreateSession creates a new session JWT from user information
+// CreateSession creates a new session using the dual token system
 func (sm *SessionManager) CreateSession(user *User) (string, error) {
-	now := time.Now()
-	session := Session{
-		Sub:       user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		Groups:    user.Groups,
-		IssuedAt:  now,
-		ExpiresAt: now.Add(sm.sessionTTL),
-	}
-
-	// Create JWT token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub":        session.Sub,
-		"email":      session.Email,
-		"name":       session.Name,
-		"groups":     session.Groups,
-		"iat":        session.IssuedAt.Unix(),
-		"exp":        session.ExpiresAt.Unix(),
-		"session_id": generateSessionID(),
-	})
-
-	tokenString, err := token.SignedString(sm.secret)
+	// This method now creates both access and refresh tokens
+	// For backward compatibility, we return the access token
+	
+	traceID := generateTraceID()
+	
+	// Get current session version
+	sessionVer := sm.tokenManager.GetSessionVersion(user.ID)
+	
+	// Create access token
+	accessToken, err := sm.tokenManager.CreateAccessToken(user, sessionVer, traceID)
 	if err != nil {
-		return "", fmt.Errorf("failed to sign session token: %w", err)
+		return "", fmt.Errorf("failed to create access token: %w", err)
 	}
-
-	sm.logger.Debug("Created session",
-		zap.String("sub", session.Sub),
-		zap.String("email", session.Email),
-		zap.Strings("groups", session.Groups),
-		zap.Time("expires_at", session.ExpiresAt))
-
-	return tokenString, nil
+	
+	sm.logger.Debug("Created legacy session",
+		zap.String("user_id", user.ID),
+		zap.String("trace_id", traceID),
+		zap.Int64("session_ver", sessionVer))
+	
+	return accessToken, nil
 }
 
-// ValidateSession validates and extracts session from JWT token
+// CreateDualTokenSession creates both access and refresh tokens for modern auth flow
+func (sm *SessionManager) CreateDualTokenSession(user *User, r *http.Request) (accessToken, refreshToken string, err error) {
+	traceID := generateTraceID()
+	clientHash := sm.tokenManager.GenerateClientHash(r)
+	
+	// Get current session version
+	sessionVer := sm.tokenManager.GetSessionVersion(user.ID)
+	
+	// Create access token
+	accessToken, err = sm.tokenManager.CreateAccessToken(user, sessionVer, traceID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create access token: %w", err)
+	}
+	
+	// Create refresh token
+	refreshToken, _, err = sm.tokenManager.CreateRefreshToken(user, clientHash, "")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create refresh token: %w", err)
+	}
+	
+	sm.logger.Info("Created dual token session",
+		zap.String("user_id", user.ID),
+		zap.String("trace_id", traceID),
+		zap.Int64("session_ver", sessionVer))
+	
+	return accessToken, refreshToken, nil
+}
+
+// ValidateSession validates and extracts session from JWT token using new token manager
 func (sm *SessionManager) ValidateSession(tokenString string) (*Session, error) {
+	// Try new token manager first
+	claims, err := sm.tokenManager.ValidateAccessToken(tokenString)
+	if err == nil {
+		// Convert access token claims to legacy session format
+		return &Session{
+			Sub:       claims.UserID,
+			Email:     claims.Email,
+			Name:      claims.Name,
+			Groups:    claims.Roles, // Use roles as groups for backward compatibility
+			IssuedAt:  claims.IssuedAt.Time,
+			ExpiresAt: claims.ExpiresAt.Time,
+		}, nil
+	}
+	
+	// Fallback to legacy HMAC validation for existing sessions
+	return sm.validateLegacySession(tokenString)
+}
+
+// validateLegacySession validates legacy HMAC-signed sessions
+func (sm *SessionManager) validateLegacySession(tokenString string) (*Session, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// Verify signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -145,44 +194,123 @@ func (sm *SessionManager) ValidateSession(tokenString string) (*Session, error) 
 	return session, nil
 }
 
-// SetSessionCookie sets the session cookie on the response
+// SetSessionCookie sets the access token cookie (updated for dual token system)
 func (sm *SessionManager) SetSessionCookie(w http.ResponseWriter, tokenString string, secure bool) {
-	cookie := &http.Cookie{
-		Name:     "kaptn-session",
-		Value:    tokenString,
-		HttpOnly: true,
-		Secure:   secure, // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-		MaxAge:   int(sm.sessionTTL.Seconds()),
-	}
-
-	http.SetCookie(w, cookie)
+	// This method now sets the access token cookie
+	sm.tokenManager.SetAccessTokenCookie(w, tokenString, secure)
 }
 
-// ClearSessionCookie clears the session cookie
+// SetDualTokenCookies sets both access and refresh token cookies
+func (sm *SessionManager) SetDualTokenCookies(w http.ResponseWriter, accessToken, refreshToken string, secure bool) {
+	sm.tokenManager.SetAccessTokenCookie(w, accessToken, secure)
+	sm.tokenManager.SetRefreshTokenCookie(w, refreshToken, secure)
+}
+
+// ClearSessionCookie clears the session cookie (updated for dual token system)
 func (sm *SessionManager) ClearSessionCookie(w http.ResponseWriter) {
-	cookie := &http.Cookie{
-		Name:     "kaptn-session",
-		Value:    "",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-		MaxAge:   -1, // Delete immediately
-	}
-
-	http.SetCookie(w, cookie)
+	// Clear both tokens
+	sm.tokenManager.ClearAuthCookies(w)
 }
 
-// GetSessionFromCookie extracts session from request cookie
+// GetSessionFromCookie extracts session from request cookie (updated for dual token system)
 func (sm *SessionManager) GetSessionFromCookie(r *http.Request) (*Session, error) {
+	// Try new access token cookie first
+	accessToken, _ := sm.tokenManager.GetTokensFromCookies(r)
+	if accessToken != "" {
+		return sm.ValidateSession(accessToken)
+	}
+	
+	// Fallback to legacy session cookie
 	cookie, err := r.Cookie("kaptn-session")
 	if err != nil {
 		return nil, fmt.Errorf("no session cookie found")
 	}
 
 	return sm.ValidateSession(cookie.Value)
+}
+
+// RefreshSession refreshes tokens using the refresh token
+func (sm *SessionManager) RefreshSession(r *http.Request, user *User) (accessToken, refreshToken string, err error) {
+	_, refreshTokenString := sm.tokenManager.GetTokensFromCookies(r)
+	if refreshTokenString == "" {
+		return "", "", fmt.Errorf("no refresh token found")
+	}
+	
+	clientHash := sm.tokenManager.GenerateClientHash(r)
+	traceID := generateTraceID()
+	
+	return sm.tokenManager.RefreshTokens(refreshTokenString, clientHash, user, traceID)
+}
+
+// RefreshSessionFromToken refreshes tokens using only the refresh token (no user required)
+func (sm *SessionManager) RefreshSessionFromToken(r *http.Request) (accessToken, refreshToken, userID string, err error) {
+	_, refreshTokenString := sm.tokenManager.GetTokensFromCookies(r)
+	if refreshTokenString == "" {
+		return "", "", "", fmt.Errorf("no refresh token found")
+	}
+	
+	clientHash := sm.tokenManager.GenerateClientHash(r)
+	traceID := generateTraceID()
+	
+	return sm.tokenManager.RefreshTokensWithoutUser(refreshTokenString, clientHash, traceID)
+}
+
+// InvalidateUserSessions invalidates all sessions for a user
+func (sm *SessionManager) InvalidateUserSessions(userID string) {
+	sm.tokenManager.InvalidateUserSessions(userID)
+}
+
+// GetTokenManager returns the underlying token manager for advanced operations
+func (sm *SessionManager) GetTokenManager() *TokenManager {
+	return sm.tokenManager
+}
+
+// GetMinimalUserFromRequest extracts minimal user data from request for HTML injection
+// This is used for server-side HTML injection while keeping tokens HttpOnly
+func (sm *SessionManager) GetMinimalUserFromRequest(r *http.Request) *MinimalUser {
+	// Try to get session data from access token
+	if sm.tokenManager != nil {
+		accessToken, _ := sm.tokenManager.GetTokensFromCookies(r)
+		if accessToken != "" {
+			if claims, err := sm.tokenManager.ValidateAccessToken(accessToken); err == nil {
+				return &MinimalUser{
+					ID:              claims.UserID,
+					Email:           claims.Email,
+					Name:            claims.Name,
+					IsAuthenticated: true,
+				}
+			}
+		}
+	}
+	
+	// Fallback to legacy session validation
+	if session, err := sm.GetSessionFromCookie(r); err == nil {
+		return &MinimalUser{
+			ID:              session.Sub,
+			Email:           session.Email,
+			Name:            session.Name,
+			IsAuthenticated: true,
+		}
+	}
+	
+	return &MinimalUser{
+		IsAuthenticated: false,
+	}
+}
+
+// MinimalUser represents the minimal user data for frontend injection
+type MinimalUser struct {
+	ID              string `json:"id"`
+	Email           string `json:"email"`
+	Name            string `json:"name,omitempty"`
+	IsAuthenticated bool   `json:"isAuthenticated"`
+}
+
+// Shutdown shuts down the session manager
+func (sm *SessionManager) Shutdown() {
+	if sm.tokenManager != nil {
+		sm.tokenManager.Shutdown()
+	}
 }
 
 // PKCE helper functions
@@ -243,6 +371,15 @@ func generateSessionID() string {
 		id = fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 	return id
+}
+
+// generateTraceID generates a unique trace ID for request tracking
+func generateTraceID() string {
+	id, _ := generateRandomString(8) // Ignore error, fallback to timestamp
+	if id == "" {
+		id = fmt.Sprintf("trace-%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("trace-%s", id)
 }
 
 // Session storage for PKCE state (in-memory for now, can be Redis later)

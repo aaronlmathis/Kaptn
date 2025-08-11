@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 
 interface User {
-	sub: string
+	id: string
 	email: string
 	name?: string
 	groups?: string[]
+	roles?: string[]
+	perms?: string[]
 }
 
 interface AuthConfig {
@@ -21,6 +23,68 @@ interface AuthState {
 	authMode: 'none' | 'header' | 'oidc' | null
 }
 
+interface FetchOptions {
+	method?: string
+	headers?: Record<string, string>
+	body?: string
+	credentials?: 'include' | 'omit' | 'same-origin'
+}
+
+interface InjectedSession {
+	id?: string
+	email?: string
+	name?: string
+	isAuthenticated: boolean
+	authMode: 'none' | 'header' | 'oidc'
+}
+
+// Helper function to get injected session data
+function getInjectedSession(): InjectedSession | null {
+	if (typeof window === 'undefined') return null
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	return (window as any).__KAPTN_SESSION__ || null
+}
+
+// Enhanced fetch with automatic retry on 401
+async function fetchWithAuth(url: string, options: FetchOptions = {}): Promise<Response> {
+	const defaultOptions: FetchOptions = {
+		credentials: 'include',
+		...options,
+	}
+
+	// First attempt
+	let response = await fetch(url, defaultOptions)
+
+	// If 401, try to refresh and retry once
+	if (response.status === 401 && !url.includes('/auth/refresh')) {
+		console.log('Received 401, attempting token refresh...')
+		
+		try {
+			const refreshResponse = await fetch('/api/v1/auth/refresh', {
+				method: 'POST',
+				credentials: 'include',
+			})
+
+			if (refreshResponse.ok) {
+				console.log('Token refresh successful, retrying original request...')
+				// Retry original request with new tokens
+				response = await fetch(url, defaultOptions)
+			} else {
+				console.log('Token refresh failed, redirecting to login')
+				// Refresh failed - redirect to login
+				window.location.href = '/login'
+				throw new Error('Authentication session expired')
+			}
+		} catch (refreshError) {
+			console.error('Refresh attempt failed:', refreshError)
+			window.location.href = '/login'
+			throw new Error('Authentication session expired')
+		}
+	}
+
+	return response
+}
+
 export function useAuth() {
 	const [authState, setAuthState] = useState<AuthState>({
 		isAuthenticated: false,
@@ -31,15 +95,48 @@ export function useAuth() {
 	})
 
 	useEffect(() => {
-		checkAuthStatus()
-	}, [])
+		initializeAuth()
+	}, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+	const initializeAuth = async () => {
+		try {
+			// First, try to get session data from server-injected global
+			const injectedSession = getInjectedSession()
+			
+			if (injectedSession) {
+				// Use injected session data
+				setAuthState({
+					isAuthenticated: injectedSession.isAuthenticated,
+					isLoading: false,
+					user: injectedSession.isAuthenticated ? {
+						id: injectedSession.id || '',
+						email: injectedSession.email || '',
+						name: injectedSession.name
+					} : null,
+					error: null,
+					authMode: injectedSession.authMode,
+				})
+				return
+			}
+
+			// Fallback: fetch auth config and status (for cases where injection fails)
+			await checkAuthStatus()
+		} catch (error) {
+			console.error('Auth initialization error:', error)
+			setAuthState({
+				isAuthenticated: false,
+				isLoading: false,
+				user: null,
+				error: error instanceof Error ? error.message : 'Unknown error',
+				authMode: null,
+			})
+		}
+	}
 
 	const checkAuthStatus = async () => {
 		try {
 			// First, get the auth configuration
-			const configResponse = await fetch('/api/v1/config', {
-				credentials: 'include',
-			})
+			const configResponse = await fetchWithAuth('/api/v1/config')
 
 			if (!configResponse.ok) {
 				throw new Error(`Config fetch failed: ${configResponse.statusText}`)
@@ -54,7 +151,7 @@ export function useAuth() {
 					isAuthenticated: true,
 					isLoading: false,
 					user: {
-						sub: 'dev-user',
+						id: 'dev-user',
 						email: 'dev@localhost',
 						name: 'Development User'
 					},
@@ -65,18 +162,28 @@ export function useAuth() {
 			}
 
 			// For other auth modes, check authentication status
-			const response = await fetch('/api/v1/auth/me', {
-				credentials: 'include',
-			})
+			const response = await fetchWithAuth('/api/v1/auth/me')
 
 			if (response.ok) {
 				const data = await response.json()
 				// The API returns { authenticated: true, user: {...} }
 				const user = data.user || data
+				
+				// Create minimal user object without sensitive claims
+				const safeUser: User = {
+					id: user.id || user.sub,
+					email: user.email,
+					name: user.name,
+					// Only include basic role/permission info, not full JWT claims
+					groups: user.groups || [],
+					roles: user.roles || user.groups || [],
+					perms: user.perms || [],
+				}
+				
 				setAuthState({
 					isAuthenticated: true,
 					isLoading: false,
-					user,
+					user: safeUser,
 					error: null,
 					authMode,
 				})
@@ -121,10 +228,44 @@ export function useAuth() {
 		}
 	}
 
+	const refreshAuth = async (): Promise<boolean> => {
+		try {
+			const refreshResponse = await fetch('/api/v1/auth/refresh', {
+				method: 'POST',
+				credentials: 'include',
+			})
+
+			if (refreshResponse.ok) {
+				// Refresh successful - update auth state
+				await checkAuthStatus()
+				return true
+			} else {
+				// Refresh failed
+				setAuthState(prev => ({
+					...prev,
+					isAuthenticated: false,
+					user: null,
+				}))
+				return false
+			}
+		} catch (error) {
+			console.error('Manual refresh failed:', error)
+			setAuthState(prev => ({
+				...prev,
+				isAuthenticated: false,
+				user: null,
+			}))
+			return false
+		}
+	}
+
 	return {
 		...authState,
 		login,
 		logout,
+		refresh: refreshAuth,
 		refetch: checkAuthStatus,
+		// Export the enhanced fetch for use in other components
+		fetchWithAuth,
 	}
 }

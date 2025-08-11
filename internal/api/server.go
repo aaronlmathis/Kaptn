@@ -545,7 +545,9 @@ func (s *Server) setupRoutes() {
 		r.Post("/auth/login", s.handleLogin)
 		r.Get("/auth/callback", s.handleAuthCallback) // Changed to GET for OAuth
 		r.Post("/auth/logout", s.handleLogout)
+		r.Post("/auth/refresh", s.handleRefresh) // New refresh endpoint
 		r.Get("/auth/me", s.handleMe)
+		r.Get("/auth/jwks", s.handleJWKS) // New JWKS endpoint
 
 		// Public configuration endpoint
 		r.Get("/config", s.handlePublicConfig)
@@ -734,7 +736,8 @@ func (s *Server) setupRoutes() {
 		})
 	})
 
-	// Serve static files from frontend/dist directory
+	// Serve static files from frontend/dist directory with session injection
 	filesDir := http.Dir("./frontend/dist/")
-	s.router.Handle("/*", http.FileServer(filesDir))
+	sessionHandler := NewSessionInjectionHandler(s.logger, filesDir, s.config.Security.AuthMode, s.sessionManager)
+	s.router.Handle("/*", sessionHandler)
 }
