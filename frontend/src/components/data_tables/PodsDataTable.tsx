@@ -452,6 +452,31 @@ export function PodsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search services by name, namespace, type, cluster IP, external IP, or ports... (Press '/' to focus)"
+					categoryFilter={typeFilter}
+					onCategoryFilterChange={setTypeFilter}
+					categoryLabel="Filter by type"
+					categoryOptions={serviceTypes}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={serviceBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{/* {isConnected && (
+										<div className="flex items-center space-x-1 text-xs text-green-600">
+											<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+											<span>Live updates</span>
+										</div>
+									)} */}
+				</DataTableFilters>
 				{/* Table controls */}
 				<div className="flex items-center justify-between">
 					<div className="flex items-center space-x-2">

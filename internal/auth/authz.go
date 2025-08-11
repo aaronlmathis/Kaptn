@@ -80,42 +80,11 @@ func (a *AuthzResolver) ResolveAuthorization(ctx context.Context, userInfo *User
 	// Validate groups to ensure only known Kaptn groups
 	validGroups := a.ValidateGroups(groups)
 
-	// For user_bindings mode, also get namespaces
-	var namespaces []string
-	if a.config.Mode == "user_bindings" {
-		namespaces = a.getNamespacesFromBindings(ctx, userInfo)
-	}
-
 	return &AuthzResult{
 		Username:   username,
 		Groups:     validGroups,
-		Namespaces: namespaces,
+		Namespaces: []string{}, // TODO: Extract from user bindings in future enhancement
 	}, nil
-}
-
-// getNamespacesFromBindings extracts namespaces from user bindings
-func (a *AuthzResolver) getNamespacesFromBindings(ctx context.Context, userInfo *User) []string {
-	// Try to get the full UserBinding to extract namespaces
-	if a.bindings.Source == "configmap" {
-		// Try different lookup keys in order of preference
-		lookupKeys := []string{
-			userInfo.Sub,   // OIDC subject ID (preferred)
-			userInfo.Email, // Email address
-			userInfo.ID,    // User ID
-		}
-
-		// This is a bit of duplication with the resolver, but necessary
-		// since the GroupResolver interface doesn't include namespaces
-		for _, key := range lookupKeys {
-			if key != "" {
-				// We would need access to the binding store here
-				// For now, return empty namespaces and fix this in a future iteration
-				break
-			}
-		}
-	}
-
-	return []string{} // Empty means all namespaces
 }
 
 // formatUsername applies the configured username format

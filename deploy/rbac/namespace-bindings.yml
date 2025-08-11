@@ -1,0 +1,84 @@
+# Example: Group A can only see pods in namespace "xyz"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: group-a-pods-xyz
+  namespace: xyz  # THIS IS THE KEY - limits to this namespace only
+subjects:
+- kind: User
+  name: user1@example.com
+  apiGroup: rbac.authorization.k8s.io
+- kind: User
+  name: user2@example.com
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: kaptn-pods-viewer  # References the ClusterRole we created
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Group B can see deployments in "production" namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: group-b-deployments-production
+  namespace: production
+subjects:
+- kind: User
+  name: manager@example.com
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: kaptn-deployments-viewer
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# DevOps team can manage secrets in "staging" 
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: devops-secrets-staging
+  namespace: staging
+subjects:
+- kind: User
+  name: devops1@example.com
+  apiGroup: rbac.authorization.k8s.io
+- kind: User
+  name: devops2@example.com
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: kaptn-secrets-manager
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Multi-namespace access: user can see pods in both dev and test
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-pods-dev
+  namespace: dev
+subjects:
+- kind: User
+  name: developer@example.com
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: kaptn-pods-viewer
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-pods-test
+  namespace: test
+subjects:
+- kind: User
+  name: developer@example.com
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: kaptn-pods-viewer
+  apiGroup: rbac.authorization.k8s.io

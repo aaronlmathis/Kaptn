@@ -95,10 +95,32 @@ func (s *Server) handleGetNamespace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	namespace, err := s.kubeClient.CoreV1().Namespaces().Get(r.Context(), name, metav1.GetOptions{})
+	// Phase 7: Get security context with impersonated client
+	secCtx, err := s.getSecurityContext(r)
+	if err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, nil)
+		} else {
+			http.Error(w, "Security context error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Phase 7: Check permission to get this specific namespace
+	if err := s.checkResourcePermission(r.Context(), secCtx, "get", "namespaces", "", name); err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, secCtx.User)
+		} else {
+			http.Error(w, "Permission check failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	namespace, err := secCtx.Client.CoreV1().Namespaces().Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get namespace",
 			zap.String("name", name),
+			zap.String("user", secCtx.User.Email),
 			zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -108,6 +130,14 @@ func (s *Server) handleGetNamespace(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Log successful operation for audit
+	s.logger.Info("Namespace retrieved successfully",
+		zap.String("user", secCtx.User.Email),
+		zap.String("user_sub", secCtx.User.Sub),
+		zap.Strings("user_groups", secCtx.User.Groups),
+		zap.String("namespace", name),
+		zap.String("status", string(namespace.Status.Phase)))
 
 	// Create namespace summary
 	summary := formatNamespaceSummary(namespace)

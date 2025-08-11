@@ -65,27 +65,25 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse callback parameters
-	var callbackData struct {
-		Code  string `json:"code"`
-		State string `json:"state"`
-	}
+	// Parse callback parameters from URL query (not JSON body)
+	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
 
-	if err := json.NewDecoder(r.Body).Decode(&callbackData); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if code == "" || state == "" {
+		http.Error(w, "Missing code or state parameter", http.StatusBadRequest)
 		return
 	}
 
 	// Retrieve and validate PKCE parameters
-	pkceParams, exists := auth.GetPKCEParams(callbackData.State)
+	pkceParams, exists := auth.GetPKCEParams(state)
 	if !exists {
-		s.logger.Error("Invalid or expired state parameter", zap.String("state", callbackData.State))
+		s.logger.Error("Invalid or expired state parameter", zap.String("state", state))
 		http.Error(w, "Invalid or expired login session", http.StatusBadRequest)
 		return
 	}
 
 	// Exchange code for tokens with PKCE
-	token, err := s.oidcClient.ExchangeCodeWithPKCE(r.Context(), callbackData.Code, pkceParams.CodeVerifier)
+	token, err := s.oidcClient.ExchangeCodeWithPKCE(r.Context(), code, pkceParams.CodeVerifier)
 	if err != nil {
 		s.logger.Error("Failed to exchange code for token", zap.Error(err))
 		http.Error(w, "Failed to exchange code", http.StatusBadRequest)
@@ -132,28 +130,14 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		// Set secure session cookie
 		s.sessionManager.SetSessionCookie(w, sessionToken, r.TLS != nil)
 
-		// Return success response without sensitive tokens
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": true,
-			"user": map[string]interface{}{
-				"id":     user.ID,
-				"email":  user.Email,
-				"name":   user.Name,
-				"groups": user.Groups,
-			},
-			"message": "Authentication successful",
-		})
+		// Redirect to dashboard after successful login
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
 	} else {
 		// Fallback for Phase 2 (until sessionManager is wired up)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":      true,
-			"user":         user,
-			"access_token": token.AccessToken,
-			"id_token":     idToken,
-			"expires_at":   token.Expiry,
-		})
+		// Still redirect to dashboard
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
 	}
 }
 
@@ -192,11 +176,12 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"authenticated": true,
 		"user": map[string]interface{}{
-			"id":     user.ID,
-			"sub":    user.ID, // For debug - show the OIDC subject
-			"email":  user.Email,
-			"name":   user.Name,
-			"groups": user.Groups,
+			"id":      user.ID,
+			"sub":     user.ID, // For debug - show the OIDC subject
+			"email":   user.Email,
+			"name":    user.Name,
+			"picture": user.Picture,
+			"groups":  user.Groups,
 		},
 		"session_info": map[string]interface{}{
 			"auth_mode":           s.config.Security.AuthMode,
@@ -259,6 +244,19 @@ func (s *Server) handleAuthzPreview(w http.ResponseWriter, r *http.Request) {
 
 	if resolverError != "" {
 		response["error"] = resolverError
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// handlePublicConfig handles GET /api/v1/config - returns public configuration
+func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	response := map[string]interface{}{
+		"auth": map[string]interface{}{
+			"mode": s.config.Security.AuthMode,
+		},
 	}
 
 	json.NewEncoder(w).Encode(response)

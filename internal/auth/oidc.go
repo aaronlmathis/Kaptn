@@ -120,6 +120,9 @@ func (c *OIDCClient) VerifyToken(ctx context.Context, tokenString string) (*User
 	if name, ok := claims["name"].(string); ok {
 		user.Name = name
 	}
+	if picture, ok := claims["picture"].(string); ok {
+		user.Picture = picture
+	}
 
 	// Extract groups from various possible claim names
 	user.Groups = c.extractGroups(claims)

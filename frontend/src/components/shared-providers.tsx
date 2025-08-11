@@ -11,6 +11,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { Toaster } from "@/components/ui/sonner"
 import { PodShellManager } from "@/components/PodShellManager"
+import { AuthGuard } from "@/components/AuthGuard"
 
 interface SharedProvidersProps {
 	children: React.ReactNode
@@ -46,19 +47,21 @@ function AppContent({ children }: { children: React.ReactNode }) {
 export function SharedProviders({ children }: SharedProvidersProps) {
 	return (
 		<ThemeProvider defaultTheme="system" storageKey="k8s-dashboard-theme">
-			<CapabilitiesProvider>
-				<NavigationProvider>
-					<NamespaceProvider>
-						<ShellProvider>
-							<AppContent>
-								{children}
-							</AppContent>
-							<Toaster />
-							<PodShellManager />
-						</ShellProvider>
-					</NamespaceProvider>
-				</NavigationProvider>
-			</CapabilitiesProvider>
+			<AuthGuard>
+				<CapabilitiesProvider>
+					<NavigationProvider>
+						<NamespaceProvider>
+							<ShellProvider>
+								<AppContent>
+									{children}
+								</AppContent>
+								<Toaster />
+								<PodShellManager />
+							</ShellProvider>
+						</NamespaceProvider>
+					</NavigationProvider>
+				</CapabilitiesProvider>
+			</AuthGuard>
 		</ThemeProvider>
 	)
 }

@@ -1,0 +1,56 @@
+---
+import "../styles/global.css";
+import { ThemeProvider } from "@/components/theme-provider";
+
+export interface Props {
+	title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<title>{title}</title>
+
+		<!-- Prevent theme flash by setting theme immediately -->
+		<script is:inline>
+			(function () {
+				function getThemePreference() {
+					const stored = localStorage.getItem("k8s-dashboard-theme");
+					if (stored && (stored === "light" || stored === "dark")) {
+						return stored;
+					}
+					if (stored === "system" || !stored) {
+						return window.matchMedia("(prefers-color-scheme: dark)")
+							.matches
+							? "dark"
+							: "light";
+					}
+					return "light";
+				}
+
+				const theme = getThemePreference();
+				document.documentElement.classList.add(theme);
+			})();
+		</script>
+		<script is:inline>
+			(function () {
+				// kill transitions until React mounts
+				document.documentElement.classList.add("no-transitions");
+			})();
+		</script>
+	</head>
+	<body>
+		<ThemeProvider
+			defaultTheme="system"
+			storageKey="k8s-dashboard-theme"
+			client:load
+		>
+			<slot />
+		</ThemeProvider>
+	</body>
+</html>

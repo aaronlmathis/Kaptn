@@ -6,12 +6,13 @@ import (
 
 // User represents an authenticated user
 type User struct {
-	ID     string                 `json:"id"`
-	Sub    string                 `json:"sub"` // OIDC subject identifier
-	Email  string                 `json:"email"`
-	Name   string                 `json:"name"`
-	Groups []string               `json:"groups"`
-	Claims map[string]interface{} `json:"claims"`
+	ID      string                 `json:"id"`
+	Sub     string                 `json:"sub"` // OIDC subject identifier
+	Email   string                 `json:"email"`
+	Name    string                 `json:"name"`
+	Picture string                 `json:"picture"` // Profile picture URL
+	Groups  []string               `json:"groups"`
+	Claims  map[string]interface{} `json:"claims"`
 }
 
 // UserContextKey is the key used to store user in context

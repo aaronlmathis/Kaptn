@@ -524,12 +524,12 @@ export function ServicesDataTable() {
 					isRefreshing={loading}
 				>
 					{/* Real-time updates indicator */}
-					{isConnected && (
+					{/* {isConnected && (
 						<div className="flex items-center space-x-1 text-xs text-green-600">
 							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
 							<span>Live updates</span>
 						</div>
-					)}
+					)} */}
 				</DataTableFilters>
 
 				{/* Data table */}

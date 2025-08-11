@@ -10,6 +10,7 @@ import (
 	"github.com/aaronlmathis/kaptn/internal/analytics"
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/aaronlmathis/kaptn/internal/config"
+	"github.com/aaronlmathis/kaptn/internal/k8s"
 	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
 	"github.com/aaronlmathis/kaptn/internal/k8s/client"
 	"github.com/aaronlmathis/kaptn/internal/k8s/exec"
@@ -52,6 +53,8 @@ type Server struct {
 	authMiddleware   *auth.Middleware
 	oidcClient       *auth.OIDCClient
 	sessionManager   *auth.SessionManager
+	impersonationMgr *k8s.ImpersonationManager
+	clientFactory    *client.Factory
 }
 
 // NewServer creates a new API server
@@ -116,14 +119,21 @@ func (s *Server) initKubernetesClient() error {
 		return err
 	}
 
+	// Store factory for impersonation
+	s.clientFactory = factory
 	s.kubeClient = factory.Client()
 	s.dynamicClient = factory.DynamicClient()
 
+	// Initialize impersonation manager
+	impersonatedFactory := k8s.NewImpersonatedClientFactory(s.logger, factory.RESTConfig())
+	s.impersonationMgr = k8s.NewImpersonationManager(impersonatedFactory, s.logger)
+	s.logger.Info("Impersonation manager initialized")
+
 	// Initialize apply service
 	s.applyService = actions.NewApplyService(
-		factory.Client(),
-		factory.DynamicClient(),
-		factory.DiscoveryClient(),
+		s.clientFactory.Client(),
+		s.clientFactory.DynamicClient(),
+		s.clientFactory.DiscoveryClient(),
 		s.logger,
 	)
 
@@ -131,11 +141,11 @@ func (s *Server) initKubernetesClient() error {
 	s.logsService = logs.NewStreamManager(s.logger, s.kubeClient)
 
 	// Initialize exec service
-	s.execService = exec.NewExecManager(s.logger, s.kubeClient, factory.RESTConfig())
+	s.execService = exec.NewExecManager(s.logger, s.kubeClient, s.clientFactory.RESTConfig())
 
 	// Initialize metrics service (try to create metrics client, fallback gracefully)
 	var metricsClient *metricsv1beta1.Clientset
-	if metricsClient, err = metricsv1beta1.NewForConfig(factory.RESTConfig()); err != nil {
+	if metricsClient, err = metricsv1beta1.NewForConfig(s.clientFactory.RESTConfig()); err != nil {
 		s.logger.Warn("Metrics server not available, metrics will be limited", zap.Error(err))
 	}
 
@@ -150,7 +160,7 @@ func (s *Server) initKubernetesClient() error {
 	s.overviewService.SetWebSocketHub(s.wsHub)
 
 	// Initialize resource manager
-	s.resourceManager = resources.NewResourceManager(s.logger, s.kubeClient, factory.DynamicClient())
+	s.resourceManager = resources.NewResourceManager(s.logger, s.kubeClient, s.clientFactory.DynamicClient())
 
 	// Initialize analytics service
 	if err := s.initAnalytics(); err != nil {
@@ -158,7 +168,7 @@ func (s *Server) initKubernetesClient() error {
 	}
 
 	// Validate connection
-	if err := factory.ValidateConnection(); err != nil {
+	if err := s.clientFactory.ValidateConnection(); err != nil {
 		return err
 	}
 
@@ -436,9 +446,18 @@ func (s *Server) Handler() http.Handler {
 	return s.router
 }
 
+// requestContextMiddleware adds the HTTP request to the context for audit logging
+func (s *Server) requestContextMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), "http_request", r)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestID)
 	s.router.Use(apimiddleware.RequestIDResponseMiddleware) // Add request ID to response headers
+	s.router.Use(s.requestContextMiddleware)                // Add request to context for audit logging
 	s.router.Use(middleware.RealIP)
 	s.router.Use(middleware.Logger)
 	s.router.Use(middleware.Recoverer)
@@ -452,6 +471,9 @@ func (s *Server) setupMiddleware() {
 
 	// Authentication middleware (always applied, handles different auth modes)
 	s.router.Use(s.authMiddleware.Authenticate)
+
+	// Impersonation middleware (adds impersonated K8s clients to context)
+	s.router.Use(s.ImpersonationMiddleware)
 
 	// CORS middleware
 	s.router.Use(func(next http.Handler) http.Handler {
@@ -481,6 +503,33 @@ func (s *Server) setupRoutes() {
 	// Prometheus metrics endpoint
 	s.router.Handle("/metrics", promhttp.Handler())
 
+	// Test page for authentication (public)
+	s.router.Get("/test-login", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "test-login.html")
+	})
+
+	// Phase 6 test page for SSAR UI gating
+	s.router.Get("/test-phase6", s.handlePhase6TestPage)
+
+	// Phase 6 test page (requires authentication)
+	s.router.Get("/test-phase6", s.handlePhase6TestPage)
+
+	// OAuth callback route - redirect to test page with parameters
+	s.router.Get("/callback", func(w http.ResponseWriter, r *http.Request) {
+		// Get the query parameters from the OAuth callback
+		code := r.URL.Query().Get("code")
+		state := r.URL.Query().Get("state")
+
+		if code == "" || state == "" {
+			http.Error(w, "Missing code or state parameter", http.StatusBadRequest)
+			return
+		}
+
+		// Redirect to test page with parameters
+		redirectURL := fmt.Sprintf("/test-login?code=%s&state=%s", code, state)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+	})
+
 	// API routes
 	s.router.Route("/api/v1", func(r chi.Router) {
 		// Basic info endpoint (public)
@@ -494,9 +543,12 @@ func (s *Server) setupRoutes() {
 
 		// Authentication endpoints (public)
 		r.Post("/auth/login", s.handleLogin)
-		r.Post("/auth/callback", s.handleAuthCallback)
+		r.Get("/auth/callback", s.handleAuthCallback) // Changed to GET for OAuth
 		r.Post("/auth/logout", s.handleLogout)
 		r.Get("/auth/me", s.handleMe)
+
+		// Public configuration endpoint
+		r.Get("/config", s.handlePublicConfig)
 
 		// Admin endpoints (require authentication)
 		r.Group(func(r chi.Router) {
@@ -504,6 +556,38 @@ func (s *Server) setupRoutes() {
 				r.Use(s.authMiddleware.RequireAuth)
 			}
 			r.Get("/admin/authz/preview", s.handleAuthzPreview)
+			r.Get("/admin/authz/preview-enhanced", s.handleAuthzPreviewEnhanced)
+			r.Get("/admin/authz/ssar-test", s.handleSSARTest)
+			r.Get("/admin/authz/permissions-check", s.handlePermissionsCheck)
+
+			// Phase 8: Admin Utilities & Observability
+			r.Post("/admin/authz/reload", s.handleBindingsReload) // Force reload bindings store
+			r.Get("/admin/authz/sar", s.handleGenericSAR)         // Generic SAR runner for debugging
+		})
+
+		// Permission checking endpoints for UI gating (Phase 6)
+		r.Group(func(r chi.Router) {
+			if s.config.Security.AuthMode != "none" {
+				r.Use(s.authMiddleware.RequireAuth)
+			}
+			r.Get("/permissions/check", s.handleCheckPermission)
+			r.Get("/permissions/actions", s.handleGetActionPermissions)
+			r.Get("/permissions/actions/{namespace}", s.handleGetActionPermissions)
+			r.Get("/permissions/page-access", s.handleCheckPageAccess)
+			r.Get("/permissions/namespaces", s.handleGetUserNamespacePermissions)
+			r.Post("/permissions/bulk", s.handleBulkPermissionCheck)
+		})
+
+		// Permission checking endpoints for Phase 6 UI gating
+		r.Group(func(r chi.Router) {
+			if s.config.Security.AuthMode != "none" {
+				r.Use(s.authMiddleware.RequireAuth)
+			}
+			r.Get("/permissions/check", s.handleCheckPermission)
+			r.Get("/permissions/actions", s.handleGetActionPermissions)
+			r.Get("/permissions/actions/{namespace}", s.handleGetActionPermissions)
+			r.Get("/permissions/page-access", s.handleCheckPageAccess)
+			r.Post("/permissions/bulk-check", s.handleBulkPermissionCheck)
 		})
 
 		// Read-only endpoints (require read permissions)

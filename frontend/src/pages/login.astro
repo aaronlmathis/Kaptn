@@ -1,10 +1,10 @@
 ---
-import Layout from "@/layouts/main.astro";
+import Layout from "@/layouts/auth.astro";
 import { LoginPage } from "@/components/pages/LoginPage";
 
 const title = "Login";
 ---
 
 <Layout title={title}>
-	<LoginPage />
+	<LoginPage client:load />
 </Layout>

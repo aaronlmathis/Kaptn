@@ -26,12 +26,34 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get pod from Kubernetes API
-	pod, err := s.kubeClient.CoreV1().Pods(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Phase 7: Get security context with impersonated client
+	secCtx, err := s.getSecurityContext(r)
+	if err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, nil)
+		} else {
+			http.Error(w, "Security context error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Phase 7: Check permission to get this specific pod
+	if err := s.checkResourcePermission(r.Context(), secCtx, "get", "pods", namespace, name); err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, secCtx.User)
+		} else {
+			http.Error(w, "Permission check failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Get pod from Kubernetes API using impersonated client
+	pod, err := secCtx.Client.CoreV1().Pods(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get pod",
 			zap.String("namespace", namespace),
 			zap.String("name", name),
+			zap.String("user", secCtx.User.Email),
 			zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -41,6 +63,15 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Log successful operation for audit
+	s.logger.Info("Pod retrieved successfully",
+		zap.String("user", secCtx.User.Email),
+		zap.String("user_sub", secCtx.User.Sub),
+		zap.Strings("user_groups", secCtx.User.Groups),
+		zap.String("namespace", namespace),
+		zap.String("name", name),
+		zap.String("pod_phase", string(pod.Status.Phase)))
 
 	// Get pod metrics for enrichment
 	podMetricsMap := make(map[string]map[string]interface{})
@@ -79,15 +110,15 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
-	// Get pods from informer cache
-	indexer := s.informerManager.GetPodLister()
-	podObjs := indexer.List()
-
-	var pods []v1.Pod
-	for _, obj := range podObjs {
-		if pod, ok := obj.(*v1.Pod); ok {
-			pods = append(pods, *pod)
+	// Phase 7: Get security context with impersonated client
+	secCtx, err := s.getSecurityContext(r)
+	if err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, nil)
+		} else {
+			http.Error(w, "Security context error", http.StatusInternalServerError)
 		}
+		return
 	}
 
 	// Parse query parameters for enhanced filtering
@@ -113,6 +144,41 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 
+	// Phase 7: Check permission for listing pods
+	// If namespace is specified, check that specific namespace
+	// If no namespace, check cluster-wide list permission
+	if namespace != "" {
+		if err := s.checkResourcePermission(r.Context(), secCtx, "list", "pods", namespace, ""); err != nil {
+			if secErr, ok := err.(*SecurityError); ok {
+				s.writeSecurityError(w, secErr, secCtx.User)
+			} else {
+				http.Error(w, "Permission check failed", http.StatusInternalServerError)
+			}
+			return
+		}
+	} else {
+		// For cluster-wide list, check with empty namespace (cluster scope)
+		if err := s.checkResourcePermission(r.Context(), secCtx, "list", "pods", "", ""); err != nil {
+			if secErr, ok := err.(*SecurityError); ok {
+				s.writeSecurityError(w, secErr, secCtx.User)
+			} else {
+				http.Error(w, "Permission check failed", http.StatusInternalServerError)
+			}
+			return
+		}
+	}
+
+	// Get pods from informer cache
+	indexer := s.informerManager.GetPodLister()
+	podObjs := indexer.List()
+
+	var pods []v1.Pod
+	for _, obj := range podObjs {
+		if pod, ok := obj.(*v1.Pod); ok {
+			pods = append(pods, *pod)
+		}
+	}
+
 	// Total count before filtering for pagination metadata
 	totalBeforeFilter := len(pods)
 
@@ -135,6 +201,16 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to filter pods", http.StatusBadRequest)
 		return
 	}
+
+	// Log successful operation for audit
+	s.logger.Info("Pods listed successfully",
+		zap.String("user", secCtx.User.Email),
+		zap.String("user_sub", secCtx.User.Sub),
+		zap.Strings("user_groups", secCtx.User.Groups),
+		zap.String("namespace", namespace),
+		zap.Int("total_pods", len(filteredPods)),
+		zap.Int("page", page),
+		zap.Int("page_size", pageSize))
 
 	// Get pod metrics for enrichment
 	podMetricsMap := make(map[string]map[string]interface{})

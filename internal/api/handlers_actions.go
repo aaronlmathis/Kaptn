@@ -271,18 +271,50 @@ func (s *Server) handleDeleteResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.resourceManager.DeleteResource(r.Context(), req)
+	// Phase 7: Get security context for permission checking and audit logging
+	secCtx, err := s.getSecurityContext(r)
+	if err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, nil)
+		} else {
+			http.Error(w, "Security context error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Convert Kind to lowercase resource name for RBAC check
+	resourceName := strings.ToLower(req.Kind) + "s" // e.g., "Pod" -> "pods"
+	if err := s.checkResourcePermission(r.Context(), secCtx, "delete", resourceName, req.Namespace, req.Name); err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, secCtx.User)
+		} else {
+			http.Error(w, "Permission check failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	err = s.resourceManager.DeleteResource(r.Context(), req)
 	if err != nil {
 		s.logger.Error("Failed to delete resource",
 			zap.String("namespace", req.Namespace),
 			zap.String("name", req.Name),
 			zap.String("kind", req.Kind),
+			zap.String("user", secCtx.User.Email),
 			zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
+
+	// Log successful deletion for audit
+	s.logger.Info("Resource deleted successfully",
+		zap.String("user", secCtx.User.Email),
+		zap.String("user_sub", secCtx.User.Sub),
+		zap.Strings("user_groups", secCtx.User.Groups),
+		zap.String("namespace", req.Namespace),
+		zap.String("name", req.Name),
+		zap.String("kind", req.Kind))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

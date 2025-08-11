@@ -1,0 +1,47 @@
+---
+# ClusterRoleBindings for Kaptn Groups
+# These bind the groups (kaptn-viewers, kaptn-developers, kaptn-admins) to their respective ClusterRoles
+
+# Bind kaptn-viewers group to kaptn-viewer ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-viewers-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-viewer
+subjects:
+- kind: Group
+  name: kaptn-viewers
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind kaptn-developers group to kaptn-developer ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-developers-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-developer
+subjects:
+- kind: Group
+  name: kaptn-developers
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind kaptn-admins group to kaptn-admin ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-admins-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-admin
+subjects:
+- kind: Group
+  name: kaptn-admins
+  apiGroup: rbac.authorization.k8s.io
