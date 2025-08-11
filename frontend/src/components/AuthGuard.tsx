@@ -52,19 +52,19 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 	// This is now primarily cosmetic - the real authentication is handled by Astro middleware
 	// The middleware should have already redirected unauthenticated users
 	// This component mainly handles loading states and provides fallback UI
-	
+
 	if (!isAuthenticated) {
 		// If we reach here and user is not authenticated, show fallback or redirect
 		// This should rarely happen with proper Astro middleware in place
 		console.warn('AuthGuard: User not authenticated - middleware may not be working correctly')
-		
+
 		if (typeof window !== 'undefined') {
 			// Client-side redirect as fallback
 			setTimeout(() => {
 				window.location.href = '/login'
 			}, 1000)
 		}
-		
+
 		return fallback || (
 			<div className="flex h-screen items-center justify-center">
 				<div className="flex flex-col items-center space-y-4">

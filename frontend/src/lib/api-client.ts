@@ -48,7 +48,7 @@ export class ApiClient {
 		// If 401, try to refresh and retry once
 		if (response.status === 401 && !endpoint.includes('/auth/refresh')) {
 			console.log('API request received 401, attempting token refresh...');
-			
+
 			try {
 				const refreshResponse = await fetch('/api/v1/auth/refresh', {
 					method: 'POST',

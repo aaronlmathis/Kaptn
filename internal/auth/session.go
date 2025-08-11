@@ -28,7 +28,7 @@ type SessionManager struct {
 	logger     *zap.Logger
 	secret     []byte
 	sessionTTL time.Duration
-	
+
 	// New dual-token system
 	tokenManager *TokenManager
 }
@@ -40,9 +40,9 @@ func NewSessionManager(logger *zap.Logger, secret string, sessionTTL time.Durati
 	}
 
 	// Create token manager with short access tokens and longer refresh tokens
-	accessTokenTTL := 15 * time.Minute  // 15 minute access tokens
-	refreshTokenTTL := 7 * 24 * time.Hour  // 7 day refresh tokens
-	
+	accessTokenTTL := 15 * time.Minute    // 15 minute access tokens
+	refreshTokenTTL := 7 * 24 * time.Hour // 7 day refresh tokens
+
 	tokenManager, err := NewTokenManager(logger, accessTokenTTL, refreshTokenTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create token manager: %w", err)
@@ -60,23 +60,23 @@ func NewSessionManager(logger *zap.Logger, secret string, sessionTTL time.Durati
 func (sm *SessionManager) CreateSession(user *User) (string, error) {
 	// This method now creates both access and refresh tokens
 	// For backward compatibility, we return the access token
-	
+
 	traceID := generateTraceID()
-	
+
 	// Get current session version
 	sessionVer := sm.tokenManager.GetSessionVersion(user.ID)
-	
+
 	// Create access token
 	accessToken, err := sm.tokenManager.CreateAccessToken(user, sessionVer, traceID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create access token: %w", err)
 	}
-	
+
 	sm.logger.Debug("Created legacy session",
 		zap.String("user_id", user.ID),
 		zap.String("trace_id", traceID),
 		zap.Int64("session_ver", sessionVer))
-	
+
 	return accessToken, nil
 }
 
@@ -84,27 +84,27 @@ func (sm *SessionManager) CreateSession(user *User) (string, error) {
 func (sm *SessionManager) CreateDualTokenSession(user *User, r *http.Request) (accessToken, refreshToken string, err error) {
 	traceID := generateTraceID()
 	clientHash := sm.tokenManager.GenerateClientHash(r)
-	
+
 	// Get current session version
 	sessionVer := sm.tokenManager.GetSessionVersion(user.ID)
-	
+
 	// Create access token
 	accessToken, err = sm.tokenManager.CreateAccessToken(user, sessionVer, traceID)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create access token: %w", err)
 	}
-	
+
 	// Create refresh token
 	refreshToken, _, err = sm.tokenManager.CreateRefreshToken(user, clientHash, "")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create refresh token: %w", err)
 	}
-	
+
 	sm.logger.Info("Created dual token session",
 		zap.String("user_id", user.ID),
 		zap.String("trace_id", traceID),
 		zap.Int64("session_ver", sessionVer))
-	
+
 	return accessToken, refreshToken, nil
 }
 
@@ -123,7 +123,7 @@ func (sm *SessionManager) ValidateSession(tokenString string) (*Session, error) 
 			ExpiresAt: claims.ExpiresAt.Time,
 		}, nil
 	}
-	
+
 	// Fallback to legacy HMAC validation for existing sessions
 	return sm.validateLegacySession(tokenString)
 }
@@ -219,7 +219,7 @@ func (sm *SessionManager) GetSessionFromCookie(r *http.Request) (*Session, error
 	if accessToken != "" {
 		return sm.ValidateSession(accessToken)
 	}
-	
+
 	// Fallback to legacy session cookie
 	cookie, err := r.Cookie("kaptn-session")
 	if err != nil {
@@ -235,10 +235,10 @@ func (sm *SessionManager) RefreshSession(r *http.Request, user *User) (accessTok
 	if refreshTokenString == "" {
 		return "", "", fmt.Errorf("no refresh token found")
 	}
-	
+
 	clientHash := sm.tokenManager.GenerateClientHash(r)
 	traceID := generateTraceID()
-	
+
 	return sm.tokenManager.RefreshTokens(refreshTokenString, clientHash, user, traceID)
 }
 
@@ -248,10 +248,10 @@ func (sm *SessionManager) RefreshSessionFromToken(r *http.Request) (accessToken,
 	if refreshTokenString == "" {
 		return "", "", "", fmt.Errorf("no refresh token found")
 	}
-	
+
 	clientHash := sm.tokenManager.GenerateClientHash(r)
 	traceID := generateTraceID()
-	
+
 	return sm.tokenManager.RefreshTokensWithoutUser(refreshTokenString, clientHash, traceID)
 }
 
@@ -282,7 +282,7 @@ func (sm *SessionManager) GetMinimalUserFromRequest(r *http.Request) *MinimalUse
 			}
 		}
 	}
-	
+
 	// Fallback to legacy session validation
 	if session, err := sm.GetSessionFromCookie(r); err == nil {
 		return &MinimalUser{
@@ -292,7 +292,7 @@ func (sm *SessionManager) GetMinimalUserFromRequest(r *http.Request) *MinimalUse
 			IsAuthenticated: true,
 		}
 	}
-	
+
 	return &MinimalUser{
 		IsAuthenticated: false,
 	}

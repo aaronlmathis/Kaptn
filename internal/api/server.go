@@ -450,6 +450,16 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) requestContextMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), "http_request", r)
+
+		// Extract trace ID from authenticated user's claims if available
+		if user, ok := auth.UserFromContext(ctx); ok && user != nil {
+			if traceID, exists := user.Claims["trace_id"].(string); exists && traceID != "" {
+				// Add trace ID to response headers for correlation
+				w.Header().Set("X-Trace-ID", traceID)
+				ctx = context.WithValue(ctx, "trace_id", traceID)
+			}
+		}
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -475,15 +485,19 @@ func (s *Server) setupMiddleware() {
 	// Impersonation middleware (adds impersonated K8s clients to context)
 	s.router.Use(s.ImpersonationMiddleware)
 
+	// ETag middleware for cacheable GET requests
+	etagMiddleware := apimiddleware.NewETagMiddleware(s.logger)
+	s.router.Use(etagMiddleware.Middleware)
+
 	// CORS middleware - removed wildcard, same-origin only for security
 	s.router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// For same-origin deployment, we disable CORS entirely
 			// All requests should come from the same origin that serves the static files
-			
+
 			// Set credentials flag for cookie-based auth
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			
+
 			// Handle preflight OPTIONS requests
 			if r.Method == "OPTIONS" {
 				// Only allow same-origin requests
@@ -493,7 +507,7 @@ func (s *Server) setupMiddleware() {
 					w.WriteHeader(http.StatusOK)
 					return
 				}
-				
+
 				// Reject cross-origin preflight requests
 				w.WriteHeader(http.StatusForbidden)
 				return
@@ -573,6 +587,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/admin/authz/preview-enhanced", s.handleAuthzPreviewEnhanced)
 			r.Get("/admin/authz/ssar-test", s.handleSSARTest)
 			r.Get("/admin/authz/permissions-check", s.handlePermissionsCheck)
+			r.Post("/auth/revoke-user-sessions", s.handleRevokeUserSessions) // Admin endpoint to revoke user sessions
 
 			// Phase 8: Admin Utilities & Observability
 			r.Post("/admin/authz/reload", s.handleBindingsReload) // Force reload bindings store
@@ -713,6 +728,13 @@ func (s *Server) setupRoutes() {
 			}
 			r.Use(s.authMiddleware.RateLimit(s.config.RateLimits.ActionsPerMinute))
 
+			// Add idempotency middleware for state-changing operations
+			idempotencyMiddleware := apimiddleware.NewIdempotencyMiddleware(s.logger, 15*time.Minute)
+			r.Use(idempotencyMiddleware.Middleware)
+
+			// Add CSRF protection for high-risk operations
+			r.Use(s.authMiddleware.CSRFProtection)
+
 			r.Post("/nodes/{nodeName}/cordon", s.handleCordonNode)
 			r.Post("/nodes/{nodeName}/uncordon", s.handleUncordonNode)
 			r.Post("/nodes/{nodeName}/drain", s.handleDrainNode)
@@ -740,6 +762,13 @@ func (s *Server) setupRoutes() {
 				r.Use(s.authMiddleware.RequireWrite)
 			}
 			r.Use(s.authMiddleware.RateLimit(s.config.RateLimits.ApplyPerMinute))
+
+			// Add idempotency middleware for apply operations
+			idempotencyMiddleware := apimiddleware.NewIdempotencyMiddleware(s.logger, 30*time.Minute)
+			r.Use(idempotencyMiddleware.Middleware)
+
+			// Add CSRF protection for high-risk operations
+			r.Use(s.authMiddleware.CSRFProtection)
 
 			// Enhanced apply endpoint for Apply Config drawer
 			r.Post("/apply", s.handleApplyConfig)

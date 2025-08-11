@@ -58,7 +58,7 @@ async function fetchWithAuth(url: string, options: FetchOptions = {}): Promise<R
 	// If 401, try to refresh and retry once
 	if (response.status === 401 && !url.includes('/auth/refresh')) {
 		console.log('Received 401, attempting token refresh...')
-		
+
 		try {
 			const refreshResponse = await fetch('/api/v1/auth/refresh', {
 				method: 'POST',
@@ -102,7 +102,7 @@ export function useAuth() {
 		try {
 			// First, try to get session data from server-injected global
 			const injectedSession = getInjectedSession()
-			
+
 			if (injectedSession) {
 				// Use injected session data
 				setAuthState({
@@ -168,7 +168,7 @@ export function useAuth() {
 				const data = await response.json()
 				// The API returns { authenticated: true, user: {...} }
 				const user = data.user || data
-				
+
 				// Create minimal user object without sensitive claims
 				const safeUser: User = {
 					id: user.id || user.sub,
@@ -179,7 +179,7 @@ export function useAuth() {
 					roles: user.roles || user.groups || [],
 					perms: user.perms || [],
 				}
-				
+
 				setAuthState({
 					isAuthenticated: true,
 					isLoading: false,

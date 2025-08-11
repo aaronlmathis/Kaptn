@@ -38,18 +38,18 @@ func (h *SessionInjectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	if !strings.HasPrefix(upath, "/") {
 		upath = "/" + upath
 	}
-	
+
 	// Clean the path
 	upath = filepath.Clean(upath)
-	
+
 	// If it's a directory request, serve index.html
 	if strings.HasSuffix(upath, "/") {
 		upath = upath + "index.html"
 	}
-	
+
 	// Convert to file system path
 	fsPath := string(h.filesDir) + upath
-	
+
 	// Check if file exists
 	info, err := os.Stat(fsPath)
 	if err != nil {
@@ -61,7 +61,7 @@ func (h *SessionInjectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
-	
+
 	// If it's a directory, try to serve index.html from it
 	if info.IsDir() {
 		indexPath := filepath.Join(fsPath, "index.html")
@@ -72,13 +72,13 @@ func (h *SessionInjectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
-	
+
 	// If it's an HTML file, inject session data
 	if strings.HasSuffix(upath, ".html") {
 		h.serveWithSessionInjection(w, r, fsPath)
 		return
 	}
-	
+
 	// For non-HTML files, serve directly
 	http.ServeFile(w, r, fsPath)
 }
@@ -93,26 +93,26 @@ func (h *SessionInjectionHandler) serveWithSessionInjection(w http.ResponseWrite
 		return
 	}
 	defer file.Close()
-	
+
 	content, err := io.ReadAll(file)
 	if err != nil {
 		h.logger.Error("Failed to read HTML file", zap.String("path", filePath), zap.Error(err))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Get session data
 	sessionData := h.getSessionData(r)
-	
+
 	// Inject session data into HTML
 	injectedContent := h.injectSessionData(string(content), sessionData)
-	
+
 	// Set headers
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
-	
+
 	// Write the content
 	w.Write([]byte(injectedContent))
 }
@@ -123,7 +123,7 @@ func (h *SessionInjectionHandler) getSessionData(r *http.Request) *auth.MinimalU
 	sessionData := &auth.MinimalUser{
 		IsAuthenticated: false,
 	}
-	
+
 	// If auth mode is none, return a dev user
 	if h.authMode == "none" {
 		sessionData.IsAuthenticated = true
@@ -132,12 +132,12 @@ func (h *SessionInjectionHandler) getSessionData(r *http.Request) *auth.MinimalU
 		sessionData.Name = "Development User"
 		return sessionData
 	}
-	
+
 	// Use session manager to securely validate tokens and extract user data
 	if h.sessionManager != nil {
 		return h.sessionManager.GetMinimalUserFromRequest(r)
 	}
-	
+
 	return sessionData
 }
 
@@ -151,21 +151,21 @@ func (h *SessionInjectionHandler) injectSessionData(content string, sessionData 
 		"isAuthenticated": sessionData.IsAuthenticated,
 		"authMode":        h.authMode,
 	}
-	
+
 	// Convert session data to JSON
 	sessionJSON, err := json.Marshal(sessionWithMode)
 	if err != nil {
 		h.logger.Error("Failed to marshal session data", zap.Error(err))
 		sessionJSON = []byte(fmt.Sprintf(`{"isAuthenticated":false,"authMode":"%s"}`, h.authMode))
 	}
-	
+
 	// Create the injection script
 	injectionScript := fmt.Sprintf(`
 <script>
 	// Kaptn session data injected by server
 	window.__KAPTN_SESSION__ = %s;
 </script>`, string(sessionJSON))
-	
+
 	// Find a good place to inject the script (before </head> or at the start of <body>)
 	if strings.Contains(content, "</head>") {
 		return strings.Replace(content, "</head>", injectionScript+"\n</head>", 1)
@@ -174,7 +174,7 @@ func (h *SessionInjectionHandler) injectSessionData(content string, sessionData 
 	} else if strings.Contains(content, "<html>") {
 		return strings.Replace(content, "<html>", "<html>\n"+injectionScript, 1)
 	}
-	
+
 	// Fallback: prepend to content
 	return injectionScript + "\n" + content
 }
