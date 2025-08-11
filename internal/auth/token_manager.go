@@ -450,7 +450,7 @@ func (tm *TokenManager) InvalidateRefreshFamily(familyID string) {
 // InvalidateUserSessions invalidates all sessions for a user by bumping session version
 func (tm *TokenManager) InvalidateUserSessions(userID string) {
 	tm.mutex.Lock()
-	
+
 	// Bump session version
 	sv := tm.sessionVersions[userID]
 	if sv == nil {
@@ -469,7 +469,7 @@ func (tm *TokenManager) InvalidateUserSessions(userID string) {
 			familiesInvalidated++
 		}
 	}
-	
+
 	tm.mutex.Unlock()
 
 	tm.logger.Info("User sessions invalidated",

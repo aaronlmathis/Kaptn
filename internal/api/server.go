@@ -489,6 +489,10 @@ func (s *Server) setupMiddleware() {
 	etagMiddleware := apimiddleware.NewETagMiddleware(s.logger)
 	s.router.Use(etagMiddleware.Middleware)
 
+	// Error sanitization middleware
+	errorSanitizer := apimiddleware.NewErrorSanitizer(s.logger)
+	s.router.Use(errorSanitizer.Middleware)
+
 	// CORS middleware - removed wildcard, same-origin only for security
 	s.router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -29,8 +29,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if s.oidcClient == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "OIDC not configured",
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "OIDC authentication is not configured",
 			"code":  "OIDC_NOT_CONFIGURED",
 		})
 		return
@@ -40,7 +40,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	pkceParams, err := auth.GeneratePKCEParams()
 	if err != nil {
 		s.logger.Error("Failed to generate PKCE parameters", zap.Error(err))
-		http.Error(w, "Failed to generate login parameters", http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Unable to initialize authentication. Please try again.",
+		})
 		return
 	}
 
@@ -64,7 +68,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if s.oidcClient == nil {
 		s.logAuthEvent(r, "", "callback_failed", "OIDC not configured", nil)
-		http.Error(w, "OIDC not configured", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Authentication service is not configured",
+		})
 		return
 	}
 
@@ -74,7 +82,11 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	if code == "" || state == "" {
 		s.logAuthEvent(r, "", "callback_failed", "Missing code or state parameter", nil)
-		http.Error(w, "Missing code or state parameter", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Invalid authentication response. Please try logging in again.",
+		})
 		return
 	}
 
@@ -175,7 +187,14 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 
 		// Clear cookies and return 401 to force re-authentication
 		s.sessionManager.ClearSessionCookie(w)
-		http.Error(w, "Token refresh failed", http.StatusUnauthorized)
+
+		// Use sanitized error response
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":  "Authentication session expired. Please log in again.",
+			"status": http.StatusUnauthorized,
+		})
 		return
 	}
 
@@ -394,13 +413,13 @@ func (s *Server) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request
 		zap.String("admin_user_id", currentUser.ID),
 		zap.String("target_user_id", requestBody.UserID))
 
-	s.logAuthEvent(r, currentUser.ID, "admin_revoke_sessions", 
+	s.logAuthEvent(r, currentUser.ID, "admin_revoke_sessions",
 		fmt.Sprintf("Revoked all sessions for user %s", requestBody.UserID), nil)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("All sessions revoked for user %s", requestBody.UserID),
+		"success":    true,
+		"message":    fmt.Sprintf("All sessions revoked for user %s", requestBody.UserID),
 		"revoked_by": currentUser.ID,
 	})
 }

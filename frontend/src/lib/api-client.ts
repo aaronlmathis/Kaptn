@@ -45,29 +45,39 @@ export class ApiClient {
 		// First attempt
 		let response = await fetch(url, defaultOptions);
 
-		// If 401, try to refresh and retry once
-		if (response.status === 401 && !endpoint.includes('/auth/refresh')) {
+		// Enhanced 401 handling with single retry
+		if (response.status === 401 && !endpoint.includes('/auth/refresh') && !endpoint.includes('/auth/login')) {
 			console.log('API request received 401, attempting token refresh...');
 
 			try {
 				const refreshResponse = await fetch('/api/v1/auth/refresh', {
 					method: 'POST',
 					credentials: 'include',
+					headers: {
+						'Content-Type': 'application/json',
+					},
 				});
 
 				if (refreshResponse.ok) {
 					console.log('Token refresh successful, retrying original request...');
-					// Retry original request with new tokens
+
+					// Retry original request with refreshed cookies/tokens
 					response = await fetch(url, defaultOptions);
+
+					// If still 401 after refresh, redirect to login
+					if (response.status === 401) {
+						console.log('Still unauthorized after refresh, redirecting to login');
+						this.redirectToLogin();
+						throw new Error('Authentication session expired');
+					}
 				} else {
 					console.log('Token refresh failed, redirecting to login');
-					// Refresh failed - redirect to login
-					window.location.href = '/login';
+					this.redirectToLogin();
 					throw new Error('Authentication session expired');
 				}
 			} catch (refreshError) {
 				console.error('Refresh attempt failed:', refreshError);
-				window.location.href = '/login';
+				this.redirectToLogin();
 				throw new Error('Authentication session expired');
 			}
 		}
@@ -76,10 +86,11 @@ export class ApiClient {
 			let errorMessage = `HTTP ${response.status}`;
 			try {
 				const error = await response.json();
-				errorMessage = error.error || errorMessage;
+				// Sanitize error messages - only show safe, user-friendly messages
+				errorMessage = this.sanitizeErrorMessage(error.error || error.message || errorMessage);
 			} catch {
-				// If we can't parse the error response, use the status text
-				errorMessage = response.statusText || errorMessage;
+				// If we can't parse the error response, use a generic message
+				errorMessage = this.getGenericErrorMessage(response.status);
 			}
 			throw new Error(errorMessage);
 		}
@@ -92,6 +103,66 @@ export class ApiClient {
 			return response.text() as Promise<T>;
 		} else {
 			return response.arrayBuffer() as Promise<T>;
+		}
+	}
+
+	private redirectToLogin(): void {
+		// Clear any stored tokens
+		this.token = null;
+
+		// Redirect to login page
+		window.location.href = '/login';
+	}
+
+	private sanitizeErrorMessage(message: string): string {
+		// Remove any sensitive information from error messages
+		const sensitivePatterns = [
+			/token/gi,
+			/jwt/gi,
+			/bearer/gi,
+			/authorization/gi,
+			/secret/gi,
+			/key/gi,
+			/credential/gi,
+			/password/gi,
+			/session/gi,
+		];
+
+		let sanitized = message;
+		sensitivePatterns.forEach(pattern => {
+			sanitized = sanitized.replace(pattern, '[REDACTED]');
+		});
+
+		// Limit message length
+		if (sanitized.length > 200) {
+			sanitized = sanitized.substring(0, 200) + '...';
+		}
+
+		return sanitized;
+	}
+
+	private getGenericErrorMessage(status: number): string {
+		switch (status) {
+			case 400:
+				return 'Invalid request. Please check your input and try again.';
+			case 401:
+				return 'Authentication required. Please log in.';
+			case 403:
+				return 'You do not have permission to perform this action.';
+			case 404:
+				return 'The requested resource was not found.';
+			case 409:
+				return 'The request conflicts with the current state. Please refresh and try again.';
+			case 429:
+				return 'Too many requests. Please wait a moment and try again.';
+			case 500:
+				return 'An internal server error occurred. Please try again later.';
+			case 502:
+			case 503:
+			case 504:
+				return 'The service is temporarily unavailable. Please try again later.';
+			default:
+				return 'An unexpected error occurred. Please try again.';
 		}
 	}
 
