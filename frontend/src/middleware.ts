@@ -115,15 +115,76 @@ async function attemptRefresh(request: Request): Promise<{ accessToken: string; 
 	return null;
 }
 
+// Check auth mode from backend config
+async function getAuthMode(request: Request): Promise<string> {
+	try {
+		console.log('getAuthMode called, request.url:', request.url);
+		const url = new URL(request.url);
+
+		// During build time, Astro uses localhost:4321 which won't have our backend
+		// In this case, we should assume no auth for static generation to avoid redirects
+		if (url.port === '4321') {
+			console.log('Build-time detected (port 4321), defaulting to none auth mode for static generation');
+			return 'none'; // Default to none for static build to avoid redirects
+		}
+
+		const configUrl = `${url.protocol}//${url.host}/api/v1/config`;
+		console.log('Fetching config from:', configUrl);
+
+		const response = await fetch(configUrl);
+		console.log('Config response status:', response.status);
+
+		if (!response.ok) {
+			console.log('Config fetch failed, status:', response.status);
+			return 'oidc'; // Default to oidc if we can't fetch config
+		}
+
+		const config = await response.json();
+		console.log('Config response:', config);
+		return config.auth?.mode || 'oidc';
+	} catch (error) {
+		console.error('Error fetching auth config:', error);
+		return 'oidc'; // Default to oidc on error
+	}
+}
+
 // Main middleware function
 export const onRequest: MiddlewareHandler = async (context, next) => {
 	const { request, locals, url } = context;
 
+	console.log('🛡️ Middleware: Processing request for', url.pathname);
+
 	// Skip auth for public paths
 	const publicPaths = ['/login', '/callback', '/api/v1/auth', '/healthz', '/readyz'];
 	if (publicPaths.some(path => url.pathname.startsWith(path))) {
+		console.log('🛡️ Middleware: Skipping auth for public path', url.pathname);
 		return next();
 	}
+
+	// Check auth mode first
+	console.log('🛡️ Middleware: Checking auth mode for', url.pathname);
+	const authMode = await getAuthMode(request);
+	console.log('🛡️ Middleware: Auth mode result:', authMode);
+
+	if (authMode === 'none') {
+		console.log('🛡️ Middleware: Auth mode is none, bypassing authentication for', url.pathname);
+		// Auth disabled - set mock user and continue
+		locals.user = {
+			id: 'dev-user',
+			email: 'dev@localhost',
+			name: 'Development User',
+			roles: ['admin'],
+			perms: ['read', 'write', 'delete', 'admin'],
+		};
+		locals.isAuthenticated = true;
+		locals.trace_id = 'dev-trace-' + Date.now();
+		console.log('🛡️ Middleware: Set dev user, calling next()');
+		const result = await next();
+		console.log('🛡️ Middleware: next() completed for', url.pathname);
+		return result;
+	}
+
+	console.log('Auth mode is not none, proceeding with authentication');
 
 	// Extract access token from cookies
 	const cookies = request.headers.get('Cookie') || '';

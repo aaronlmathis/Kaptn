@@ -8,7 +8,7 @@ export interface ApiResponse<T> {
 }
 
 export class ApiClient {
-	private baseURL = '/api/v1';
+	private baseURL = '/api/v1'; // Use proxy to backend server
 	private token: string | null = null;
 
 	constructor(baseURL?: string) {
@@ -48,6 +48,15 @@ export class ApiClient {
 		// Enhanced 401 handling with single retry
 		if (response.status === 401 && !endpoint.includes('/auth/refresh') && !endpoint.includes('/auth/login')) {
 			console.log('API request received 401, attempting token refresh...');
+
+			// Check if auth mode is none - skip refresh attempts
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const session = typeof window !== 'undefined' ? (window as any).__KAPTN_SESSION__ : null;
+			if (session?.authMode === 'none') {
+				console.log('🔓 Auth mode is none - skipping token refresh for 401');
+				// For auth mode none, treat 401 as a normal error instead of trying to refresh
+				throw new Error('Unauthorized - auth disabled');
+			}
 
 			try {
 				const refreshResponse = await fetch('/api/v1/auth/refresh', {
@@ -107,10 +116,24 @@ export class ApiClient {
 	}
 
 	private redirectToLogin(): void {
+		console.log('🚨 ApiClient redirectToLogin called - DEBUG INFO:');
+		console.log('🚨 window.__KAPTN_SESSION__:', typeof window !== 'undefined' ? (window as any).__KAPTN_SESSION__ : 'no window');
+
+		// Check if auth mode is none by looking at injected session data
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const session = typeof window !== 'undefined' ? (window as any).__KAPTN_SESSION__ : null;
+		console.log('🚨 Session auth mode:', session?.authMode);
+
+		if (session?.authMode === 'none') {
+			console.log('🔓 Auth mode is none - BLOCKING redirect to login');
+			return;
+		}
+
 		// Clear any stored tokens
 		this.token = null;
 
 		// Redirect to login page
+		console.log('🔄 Proceeding with redirect to login...');
 		window.location.href = '/login';
 	}
 

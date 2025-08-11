@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"bufio"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"strings"
 
@@ -136,6 +139,14 @@ func (es *ErrorSanitizer) getGenericErrorMessage(statusCode int) string {
 // Middleware returns an HTTP middleware that sanitizes error responses
 func (es *ErrorSanitizer) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip WebSocket upgrade requests early
+		if r.Header.Get("Upgrade") == "websocket" ||
+			strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade") ||
+			strings.Contains(r.URL.Path, "/stream/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Wrap the response writer to capture errors
 		wrapped := &errorCapturingWriter{
 			ResponseWriter: w,
@@ -169,4 +180,12 @@ func (ecw *errorCapturingWriter) WriteHeader(statusCode int) {
 func (ecw *errorCapturingWriter) Write(data []byte) (int, error) {
 	ecw.written = true
 	return ecw.ResponseWriter.Write(data)
+}
+
+// Hijack implements http.Hijacker for WebSocket support
+func (ecw *errorCapturingWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := ecw.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
+	}
+	return nil, nil, errors.New("hijacker not supported")
 }

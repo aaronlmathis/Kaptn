@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
@@ -26,34 +27,42 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Phase 7: Get security context with impersonated client
-	secCtx, err := s.getSecurityContext(r)
-	if err != nil {
-		if secErr, ok := err.(*SecurityError); ok {
-			s.writeSecurityError(w, secErr, nil)
-		} else {
-			http.Error(w, "Security context error", http.StatusInternalServerError)
+	// Only apply Phase 7 security checks if auth mode is not 'none'
+	var kubeClient kubernetes.Interface
+	if s.config.Security.AuthMode != "none" {
+		// Phase 7: Get security context with impersonated client
+		secCtx, err := s.getSecurityContext(r)
+		if err != nil {
+			if secErr, ok := err.(*SecurityError); ok {
+				s.writeSecurityError(w, secErr, nil)
+			} else {
+				http.Error(w, "Security context error", http.StatusInternalServerError)
+			}
+			return
 		}
-		return
+
+		// Phase 7: Check permission to get this specific pod
+		if err := s.checkResourcePermission(r.Context(), secCtx, "get", "pods", namespace, name); err != nil {
+			if secErr, ok := err.(*SecurityError); ok {
+				s.writeSecurityError(w, secErr, secCtx.User)
+			} else {
+				http.Error(w, "Permission check failed", http.StatusInternalServerError)
+			}
+			return
+		}
+
+		kubeClient = secCtx.Client
+	} else {
+		// Use default client when auth is disabled
+		kubeClient = s.kubeClient
 	}
 
-	// Phase 7: Check permission to get this specific pod
-	if err := s.checkResourcePermission(r.Context(), secCtx, "get", "pods", namespace, name); err != nil {
-		if secErr, ok := err.(*SecurityError); ok {
-			s.writeSecurityError(w, secErr, secCtx.User)
-		} else {
-			http.Error(w, "Permission check failed", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Get pod from Kubernetes API using impersonated client
-	pod, err := secCtx.Client.CoreV1().Pods(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get pod from Kubernetes API using appropriate client
+	pod, err := kubeClient.CoreV1().Pods(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get pod",
 			zap.String("namespace", namespace),
 			zap.String("name", name),
-			zap.String("user", secCtx.User.Email),
 			zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -66,9 +75,12 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 
 	// Log successful operation for audit
 	s.logger.Info("Pod retrieved successfully",
-		zap.String("user", secCtx.User.Email),
-		zap.String("user_sub", secCtx.User.Sub),
-		zap.Strings("user_groups", secCtx.User.Groups),
+		zap.String("user", func() string {
+			if s.config.Security.AuthMode == "none" {
+				return "none-mode"
+			}
+			return "authenticated"
+		}()),
 		zap.String("namespace", namespace),
 		zap.String("name", name),
 		zap.String("pod_phase", string(pod.Status.Phase)))
@@ -110,17 +122,6 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
-	// Phase 7: Get security context with impersonated client
-	secCtx, err := s.getSecurityContext(r)
-	if err != nil {
-		if secErr, ok := err.(*SecurityError); ok {
-			s.writeSecurityError(w, secErr, nil)
-		} else {
-			http.Error(w, "Security context error", http.StatusInternalServerError)
-		}
-		return
-	}
-
 	// Parse query parameters for enhanced filtering
 	namespace := r.URL.Query().Get("namespace")
 	nodeName := r.URL.Query().Get("node")
@@ -144,27 +145,41 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 
-	// Phase 7: Check permission for listing pods
-	// If namespace is specified, check that specific namespace
-	// If no namespace, check cluster-wide list permission
-	if namespace != "" {
-		if err := s.checkResourcePermission(r.Context(), secCtx, "list", "pods", namespace, ""); err != nil {
+	// Only apply Phase 7 security checks if auth mode is not 'none'
+	if s.config.Security.AuthMode != "none" {
+		// Phase 7: Get security context with impersonated client
+		secCtx, err := s.getSecurityContext(r)
+		if err != nil {
 			if secErr, ok := err.(*SecurityError); ok {
-				s.writeSecurityError(w, secErr, secCtx.User)
+				s.writeSecurityError(w, secErr, nil)
 			} else {
-				http.Error(w, "Permission check failed", http.StatusInternalServerError)
+				http.Error(w, "Security context error", http.StatusInternalServerError)
 			}
 			return
 		}
-	} else {
-		// For cluster-wide list, check with empty namespace (cluster scope)
-		if err := s.checkResourcePermission(r.Context(), secCtx, "list", "pods", "", ""); err != nil {
-			if secErr, ok := err.(*SecurityError); ok {
-				s.writeSecurityError(w, secErr, secCtx.User)
-			} else {
-				http.Error(w, "Permission check failed", http.StatusInternalServerError)
+
+		// Phase 7: Check permission for listing pods
+		// If namespace is specified, check that specific namespace
+		// If no namespace, check cluster-wide list permission
+		if namespace != "" {
+			if err := s.checkResourcePermission(r.Context(), secCtx, "list", "pods", namespace, ""); err != nil {
+				if secErr, ok := err.(*SecurityError); ok {
+					s.writeSecurityError(w, secErr, secCtx.User)
+				} else {
+					http.Error(w, "Permission check failed", http.StatusInternalServerError)
+				}
+				return
 			}
-			return
+		} else {
+			// For cluster-wide list, check with empty namespace (cluster scope)
+			if err := s.checkResourcePermission(r.Context(), secCtx, "list", "pods", "", ""); err != nil {
+				if secErr, ok := err.(*SecurityError); ok {
+					s.writeSecurityError(w, secErr, secCtx.User)
+				} else {
+					http.Error(w, "Permission check failed", http.StatusInternalServerError)
+				}
+				return
+			}
 		}
 	}
 
@@ -203,14 +218,22 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log successful operation for audit
-	s.logger.Info("Pods listed successfully",
-		zap.String("user", secCtx.User.Email),
-		zap.String("user_sub", secCtx.User.Sub),
-		zap.Strings("user_groups", secCtx.User.Groups),
-		zap.String("namespace", namespace),
-		zap.Int("total_pods", len(filteredPods)),
-		zap.Int("page", page),
-		zap.Int("page_size", pageSize))
+	if s.config.Security.AuthMode != "none" {
+		// Log with user info when auth is enabled
+		s.logger.Info("Pods listed successfully",
+			zap.String("namespace", namespace),
+			zap.Int("total_pods", len(filteredPods)),
+			zap.Int("page", page),
+			zap.Int("page_size", pageSize))
+	} else {
+		// Simple logging when auth is disabled
+		s.logger.Info("Pods listed successfully",
+			zap.String("user", "none-mode"),
+			zap.String("namespace", namespace),
+			zap.Int("total_pods", len(filteredPods)),
+			zap.Int("page", page),
+			zap.Int("page_size", pageSize))
+	}
 
 	// Get pod metrics for enrichment
 	podMetricsMap := make(map[string]map[string]interface{})

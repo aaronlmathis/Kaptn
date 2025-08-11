@@ -464,6 +464,22 @@ func (s *Server) requestContextMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// webSocketAwareTimeout applies timeout middleware but skips WebSocket upgrade requests
+func (s *Server) webSocketAwareTimeout(timeout time.Duration) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip timeout for WebSocket upgrade requests
+			if r.Header.Get("Upgrade") == "websocket" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Apply normal timeout for all other requests
+			middleware.Timeout(timeout)(next).ServeHTTP(w, r)
+		})
+	}
+}
+
 func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestID)
 	s.router.Use(apimiddleware.RequestIDResponseMiddleware) // Add request ID to response headers
@@ -471,7 +487,7 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RealIP)
 	s.router.Use(middleware.Logger)
 	s.router.Use(middleware.Recoverer)
-	s.router.Use(middleware.Timeout(60 * time.Second))
+	s.router.Use(s.webSocketAwareTimeout(60 * time.Second))
 
 	// Prometheus metrics middleware
 	s.router.Use(apimiddleware.PrometheusMiddleware)

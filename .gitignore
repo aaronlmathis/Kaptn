@@ -402,3 +402,5 @@ internal_docs/
 *.key
 certs/
 *.bak
+config_auth.yaml
+config_auth.yaml

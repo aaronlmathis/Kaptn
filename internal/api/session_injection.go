@@ -104,8 +104,21 @@ func (h *SessionInjectionHandler) serveWithSessionInjection(w http.ResponseWrite
 	// Get session data
 	sessionData := h.getSessionData(r)
 
+	// Get CSP nonce from context
+	nonce := ""
+	if nonceValue := r.Context().Value(auth.CSPNonceKey{}); nonceValue != nil {
+		if nonceStr, ok := nonceValue.(string); ok {
+			nonce = nonceStr
+			h.logger.Info("Found CSP nonce in context", zap.String("nonce", nonce))
+		} else {
+			h.logger.Warn("CSP nonce in context is not a string", zap.Any("value", nonceValue))
+		}
+	} else {
+		h.logger.Warn("No CSP nonce found in request context")
+	}
+
 	// Inject session data into HTML
-	injectedContent := h.injectSessionData(string(content), sessionData)
+	injectedContent := h.injectSessionData(string(content), sessionData, nonce)
 
 	// Set headers
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -141,8 +154,8 @@ func (h *SessionInjectionHandler) getSessionData(r *http.Request) *auth.MinimalU
 	return sessionData
 }
 
-// injectSessionData injects session data into HTML content
-func (h *SessionInjectionHandler) injectSessionData(content string, sessionData *auth.MinimalUser) string {
+// injectSessionData injects session data into HTML content with CSP nonce
+func (h *SessionInjectionHandler) injectSessionData(content string, sessionData *auth.MinimalUser, nonce string) string {
 	// Add auth mode to the injected data
 	sessionWithMode := map[string]interface{}{
 		"id":              sessionData.ID,
@@ -159,12 +172,17 @@ func (h *SessionInjectionHandler) injectSessionData(content string, sessionData 
 		sessionJSON = []byte(fmt.Sprintf(`{"isAuthenticated":false,"authMode":"%s"}`, h.authMode))
 	}
 
-	// Create the injection script
+	// Create the injection script with CSP nonce
 	injectionScript := fmt.Sprintf(`
-<script>
+<script nonce="%s">
 	// Kaptn session data injected by server
 	window.__KAPTN_SESSION__ = %s;
-</script>`, string(sessionJSON))
+</script>`, nonce, string(sessionJSON))
+
+	h.logger.Info("Injecting session script",
+		zap.String("nonce", nonce),
+		zap.String("sessionData", string(sessionJSON)),
+		zap.String("script", injectionScript))
 
 	// Find a good place to inject the script (before </head> or at the start of <body>)
 	if strings.Contains(content, "</head>") {

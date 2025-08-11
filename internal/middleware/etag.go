@@ -1,8 +1,11 @@
 package middleware
 
 import (
+	"bufio"
 	"crypto/md5"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -26,6 +29,19 @@ func NewETagMiddleware(logger *zap.Logger) *ETagMiddleware {
 // Middleware returns the ETag middleware handler
 func (em *ETagMiddleware) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip WebSocket upgrade requests early (before any response wrapper)
+		if r.Header.Get("Upgrade") == "websocket" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Skip WebSocket connection requests by checking for websocket-specific headers
+		if r.Header.Get("Connection") == "Upgrade" ||
+			strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Only apply to safe GET requests
 		if r.Method != "GET" {
 			next.ServeHTTP(w, r)
@@ -101,6 +117,8 @@ func (em *ETagMiddleware) shouldSkipETag(path string) bool {
 		"/api/v1/analytics/",
 		"/api/v1/metrics/",
 		"/api/v1/logs/",
+		"/ws/",
+		"/websocket/",
 	}
 
 	for _, skipPath := range skipPaths {
@@ -111,6 +129,13 @@ func (em *ETagMiddleware) shouldSkipETag(path string) bool {
 
 	// Skip for admin endpoints
 	if strings.Contains(path, "/admin/") {
+		return true
+	}
+
+	// Skip for any WebSocket-related paths
+	if strings.Contains(strings.ToLower(path), "websocket") ||
+		strings.Contains(strings.ToLower(path), "/ws") ||
+		strings.Contains(path, "/stream/") {
 		return true
 	}
 
@@ -183,13 +208,18 @@ func (r *ETagResponseRecorder) Flush() {
 	}
 }
 
-// CloseNotify forwards close notifications
-func (r *ETagResponseRecorder) CloseNotify() <-chan bool {
-	if cn, ok := r.ResponseWriter.(http.CloseNotifier); ok {
-		return cn.CloseNotify()
+// Hijack forwards hijack calls (needed for WebSocket upgrades, though we skip them earlier)
+func (r *ETagResponseRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if h, ok := r.ResponseWriter.(http.Hijacker); ok {
+		return h.Hijack()
 	}
-	// Return a closed channel if CloseNotify is not available
-	ch := make(chan bool)
-	close(ch)
-	return ch
+	return nil, nil, errors.New("hijacker not supported")
+}
+
+// Push implements http.Pusher interface for HTTP/2 server push
+func (r *ETagResponseRecorder) Push(target string, opts *http.PushOptions) error {
+	if p, ok := r.ResponseWriter.(http.Pusher); ok {
+		return p.Push(target, opts)
+	}
+	return errors.New("push not supported")
 }

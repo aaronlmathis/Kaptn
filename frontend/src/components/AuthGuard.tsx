@@ -46,7 +46,19 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 
 	// If auth is disabled (none), always allow access
 	if (authMode === 'none') {
+		console.log('🔓 AuthGuard: Auth mode is none, allowing access')
 		return <>{children}</>
+	}
+
+	// Temporary: If we can't determine auth mode, check window session directly
+	if (typeof window !== 'undefined') {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const session = (window as any).__KAPTN_SESSION__
+		console.log('🔍 AuthGuard: Checking window session:', session)
+		if (session?.authMode === 'none') {
+			console.log('🔓 AuthGuard: Found auth mode none in window session, allowing access')
+			return <>{children}</>
+		}
 	}
 
 	// This is now primarily cosmetic - the real authentication is handled by Astro middleware

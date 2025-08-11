@@ -41,8 +41,18 @@ interface InjectedSession {
 // Helper function to get injected session data
 function getInjectedSession(): InjectedSession | null {
 	if (typeof window === 'undefined') return null
+
+	// Check for injected session data (should be available immediately)
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return (window as any).__KAPTN_SESSION__ || null
+	const injected = (window as any).__KAPTN_SESSION__ || null
+
+	if (injected) {
+		console.log('✅ Found injected session data:', injected)
+		return injected
+	}
+
+	console.log('⚠️ No injected session found')
+	return null
 }
 
 // Enhanced fetch with automatic retry on 401
@@ -59,6 +69,14 @@ async function fetchWithAuth(url: string, options: FetchOptions = {}): Promise<R
 	if (response.status === 401 && !url.includes('/auth/refresh')) {
 		console.log('Received 401, attempting token refresh...')
 
+		// Check if auth mode is none - skip refresh attempts
+		const injectedSession = getInjectedSession()
+		if (injectedSession?.authMode === 'none') {
+			console.log('🔓 Auth mode is none - skipping token refresh for 401')
+			// For auth mode none, just throw an error instead of trying to refresh
+			throw new Error('Unauthorized - auth disabled')
+		}
+
 		try {
 			const refreshResponse = await fetch('/api/v1/auth/refresh', {
 				method: 'POST',
@@ -71,12 +89,24 @@ async function fetchWithAuth(url: string, options: FetchOptions = {}): Promise<R
 				response = await fetch(url, defaultOptions)
 			} else {
 				console.log('Token refresh failed, redirecting to login')
+				// Check if auth mode is none before redirecting
+				const injectedSession = getInjectedSession()
+				if (injectedSession?.authMode === 'none') {
+					console.log('🔓 Auth mode is none - skipping redirect on refresh failure')
+					throw new Error('Refresh failed but auth disabled')
+				}
 				// Refresh failed - redirect to login
 				window.location.href = '/login'
 				throw new Error('Authentication session expired')
 			}
 		} catch (refreshError) {
 			console.error('Refresh attempt failed:', refreshError)
+			// Check if auth mode is none before redirecting
+			const injectedSession = getInjectedSession()
+			if (injectedSession?.authMode === 'none') {
+				console.log('🔓 Auth mode is none - skipping redirect on error')
+				throw new Error('Auth error but auth disabled')
+			}
 			window.location.href = '/login'
 			throw new Error('Authentication session expired')
 		}
@@ -100,11 +130,15 @@ export function useAuth() {
 
 	const initializeAuth = async () => {
 		try {
-			// First, try to get session data from server-injected global
+			console.log('🔄 Initializing auth...')
+
+			// First, try to get session data from server-injected global (synchronous)
 			const injectedSession = getInjectedSession()
+			console.log('📦 Injected session data:', injectedSession)
 
 			if (injectedSession) {
-				// Use injected session data
+				console.log('✅ Using injected session data, authMode:', injectedSession.authMode)
+				// Use injected session data immediately
 				setAuthState({
 					isAuthenticated: injectedSession.isAuthenticated,
 					isLoading: false,
@@ -119,10 +153,11 @@ export function useAuth() {
 				return
 			}
 
+			console.log('⚠️ No injected session data found, falling back to API calls')
 			// Fallback: fetch auth config and status (for cases where injection fails)
 			await checkAuthStatus()
 		} catch (error) {
-			console.error('Auth initialization error:', error)
+			console.error('❌ Auth initialization error:', error)
 			setAuthState({
 				isAuthenticated: false,
 				isLoading: false,
@@ -147,6 +182,7 @@ export function useAuth() {
 
 			// If auth is disabled, consider user as authenticated
 			if (authMode === 'none') {
+				console.log('🔓 Auth mode is none, setting dev user')
 				setAuthState({
 					isAuthenticated: true,
 					isLoading: false,
