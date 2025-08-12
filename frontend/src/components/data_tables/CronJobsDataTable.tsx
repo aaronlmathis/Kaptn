@@ -21,14 +21,12 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
@@ -37,6 +35,9 @@ import {
 	IconEye,
 	IconPlayerPause,
 	IconPlayerPlay,
+	IconDownload,
+	IconCopy,
+	IconClock,
 } from "@tabler/icons-react"
 
 import {
@@ -60,7 +61,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -76,6 +76,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { CronJobDetailDrawer } from "@/components/viewers/CronJobDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useCronJobsWithWebSocket } from "@/hooks/useCronJobsWithWebSocket"
@@ -329,6 +330,8 @@ export function CronJobsDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedCronJobForDetails, setSelectedCronJobForDetails] = React.useState<z.infer<typeof cronJobSchema> | null>(null)
 
@@ -344,8 +347,59 @@ export function CronJobsDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create filter options for cronjobs based on suspend status
+	const cronJobStatuses: FilterOption[] = React.useMemo(() => {
+		const statuses = new Set<string>()
+		cronJobs.forEach(cronJob => {
+			// Create status based on suspend field
+			if (cronJob.suspend) {
+				statuses.add("Suspended")
+			} else {
+				statuses.add("Active")
+			}
+		})
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: (
+				<Badge variant="outline" className={status === "Active" ? "text-green-600 border-border bg-transparent px-1.5" : "text-yellow-600 border-border bg-transparent px-1.5"}>
+					{status === "Active" ? <IconPlayerPlay className="size-3 mr-1" /> : <IconPlayerPause className="size-3 mr-1" />}
+					{status}
+				</Badge>
+			)
+		}))
+	}, [cronJobs])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = cronJobs
+
+		// Apply category filter (status)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(cronJob => {
+				// Determine status for this cronjob
+				const status = cronJob.suspend ? "Suspended" : "Active"
+				return status === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(cronJob =>
+				cronJob.name.toLowerCase().includes(searchTerm) ||
+				cronJob.namespace.toLowerCase().includes(searchTerm) ||
+				cronJob.schedule.toLowerCase().includes(searchTerm) ||
+				cronJob.image.toLowerCase().includes(searchTerm) ||
+				cronJob.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [cronJobs, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: cronJobs,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -364,6 +418,67 @@ export function CronJobsDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Create bulk actions for cronjobs
+	const cronJobBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for cronjobs:', selectedCronJobs.map(cj => cj.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy CronJob Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedCronJobs.map(cj => cj.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied cronjob names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "trigger-jobs",
+			label: "Trigger Selected Jobs",
+			icon: <IconClock className="size-4" />,
+			action: () => {
+				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Trigger jobs for cronjobs:', selectedCronJobs.map(cj => `${cj.name} in ${cj.namespace}`))
+				// TODO: Implement bulk job triggering
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "toggle-suspend",
+			label: "Toggle Suspend/Resume",
+			icon: <IconPlayerPause className="size-4" />,
+			action: () => {
+				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Toggle suspend for cronjobs:', selectedCronJobs.map(cj => `${cj.name} in ${cj.namespace}`))
+				// TODO: Implement bulk suspend/resume toggle
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-cronjobs",
+			label: "Delete Selected CronJobs",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete cronjobs:', selectedCronJobs.map(cj => `${cj.name} in ${cj.namespace}`))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -416,60 +531,32 @@ export function CronJobsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{/* Connection status indicator */}
-						{isConnected && (
-							<div className="flex items-center gap-1.5 text-xs text-green-600">
-								<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-								Live
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search cronjobs by name, namespace, schedule, image, or age... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by status"
+					categoryOptions={cronJobStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={cronJobBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

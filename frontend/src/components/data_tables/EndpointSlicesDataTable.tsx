@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,13 +28,15 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconNetwork,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +60,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { EndpointSliceDetailDrawer } from "@/components/viewers/EndpointSliceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useEndpointSlicesWithWebSocket } from "@/hooks/useEndpointSlicesWithWebSocket"
@@ -327,6 +328,8 @@ export function EndpointSlicesDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedEndpointSliceForDetails, setSelectedEndpointSliceForDetails] = React.useState<z.infer<typeof endpointSliceSchema> | null>(null)
 
@@ -342,8 +345,47 @@ export function EndpointSlicesDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create filter options for endpoint slices based on address type
+	const endpointSliceTypes: FilterOption[] = React.useMemo(() => {
+		const types = new Set(endpointSlices.map(slice => slice.addressType))
+		return Array.from(types).sort().map(type => ({
+			value: type,
+			label: type,
+			badge: (
+				<Badge variant="outline" className="text-blue-600 border-border bg-transparent px-1.5">
+					{type}
+				</Badge>
+			)
+		}))
+	}, [endpointSlices])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = endpointSlices
+
+		// Apply category filter (address type)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(slice => slice.addressType === statusFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(slice =>
+				slice.name.toLowerCase().includes(searchTerm) ||
+				slice.namespace.toLowerCase().includes(searchTerm) ||
+				slice.addressType.toLowerCase().includes(searchTerm) ||
+				slice.ready.toLowerCase().includes(searchTerm) ||
+				slice.addressesDisplay?.toLowerCase().includes(searchTerm) ||
+				slice.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [endpointSlices, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: endpointSlices,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -362,6 +404,56 @@ export function EndpointSlicesDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Create bulk actions for endpoint slices
+	const endpointSliceBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for endpoint slices:', selectedSlices.map(slice => slice.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy EndpointSlice Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedSlices.map(slice => slice.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied endpoint slice names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "monitor-endpoints",
+			label: "Monitor Selected Endpoints",
+			icon: <IconNetwork className="size-4" />,
+			action: () => {
+				const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Monitor endpoints for slices:', selectedSlices.map(slice => `${slice.name} in ${slice.namespace}`))
+				// TODO: Implement endpoint monitoring
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-endpointslices",
+			label: "Delete Selected EndpointSlices",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete endpoint slices:', selectedSlices.map(slice => `${slice.name} in ${slice.namespace}`))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -414,60 +506,32 @@ export function EndpointSlicesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{/* Connection status indicator */}
-						{isConnected && (
-							<div className="flex items-center gap-1.5 text-xs text-green-600">
-								<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-								Live
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search endpoint slices by name, namespace, address type, or addresses... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by address type"
+					categoryOptions={endpointSliceTypes}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={endpointSliceBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
@@ -527,6 +591,12 @@ export function EndpointSlicesDataTable() {
 					<div className="flex-1 text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
+						{isConnected && (
+							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-6 lg:space-x-8">
 						<div className="flex items-center space-x-2">

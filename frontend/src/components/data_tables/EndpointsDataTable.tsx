@@ -21,20 +21,22 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconEdit,
 	IconEye,
 	IconTrash,
+	IconDownload,
+	IconCopy,
+	IconNetwork,
+	IconInfoCircle,
 } from "@tabler/icons-react"
 
 import {
@@ -58,7 +60,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -74,6 +75,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { EndpointDetailDrawer } from "@/components/viewers/EndpointDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useEndpointsWithWebSocket } from "@/hooks/useEndpointsWithWebSocket"
@@ -280,6 +282,8 @@ export function EndpointsDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedEndpointForDetails, setSelectedEndpointForDetails] = React.useState<DashboardEndpoints | null>(null)
 
@@ -295,8 +299,71 @@ export function EndpointsDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create filter options for endpoints based on subset count
+	const endpointStatuses: FilterOption[] = React.useMemo(() => {
+		const statuses = new Set<string>()
+		endpoints.forEach(endpoint => {
+			// Create status categories based on subset count
+			if (endpoint.subsets === 0) {
+				statuses.add("No Endpoints")
+			} else if (endpoint.subsets === 1) {
+				statuses.add("Single Subset")
+			} else {
+				statuses.add("Multiple Subsets")
+			}
+		})
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: (
+				<Badge variant="outline" className={
+					status === "No Endpoints" ? "text-red-600 border-border bg-transparent px-1.5" :
+						status === "Single Subset" ? "text-blue-600 border-border bg-transparent px-1.5" :
+							"text-green-600 border-border bg-transparent px-1.5"
+				}>
+					{status}
+				</Badge>
+			)
+		}))
+	}, [endpoints])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = endpoints
+
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(endpoint => {
+				// Determine status category for this endpoint
+				let statusCategory = ""
+				if (endpoint.subsets === 0) {
+					statusCategory = "No Endpoints"
+				} else if (endpoint.subsets === 1) {
+					statusCategory = "Single Subset"
+				} else {
+					statusCategory = "Multiple Subsets"
+				}
+				return statusCategory === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(endpoint =>
+				endpoint.name.toLowerCase().includes(searchTerm) ||
+				endpoint.namespace.toLowerCase().includes(searchTerm) ||
+				endpoint.addressesDisplay.toLowerCase().includes(searchTerm) ||
+				endpoint.portsDisplay.toLowerCase().includes(searchTerm) ||
+				endpoint.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [endpoints, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: endpoints,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -315,6 +382,67 @@ export function EndpointsDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Bulk actions for endpoints
+	const endpointBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for endpoints:', selectedEndpoints.map(ep => ep.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Endpoint Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedEndpoints.map(ep => ep.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied endpoint names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "show-network-info",
+			label: "Show Network Information",
+			icon: <IconNetwork className="size-4" />,
+			action: () => {
+				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Show network info for endpoints:', selectedEndpoints.map(ep => `${ep.name}: ${ep.addressesDisplay}`))
+				// TODO: Implement network information display
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "describe-endpoints",
+			label: "Describe Selected Endpoints",
+			icon: <IconInfoCircle className="size-4" />,
+			action: () => {
+				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Describe endpoints:', selectedEndpoints.map(ep => `${ep.name} in ${ep.namespace}`))
+				// TODO: Implement bulk endpoint describe
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-endpoints",
+			label: "Delete Selected Endpoints",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete endpoints:', selectedEndpoints.map(ep => `${ep.name} in ${ep.namespace}`))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -367,59 +495,31 @@ export function EndpointsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search endpoints by name, namespace, addresses, ports, or age... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by subset count"
+					categoryOptions={endpointStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={endpointBulkActions}
+					bulkActionsLabel="Endpoint Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Real-time updates enabled</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

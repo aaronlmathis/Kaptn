@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,13 +28,16 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconFileText,
+	IconInfoCircle,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +61,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -75,6 +76,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { DaemonSetDetailDrawer } from "@/components/viewers/DaemonSetDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useDaemonSetsWithWebSocket } from "@/hooks/useDaemonSetsWithWebSocket"
@@ -332,6 +334,8 @@ export function DaemonSetsDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedDaemonSetForDetails, setSelectedDaemonSetForDetails] = React.useState<z.infer<typeof daemonSetSchema> | null>(null)
 
@@ -347,8 +351,68 @@ export function DaemonSetsDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create readiness status options based on daemon set state
+	const daemonSetStatuses: FilterOption[] = React.useMemo(() => {
+		const statuses = new Set<string>()
+		daemonSets.forEach(daemonSet => {
+			const isReady = daemonSet.ready === daemonSet.desired && daemonSet.desired > 0
+			const isPartial = daemonSet.ready > 0 && daemonSet.ready < daemonSet.desired
+			if (isReady) {
+				statuses.add("Ready")
+			} else if (isPartial) {
+				statuses.add("Partial")
+			} else {
+				statuses.add("Not Ready")
+			}
+		})
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: (
+				<Badge variant="outline" className={
+					status === "Ready" ? "text-green-600 border-border bg-transparent px-1.5" :
+						status === "Partial" ? "text-yellow-600 border-border bg-transparent px-1.5" :
+							"text-red-600 border-border bg-transparent px-1.5"
+				}>
+					{status === "Ready" && <IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />}
+					{status === "Partial" && <IconLoader className="size-3 text-yellow-600 mr-1" />}
+					{status === "Not Ready" && <IconAlertTriangle className="size-3 text-red-600 mr-1" />}
+					{status}
+				</Badge>
+			)
+		}))
+	}, [daemonSets])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = daemonSets
+
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(daemonSet => {
+				const isReady = daemonSet.ready === daemonSet.desired && daemonSet.desired > 0
+				const isPartial = daemonSet.ready > 0 && daemonSet.ready < daemonSet.desired
+				const status = isReady ? "Ready" : isPartial ? "Partial" : "Not Ready"
+				return status === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(daemonSet =>
+				daemonSet.name.toLowerCase().includes(searchTerm) ||
+				daemonSet.namespace.toLowerCase().includes(searchTerm) ||
+				daemonSet.updateStrategy.toLowerCase().includes(searchTerm) ||
+				daemonSet.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [daemonSets, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: daemonSets,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -367,6 +431,78 @@ export function DaemonSetsDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Bulk actions for daemon sets
+	const daemonSetBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for daemon sets:', selectedDaemonSets.map(ds => ds.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy DaemonSet Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedDaemonSets.map(ds => ds.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied daemon set names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "restart-daemonsets",
+			label: "Restart Selected DaemonSets",
+			icon: <IconRefresh className="size-4" />,
+			action: () => {
+				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Restart daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
+				// TODO: Implement bulk daemon set restart
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "get-logs",
+			label: "Get Logs for Selected",
+			icon: <IconFileText className="size-4" />,
+			action: () => {
+				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Get logs for daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
+				// TODO: Implement bulk log retrieval
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "describe-daemonsets",
+			label: "Describe Selected DaemonSets",
+			icon: <IconInfoCircle className="size-4" />,
+			action: () => {
+				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Describe daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
+				// TODO: Implement bulk daemon set describe
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-daemonsets",
+			label: "Delete Selected DaemonSets",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -419,59 +555,31 @@ export function DaemonSetsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search daemon sets by name, namespace, update strategy, or age... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by readiness"
+					categoryOptions={daemonSetStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={daemonSetBulkActions}
+					bulkActionsLabel="DaemonSet Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Real-time updates enabled</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

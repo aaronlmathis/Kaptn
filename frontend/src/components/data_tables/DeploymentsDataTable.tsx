@@ -21,20 +21,21 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconScale,
 } from "@tabler/icons-react"
 
 import {
@@ -58,7 +59,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -72,6 +72,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { DeploymentDetailDrawer } from "@/components/viewers/DeploymentDetailDrawer"
@@ -299,6 +300,8 @@ export function DeploymentsDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedDeploymentForDetails, setSelectedDeploymentForDetails] = React.useState<z.infer<typeof deploymentSchema> | null>(null)
 
@@ -314,8 +317,56 @@ export function DeploymentsDataTable() {
 		[handleViewDetails]
 	)
 
+	// For deployments, we can create status filters based on the ready/available status
+	const deploymentStatuses: FilterOption[] = React.useMemo(() => {
+		const statuses = new Set<string>()
+		deployments.forEach(deployment => {
+			// Create status based on availability
+			if (deployment.available > 0) {
+				statuses.add("Available")
+			} else {
+				statuses.add("Unavailable")
+			}
+		})
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: (
+				<Badge variant="outline" className={status === "Available" ? "text-green-600 border-border bg-transparent px-1.5" : "text-red-600 border-border bg-transparent px-1.5"}>
+					{status}
+				</Badge>
+			)
+		}))
+	}, [deployments])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = deployments
+
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(deployment => {
+				const isAvailable = deployment.available > 0
+				const status = isAvailable ? "Available" : "Unavailable"
+				return status === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(deployment =>
+				deployment.name.toLowerCase().includes(searchTerm) ||
+				deployment.namespace.toLowerCase().includes(searchTerm) ||
+				deployment.image.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [deployments, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: deployments,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -334,6 +385,67 @@ export function DeploymentsDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Bulk actions for deployments
+	const deploymentBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "scale-deployments",
+			label: "Scale Selected Deployments",
+			icon: <IconScale className="size-4" />,
+			action: () => {
+				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Scale deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
+				// TODO: Implement bulk deployment scaling
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "restart-deployments",
+			label: "Restart Selected Deployments",
+			icon: <IconRefresh className="size-4" />,
+			action: () => {
+				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Restart deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
+				// TODO: Implement bulk deployment restart
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for deployments:', selectedDeployments.map(d => d.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Deployment Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedDeployments.map(d => d.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied deployment names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-deployments",
+			label: "Delete Selected Deployments",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
+				// TODO: Implement bulk deployment deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -386,59 +498,32 @@ export function DeploymentsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Live updates</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search deployments by name, namespace, or image... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by status"
+					categoryOptions={deploymentStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={deploymentBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

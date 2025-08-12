@@ -21,20 +21,21 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconDatabase,
 } from "@tabler/icons-react"
 
 import {
@@ -58,7 +59,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -74,6 +74,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { ConfigMapDetailDrawer } from "@/components/viewers/ConfigMapDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useConfigMapsWithWebSocket } from "@/hooks/useConfigMapsWithWebSocket"
@@ -287,6 +288,8 @@ export function ConfigMapsDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedConfigMapForDetails, setSelectedConfigMapForDetails] = React.useState<DashboardConfigMap | null>(null)
 
@@ -302,8 +305,70 @@ export function ConfigMapsDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create filter options for config maps based on data keys count
+	const configMapSizes: FilterOption[] = React.useMemo(() => {
+		const sizes = new Set<string>()
+		configMaps.forEach(configMap => {
+			// Create size categories based on data keys count
+			if (configMap.dataKeysCount === 0) {
+				sizes.add("Empty")
+			} else if (configMap.dataKeysCount <= 5) {
+				sizes.add("Small (1-5 keys)")
+			} else if (configMap.dataKeysCount <= 20) {
+				sizes.add("Medium (6-20 keys)")
+			} else {
+				sizes.add("Large (20+ keys)")
+			}
+		})
+		return Array.from(sizes).sort().map(size => ({
+			value: size,
+			label: size,
+			badge: (
+				<Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
+					{size}
+				</Badge>
+			)
+		}))
+	}, [configMaps])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = configMaps
+
+		// Apply category filter (size categories)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(configMap => {
+				// Determine size category for this config map
+				let sizeCategory = ""
+				if (configMap.dataKeysCount === 0) {
+					sizeCategory = "Empty"
+				} else if (configMap.dataKeysCount <= 5) {
+					sizeCategory = "Small (1-5 keys)"
+				} else if (configMap.dataKeysCount <= 20) {
+					sizeCategory = "Medium (6-20 keys)"
+				} else {
+					sizeCategory = "Large (20+ keys)"
+				}
+				return sizeCategory === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(configMap =>
+				configMap.name.toLowerCase().includes(searchTerm) ||
+				configMap.namespace.toLowerCase().includes(searchTerm) ||
+				configMap.dataSize.toLowerCase().includes(searchTerm) ||
+				configMap.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [configMaps, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: configMaps,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -322,6 +387,56 @@ export function ConfigMapsDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Create bulk actions for config maps
+	const configMapBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for config maps:', selectedConfigMaps.map(cm => cm.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy ConfigMap Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedConfigMaps.map(cm => cm.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied config map names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "download-data",
+			label: "Download ConfigMap Data",
+			icon: <IconDatabase className="size-4" />,
+			action: () => {
+				const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Download data for config maps:', selectedConfigMaps.map(cm => `${cm.name} in ${cm.namespace}`))
+				// TODO: Implement bulk data download
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-configmaps",
+			label: "Delete Selected ConfigMaps",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete config maps:', selectedConfigMaps.map(cm => `${cm.name} in ${cm.namespace}`))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -374,59 +489,32 @@ export function ConfigMapsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search config maps by name, namespace, data size, or age... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by size"
+					categoryOptions={configMapSizes}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={configMapBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

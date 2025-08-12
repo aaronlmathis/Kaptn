@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,13 +28,14 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconDatabase,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +59,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -73,6 +72,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ApiResourceDetailDrawer } from "@/components/viewers/ApiResourceDetailDrawer"
@@ -324,6 +324,8 @@ export function ApiResourcesDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedAPIResourceForDetails, setSelectedAPIResourceForDetails] = React.useState<z.infer<typeof apiResourceSchema> | null>(null)
 
@@ -339,8 +341,45 @@ export function ApiResourcesDataTable() {
 		[handleViewDetails]
 	)
 
+	// Filter options for API resources (namespaced vs cluster-scoped)
+	const resourceScopes: FilterOption[] = React.useMemo(() => {
+		const scopes = new Set(apiResources.map(resource => resource.namespaced))
+		return Array.from(scopes).sort().map(scope => ({
+			value: scope,
+			label: scope === "Yes" ? "Namespaced" : "Cluster-scoped",
+			badge: getNamespacedBadge(scope)
+		}))
+	}, [apiResources])
+
+	// Filter data based on global filter and scope filter
+	const filteredData = React.useMemo(() => {
+		let filtered = apiResources
+
+		// Apply scope filter (namespaced vs cluster-scoped)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(resource => resource.namespaced === statusFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(resource =>
+				resource.name.toLowerCase().includes(searchTerm) ||
+				resource.singularName.toLowerCase().includes(searchTerm) ||
+				resource.kind.toLowerCase().includes(searchTerm) ||
+				resource.group.toLowerCase().includes(searchTerm) ||
+				resource.version.toLowerCase().includes(searchTerm) ||
+				resource.apiVersion.toLowerCase().includes(searchTerm) ||
+				resource.categories.toLowerCase().includes(searchTerm) ||
+				(resource.shortNames && resource.shortNames.toLowerCase().includes(searchTerm))
+			)
+		}
+
+		return filtered
+	}, [apiResources, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: apiResources,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -359,6 +398,45 @@ export function ApiResourcesDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Bulk actions for API resources
+	const apiResourceBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedResources = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for API resources:', selectedResources.map(r => r.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Resource Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedResources = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedResources.map(r => r.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied API resource names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-kinds",
+			label: "Copy Resource Kinds",
+			icon: <IconDatabase className="size-4" />,
+			action: () => {
+				const selectedResources = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const kinds = selectedResources.map(r => r.kind).join('\n')
+				navigator.clipboard.writeText(kinds)
+				console.log('Copied API resource kinds:', kinds)
+			},
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -411,53 +489,24 @@ export function ApiResourcesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search API resources by name, kind, group, version, or categories... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by scope"
+					categoryOptions={resourceScopes}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={apiResourceBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				/>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,13 +28,16 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconNetwork,
+	IconRoute,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +61,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -75,6 +76,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { GatewayDetailDrawer } from "@/components/viewers/GatewayDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useGatewaysWithWebSocket } from "@/hooks/useGatewaysWithWebSocket"
@@ -208,11 +210,13 @@ const createColumns = (
 			),
 		},
 		{
+			id: "protocol-type",
 			accessorKey: "ports",
 			header: "Type",
 			cell: ({ row }) => getGatewayServerTypeBadge(row.original.ports),
 		},
 		{
+			id: "ports-list",
 			accessorKey: "ports",
 			header: "Ports",
 			cell: ({ row }) => {
@@ -348,6 +352,8 @@ export function GatewaysDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedGatewayForDetails, setSelectedGatewayForDetails] = React.useState<z.infer<typeof gatewaySchema> | null>(null)
 
@@ -363,8 +369,118 @@ export function GatewaysDataTable() {
 		[handleViewDetails]
 	)
 
+	// Helper function to get badge for gateway type in filter options
+	const getGatewayTypeBadge = React.useCallback((type: string) => {
+		switch (type) {
+			case "HTTPS":
+				return (
+					<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+						<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+						HTTPS
+					</Badge>
+				)
+			case "HTTP":
+				return (
+					<Badge variant="outline" className="text-blue-600 border-border bg-transparent px-1.5">
+						<IconCircleCheckFilled className="size-3 fill-blue-600 mr-1" />
+						HTTP
+					</Badge>
+				)
+			case "TCP":
+				return (
+					<Badge variant="outline" className="text-purple-600 border-border bg-transparent px-1.5">
+						<IconCircleCheckFilled className="size-3 fill-purple-600 mr-1" />
+						TCP
+					</Badge>
+				)
+			default:
+				return (
+					<Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
+						{type}
+					</Badge>
+				)
+		}
+	}, [])
+
+	// Create filter options for gateways based on protocol types
+	const gatewayTypes: FilterOption[] = React.useMemo(() => {
+		const types = new Set<string>()
+		gateways.forEach(gateway => {
+			// Determine the primary protocol type for this gateway
+			if (!gateway.ports || gateway.ports.length === 0) {
+				types.add("No Ports")
+			} else {
+				const hasHTTPS = gateway.ports.some(p => p.protocol === "HTTPS")
+				const hasHTTP = gateway.ports.some(p => p.protocol === "HTTP")
+				const hasTCP = gateway.ports.some(p => p.protocol === "TCP")
+
+				if (hasHTTPS) {
+					types.add("HTTPS")
+				} else if (hasHTTP) {
+					types.add("HTTP")
+				} else if (hasTCP) {
+					types.add("TCP")
+				} else {
+					types.add("Other")
+				}
+			}
+		})
+		return Array.from(types).sort().map(type => ({
+			value: type,
+			label: type,
+			badge: getGatewayTypeBadge(type)
+		}))
+	}, [gateways, getGatewayTypeBadge])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = gateways
+
+		// Apply category filter (gateway type)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(gateway => {
+				// Determine the primary protocol type for this gateway
+				if (!gateway.ports || gateway.ports.length === 0) {
+					return statusFilter === "No Ports"
+				}
+
+				const hasHTTPS = gateway.ports.some(p => p.protocol === "HTTPS")
+				const hasHTTP = gateway.ports.some(p => p.protocol === "HTTP")
+				const hasTCP = gateway.ports.some(p => p.protocol === "TCP")
+
+				let gatewayType = "Other"
+				if (hasHTTPS) {
+					gatewayType = "HTTPS"
+				} else if (hasHTTP) {
+					gatewayType = "HTTP"
+				} else if (hasTCP) {
+					gatewayType = "TCP"
+				}
+
+				return gatewayType === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(gateway =>
+				gateway.name.toLowerCase().includes(searchTerm) ||
+				gateway.namespace.toLowerCase().includes(searchTerm) ||
+				gateway.addresses?.some(addr => addr.toLowerCase().includes(searchTerm)) ||
+				gateway.ports?.some(port =>
+					port.protocol.toLowerCase().includes(searchTerm) ||
+					port.name?.toLowerCase().includes(searchTerm)
+				) ||
+				gateway.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [gateways, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: gateways,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -383,6 +499,67 @@ export function GatewaysDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Create bulk actions for gateways
+	const gatewayBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedGateways = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for gateways:', selectedGateways.map(gw => gw.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Gateway Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedGateways = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedGateways.map(gw => gw.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied gateway names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "configure-routes",
+			label: "Configure Routes",
+			icon: <IconRoute className="size-4" />,
+			action: () => {
+				const selectedGateways = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Configure routes for gateways:', selectedGateways.map(gw => `${gw.name} in ${gw.namespace}`))
+				// TODO: Implement route configuration
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "test-connectivity",
+			label: "Test Gateway Connectivity",
+			icon: <IconNetwork className="size-4" />,
+			action: () => {
+				const selectedGateways = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Test connectivity for gateways:', selectedGateways.map(gw => `${gw.name} in ${gw.namespace}`))
+				// TODO: Implement connectivity testing
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-gateways",
+			label: "Delete Selected Gateways",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedGateways = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete gateways:', selectedGateways.map(gw => `${gw.name} in ${gw.namespace}`))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -435,59 +612,32 @@ export function GatewaysDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Live updates</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search gateways by name, namespace, addresses, or port protocols... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by protocol type"
+					categoryOptions={gatewayTypes}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={gatewayBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
@@ -547,6 +697,12 @@ export function GatewaysDataTable() {
 					<div className="flex-1 text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
+						{isConnected && (
+							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
+								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+								<span>Real-time updates enabled</span>
+							</div>
+						)}
 					</div>
 					<div className="flex items-center space-x-6 lg:space-x-8">
 						<div className="flex items-center space-x-2">

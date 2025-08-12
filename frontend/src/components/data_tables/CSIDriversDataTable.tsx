@@ -21,20 +21,20 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconDatabase,
 } from "@tabler/icons-react"
 
 import {
@@ -58,7 +58,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
@@ -73,6 +72,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { CSIDriverDetailDrawer } from "@/components/viewers/CSIDriverDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useCSIDrivers } from "@/hooks/use-k8s-data"
@@ -339,6 +339,8 @@ export function CSIDriversDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedCSIDriverForDetails, setSelectedCSIDriverForDetails] = React.useState<z.infer<typeof csiDriverSchema> | null>(null)
 
@@ -354,8 +356,60 @@ export function CSIDriversDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create filter options for CSI drivers based on storage capacity support
+	const csiDriverCapabilities: FilterOption[] = React.useMemo(() => {
+		const capabilities = new Set<string>()
+		csiDrivers.forEach(driver => {
+			// Create capability categories based on storage capacity
+			if (driver.storageCapacity) {
+				capabilities.add("Storage Capacity Supported")
+			} else {
+				capabilities.add("Storage Capacity Not Supported")
+			}
+		})
+		return Array.from(capabilities).sort().map(capability => ({
+			value: capability,
+			label: capability,
+			badge: (
+				<Badge variant="outline" className={capability.includes("Supported") ? "text-green-600 border-border bg-transparent px-1.5" : "text-muted-foreground border-border bg-transparent px-1.5"}>
+					{capability.replace("Storage Capacity ", "")}
+				</Badge>
+			)
+		}))
+	}, [csiDrivers])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = csiDrivers
+
+		// Apply category filter (storage capacity capabilities)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(driver => {
+				// Determine capability for this driver
+				const capability = driver.storageCapacity
+					? "Storage Capacity Supported"
+					: "Storage Capacity Not Supported"
+				return capability === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(driver =>
+				driver.name.toLowerCase().includes(searchTerm) ||
+				driver.fsGroupPolicy.toLowerCase().includes(searchTerm) ||
+				driver.volumeLifecycleModes.toString().includes(searchTerm) ||
+				driver.tokenRequests.toString().includes(searchTerm) ||
+				driver.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [csiDrivers, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: csiDrivers,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -374,6 +428,56 @@ export function CSIDriversDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Create bulk actions for CSI drivers
+	const csiDriverBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedDrivers = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for CSI drivers:', selectedDrivers.map(d => d.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Driver Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedDrivers = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedDrivers.map(d => d.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied CSI driver names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "show-capabilities",
+			label: "Show Driver Capabilities",
+			icon: <IconDatabase className="size-4" />,
+			action: () => {
+				const selectedDrivers = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Show capabilities for CSI drivers:', selectedDrivers.map(d => d.name))
+				// TODO: Implement capabilities overview
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-drivers",
+			label: "Delete Selected Drivers",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedDrivers = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete CSI drivers:', selectedDrivers.map(d => d.name))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -426,53 +530,24 @@ export function CSIDriversDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search CSI drivers by name, FS group policy, lifecycle modes, or age... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by capability"
+					categoryOptions={csiDriverCapabilities}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={csiDriverBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				/>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

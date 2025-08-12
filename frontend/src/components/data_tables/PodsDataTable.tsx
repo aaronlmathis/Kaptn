@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,7 +28,6 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
@@ -37,6 +35,10 @@ import {
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconFileText,
+	IconInfoCircle,
 } from "@tabler/icons-react"
 
 import {
@@ -60,7 +62,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -74,6 +75,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { useShell } from "@/hooks/use-shell"
@@ -352,7 +354,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 }
 
 export function PodsDataTable() {
-	const { data: pods, loading, error, refetch } = usePodsWithWebSocket(true)
+	const { data: pods, loading, error, refetch, isConnected } = usePodsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 	const { openShell } = useShell()
 
@@ -360,6 +362,8 @@ export function PodsDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedPodForDetails, setSelectedPodForDetails] = React.useState<z.infer<typeof podSchema> | null>(null)
 
@@ -380,8 +384,42 @@ export function PodsDataTable() {
 		[handleViewDetails, handleExecShell]
 	)
 
+	// Filter options for pod statuses
+	const podStatuses: FilterOption[] = React.useMemo(() => {
+		const statuses = new Set(pods.map(pod => pod.status))
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: getStatusBadge(status)
+		}))
+	}, [pods])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = pods
+
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(pod => pod.status === statusFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(pod =>
+				pod.name.toLowerCase().includes(searchTerm) ||
+				pod.namespace.toLowerCase().includes(searchTerm) ||
+				pod.status.toLowerCase().includes(searchTerm) ||
+				pod.node.toLowerCase().includes(searchTerm) ||
+				pod.image.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [pods, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: pods,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -400,6 +438,78 @@ export function PodsDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Bulk actions for pods
+	const podBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "get-logs",
+			label: "Get Logs for Selected",
+			icon: <IconFileText className="size-4" />,
+			action: () => {
+				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Get logs for pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
+				// TODO: Implement bulk log retrieval
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "describe-pods",
+			label: "Describe Selected Pods",
+			icon: <IconInfoCircle className="size-4" />,
+			action: () => {
+				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Describe pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
+				// TODO: Implement bulk pod describe
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for pods:', selectedPods.map(p => p.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Pod Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedPods.map(p => p.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied pod names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "restart-pods",
+			label: "Restart Selected Pods",
+			icon: <IconRefresh className="size-4" />,
+			action: () => {
+				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Restart pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
+				// TODO: Implement bulk pod restart
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-pods",
+			label: "Delete Selected Pods",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
+				// TODO: Implement bulk pod deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -452,17 +562,18 @@ export function PodsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* <DataTableFilters
+				{/* Search and filter controls */}
+				<DataTableFilters
 					globalFilter={globalFilter}
 					onGlobalFilterChange={setGlobalFilter}
-					searchPlaceholder="Search services by name, namespace, type, cluster IP, external IP, or ports... (Press '/' to focus)"
-					categoryFilter={typeFilter}
-					onCategoryFilterChange={setTypeFilter}
-					categoryLabel="Filter by type"
-					categoryOptions={serviceTypes}
+					searchPlaceholder="Search pods by name, namespace, status, node, or image... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by status"
+					categoryOptions={podStatuses}
 					selectedCount={table.getFilteredSelectedRowModel().rows.length}
 					totalCount={table.getFilteredRowModel().rows.length}
-					bulkActions={serviceBulkActions}
+					bulkActions={podBulkActions}
 					bulkActionsLabel="Actions"
 					table={table}
 					showColumnToggle={true}
@@ -470,60 +581,13 @@ export function PodsDataTable() {
 					isRefreshing={loading}
 				>
 					{/* Real-time updates indicator */}
-				{/* {isConnected && (
-										<div className="flex items-center space-x-1 text-xs text-green-600">
-											<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-											<span>Live updates</span>
-										</div>
-									)} */}
-				{/* </DataTableFilters> */}
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
