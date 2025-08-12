@@ -21,20 +21,22 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconNetwork,
+	IconSettings,
 } from "@tabler/icons-react"
 
 import {
@@ -58,7 +60,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -74,6 +75,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters } from "@/components/ui/data-table-filters"
 import { IngressClassDetailDrawer } from "@/components/viewers/IngressClassDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useIngressClassesWithWebSocket } from "@/hooks/useIngressClassesWithWebSocket"
@@ -283,6 +285,9 @@ export function IngressClassesDataTable() {
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedIngressClassForDetails, setSelectedIngressClassForDetails] = React.useState<z.infer<typeof ingressClassSchema> | null>(null)
 
+	// Additional state variables for DataTableFilters
+	const [globalFilter, setGlobalFilter] = React.useState("")
+
 	// Handle opening detail drawer
 	const handleViewDetails = React.useCallback((ingressClass: z.infer<typeof ingressClassSchema>) => {
 		setSelectedIngressClassForDetails(ingressClass)
@@ -308,13 +313,68 @@ export function IngressClassesDataTable() {
 		onRowSelectionChange: setRowSelection,
 		getFacetedRowModel: getFacetedRowModel(),
 		getFacetedUniqueValues: getFacetedUniqueValues(),
+		onGlobalFilterChange: setGlobalFilter,
+		globalFilterFn: "includesString",
 		state: {
 			sorting,
 			columnFilters,
 			columnVisibility,
 			rowSelection,
+			globalFilter,
 		},
 	})
+
+	// Bulk actions for ingress classes
+	const bulkActions = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export to YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedRowModel = table.getFilteredSelectedRowModel()
+				const yamlContent = selectedRowModel.rows.map((row: any) => row.original).map((ic: any) => `---\n${JSON.stringify(ic, null, 2)}`).join('\n')
+				const blob = new Blob([yamlContent], { type: 'text/yaml' })
+				const url = URL.createObjectURL(blob)
+				const a = document.createElement('a')
+				a.href = url
+				a.download = `ingress-classes-${new Date().toISOString().split('T')[0]}.yaml`
+				document.body.appendChild(a)
+				a.click()
+				document.body.removeChild(a)
+				URL.revokeObjectURL(url)
+			}
+		},
+		{
+			id: "copy-names",
+			label: "Copy Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedRowModel = table.getFilteredSelectedRowModel()
+				const names = selectedRowModel.rows.map((row: any) => row.original.name).join('\n')
+				navigator.clipboard.writeText(names)
+			}
+		},
+		{
+			id: "set-default",
+			label: "Set as Default",
+			icon: <IconSettings className="size-4" />,
+			action: () => {
+				const selectedRowModel = table.getFilteredSelectedRowModel()
+				console.log("Setting ingress classes as default:", selectedRowModel.rows.map((row: any) => row.original.name))
+				// TODO: Implement setting ingress class as default
+			}
+		},
+		{
+			id: "network-config",
+			label: "Network Configuration",
+			icon: <IconNetwork className="size-4" />,
+			action: () => {
+				const selectedRowModel = table.getFilteredSelectedRowModel()
+				console.log("Opening network configuration for:", selectedRowModel.rows.map((row: any) => row.original.name))
+				// TODO: Implement network configuration
+			}
+		}
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -367,59 +427,27 @@ export function IngressClassesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
+				{/* Table filters and controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search ingress classes..."
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={bulkActions}
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				/>
+
+				{/* Real-time status indicator */}
+				{isConnected && (
+					<div className="flex items-center space-x-1 text-xs text-green-600">
+						<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+						<span>Real-time updates enabled</span>
 					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				)}
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

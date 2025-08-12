@@ -21,20 +21,21 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconNetwork,
 } from "@tabler/icons-react"
 
 import {
@@ -58,7 +59,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -74,6 +74,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { NetworkPolicyDetailDrawer } from "@/components/viewers/NetworkPolicyDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNetworkPoliciesWithWebSocket } from "@/hooks/useNetworkPoliciesWithWebSocket"
@@ -291,6 +292,8 @@ export function NetworkPoliciesDataTable() {
 	const { data: networkPolicies, loading, error, refetch, isConnected } = useNetworkPoliciesWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [policyTypeFilter, setPolicyTypeFilter] = React.useState<string>("all")
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})

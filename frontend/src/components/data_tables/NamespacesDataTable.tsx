@@ -45,20 +45,19 @@ import {
 	IconEdit,
 	IconTrash,
 	IconGripVertical,
-	IconChevronDown,
-	IconLayoutColumns,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconCircleCheckFilled,
+	IconDownload,
+	IconCopy,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
@@ -74,6 +73,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNamespacesWithWebSocket } from "@/hooks/useNamespacesWithWebSocket"
 import { NamespaceDetailDrawer } from "@/components/viewers/NamespaceDetailDrawer"
@@ -319,6 +319,8 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof namespaceSchema>> }) {
 export function NamespacesDataTable() {
 	const { data: namespaces, loading, error, refetch, isConnected } = useNamespacesWithWebSocket(true)
 
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
@@ -351,8 +353,40 @@ export function NamespacesDataTable() {
 		[handleViewDetails, handleDeleteNamespace]
 	)
 
+	// Create filter options for namespace statuses
+	const namespaceStatuses = React.useMemo(() => {
+		const statuses = new Set(namespaces.map(namespace => namespace.status))
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: getStatusBadge(status)
+		}))
+	}, [namespaces])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = namespaces
+
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(namespace => namespace.status === statusFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(namespace =>
+				namespace.name.toLowerCase().includes(searchTerm) ||
+				namespace.status.toLowerCase().includes(searchTerm) ||
+				namespace.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [namespaces, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: namespaces,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -423,59 +457,72 @@ export function NamespacesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search namespaces by name, status, or age... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by status"
+					categoryOptions={namespaceStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={[
+						{
+							id: "export-yaml",
+							label: "Export Selected as YAML",
+							icon: <IconDownload className="size-4" />,
+							action: () => {
+								const selectedNamespaces = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								console.log('Export YAML for namespaces:', selectedNamespaces.map(ns => ns.name))
+								// TODO: Implement bulk YAML export
+							},
+							requiresSelection: true,
+						},
+						{
+							id: "copy-names",
+							label: "Copy Namespace Names",
+							icon: <IconCopy className="size-4" />,
+							action: () => {
+								const selectedNamespaces = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								const names = selectedNamespaces.map(ns => ns.name).join('\n')
+								navigator.clipboard.writeText(names)
+								console.log('Copied namespace names:', names)
+							},
+							requiresSelection: true,
+						},
+						{
+							id: "delete-namespaces",
+							label: "Delete Selected Namespaces",
+							icon: <IconTrash className="size-4" />,
+							action: () => {
+								const selectedNamespaces = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								if (confirm(`Are you sure you want to delete ${selectedNamespaces.length} namespace(s)? This action cannot be undone.`)) {
+									selectedNamespaces.forEach(async (namespace) => {
+										await deleteNamespace(namespace.name)
+									})
+									refetch()
+								}
+							},
+							variant: "destructive" as const,
+							requiresSelection: true,
+						},
+					]}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Real-time updates enabled</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

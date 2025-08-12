@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,13 +28,16 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconFileText,
+	IconInfoCircle,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +61,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -75,6 +76,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters } from "@/components/ui/data-table-filters"
 import { JobDetailDrawer } from "@/components/viewers/JobDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useJobsWithWebSocket } from "@/hooks/useJobsWithWebSocket"
@@ -325,6 +327,10 @@ export function JobsDataTable() {
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedJobForDetails, setSelectedJobForDetails] = React.useState<z.infer<typeof jobSchema> | null>(null)
 
+	// Additional state variables for DataTableFilters
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
+
 	// Handle opening detail drawer
 	const handleViewDetails = React.useCallback((job: z.infer<typeof jobSchema>) => {
 		setSelectedJobForDetails(job)
@@ -337,8 +343,41 @@ export function JobsDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create filter options for job statuses
+	const jobStatuses = React.useMemo(() => {
+		const statuses = new Set(jobs.map(job => job.status).filter(status => status && status.trim() !== ""))
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: getStatusBadge(status)
+		}))
+	}, [jobs])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = jobs
+
+		// Apply category filter (status)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(job => job.status === statusFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(job =>
+				job.name.toLowerCase().includes(searchTerm) ||
+				job.namespace.toLowerCase().includes(searchTerm) ||
+				(job.status && job.status.toLowerCase().includes(searchTerm)) ||
+				job.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [jobs, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: jobs,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -358,6 +397,58 @@ export function JobsDataTable() {
 		},
 	})
 
+	// Bulk actions for jobs
+	const bulkActions = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export to YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedRowModel = table.getFilteredSelectedRowModel()
+				const yamlContent = selectedRowModel.rows.map((row: any) => row.original).map((job: any) => `---\n${JSON.stringify(job, null, 2)}`).join('\n')
+				const blob = new Blob([yamlContent], { type: 'text/yaml' })
+				const url = URL.createObjectURL(blob)
+				const a = document.createElement('a')
+				a.href = url
+				a.download = `jobs-${new Date().toISOString().split('T')[0]}.yaml`
+				document.body.appendChild(a)
+				a.click()
+				document.body.removeChild(a)
+				URL.revokeObjectURL(url)
+			}
+		},
+		{
+			id: "copy-names",
+			label: "Copy Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedRowModel = table.getFilteredSelectedRowModel()
+				const names = selectedRowModel.rows.map((row: any) => row.original.name).join('\n')
+				navigator.clipboard.writeText(names)
+			}
+		},
+		{
+			id: "get-logs",
+			label: "Get Logs",
+			icon: <IconFileText className="size-4" />,
+			action: () => {
+				const selectedRowModel = table.getFilteredSelectedRowModel()
+				console.log("Getting logs for jobs:", selectedRowModel.rows.map((row: any) => row.original.name))
+				// TODO: Implement bulk log retrieval
+			}
+		},
+		{
+			id: "describe-jobs",
+			label: "Describe Jobs",
+			icon: <IconInfoCircle className="size-4" />,
+			action: () => {
+				const selectedRowModel = table.getFilteredSelectedRowModel()
+				console.log("Describing jobs:", selectedRowModel.rows.map((row: any) => row.original.name))
+				// TODO: Implement bulk job describe
+			}
+		}
+	], [table])
+
 	// Drag and drop setup
 	const sensors = useSensors(
 		useSensor(MouseSensor, {}),
@@ -366,12 +457,12 @@ export function JobsDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		jobs.map((job) => job.id)
+		filteredData.map((job) => job.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(jobs.map((job) => job.id))
-	}, [jobs])
+		setSortableIds(filteredData.map((job) => job.id))
+	}, [filteredData])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -409,59 +500,32 @@ export function JobsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Table filters and controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search jobs by name, namespace, status, or age... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by status"
+					categoryOptions={jobStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={bulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Real-time updates enabled</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

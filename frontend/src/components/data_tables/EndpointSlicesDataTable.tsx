@@ -347,7 +347,7 @@ export function EndpointSlicesDataTable() {
 
 	// Create filter options for endpoint slices based on address type
 	const endpointSliceTypes: FilterOption[] = React.useMemo(() => {
-		const types = new Set(endpointSlices.map(slice => slice.addressType))
+		const types = new Set(endpointSlices.map(slice => slice.addressType).filter(type => type && type.trim() !== ""))
 		return Array.from(types).sort().map(type => ({
 			value: type,
 			label: type,
@@ -374,9 +374,9 @@ export function EndpointSlicesDataTable() {
 			filtered = filtered.filter(slice =>
 				slice.name.toLowerCase().includes(searchTerm) ||
 				slice.namespace.toLowerCase().includes(searchTerm) ||
-				slice.addressType.toLowerCase().includes(searchTerm) ||
+				(slice.addressType && slice.addressType.toLowerCase().includes(searchTerm)) ||
 				slice.ready.toLowerCase().includes(searchTerm) ||
-				slice.addressesDisplay?.toLowerCase().includes(searchTerm) ||
+				(slice.addressesDisplay && slice.addressesDisplay.toLowerCase().includes(searchTerm)) ||
 				slice.age.toLowerCase().includes(searchTerm)
 			)
 		}

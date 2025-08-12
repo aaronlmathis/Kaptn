@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,7 +28,6 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
@@ -37,6 +35,8 @@ import {
 	IconEdit,
 	IconEye,
 	IconNetwork,
+	IconDownload,
+	IconCopy,
 } from "@tabler/icons-react"
 
 import {
@@ -60,7 +60,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -75,6 +74,7 @@ import {
 	TableRow,
 } from "@/components/ui/table"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters } from "@/components/ui/data-table-filters"
 import { LoadBalancerDetailDrawer } from "@/components/viewers/LoadBalancerDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useLoadBalancersWithWebSocket } from "@/hooks/useLoadBalancersWithWebSocket"
@@ -336,6 +336,10 @@ export function LoadBalancersDataTable() {
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedLoadBalancerForDetails, setSelectedLoadBalancerForDetails] = React.useState<z.infer<typeof loadBalancerSchema> | null>(null)
 
+	// Additional state variables for DataTableFilters
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
+
 	// Handle opening detail drawer
 	const handleViewDetails = React.useCallback((loadBalancer: z.infer<typeof loadBalancerSchema>) => {
 		setSelectedLoadBalancerForDetails(loadBalancer)
@@ -348,8 +352,69 @@ export function LoadBalancersDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create filter options for load balancer statuses based on externalIP
+	const loadBalancerStatuses = React.useMemo(() => {
+		const statuses = new Set<string>()
+		loadBalancers.forEach(lb => {
+			if (lb.externalIP && lb.externalIP !== '<none>' && lb.externalIP !== '<pending>') {
+				statuses.add("Active")
+			} else if (lb.externalIP === '<pending>') {
+				statuses.add("Pending")
+			} else {
+				statuses.add("No External IP")
+			}
+		})
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: (() => {
+				if (status === "Active") {
+					return getLoadBalancerStatusBadge("active-ip")
+				} else if (status === "Pending") {
+					return getLoadBalancerStatusBadge("<pending>")
+				} else {
+					return getLoadBalancerStatusBadge("<none>")
+				}
+			})()
+		}))
+	}, [loadBalancers])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = loadBalancers
+
+		// Apply category filter (status based on externalIP)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(lb => {
+				if (statusFilter === "Active") {
+					return lb.externalIP && lb.externalIP !== '<none>' && lb.externalIP !== '<pending>'
+				} else if (statusFilter === "Pending") {
+					return lb.externalIP === '<pending>'
+				} else if (statusFilter === "No External IP") {
+					return !lb.externalIP || lb.externalIP === '<none>'
+				}
+				return true
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(lb =>
+				lb.name.toLowerCase().includes(searchTerm) ||
+				lb.namespace.toLowerCase().includes(searchTerm) ||
+				(lb.clusterIP && lb.clusterIP.toLowerCase().includes(searchTerm)) ||
+				(lb.externalIP && lb.externalIP !== '<none>' && lb.externalIP !== '<pending>' && lb.externalIP.toLowerCase().includes(searchTerm)) ||
+				(lb.ports && lb.ports.toLowerCase().includes(searchTerm)) ||
+				lb.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [loadBalancers, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: loadBalancers,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -420,59 +485,55 @@ export function LoadBalancersDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					table={table}
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryOptions={loadBalancerStatuses}
+					categoryLabel="Status"
+					searchPlaceholder="Search load balancers..."
+					onRefresh={refetch}
+					isRefreshing={loading}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={[
+						{
+							id: "export-yaml",
+							icon: <IconDownload />,
+							label: "Export to YAML",
+							action: () => {
+								const selectedRows = table.getFilteredSelectedRowModel().rows
+								// TODO: Implement bulk YAML export for selected load balancers
+								console.log('Export selected load balancers:', selectedRows.map(row => row.original))
+							},
+							requiresSelection: true
+						},
+						{
+							id: "copy-names",
+							icon: <IconCopy />,
+							label: "Copy names",
+							action: () => {
+								const selectedRows = table.getFilteredSelectedRowModel().rows
+								const names = selectedRows.map(row => row.original.name).join('\n')
+								navigator.clipboard.writeText(names)
+							},
+							requiresSelection: true
+						}
+					]}
+					bulkActionsLabel="Actions"
+					showColumnToggle={true}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Real-time updates enabled</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
