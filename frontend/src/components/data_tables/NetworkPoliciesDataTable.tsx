@@ -29,7 +29,6 @@ import {
 	IconGripVertical,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
@@ -74,7 +73,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
+import { DataTableFilters } from "@/components/ui/data-table-filters"
 import { NetworkPolicyDetailDrawer } from "@/components/viewers/NetworkPolicyDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNetworkPoliciesWithWebSocket } from "@/hooks/useNetworkPoliciesWithWebSocket"
@@ -313,8 +312,57 @@ export function NetworkPoliciesDataTable() {
 		[handleViewDetails]
 	)
 
+	// Create filter options for policy types
+	const policyTypes = React.useMemo(() => {
+		const types = new Set<string>()
+		networkPolicies.forEach(policy => {
+			if (policy.policyTypes) {
+				// Split policy types if they're comma-separated
+				const policyTypeList = policy.policyTypes.split(',').map(t => t.trim())
+				policyTypeList.forEach(type => types.add(type))
+			}
+		})
+		return Array.from(types).sort().map(type => ({
+			value: type,
+			label: type,
+			badge: (
+				<Badge variant="outline" className="text-purple-600 border-border bg-transparent px-1.5">
+					<IconNetwork className="size-3 mr-1" />
+					{type}
+				</Badge>
+			)
+		}))
+	}, [networkPolicies])
+
+	// Filter data based on global filter and policy type filter
+	const filteredData = React.useMemo(() => {
+		let filtered = networkPolicies
+
+		// Apply policy type filter
+		if (policyTypeFilter !== "all") {
+			filtered = filtered.filter(policy =>
+				policy.policyTypes && policy.policyTypes.includes(policyTypeFilter)
+			)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(policy =>
+				policy.name.toLowerCase().includes(searchTerm) ||
+				policy.namespace.toLowerCase().includes(searchTerm) ||
+				(policy.podSelector && policy.podSelector.toLowerCase().includes(searchTerm)) ||
+				(policy.policyTypes && policy.policyTypes.toLowerCase().includes(searchTerm)) ||
+				(policy.affectedPods && policy.affectedPods.toString().includes(searchTerm)) ||
+				policy.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [networkPolicies, policyTypeFilter, globalFilter])
+
 	const table = useReactTable({
-		data: networkPolicies,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -385,59 +433,70 @@ export function NetworkPoliciesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search network policies by name, namespace, pod selector, policy types, or affected pods... (Press '/' to focus)"
+					categoryFilter={policyTypeFilter}
+					onCategoryFilterChange={setPolicyTypeFilter}
+					categoryLabel="Filter by policy type"
+					categoryOptions={policyTypes}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={[
+						{
+							id: "export-yaml",
+							label: "Export Selected as YAML",
+							icon: <IconDownload className="size-4" />,
+							action: () => {
+								const selectedPolicies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								console.log('Export YAML for network policies:', selectedPolicies.map(policy => `${policy.name} in ${policy.namespace}`))
+								// TODO: Implement bulk YAML export
+							},
+							requiresSelection: true,
+						},
+						{
+							id: "copy-names",
+							label: "Copy Policy Names",
+							icon: <IconCopy className="size-4" />,
+							action: () => {
+								const selectedPolicies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								const names = selectedPolicies.map(policy => policy.name).join('\n')
+								navigator.clipboard.writeText(names)
+								console.log('Copied network policy names:', names)
+							},
+							requiresSelection: true,
+						},
+						{
+							id: "delete-policies",
+							label: "Delete Selected Policies",
+							icon: <IconTrash className="size-4" />,
+							action: () => {
+								const selectedPolicies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								if (confirm(`Are you sure you want to delete ${selectedPolicies.length} network polic${selectedPolicies.length === 1 ? 'y' : 'ies'}? This action cannot be undone.`)) {
+									console.log('Delete network policies:', selectedPolicies.map(policy => `${policy.name} in ${policy.namespace}`))
+									// TODO: Implement bulk deletion
+								}
+							},
+							variant: "destructive" as const,
+							requiresSelection: true,
+						},
+					]}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Real-time updates enabled</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

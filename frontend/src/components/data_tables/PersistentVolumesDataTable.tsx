@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,13 +28,14 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconDatabase,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +59,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -77,6 +76,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { PersistentVolumeDetailDrawer } from "@/components/viewers/PersistentVolumeDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { usePersistentVolumesWithWebSocket } from "@/hooks/usePersistentVolumesWithWebSocket"
 import { persistentVolumeSchema } from "@/lib/schemas/persistent-volume"
 import { z } from "zod"
@@ -146,18 +146,18 @@ const createColumns = (
 	onViewDetails: (pv: z.infer<typeof persistentVolumeSchema>) => void
 ): ColumnDef<z.infer<typeof persistentVolumeSchema>>[] => [
 		{
-			id: "drag",
+			id: "pv-drag",
 			header: () => null,
 			cell: ({ row }) => <DragHandle id={row.original.id} />,
 		},
 		{
-			id: "select",
+			id: "pv-select",
 			header: ({ table }) => (
 				<div className="flex items-center justify-center">
 					<Checkbox
 						checked={
 							table.getIsAllPageRowsSelected() ||
-							(table.getIsSomePageRowsSelected() && "indeterminate")
+							(table.getIsSomePageRowsSelected() ? "indeterminate" : false)
 						}
 						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
 						aria-label="Select all"
@@ -177,6 +177,7 @@ const createColumns = (
 			enableHiding: false,
 		},
 		{
+			id: "pv-name",
 			accessorKey: "name",
 			header: "Name",
 			cell: ({ row }) => {
@@ -192,6 +193,7 @@ const createColumns = (
 			enableHiding: false,
 		},
 		{
+			id: "pv-capacity",
 			accessorKey: "capacity",
 			header: "Capacity",
 			cell: ({ row }) => (
@@ -199,6 +201,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "pv-access-modes",
 			accessorKey: "accessModesDisplay",
 			header: "Access Modes",
 			cell: ({ row }) => (
@@ -206,6 +209,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "pv-reclaim-policy",
 			accessorKey: "reclaimPolicy",
 			header: "Reclaim Policy",
 			cell: ({ row }) => (
@@ -213,11 +217,13 @@ const createColumns = (
 			),
 		},
 		{
+			id: "pv-status",
 			accessorKey: "status",
 			header: "Status",
 			cell: ({ row }) => getStatusBadge(row.original.status),
 		},
 		{
+			id: "pv-claim",
 			accessorKey: "claim",
 			header: "Claim",
 			cell: ({ row }) => (
@@ -225,6 +231,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "pv-storage-class",
 			accessorKey: "storageClass",
 			header: "Storage Class",
 			cell: ({ row }) => (
@@ -232,6 +239,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "pv-volume-source",
 			accessorKey: "volumeSource",
 			header: "Volume Source",
 			cell: ({ row }) => (
@@ -239,6 +247,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "pv-age",
 			accessorKey: "age",
 			header: "Age",
 			cell: ({ row }) => (
@@ -246,7 +255,7 @@ const createColumns = (
 			),
 		},
 		{
-			id: "actions",
+			id: "pv-actions",
 			cell: ({ row }) => (
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
@@ -333,6 +342,8 @@ export function PersistentVolumesDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedPVForDetails, setSelectedPVForDetails] = React.useState<z.infer<typeof persistentVolumeSchema> | null>(null)
 
@@ -348,8 +359,45 @@ export function PersistentVolumesDataTable() {
 		[handleViewDetails]
 	)
 
+	// Filter options for PV statuses
+	const pvStatuses: FilterOption[] = React.useMemo(() => {
+		const statuses = new Set(persistentVolumes.map(pv => pv.status))
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: getStatusBadge(status)
+		}))
+	}, [persistentVolumes])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = persistentVolumes
+
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(pv => pv.status === statusFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(pv =>
+				pv.name.toLowerCase().includes(searchTerm) ||
+				pv.capacity.toLowerCase().includes(searchTerm) ||
+				pv.status.toLowerCase().includes(searchTerm) ||
+				pv.accessModesDisplay.toLowerCase().includes(searchTerm) ||
+				pv.reclaimPolicy.toLowerCase().includes(searchTerm) ||
+				(pv.claim && pv.claim.toLowerCase().includes(searchTerm)) ||
+				pv.storageClass.toLowerCase().includes(searchTerm) ||
+				pv.volumeSource.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [persistentVolumes, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: persistentVolumes,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -369,6 +417,45 @@ export function PersistentVolumesDataTable() {
 		},
 	})
 
+	// Bulk actions for persistent volumes
+	const pvBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedPVs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for PVs:', selectedPVs.map(pv => pv.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy PV Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedPVs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedPVs.map(pv => pv.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied PV names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-pvs",
+			label: "Delete Selected PVs",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedPVs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete PVs:', selectedPVs.map(pv => pv.name))
+				// TODO: Implement bulk PV deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
+
 	// Drag and drop setup
 	const sensors = useSensors(
 		useSensor(MouseSensor, {}),
@@ -377,12 +464,12 @@ export function PersistentVolumesDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		persistentVolumes.map((pv) => pv.id)
+		filteredData.map((pv) => pv.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(persistentVolumes.map((pv) => pv.id))
-	}, [persistentVolumes])
+		setSortableIds(filteredData.map((pv) => pv.id))
+	}, [filteredData])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -419,62 +506,33 @@ export function PersistentVolumesDataTable() {
 
 	return (
 		<div className="px-4 lg:px-6">
-			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
+		<div className="space-y-4">
+			{/* Search and filter controls */}
+			<DataTableFilters
+				globalFilter={globalFilter}
+				onGlobalFilterChange={setGlobalFilter}
+				searchPlaceholder="Search PVs by name, capacity, status, access modes, reclaim policy, claim, storage class, or volume source... (Press '/' to focus)"
+				categoryFilter={statusFilter}
+				onCategoryFilterChange={setStatusFilter}
+				categoryLabel="Filter by status"
+				categoryOptions={pvStatuses}
+				selectedCount={table.getFilteredSelectedRowModel().rows.length}
+				totalCount={table.getFilteredRowModel().rows.length}
+				bulkActions={pvBulkActions}
+				bulkActionsLabel="Actions"
+				table={table}
+				showColumnToggle={true}
+				onRefresh={refetch}
+				isRefreshing={loading}
+			>
+				{/* Real-time updates indicator */}
+				{isConnected && (
+					<div className="flex items-center space-x-1 text-xs text-green-600">
+						<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+						<span>Live updates</span>
 					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
-
-				{/* Data table */}
+				)}
+			</DataTableFilters>				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
 					<ScrollArea className="w-full">
 						<DndContext

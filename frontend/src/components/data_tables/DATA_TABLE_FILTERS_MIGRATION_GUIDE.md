@@ -23,6 +23,10 @@ The `DataTableFilters` component provides a unified filtering, searching, and bu
 - `JobsDataTable.tsx` - ✅ Complete
 - `LoadBalancersDataTable.tsx` - ✅ Complete
 - `NamespacesDataTable.tsx` - ✅ Complete
+- `NetworkPoliciesDataTable.tsx` - ✅ Complete
+- `NodesDataTable.tsx` - ✅ Complete
+- `PersistentVolumeClaimsDataTable.tsx` - ✅ Complete
+- `PersistentVolumesDataTable.tsx` - ✅ Complete
 
 ## 🔄 Files Requiring Migration
 

@@ -1,57 +1,57 @@
-# name: Build and Deploy to Local Kubernetes
+name: Build and Deploy to Local Kubernetes
 
-# on:
-#   push:
-#     branches:
-#       - main
+on:
+  push:
+    branches:
+      - main
 
-# jobs:
-#   build-and-deploy:
-#     runs-on: self-hosted
-#     environment: development
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    environment: development
  
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v3 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3 
 
-#       - name: Set up Docker Buildx
-#         uses: docker/setup-buildx-action@v2 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2 
 
-#       - name: Login to Docker Hub
-#         uses: docker/login-action@v2
-#         with:
-#           username: ${{ secrets.DOCKERHUB_USERNAME }}
-#           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-#       - name: Build and Push Debug Image
-#         run: make push-debug
+      - name: Build and Push Debug Image
+        run: make push-debug
 
-#       - name: Configure kubeconfig
-#         run: |
-#           mkdir -p "$HOME/.kube"
-#           printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
 
-#       - name: Verify kubeconfig
-#         run: |
-#           echo "Testing Kubernetes config..."
-#           kubectl config view --minify --output 'jsonpath={..cluster.server}'
-#           echo ""
-#           echo "Cluster should be reachable:"
-#           kubectl get nodes
+      - name: Verify kubeconfig
+        run: |
+          echo "Testing Kubernetes config..."
+          kubectl config view --minify --output 'jsonpath={..cluster.server}'
+          echo ""
+          echo "Cluster should be reachable:"
+          kubectl get nodes
 
-#       - name: Restart Kaptn Deployment
-#         run: |
-#           kubectl rollout restart deployment/kaptn -n kaptn
-#           kubectl rollout status deployment/kaptn -n kaptn
+      - name: Restart Kaptn Deployment
+        run: |
+          kubectl rollout restart deployment/kaptn -n kaptn
+          kubectl rollout status deployment/kaptn -n kaptn
 
-#       - name: Clean up Docker
-#         if: always()
-#         run: |
-#           docker system prune -af --volumes
+      - name: Clean up Docker
+        if: always()
+        run: |
+          docker system prune -af --volumes
           
-#       - name: Deployment Summary
-#         run: |
-#           echo "## Kaptn Deployment" >> $GITHUB_STEP_SUMMARY
-#           echo "* **Image:** aaronlmathis/kaptn:debug" >> $GITHUB_STEP_SUMMARY
-#           echo "* **Namespace:** kaptn" >> $GITHUB_STEP_SUMMARY
-#           echo "* **Status:** Deployment triggered" >> $GITHUB_STEP_SUMMARY
+      - name: Deployment Summary
+        run: |
+          echo "## Kaptn Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "* **Image:** aaronlmathis/kaptn:debug" >> $GITHUB_STEP_SUMMARY
+          echo "* **Namespace:** kaptn" >> $GITHUB_STEP_SUMMARY
+          echo "* **Status:** Deployment triggered" >> $GITHUB_STEP_SUMMARY

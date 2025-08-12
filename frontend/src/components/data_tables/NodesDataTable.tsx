@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,7 +28,6 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
@@ -38,6 +36,9 @@ import {
 	IconEye,
 	IconPlayerPause,
 	IconDroplets,
+	IconDownload,
+	IconCopy,
+	IconServer,
 } from "@tabler/icons-react"
 
 import {
@@ -61,7 +62,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -77,6 +77,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { NodeDetailDrawer } from "@/components/viewers/NodeDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNodesWithWebSocket } from "@/hooks/useNodesWithWebSocket"
@@ -313,6 +314,8 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof nodeSchema>> }) {
 export function NodesDataTable() {
 	const { data: nodes, loading, error, refetch, isConnected } = useNodesWithWebSocket(true)
 
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
@@ -356,8 +359,42 @@ export function NodesDataTable() {
 		[handleViewDetails, handleCordonNode, handleDrainNode]
 	)
 
+	// Create filter options for node statuses
+	const nodeStatuses = React.useMemo(() => {
+		const statuses = new Set(nodes.map(node => node.status))
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: getNodeStatusBadge(status)
+		}))
+	}, [nodes])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = nodes
+
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(node => node.status === statusFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(node =>
+				node.name.toLowerCase().includes(searchTerm) ||
+				node.status.toLowerCase().includes(searchTerm) ||
+				(node.roles && node.roles.toLowerCase().includes(searchTerm)) ||
+				(node.version && node.version.toLowerCase().includes(searchTerm)) ||
+				node.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [nodes, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: nodes,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -428,59 +465,81 @@ export function NodesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search nodes by name, status, role, or version... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by status"
+					categoryOptions={nodeStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={[
+						{
+							id: "export-yaml",
+							label: "Export Selected as YAML",
+							icon: <IconDownload className="size-4" />,
+							action: () => {
+								const selectedNodes = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								console.log('Export YAML for nodes:', selectedNodes.map(node => node.name))
+								// TODO: Implement bulk YAML export
+							},
+							requiresSelection: true,
+						},
+						{
+							id: "copy-names",
+							label: "Copy Node Names",
+							icon: <IconCopy className="size-4" />,
+							action: () => {
+								const selectedNodes = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								const names = selectedNodes.map(node => node.name).join('\n')
+								navigator.clipboard.writeText(names)
+								console.log('Copied node names:', names)
+							},
+							requiresSelection: true,
+						},
+						{
+							id: "cordon-nodes",
+							label: "Cordon Selected Nodes",
+							icon: <IconPlayerPause className="size-4" />,
+							action: () => {
+								const selectedNodes = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								if (confirm(`Are you sure you want to cordon ${selectedNodes.length} node(s)? This will prevent new pods from being scheduled on them.`)) {
+									selectedNodes.forEach(node => handleCordonNode(node))
+								}
+							},
+							requiresSelection: true,
+						},
+						{
+							id: "drain-nodes",
+							label: "Drain Selected Nodes",
+							icon: <IconDroplets className="size-4" />,
+							action: () => {
+								const selectedNodes = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+								if (confirm(`Are you sure you want to drain ${selectedNodes.length} node(s)? This will evict all pods and cordon the nodes.`)) {
+									selectedNodes.forEach(node => handleDrainNode(node))
+								}
+							},
+							variant: "destructive" as const,
+							requiresSelection: true,
+						},
+					]}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Real-time updates enabled</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

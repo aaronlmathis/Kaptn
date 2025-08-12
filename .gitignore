@@ -406,3 +406,5 @@ config_auth.yaml
 config_auth.yaml
 config.dev.yaml
 config-deploy.yaml
+internal_deploy/
+*.pem

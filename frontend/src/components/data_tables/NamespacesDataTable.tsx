@@ -39,7 +39,6 @@ import { CSS } from "@dnd-kit/utilities"
 import {
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconDotsVertical,
 	IconEye,
 	IconEdit,
@@ -73,7 +72,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
+import { DataTableFilters } from "@/components/ui/data-table-filters"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNamespacesWithWebSocket } from "@/hooks/useNamespacesWithWebSocket"
 import { NamespaceDetailDrawer } from "@/components/viewers/NamespaceDetailDrawer"
