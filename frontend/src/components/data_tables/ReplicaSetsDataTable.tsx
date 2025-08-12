@@ -77,6 +77,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ReplicaSetDetailDrawer } from "@/components/viewers/ReplicaSetDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { useReplicaSetsWithWebSocket } from "@/hooks/useReplicaSetsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { replicaSetSchema } from "@/lib/schemas/replicaset"
@@ -137,18 +138,18 @@ const createColumns = (
 	onViewDetails: (replicaSet: z.infer<typeof replicaSetSchema>) => void
 ): ColumnDef<z.infer<typeof replicaSetSchema>>[] => [
 		{
-			id: "drag",
+			id: "rs-drag",
 			header: () => null,
 			cell: ({ row }) => <DragHandle id={row.original.id} />,
 		},
 		{
-			id: "select",
+			id: "rs-select",
 			header: ({ table }) => (
 				<div className="flex items-center justify-center">
 					<Checkbox
 						checked={
 							table.getIsAllPageRowsSelected() ||
-							(table.getIsSomePageRowsSelected() && "indeterminate")
+							(table.getIsSomePageRowsSelected() ? "indeterminate" : false)
 						}
 						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
 						aria-label="Select all"
@@ -168,6 +169,7 @@ const createColumns = (
 			enableHiding: false,
 		},
 		{
+			id: "rs-name",
 			accessorKey: "name",
 			header: "ReplicaSet Name",
 			cell: ({ row }) => {
@@ -183,6 +185,7 @@ const createColumns = (
 			enableHiding: false,
 		},
 		{
+			id: "rs-namespace",
 			accessorKey: "namespace",
 			header: "Namespace",
 			cell: ({ row }) => (
@@ -192,11 +195,13 @@ const createColumns = (
 			),
 		},
 		{
+			id: "rs-ready",
 			accessorKey: "ready",
 			header: "Ready",
 			cell: ({ row }) => getReadyBadge(row.original.ready),
 		},
 		{
+			id: "rs-desired",
 			accessorKey: "desired",
 			header: "Desired",
 			cell: ({ row }) => (
@@ -204,6 +209,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "rs-current",
 			accessorKey: "current",
 			header: "Current",
 			cell: ({ row }) => (
@@ -211,6 +217,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "rs-available",
 			accessorKey: "available",
 			header: "Available",
 			cell: ({ row }) => (
@@ -218,6 +225,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "rs-age",
 			accessorKey: "age",
 			header: "Age",
 			cell: ({ row }) => (
@@ -225,7 +233,7 @@ const createColumns = (
 			),
 		},
 		{
-			id: "actions",
+			id: "rs-actions",
 			cell: ({ row }) => (
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
@@ -317,6 +325,8 @@ export function ReplicaSetsDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedReplicaSetForDetails, setSelectedReplicaSetForDetails] = React.useState<z.infer<typeof replicaSetSchema> | null>(null)
 
@@ -332,8 +342,63 @@ export function ReplicaSetsDataTable() {
 		[handleViewDetails]
 	)
 
+	// Filter options for ReplicaSet statuses based on readiness
+	const replicaSetStatuses: FilterOption[] = React.useMemo(() => {
+		const statuses = new Set<string>()
+		replicaSets.forEach(rs => {
+			const [current, desired] = rs.ready.split("/").map(Number)
+			const isReady = current === desired && desired > 0
+			const isPartial = current > 0 && current < desired
+
+			if (isReady) {
+				statuses.add("Ready")
+			} else if (isPartial) {
+				statuses.add("Partial")
+			} else {
+				statuses.add("Not Ready")
+			}
+		})
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: getReadyBadge(status === "Ready" ? "1/1" : status === "Partial" ? "1/2" : "0/1")
+		}))
+	}, [replicaSets])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = replicaSets
+
+		// Apply status filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(rs => {
+				const [current, desired] = rs.ready.split("/").map(Number)
+				const isReady = current === desired && desired > 0
+				const isPartial = current > 0 && current < desired
+
+				const status = isReady ? "Ready" : isPartial ? "Partial" : "Not Ready"
+				return status === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(rs =>
+				rs.name.toLowerCase().includes(searchTerm) ||
+				rs.namespace.toLowerCase().includes(searchTerm) ||
+				rs.ready.toLowerCase().includes(searchTerm) ||
+				rs.desired.toString().includes(searchTerm) ||
+				rs.current.toString().includes(searchTerm) ||
+				rs.available.toString().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [replicaSets, statusFilter, globalFilter])
+
 	const table = useReactTable({
-		data: replicaSets,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -353,6 +418,67 @@ export function ReplicaSetsDataTable() {
 		},
 	})
 
+	// Bulk actions for replicasets
+	const replicaSetBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for ReplicaSets:', selectedReplicaSets.map(rs => rs.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy ReplicaSet Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedReplicaSets.map(rs => rs.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied ReplicaSet names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "scale-replicasets",
+			label: "Scale Selected ReplicaSets",
+			icon: <IconScale className="size-4" />,
+			action: () => {
+				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Scale ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
+				// TODO: Implement bulk ReplicaSet scaling
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "restart-replicasets",
+			label: "Restart Selected ReplicaSets",
+			icon: <IconRefresh className="size-4" />,
+			action: () => {
+				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Restart ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
+				// TODO: Implement bulk ReplicaSet restart
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-replicasets",
+			label: "Delete Selected ReplicaSets",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
+				// TODO: Implement bulk ReplicaSet deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
+
 	// Drag and drop setup
 	const sensors = useSensors(
 		useSensor(MouseSensor, {}),
@@ -361,12 +487,12 @@ export function ReplicaSetsDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		replicaSets.map((replicaSet: z.infer<typeof replicaSetSchema>) => replicaSet.id)
+		filteredData.map((replicaSet: z.infer<typeof replicaSetSchema>) => replicaSet.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(replicaSets.map((replicaSet: z.infer<typeof replicaSetSchema>) => replicaSet.id))
-	}, [replicaSets])
+		setSortableIds(filteredData.map((replicaSet: z.infer<typeof replicaSetSchema>) => replicaSet.id))
+	}, [filteredData])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -404,61 +530,32 @@ export function ReplicaSetsDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
-
-				{/* Data table */}
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search ReplicaSets by name, namespace, ready status, or replica counts... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by status"
+					categoryOptions={replicaSetStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={replicaSetBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
 					<ScrollArea className="w-full">
 						<DndContext
@@ -512,12 +609,12 @@ export function ReplicaSetsDataTable() {
 				</div>
 
 				{/* Pagination */}
-				<div className="flex items-center justify-between px-2">
-					<div className="flex-1 text-sm text-muted-foreground">
+				<div className="flex flex-col gap-4 px-2 sm:flex-row sm:items-center sm:justify-between">
+					<div className="text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
 					</div>
-					<div className="flex items-center space-x-6 lg:space-x-8">
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
 						<div className="flex items-center space-x-2">
 							<p className="text-sm font-medium">Rows per page</p>
 							<select
@@ -534,50 +631,52 @@ export function ReplicaSetsDataTable() {
 								))}
 							</select>
 						</div>
-						<div className="flex w-[100px] items-center justify-center text-sm font-medium">
-							Page {table.getState().pagination.pageIndex + 1} of{" "}
-							{table.getPageCount()}
-						</div>
-						<div className="flex items-center space-x-2">
-							<Button
-								variant="outline"
-								className="hidden h-8 w-8 p-0 lg:flex"
-								onClick={() => table.setPageIndex(0)}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to first page</span>
-								<IconChevronsLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.previousPage()}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to previous page</span>
-								<IconChevronLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.nextPage()}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to next page</span>
-								<IconChevronRight />
-							</Button>
-							<Button
-								variant="outline"
-								className="hidden size-8 lg:flex"
-								size="icon"
-								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to last page</span>
-								<IconChevronsRight />
-							</Button>
+						<div className="flex items-center justify-between sm:justify-center sm:gap-6 lg:gap-8">
+							<div className="flex w-[100px] items-center justify-center text-sm font-medium">
+								Page {table.getState().pagination.pageIndex + 1} of{" "}
+								{table.getPageCount()}
+							</div>
+							<div className="flex items-center space-x-2">
+								<Button
+									variant="outline"
+									className="hidden h-8 w-8 p-0 lg:flex"
+									onClick={() => table.setPageIndex(0)}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to first page</span>
+									<IconChevronsLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.previousPage()}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to previous page</span>
+									<IconChevronLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.nextPage()}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to next page</span>
+									<IconChevronRight />
+								</Button>
+								<Button
+									variant="outline"
+									className="hidden size-8 lg:flex"
+									size="icon"
+									onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to last page</span>
+									<IconChevronsRight />
+								</Button>
+							</div>
 						</div>
 					</div>
 				</div>

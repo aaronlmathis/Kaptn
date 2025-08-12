@@ -21,21 +21,20 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
-	IconWifiOff,
+	IconDownload,
+	IconCopy,
+	IconDatabase,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +58,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
@@ -72,6 +70,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { VolumeSnapshotClassDetailDrawer } from "@/components/viewers/VolumeSnapshotClassDetailDrawer"
@@ -115,8 +115,11 @@ const createColumns = (
 				<div className="flex items-center justify-center">
 					<Checkbox
 						checked={
-							table.getIsAllPageRowsSelected() ||
-							(table.getIsSomePageRowsSelected() && "indeterminate")
+							table.getIsAllPageRowsSelected()
+								? true
+								: table.getIsSomePageRowsSelected()
+									? "indeterminate"
+									: false
 						}
 						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
 						aria-label="Select all"
@@ -281,6 +284,8 @@ export function VolumeSnapshotClassesDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [policyFilter, setPolicyFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedVolumeSnapshotClassForDetails, setSelectedVolumeSnapshotClassForDetails] = React.useState<z.infer<typeof volumeSnapshotClassSchema> | null>(null)
 
@@ -290,6 +295,42 @@ export function VolumeSnapshotClassesDataTable() {
 		setDetailDrawerOpen(true)
 	}, [])
 
+	// Create filter options for deletion policies
+	const deletionPolicies: FilterOption[] = React.useMemo(() => {
+		const policies = new Set(volumeSnapshotClasses.map(vsc => vsc.deletionPolicy))
+		return Array.from(policies).sort().map(policy => ({
+			value: policy,
+			label: policy,
+			badge: (
+				<Badge variant="outline" className="text-muted-foreground px-1.5">
+					{policy}
+				</Badge>
+			)
+		}))
+	}, [volumeSnapshotClasses])
+
+	// Filter data based on global filter and policy filter
+	const filteredData = React.useMemo(() => {
+		let filtered = volumeSnapshotClasses
+
+		// Apply policy filter
+		if (policyFilter !== "all") {
+			filtered = filtered.filter(vsc => vsc.deletionPolicy === policyFilter)
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(vsc =>
+				vsc.name.toLowerCase().includes(searchTerm) ||
+				vsc.driver.toLowerCase().includes(searchTerm) ||
+				vsc.deletionPolicy.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [volumeSnapshotClasses, policyFilter, globalFilter])
+
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
 		() => createColumns(handleViewDetails),
@@ -297,7 +338,7 @@ export function VolumeSnapshotClassesDataTable() {
 	)
 
 	const table = useReactTable({
-		data: volumeSnapshotClasses,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -316,6 +357,58 @@ export function VolumeSnapshotClassesDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Create bulk actions for volume snapshot classes
+	const volumeSnapshotClassBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedClasses = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for volume snapshot classes:', selectedClasses.map(vsc => vsc.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Class Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedClasses = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedClasses.map(vsc => vsc.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied volume snapshot class names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-drivers",
+			label: "Copy Drivers",
+			icon: <IconDatabase className="size-4" />,
+			action: () => {
+				const selectedClasses = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const uniqueDrivers = selectedClasses.map(vsc => vsc.driver)
+				const drivers = Array.from(new Set(uniqueDrivers)).join('\n')
+				navigator.clipboard.writeText(drivers)
+				console.log('Copied volume snapshot class drivers:', drivers)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-classes",
+			label: "Delete Selected Classes",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedClasses = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete volume snapshot classes:', selectedClasses.map(vsc => vsc.name))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -368,68 +461,32 @@ export function VolumeSnapshotClassesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-4">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						<div className="flex items-center space-x-2">
-							{isConnected ? (
-								<>
-									<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-									<span className="text-xs text-green-600">Real-time updates enabled</span>
-								</>
-							) : (
-								<>
-									<IconWifiOff className="size-4 text-gray-400" />
-									<span className="text-xs text-gray-400">Real-time updates disconnected</span>
-								</>
-							)}
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search volume snapshot classes by name, driver, or deletion policy... (Press '/' to focus)"
+					categoryFilter={policyFilter}
+					onCategoryFilterChange={setPolicyFilter}
+					categoryLabel="Filter by deletion policy"
+					categoryOptions={deletionPolicies}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={volumeSnapshotClassBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
 						</div>
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
-
-				{/* Data table */}
+					)}
+				</DataTableFilters>				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
 					<ScrollArea className="w-full">
 						<DndContext
@@ -483,18 +540,12 @@ export function VolumeSnapshotClassesDataTable() {
 				</div>
 
 				{/* Pagination */}
-				<div className="flex items-center justify-between px-2">
-					<div className="flex-1 text-sm text-muted-foreground">
+				<div className="flex flex-col gap-4 px-2 sm:flex-row sm:items-center sm:justify-between">
+					<div className="text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
-						{isConnected && (
-							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
 					</div>
-					<div className="flex items-center space-x-6 lg:space-x-8">
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
 						<div className="flex items-center space-x-2">
 							<p className="text-sm font-medium">Rows per page</p>
 							<select
@@ -511,50 +562,52 @@ export function VolumeSnapshotClassesDataTable() {
 								))}
 							</select>
 						</div>
-						<div className="flex w-[100px] items-center justify-center text-sm font-medium">
-							Page {table.getState().pagination.pageIndex + 1} of{" "}
-							{table.getPageCount()}
-						</div>
-						<div className="flex items-center space-x-2">
-							<Button
-								variant="outline"
-								className="hidden h-8 w-8 p-0 lg:flex"
-								onClick={() => table.setPageIndex(0)}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to first page</span>
-								<IconChevronsLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.previousPage()}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to previous page</span>
-								<IconChevronLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.nextPage()}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to next page</span>
-								<IconChevronRight />
-							</Button>
-							<Button
-								variant="outline"
-								className="hidden size-8 lg:flex"
-								size="icon"
-								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to last page</span>
-								<IconChevronsRight />
-							</Button>
+						<div className="flex items-center justify-between sm:justify-center sm:gap-6 lg:gap-8">
+							<div className="flex w-[100px] items-center justify-center text-sm font-medium">
+								Page {table.getState().pagination.pageIndex + 1} of{" "}
+								{table.getPageCount()}
+							</div>
+							<div className="flex items-center space-x-2">
+								<Button
+									variant="outline"
+									className="hidden h-8 w-8 p-0 lg:flex"
+									onClick={() => table.setPageIndex(0)}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to first page</span>
+									<IconChevronsLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.previousPage()}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to previous page</span>
+									<IconChevronLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.nextPage()}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to next page</span>
+									<IconChevronRight />
+								</Button>
+								<Button
+									variant="outline"
+									className="hidden size-8 lg:flex"
+									size="icon"
+									onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to last page</span>
+									<IconChevronsRight />
+								</Button>
+							</div>
 						</div>
 					</div>
 				</div>

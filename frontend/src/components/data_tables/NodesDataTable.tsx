@@ -30,7 +30,6 @@ import {
 	IconGripVertical,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
@@ -38,7 +37,6 @@ import {
 	IconDroplets,
 	IconDownload,
 	IconCopy,
-	IconServer,
 } from "@tabler/icons-react"
 
 import {
@@ -77,7 +75,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
+import { DataTableFilters } from "@/components/ui/data-table-filters"
 import { NodeDetailDrawer } from "@/components/viewers/NodeDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNodesWithWebSocket } from "@/hooks/useNodesWithWebSocket"

@@ -21,20 +21,19 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
 } from "@tabler/icons-react"
 
 import {
@@ -58,7 +57,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -76,6 +74,7 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceQuotaDetailDrawer } from "@/components/viewers/ResourceQuotaDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { useResourceQuotasWithWebSocket } from "@/hooks/useResourceQuotasWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { type DashboardResourceQuota } from "@/lib/k8s-cluster"
@@ -106,18 +105,18 @@ const createColumns = (
 	onDelete?: (resourceQuota: DashboardResourceQuota) => void
 ): ColumnDef<DashboardResourceQuota>[] => [
 		{
-			id: "drag",
+			id: "rq-drag",
 			header: () => null,
 			cell: ({ row }) => <DragHandle id={row.original.id} />,
 		},
 		{
-			id: "select",
+			id: "rq-select",
 			header: ({ table }) => (
 				<div className="flex items-center justify-center">
 					<Checkbox
 						checked={
 							table.getIsAllPageRowsSelected() ||
-							(table.getIsSomePageRowsSelected() && "indeterminate")
+							(table.getIsSomePageRowsSelected() ? "indeterminate" : false)
 						}
 						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
 						aria-label="Select all"
@@ -137,6 +136,7 @@ const createColumns = (
 			enableHiding: false,
 		},
 		{
+			id: "rq-name",
 			accessorKey: "name",
 			header: "Resource Quota Name",
 			cell: ({ row }) => {
@@ -149,8 +149,10 @@ const createColumns = (
 					</button>
 				)
 			},
+			enableHiding: false,
 		},
 		{
+			id: "rq-namespace",
 			accessorKey: "namespace",
 			header: "Namespace",
 			cell: ({ row }) => (
@@ -160,10 +162,12 @@ const createColumns = (
 			),
 		},
 		{
+			id: "rq-age",
 			accessorKey: "age",
 			header: "Age",
 		},
 		{
+			id: "rq-hard-limits",
 			accessorKey: "hardLimits",
 			header: "Hard Limits",
 			cell: ({ row }) => (
@@ -173,6 +177,7 @@ const createColumns = (
 			),
 		},
 		{
+			id: "rq-used-resources",
 			accessorKey: "usedResources",
 			header: "Used Resources",
 			cell: ({ row }) => (
@@ -182,7 +187,7 @@ const createColumns = (
 			),
 		},
 		{
-			id: "actions",
+			id: "rq-actions",
 			cell: ({ row }) => (
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
@@ -275,6 +280,8 @@ export function ResourceQuotasDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [resourceTypeFilter, setResourceTypeFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedResourceQuotaForDetails, setSelectedResourceQuotaForDetails] = React.useState<DashboardResourceQuota | null>(null)
 
@@ -296,8 +303,61 @@ export function ResourceQuotasDataTable() {
 		[handleViewDetails, handleDelete]
 	)
 
+	// Filter options for resource types based on hard limits
+	const resourceTypeFilters: FilterOption[] = React.useMemo(() => {
+		const resourceTypes = new Set<string>()
+		resourceQuotas.forEach(quota => {
+			quota.hardLimits.forEach(limit => {
+				// Extract resource type from limit name (e.g. "requests.cpu" -> "CPU", "limits.memory" -> "Memory")
+				const resourceName = limit.name.replace(/^(requests\.|limits\.)/, '')
+				const displayName = resourceName.charAt(0).toUpperCase() + resourceName.slice(1)
+				resourceTypes.add(displayName)
+			})
+		})
+		return Array.from(resourceTypes).sort().map(type => ({
+			value: type,
+			label: type,
+		}))
+	}, [resourceQuotas])
+
+	// Filter data based on global filter and resource type filter
+	const filteredData = React.useMemo(() => {
+		let filtered = resourceQuotas
+
+		// Apply resource type filter
+		if (resourceTypeFilter !== "all") {
+			filtered = filtered.filter(quota => {
+				return quota.hardLimits.some(limit => {
+					const resourceName = limit.name.replace(/^(requests\.|limits\.)/, '')
+					const displayName = resourceName.charAt(0).toUpperCase() + resourceName.slice(1)
+					return displayName === resourceTypeFilter
+				})
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(quota =>
+				quota.name.toLowerCase().includes(searchTerm) ||
+				quota.namespace.toLowerCase().includes(searchTerm) ||
+				quota.hardLimits.some(limit =>
+					limit.name.toLowerCase().includes(searchTerm) ||
+					limit.limit.toLowerCase().includes(searchTerm) ||
+					limit.used.toLowerCase().includes(searchTerm)
+				) ||
+				quota.usedResources.some(resource =>
+					resource.name.toLowerCase().includes(searchTerm) ||
+					resource.quantity.toLowerCase().includes(searchTerm)
+				)
+			)
+		}
+
+		return filtered
+	}, [resourceQuotas, resourceTypeFilter, globalFilter])
+
 	const table = useReactTable({
-		data: resourceQuotas,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -317,6 +377,45 @@ export function ResourceQuotasDataTable() {
 		},
 	})
 
+	// Bulk actions for resource quotas
+	const resourceQuotaBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedResourceQuotas = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for ResourceQuotas:', selectedResourceQuotas.map(rq => rq.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy ResourceQuota Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedResourceQuotas = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedResourceQuotas.map(rq => rq.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied ResourceQuota names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-resource-quotas",
+			label: "Delete Selected ResourceQuotas",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedResourceQuotas = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete ResourceQuotas:', selectedResourceQuotas.map(rq => `${rq.name} in ${rq.namespace}`))
+				// TODO: Implement bulk ResourceQuota deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
+
 	// Drag and drop setup
 	const sensors = useSensors(
 		useSensor(MouseSensor, {}),
@@ -325,12 +424,12 @@ export function ResourceQuotasDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		resourceQuotas.map((resourceQuota) => resourceQuota.id)
+		filteredData.map((resourceQuota) => resourceQuota.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(resourceQuotas.map((resourceQuota) => resourceQuota.id))
-	}, [resourceQuotas])
+		setSortableIds(filteredData.map((resourceQuota) => resourceQuota.id))
+	}, [filteredData])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -368,61 +467,32 @@ export function ResourceQuotasDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
-
-				{/* Data table */}
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search ResourceQuotas by name, namespace, limits, or usage... (Press '/' to focus)"
+					categoryFilter={resourceTypeFilter}
+					onCategoryFilterChange={setResourceTypeFilter}
+					categoryLabel="Filter by resource type"
+					categoryOptions={resourceTypeFilters}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={resourceQuotaBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
 					<ScrollArea className="w-full">
 						<DndContext
@@ -476,18 +546,12 @@ export function ResourceQuotasDataTable() {
 				</div>
 
 				{/* Pagination */}
-				<div className="flex items-center justify-between">
-					<div className="flex-1 text-sm text-muted-foreground">
+				<div className="flex flex-col gap-4 px-2 sm:flex-row sm:items-center sm:justify-between">
+					<div className="text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
-						{isConnected && (
-							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
 					</div>
-					<div className="flex items-center space-x-6 lg:space-x-8">
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
 						<div className="flex items-center space-x-2">
 							<p className="text-sm font-medium">Rows per page</p>
 							<select
@@ -495,7 +559,7 @@ export function ResourceQuotasDataTable() {
 								onChange={(e) => {
 									table.setPageSize(Number(e.target.value))
 								}}
-								className="h-8 w-[70px] border border-input rounded-md text-sm"
+								className="h-8 w-[70px] rounded border border-input bg-background px-3 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
 							>
 								{[10, 20, 30, 40, 50].map((pageSize) => (
 									<option key={pageSize} value={pageSize}>
@@ -504,50 +568,52 @@ export function ResourceQuotasDataTable() {
 								))}
 							</select>
 						</div>
-						<div className="flex w-[100px] items-center justify-center text-sm font-medium">
-							Page {table.getState().pagination.pageIndex + 1} of{" "}
-							{table.getPageCount()}
-						</div>
-						<div className="flex items-center space-x-2">
-							<Button
-								variant="outline"
-								className="hidden h-8 w-8 p-0 lg:flex"
-								onClick={() => table.setPageIndex(0)}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to first page</span>
-								<IconChevronsLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.previousPage()}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to previous page</span>
-								<IconChevronLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.nextPage()}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to next page</span>
-								<IconChevronRight />
-							</Button>
-							<Button
-								variant="outline"
-								className="hidden size-8 lg:flex"
-								size="icon"
-								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to last page</span>
-								<IconChevronsRight />
-							</Button>
+						<div className="flex items-center justify-between sm:justify-center sm:gap-6 lg:gap-8">
+							<div className="flex w-[100px] items-center justify-center text-sm font-medium">
+								Page {table.getState().pagination.pageIndex + 1} of{" "}
+								{table.getPageCount()}
+							</div>
+							<div className="flex items-center space-x-2">
+								<Button
+									variant="outline"
+									className="hidden h-8 w-8 p-0 lg:flex"
+									onClick={() => table.setPageIndex(0)}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to first page</span>
+									<IconChevronsLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.previousPage()}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to previous page</span>
+									<IconChevronLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.nextPage()}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to next page</span>
+									<IconChevronRight />
+								</Button>
+								<Button
+									variant="outline"
+									className="hidden size-8 lg:flex"
+									size="icon"
+									onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to last page</span>
+									<IconChevronsRight />
+								</Button>
+							</div>
 						</div>
 					</div>
 				</div>

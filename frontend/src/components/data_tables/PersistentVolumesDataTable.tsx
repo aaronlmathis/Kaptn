@@ -35,7 +35,6 @@ import {
 	IconEye,
 	IconDownload,
 	IconCopy,
-	IconDatabase,
 } from "@tabler/icons-react"
 
 import {
@@ -506,33 +505,33 @@ export function PersistentVolumesDataTable() {
 
 	return (
 		<div className="px-4 lg:px-6">
-		<div className="space-y-4">
-			{/* Search and filter controls */}
-			<DataTableFilters
-				globalFilter={globalFilter}
-				onGlobalFilterChange={setGlobalFilter}
-				searchPlaceholder="Search PVs by name, capacity, status, access modes, reclaim policy, claim, storage class, or volume source... (Press '/' to focus)"
-				categoryFilter={statusFilter}
-				onCategoryFilterChange={setStatusFilter}
-				categoryLabel="Filter by status"
-				categoryOptions={pvStatuses}
-				selectedCount={table.getFilteredSelectedRowModel().rows.length}
-				totalCount={table.getFilteredRowModel().rows.length}
-				bulkActions={pvBulkActions}
-				bulkActionsLabel="Actions"
-				table={table}
-				showColumnToggle={true}
-				onRefresh={refetch}
-				isRefreshing={loading}
-			>
-				{/* Real-time updates indicator */}
-				{isConnected && (
-					<div className="flex items-center space-x-1 text-xs text-green-600">
-						<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-						<span>Live updates</span>
-					</div>
-				)}
-			</DataTableFilters>				{/* Data table */}
+			<div className="space-y-4">
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search PVs by name, capacity, status, access modes, reclaim policy, claim, storage class, or volume source... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by status"
+					categoryOptions={pvStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={pvBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
 					<ScrollArea className="w-full">
 						<DndContext

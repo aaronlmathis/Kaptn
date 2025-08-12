@@ -21,22 +21,20 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
 	IconChevronsRight,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
 	IconCopy,
 	IconShieldLock,
+	IconDownload,
 	IconPlus,
 } from "@tabler/icons-react"
 
@@ -59,22 +57,13 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -97,6 +86,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { SecretDetailDrawer } from "@/components/secrets/SecretDetailDrawer"
 import { SecretFormDrawer } from "@/components/secrets/SecretFormDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
@@ -180,7 +170,7 @@ const createColumns = (
 					<Checkbox
 						checked={
 							table.getIsAllPageRowsSelected() ||
-							(table.getIsSomePageRowsSelected() && "indeterminate")
+							(table.getIsSomePageRowsSelected() ? "indeterminate" : false)
 						}
 						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
 						aria-label="Select all"
@@ -479,33 +469,6 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 		}
 	}, [refetch])
 
-	// Handle bulk deletion
-	const handleBulkDelete = React.useCallback(async (tableInstance: any) => {
-		const selectedRows = tableInstance.getFilteredSelectedRowModel().rows
-		const secretsToDelete = selectedRows.map((row: any) => row.original)
-
-		try {
-			// Delete all selected secrets
-			await Promise.all(
-				secretsToDelete.map((secret: DashboardSecret) => deleteSecret(secret.namespace, secret.name))
-			)
-
-			toast.success("Secrets deleted", {
-				description: `${secretsToDelete.length} secret(s) have been deleted successfully`,
-				duration: 3000,
-			})
-
-			// Clear selection and refresh data
-			setRowSelection({})
-			refetch()
-		} catch (error) {
-			toast.error("Failed to delete secrets", {
-				description: error instanceof Error ? error.message : "An unexpected error occurred",
-				duration: 4000,
-			})
-		}
-	}, [refetch, setRowSelection])
-
 	// Handle opening form drawer for editing
 	const handleEditSecret = React.useCallback((secret: DashboardSecret) => {
 		setSelectedSecretForEdit(secret)
@@ -546,10 +509,14 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 		return filtered
 	}, [secrets, typeFilter, globalFilter])
 
-	// Get unique secret types for filter dropdown
-	const secretTypes = React.useMemo(() => {
+	// Filter options for secret types
+	const secretTypes: FilterOption[] = React.useMemo(() => {
 		const types = new Set(secrets.map(secret => secret.type))
-		return Array.from(types).sort()
+		return Array.from(types).sort().map(type => ({
+			value: type,
+			label: type,
+			badge: getSecretTypeBadge(type)
+		}))
 	}, [secrets])
 
 	const table = useReactTable({
@@ -572,6 +539,57 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 			rowSelection,
 		},
 	})
+
+	// Bulk actions for secrets
+	const secretBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for secrets:', selectedSecrets.map(s => s.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy Secret Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedSecrets.map(s => s.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied secret names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-keys",
+			label: "Copy Secret Keys",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const allKeys = selectedSecrets.flatMap(s => s.keys).join('\n')
+				navigator.clipboard.writeText(allKeys)
+				console.log('Copied secret keys:', allKeys)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-secrets",
+			label: "Delete Selected Secrets",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete secrets:', selectedSecrets.map(s => `${s.name} in ${s.namespace}`))
+				// TODO: Implement bulk secret deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	React.useEffect(() => {
 		setSortableIds(secrets.map((secret) => secret.id))
@@ -654,129 +672,38 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 		)
 	}
 
-	const selectedRowsCount = table.getFilteredSelectedRowModel().rows.length
-	const totalRowsCount = table.getFilteredRowModel().rows.length
-
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
 				{/* Search and filter controls */}
-				<div className="flex flex-col sm:flex-row gap-4">
-					<div className="flex-1">
-						<Input
-							placeholder="Search secrets by name, namespace, type, or keys... (Press '/' to focus)"
-							value={globalFilter}
-							onChange={(e) => setGlobalFilter(e.target.value)}
-							className="max-w-sm"
-						/>
-					</div>
-					<div className="flex gap-2">
-						<Select value={typeFilter} onValueChange={setTypeFilter}>
-							<SelectTrigger className="w-48">
-								<SelectValue placeholder="Filter by type" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All Types</SelectItem>
-								{secretTypes.map((type) => (
-									<SelectItem key={type} value={type}>
-										<div className="flex items-center gap-2">
-											{getSecretTypeBadge(type)}
-											<span>{type}</span>
-										</div>
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-						<Button onClick={handleNewSecret} className="gap-2">
-							<IconPlus className="size-4" />
-							<span className="hidden sm:inline">New Secret</span>
-						</Button>
-						<AlertDialog>
-							<AlertDialogTrigger asChild>
-								<Button
-									variant="outline"
-									disabled={selectedRowsCount === 0}
-									className="gap-2 text-red-600"
-									data-delete-trigger
-								>
-									<IconTrash className="size-4" />
-									<span className="hidden sm:inline">Delete ({selectedRowsCount})</span>
-								</Button>
-							</AlertDialogTrigger>
-							<AlertDialogContent>
-								<AlertDialogHeader>
-									<AlertDialogTitle>Delete {selectedRowsCount} Secret{selectedRowsCount > 1 ? 's' : ''}</AlertDialogTitle>
-									<AlertDialogDescription>
-										Are you sure you want to delete {selectedRowsCount} secret{selectedRowsCount > 1 ? 's' : ''}?
-										This action cannot be undone and will permanently remove {selectedRowsCount > 1 ? 'these secrets' : 'this secret'} and all {selectedRowsCount > 1 ? 'their' : 'its'} data.
-									</AlertDialogDescription>
-								</AlertDialogHeader>
-								<AlertDialogFooter>
-									<AlertDialogCancel>Cancel</AlertDialogCancel>
-									<AlertDialogAction
-										onClick={() => handleBulkDelete(table)}
-										className="bg-red-600 hover:bg-red-700 text-white"
-									>
-										Delete Secret{selectedRowsCount > 1 ? 's' : ''}
-									</AlertDialogAction>
-								</AlertDialogFooter>
-							</AlertDialogContent>
-						</AlertDialog>
-					</div>
-				</div>
-
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{selectedRowsCount} of {totalRowsCount} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search secrets by name, namespace, type, or keys... (Press '/' to focus)"
+					categoryFilter={typeFilter}
+					onCategoryFilterChange={setTypeFilter}
+					categoryLabel="Filter by type"
+					categoryOptions={secretTypes}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={secretBulkActions}
+					bulkActionsLabel="Actions"
+					onCreateNew={handleNewSecret}
+					createLabel="New Secret"
+					createIcon={<IconPlus className="size-4" />}
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
@@ -843,17 +770,12 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 				</div>
 
 				{/* Pagination */}
-				<div className="flex items-center justify-between px-2">
-					<div className="flex-1 text-sm text-muted-foreground">
-						{selectedRowsCount} of {totalRowsCount} row(s) selected.
-						{isConnected && (
-							<div className="inline-flex items-center space-x-1 ml-4 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
+				<div className="flex flex-col gap-4 px-2 sm:flex-row sm:items-center sm:justify-between">
+					<div className="text-sm text-muted-foreground">
+						{table.getFilteredSelectedRowModel().rows.length} of{" "}
+						{table.getFilteredRowModel().rows.length} row(s) selected.
 					</div>
-					<div className="flex items-center space-x-6 lg:space-x-8">
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
 						<div className="flex items-center space-x-2">
 							<p className="text-sm font-medium">Rows per page</p>
 							<select
@@ -870,50 +792,52 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 								))}
 							</select>
 						</div>
-						<div className="flex w-[100px] items-center justify-center text-sm font-medium">
-							Page {table.getState().pagination.pageIndex + 1} of{" "}
-							{table.getPageCount()}
-						</div>
-						<div className="flex items-center space-x-2">
-							<Button
-								variant="outline"
-								className="hidden h-8 w-8 p-0 lg:flex"
-								onClick={() => table.setPageIndex(0)}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to first page</span>
-								<IconChevronsLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.previousPage()}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to previous page</span>
-								<IconChevronLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.nextPage()}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to next page</span>
-								<IconChevronRight />
-							</Button>
-							<Button
-								variant="outline"
-								className="hidden size-8 lg:flex"
-								size="icon"
-								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to last page</span>
-								<IconChevronsRight />
-							</Button>
+						<div className="flex items-center justify-between sm:justify-center sm:gap-6 lg:gap-8">
+							<div className="flex w-[100px] items-center justify-center text-sm font-medium">
+								Page {table.getState().pagination.pageIndex + 1} of{" "}
+								{table.getPageCount()}
+							</div>
+							<div className="flex items-center space-x-2">
+								<Button
+									variant="outline"
+									className="hidden h-8 w-8 p-0 lg:flex"
+									onClick={() => table.setPageIndex(0)}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to first page</span>
+									<IconChevronsLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.previousPage()}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to previous page</span>
+									<IconChevronLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.nextPage()}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to next page</span>
+									<IconChevronRight />
+								</Button>
+								<Button
+									variant="outline"
+									className="hidden size-8 lg:flex"
+									size="icon"
+									onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to last page</span>
+									<IconChevronsRight />
+								</Button>
+							</div>
 						</div>
 					</div>
 				</div>

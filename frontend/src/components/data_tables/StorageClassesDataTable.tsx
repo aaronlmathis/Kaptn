@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,15 +28,16 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
-	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
 	IconWifi,
 	IconWifiOff,
+	IconDownload,
+	IconCopy,
+	IconDatabase,
 } from "@tabler/icons-react"
 
 import {
@@ -61,7 +61,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
@@ -76,6 +75,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { StorageClassDetailDrawer } from "@/components/viewers/StorageClassDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useStorageClassesWithWebSocket } from "@/hooks/useStorageClassesWithWebSocket"
@@ -165,7 +165,7 @@ const createColumns = (
 					<Checkbox
 						checked={
 							table.getIsAllPageRowsSelected() ||
-							(table.getIsSomePageRowsSelected() && "indeterminate")
+							(table.getIsSomePageRowsSelected() ? "indeterminate" : false)
 						}
 						onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
 						aria-label="Select all"
@@ -334,6 +334,8 @@ export function StorageClassesDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedStorageClassForDetails, setSelectedStorageClassForDetails] = React.useState<z.infer<typeof storageClassSchema> | null>(null)
 
@@ -343,6 +345,41 @@ export function StorageClassesDataTable() {
 		setDetailDrawerOpen(true)
 	}, [])
 
+	// Create filter options based on reclaim policy
+	const storageClassStatuses: FilterOption[] = React.useMemo(() => {
+		const policies = new Set(storageClasses.map(sc => sc.reclaimPolicy))
+		return Array.from(policies).sort().map(policy => ({
+			value: policy,
+			label: policy,
+			badge: getReclaimPolicyBadge(policy)
+		}))
+	}, [storageClasses])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = storageClasses
+
+		// Apply reclaim policy filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(storageClass => {
+				return storageClass.reclaimPolicy === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(storageClass =>
+				storageClass.name.toLowerCase().includes(searchTerm) ||
+				storageClass.provisioner.toLowerCase().includes(searchTerm) ||
+				storageClass.reclaimPolicy.toLowerCase().includes(searchTerm) ||
+				storageClass.volumeBindingMode.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [storageClasses, statusFilter, globalFilter])
+
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
 		() => createColumns(handleViewDetails),
@@ -350,7 +387,7 @@ export function StorageClassesDataTable() {
 	)
 
 	const table = useReactTable({
-		data: storageClasses,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -369,6 +406,57 @@ export function StorageClassesDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Create bulk actions for StorageClasses (moved after table creation)
+	const storageClassBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedStorageClasses = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for StorageClasses:', selectedStorageClasses.map(sc => sc.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy StorageClass Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedStorageClasses = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedStorageClasses.map(sc => sc.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied StorageClass names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-provisioners",
+			label: "Copy Provisioner Names",
+			icon: <IconDatabase className="size-4" />,
+			action: () => {
+				const selectedStorageClasses = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const provisioners = selectedStorageClasses.map(sc => sc.provisioner).join('\n')
+				navigator.clipboard.writeText(provisioners)
+				console.log('Copied provisioner names:', provisioners)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-storageclasses",
+			label: "Delete Selected StorageClasses",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedStorageClasses = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete StorageClasses:', selectedStorageClasses.map(sc => sc.name))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -421,66 +509,37 @@ export function StorageClassesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-4">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						<div className="flex items-center space-x-2">
-							{isConnected ? (
-								<>
-									<IconWifi className="size-4 text-green-600" />
-									<span className="text-xs text-green-600">Real-time updates enabled</span>
-								</>
-							) : (
-								<>
-									<IconWifiOff className="size-4 text-gray-400" />
-									<span className="text-xs text-gray-400">Real-time updates disconnected</span>
-								</>
-							)}
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search storage classes by name, provisioner, reclaim policy, or volume binding mode... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by reclaim policy"
+					categoryOptions={storageClassStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={storageClassBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected ? (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<IconWifi className="size-4" />
+							<span>Live updates</span>
 						</div>
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+					) : (
+						<div className="flex items-center space-x-1 text-xs text-gray-400">
+							<IconWifiOff className="size-4" />
+							<span>Disconnected</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
@@ -536,12 +595,12 @@ export function StorageClassesDataTable() {
 				</div>
 
 				{/* Pagination */}
-				<div className="flex items-center justify-between px-2">
-					<div className="flex-1 text-sm text-muted-foreground">
+				<div className="flex flex-col gap-4 px-2 sm:flex-row sm:items-center sm:justify-between">
+					<div className="text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
 					</div>
-					<div className="flex items-center space-x-6 lg:space-x-8">
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
 						<div className="flex items-center space-x-2">
 							<p className="text-sm font-medium">Rows per page</p>
 							<select
@@ -558,50 +617,52 @@ export function StorageClassesDataTable() {
 								))}
 							</select>
 						</div>
-						<div className="flex w-[100px] items-center justify-center text-sm font-medium">
-							Page {table.getState().pagination.pageIndex + 1} of{" "}
-							{table.getPageCount()}
-						</div>
-						<div className="flex items-center space-x-2">
-							<Button
-								variant="outline"
-								className="hidden h-8 w-8 p-0 lg:flex"
-								onClick={() => table.setPageIndex(0)}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to first page</span>
-								<IconChevronsLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.previousPage()}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to previous page</span>
-								<IconChevronLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.nextPage()}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to next page</span>
-								<IconChevronRight />
-							</Button>
-							<Button
-								variant="outline"
-								className="hidden size-8 lg:flex"
-								size="icon"
-								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to last page</span>
-								<IconChevronsRight />
-							</Button>
+						<div className="flex items-center justify-between sm:justify-center sm:gap-6 lg:gap-8">
+							<div className="flex w-[100px] items-center justify-center text-sm font-medium">
+								Page {table.getState().pagination.pageIndex + 1} of{" "}
+								{table.getPageCount()}
+							</div>
+							<div className="flex items-center space-x-2">
+								<Button
+									variant="outline"
+									className="hidden h-8 w-8 p-0 lg:flex"
+									onClick={() => table.setPageIndex(0)}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to first page</span>
+									<IconChevronsLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.previousPage()}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to previous page</span>
+									<IconChevronLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.nextPage()}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to next page</span>
+									<IconChevronRight />
+								</Button>
+								<Button
+									variant="outline"
+									className="hidden size-8 lg:flex"
+									size="icon"
+									onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to last page</span>
+									<IconChevronsRight />
+								</Button>
+							</div>
 						</div>
 					</div>
 				</div>

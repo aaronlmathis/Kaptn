@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
 	IconChevronLeft,
 	IconChevronRight,
 	IconChevronsLeft,
@@ -29,13 +28,15 @@ import {
 	IconCircleCheckFilled,
 	IconDotsVertical,
 	IconGripVertical,
-	IconLayoutColumns,
 	IconLoader,
 	IconAlertTriangle,
 	IconRefresh,
 	IconTrash,
 	IconEdit,
 	IconEye,
+	IconDownload,
+	IconCopy,
+	IconNetwork,
 } from "@tabler/icons-react"
 
 import {
@@ -59,7 +60,6 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
 	DropdownMenu,
-	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { VirtualServiceDetailDrawer } from "@/components/viewers/VirtualServiceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useVirtualServicesWithWebSocket } from "@/hooks/useVirtualServicesWithWebSocket"
@@ -100,6 +101,28 @@ function DragHandle({ id }: { id: number }) {
 			<span className="sr-only">Drag to reorder</span>
 		</Button>
 	)
+}
+
+// Helper function to get virtual service type string
+function getVirtualServiceType(hosts: string[], gateways: string[]): string {
+	if (hosts.length === 0 && gateways.length === 0) {
+		return "No Routes"
+	}
+
+	const hasExternalHost = hosts.some(h => !h.includes('.local') && !h.includes('.cluster.local'))
+	const hasGateway = gateways.length > 0
+
+	if (hasExternalHost && hasGateway) {
+		return "External"
+	}
+	if (hasGateway) {
+		return "Gateway"
+	}
+	if (hosts.length > 0) {
+		return "Internal"
+	}
+
+	return "Unknown"
 }
 
 // Virtual Service type badge helper
@@ -348,6 +371,8 @@ export function VirtualServicesDataTable() {
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedVirtualServiceForDetails, setSelectedVirtualServiceForDetails] = React.useState<z.infer<typeof virtualServiceSchema> | null>(null)
 
@@ -357,6 +382,51 @@ export function VirtualServicesDataTable() {
 		setDetailDrawerOpen(true)
 	}, [])
 
+	// Create filter options based on virtual service types
+	const virtualServiceStatuses: FilterOption[] = React.useMemo(() => {
+		const types = new Set<string>()
+		virtualServices.forEach(vs => {
+			const type = getVirtualServiceType(vs.hosts, vs.gateways)
+			types.add(type)
+		})
+		return Array.from(types).sort().map(type => ({
+			value: type,
+			label: type,
+			badge: getVirtualServiceTypeBadge(
+				type === "External" ? ["external.example.com"] :
+					type === "Gateway" ? ["gateway"] :
+						type === "Internal" ? ["internal"] : [],
+				type === "External" || type === "Gateway" ? ["gateway"] : []
+			)
+		}))
+	}, [virtualServices])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = virtualServices
+
+		// Apply type filter
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(virtualService => {
+				const type = getVirtualServiceType(virtualService.hosts, virtualService.gateways)
+				return type === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(virtualService =>
+				virtualService.name.toLowerCase().includes(searchTerm) ||
+				virtualService.namespace.toLowerCase().includes(searchTerm) ||
+				virtualService.hosts.some(host => host.toLowerCase().includes(searchTerm)) ||
+				virtualService.gateways.some(gateway => gateway.toLowerCase().includes(searchTerm))
+			)
+		}
+
+		return filtered
+	}, [virtualServices, statusFilter, globalFilter])
+
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
 		() => createColumns(handleViewDetails),
@@ -364,7 +434,7 @@ export function VirtualServicesDataTable() {
 	)
 
 	const table = useReactTable({
-		data: virtualServices,
+		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -383,6 +453,68 @@ export function VirtualServicesDataTable() {
 			rowSelection,
 		},
 	})
+
+	// Create bulk actions for VirtualServices (moved after table creation)
+	const virtualServiceBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "export-yaml",
+			label: "Export Selected as YAML",
+			icon: <IconDownload className="size-4" />,
+			action: () => {
+				const selectedVirtualServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for VirtualServices:', selectedVirtualServices.map(vs => vs.name))
+				// TODO: Implement bulk YAML export
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-names",
+			label: "Copy VirtualService Names",
+			icon: <IconCopy className="size-4" />,
+			action: () => {
+				const selectedVirtualServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedVirtualServices.map(vs => vs.name).join('\n')
+				navigator.clipboard.writeText(names)
+				console.log('Copied VirtualService names:', names)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "copy-hosts",
+			label: "Copy Host Names",
+			icon: <IconNetwork className="size-4" />,
+			action: () => {
+				const selectedVirtualServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const hosts = selectedVirtualServices.flatMap(vs => vs.hosts).join('\n')
+				navigator.clipboard.writeText(hosts)
+				console.log('Copied host names:', hosts)
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "restart-virtualservices",
+			label: "Restart Selected VirtualServices",
+			icon: <IconRefresh className="size-4" />,
+			action: () => {
+				const selectedVirtualServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Restart VirtualServices:', selectedVirtualServices.map(vs => `${vs.name} in ${vs.namespace}`))
+				// TODO: Implement bulk restart
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "delete-virtualservices",
+			label: "Delete Selected VirtualServices",
+			icon: <IconTrash className="size-4" />,
+			action: () => {
+				const selectedVirtualServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete VirtualServices:', selectedVirtualServices.map(vs => `${vs.name} in ${vs.namespace}`))
+				// TODO: Implement bulk deletion with confirmation
+			},
+			variant: "destructive" as const,
+			requiresSelection: true,
+		},
+	], [table])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -435,59 +567,32 @@ export function VirtualServicesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Live updates</span>
-							</div>
-						)}
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+				{/* Search and filter controls */}
+				<DataTableFilters
+					globalFilter={globalFilter}
+					onGlobalFilterChange={setGlobalFilter}
+					searchPlaceholder="Search virtual services by name, namespace, hosts, or gateways... (Press '/' to focus)"
+					categoryFilter={statusFilter}
+					onCategoryFilterChange={setStatusFilter}
+					categoryLabel="Filter by type"
+					categoryOptions={virtualServiceStatuses}
+					selectedCount={table.getFilteredSelectedRowModel().rows.length}
+					totalCount={table.getFilteredRowModel().rows.length}
+					bulkActions={virtualServiceBulkActions}
+					bulkActionsLabel="Actions"
+					table={table}
+					showColumnToggle={true}
+					onRefresh={refetch}
+					isRefreshing={loading}
+				>
+					{/* Real-time updates indicator */}
+					{isConnected && (
+						<div className="flex items-center space-x-1 text-xs text-green-600">
+							<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+							<span>Live updates</span>
+						</div>
+					)}
+				</DataTableFilters>
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">
@@ -543,12 +648,12 @@ export function VirtualServicesDataTable() {
 				</div>
 
 				{/* Pagination */}
-				<div className="flex items-center justify-between px-2">
-					<div className="flex-1 text-sm text-muted-foreground">
+				<div className="flex flex-col gap-4 px-2 sm:flex-row sm:items-center sm:justify-between">
+					<div className="text-sm text-muted-foreground">
 						{table.getFilteredSelectedRowModel().rows.length} of{" "}
 						{table.getFilteredRowModel().rows.length} row(s) selected.
 					</div>
-					<div className="flex items-center space-x-6 lg:space-x-8">
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6 lg:gap-8">
 						<div className="flex items-center space-x-2">
 							<p className="text-sm font-medium">Rows per page</p>
 							<select
@@ -565,50 +670,52 @@ export function VirtualServicesDataTable() {
 								))}
 							</select>
 						</div>
-						<div className="flex w-[100px] items-center justify-center text-sm font-medium">
-							Page {table.getState().pagination.pageIndex + 1} of{" "}
-							{table.getPageCount()}
-						</div>
-						<div className="flex items-center space-x-2">
-							<Button
-								variant="outline"
-								className="hidden h-8 w-8 p-0 lg:flex"
-								onClick={() => table.setPageIndex(0)}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to first page</span>
-								<IconChevronsLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.previousPage()}
-								disabled={!table.getCanPreviousPage()}
-							>
-								<span className="sr-only">Go to previous page</span>
-								<IconChevronLeft />
-							</Button>
-							<Button
-								variant="outline"
-								className="size-8"
-								size="icon"
-								onClick={() => table.nextPage()}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to next page</span>
-								<IconChevronRight />
-							</Button>
-							<Button
-								variant="outline"
-								className="hidden size-8 lg:flex"
-								size="icon"
-								onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-								disabled={!table.getCanNextPage()}
-							>
-								<span className="sr-only">Go to last page</span>
-								<IconChevronsRight />
-							</Button>
+						<div className="flex items-center justify-between sm:justify-center sm:gap-6 lg:gap-8">
+							<div className="flex w-[100px] items-center justify-center text-sm font-medium">
+								Page {table.getState().pagination.pageIndex + 1} of{" "}
+								{table.getPageCount()}
+							</div>
+							<div className="flex items-center space-x-2">
+								<Button
+									variant="outline"
+									className="hidden h-8 w-8 p-0 lg:flex"
+									onClick={() => table.setPageIndex(0)}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to first page</span>
+									<IconChevronsLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.previousPage()}
+									disabled={!table.getCanPreviousPage()}
+								>
+									<span className="sr-only">Go to previous page</span>
+									<IconChevronLeft />
+								</Button>
+								<Button
+									variant="outline"
+									className="size-8"
+									size="icon"
+									onClick={() => table.nextPage()}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to next page</span>
+									<IconChevronRight />
+								</Button>
+								<Button
+									variant="outline"
+									className="hidden size-8 lg:flex"
+									size="icon"
+									onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+									disabled={!table.getCanNextPage()}
+								>
+									<span className="sr-only">Go to last page</span>
+									<IconChevronsRight />
+								</Button>
+							</div>
 						</div>
 					</div>
 				</div>
