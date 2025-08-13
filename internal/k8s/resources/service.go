@@ -1706,3 +1706,51 @@ func (rm *ResourceManager) GetRoleBinding(ctx context.Context, namespace, name s
 	}
 	return roleBinding, nil
 }
+
+// ListClusterRoles lists all cluster roles
+func (rm *ResourceManager) ListClusterRoles(ctx context.Context) ([]*rbacv1.ClusterRole, error) {
+	clusterRoles, err := rm.kubeClient.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list cluster roles: %w", err)
+	}
+
+	var result []*rbacv1.ClusterRole
+	for i := range clusterRoles.Items {
+		result = append(result, &clusterRoles.Items[i])
+	}
+
+	return result, nil
+}
+
+// GetClusterRole gets a specific cluster role
+func (rm *ResourceManager) GetClusterRole(ctx context.Context, name string) (*rbacv1.ClusterRole, error) {
+	clusterRole, err := rm.kubeClient.RbacV1().ClusterRoles().Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cluster role %s: %w", name, err)
+	}
+	return clusterRole, nil
+}
+
+// ListClusterRoleBindings lists all cluster role bindings
+func (rm *ResourceManager) ListClusterRoleBindings(ctx context.Context) ([]*rbacv1.ClusterRoleBinding, error) {
+	clusterRoleBindings, err := rm.kubeClient.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list cluster role bindings: %w", err)
+	}
+
+	var result []*rbacv1.ClusterRoleBinding
+	for i := range clusterRoleBindings.Items {
+		result = append(result, &clusterRoleBindings.Items[i])
+	}
+
+	return result, nil
+}
+
+// GetClusterRoleBinding gets a specific cluster role binding
+func (rm *ResourceManager) GetClusterRoleBinding(ctx context.Context, name string) (*rbacv1.ClusterRoleBinding, error) {
+	clusterRoleBinding, err := rm.kubeClient.RbacV1().ClusterRoleBindings().Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cluster role binding %s: %w", name, err)
+	}
+	return clusterRoleBinding, nil
+}

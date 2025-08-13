@@ -80,6 +80,7 @@ import { DataTableFilters, type BulkAction } from "@/components/ui/data-table-fi
 import { useRoleBindingsWithWebSocket } from "@/hooks/useRoleBindingsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { type DashboardRoleBinding } from "@/lib/k8s-rbac"
+import { RoleBindingDetailDrawer } from "@/components/viewers/RoleBindingDetailDrawer"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -307,11 +308,13 @@ export function RoleBindingsDataTable() {
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
 	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [selectedRoleBindingForDetails, setSelectedRoleBindingForDetails] = React.useState<DashboardRoleBinding | null>(null)
+	const [isDetailDrawerOpen, setIsDetailDrawerOpen] = React.useState(false)
 
-	// Handle opening detail drawer (placeholder for now)
+	// Handle opening detail drawer
 	const handleViewDetails = React.useCallback((roleBinding: DashboardRoleBinding) => {
-		console.log('View role binding details:', roleBinding)
-		// TODO: Implement role binding detail drawer
+		setSelectedRoleBindingForDetails(roleBinding)
+		setIsDetailDrawerOpen(true)
 	}, [])
 
 	// Create columns with the onViewDetails callback
@@ -598,6 +601,15 @@ export function RoleBindingsDataTable() {
 					</div>
 				</div>
 			</div>
+
+			{/* RoleBinding Detail Drawer */}
+			{selectedRoleBindingForDetails && (
+				<RoleBindingDetailDrawer
+					item={selectedRoleBindingForDetails}
+					open={isDetailDrawerOpen}
+					onOpenChange={setIsDetailDrawerOpen}
+				/>
+			)}
 		</div>
 	)
 }

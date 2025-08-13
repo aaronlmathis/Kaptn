@@ -265,6 +265,12 @@ func (s *Server) initInformers() error {
 
 	roleBindingHandler := informers.NewRoleBindingEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddRoleBindingEventHandler(roleBindingHandler)
+
+	clusterRoleHandler := informers.NewClusterRoleEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddClusterRoleEventHandler(clusterRoleHandler)
+
+	clusterRoleBindingHandler := informers.NewClusterRoleBindingEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddClusterRoleBindingEventHandler(clusterRoleBindingHandler)
 	s.logger.Info("RBAC event handlers registered")
 
 	s.logger.Info("Registering Istio gateway event handler")
@@ -709,6 +715,10 @@ func (s *Server) setupRoutes() {
 			r.Get("/roles/{namespace}/{name}", s.handleGetRole)
 			r.Get("/role-bindings", s.handleListRoleBindings)
 			r.Get("/role-bindings/{namespace}/{name}", s.handleGetRoleBinding)
+			r.Get("/cluster-roles", s.handleListClusterRoles)
+			r.Get("/cluster-roles/{name}", s.handleGetClusterRole)
+			r.Get("/cluster-role-bindings", s.handleListClusterRoleBindings)
+			r.Get("/cluster-role-bindings/{name}", s.handleGetClusterRoleBinding)
 			r.Get("/persistent-volumes", s.handleListPersistentVolumes)
 			r.Get("/persistent-volumes/{name}", s.handleGetPersistentVolume)
 			r.Get("/persistent-volume-claims", s.handleListPersistentVolumeClaims)

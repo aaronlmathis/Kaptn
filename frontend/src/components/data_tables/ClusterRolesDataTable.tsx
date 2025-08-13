@@ -76,10 +76,9 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { DataTableFilters, type BulkAction } from "@/components/ui/data-table-filters"
-import { useRolesWithWebSocket } from "@/hooks/useRolesWithWebSocket"
-import { useNamespace } from "@/contexts/namespace-context"
-import { type DashboardRole } from "@/lib/k8s-rbac"
-import { RoleDetailDrawer } from "@/components/viewers/RoleDetailDrawer"
+import { useClusterRolesWithWebSocket } from "@/hooks/useClusterRolesWithWebSocket"
+import { type DashboardClusterRole } from "@/lib/k8s-cluster-rbac"
+import { ClusterRoleDetailDrawer } from "@/components/viewers/ClusterRoleDetailDrawer"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -101,8 +100,8 @@ function DragHandle({ id }: { id: number }) {
 	)
 }
 
-// Role rules badge helper
-function getRoleRulesBadge(rulesCount: number) {
+// Cluster role rules badge helper
+function getClusterRoleRulesBadge(rulesCount: number) {
 	if (rulesCount === 0) {
 		return (
 			<Badge variant="outline" className="text-gray-600 border-border bg-transparent px-1.5">
@@ -127,10 +126,10 @@ function getRoleRulesBadge(rulesCount: number) {
 	}
 }
 
-// Column definitions for roles table
+// Column definitions for cluster roles table
 const createColumns = (
-	onViewDetails: (role: DashboardRole) => void
-): ColumnDef<DashboardRole>[] => [
+	onViewDetails: (clusterRole: DashboardClusterRole) => void
+): ColumnDef<DashboardClusterRole>[] => [
 		{
 			id: "drag",
 			header: () => null,
@@ -164,7 +163,7 @@ const createColumns = (
 		},
 		{
 			accessorKey: "name",
-			header: "Role Name",
+			header: "ClusterRole Name",
 			cell: ({ row }) => {
 				return (
 					<button
@@ -178,18 +177,9 @@ const createColumns = (
 			enableHiding: false,
 		},
 		{
-			accessorKey: "namespace",
-			header: "Namespace",
-			cell: ({ row }) => (
-				<Badge variant="outline" className="text-muted-foreground px-1.5">
-					{row.original.namespace}
-				</Badge>
-			),
-		},
-		{
 			accessorKey: "rules",
 			header: "Rules",
-			cell: ({ row }) => getRoleRulesBadge(row.original.rules),
+			cell: ({ row }) => getClusterRoleRulesBadge(row.original.rules),
 		},
 		{
 			accessorKey: "rulesDisplay",
@@ -230,8 +220,8 @@ const createColumns = (
 						</DropdownMenuItem>
 						<ResourceYamlEditor
 							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="Role"
+							namespace=""
+							resourceKind="ClusterRole"
 						>
 							<button
 								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
@@ -257,7 +247,7 @@ const createColumns = (
 	]
 
 // Draggable row component
-function DraggableRow({ row }: { row: Row<DashboardRole> }) {
+function DraggableRow({ row }: { row: Row<DashboardClusterRole> }) {
 	const {
 		transform,
 		transition,
@@ -288,21 +278,20 @@ function DraggableRow({ row }: { row: Row<DashboardRole> }) {
 	)
 }
 
-export function RolesDataTable() {
-	const { data: roles, loading, error, refetch, isConnected } = useRolesWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+export function ClusterRolesDataTable() {
+	const { data: clusterRoles, loading, error, refetch, isConnected } = useClusterRolesWithWebSocket(true)
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
 	const [globalFilter, setGlobalFilter] = React.useState("")
-	const [selectedRoleForDetails, setSelectedRoleForDetails] = React.useState<DashboardRole | null>(null)
+	const [selectedClusterRoleForDetails, setSelectedClusterRoleForDetails] = React.useState<DashboardClusterRole | null>(null)
 	const [isDetailDrawerOpen, setIsDetailDrawerOpen] = React.useState(false)
 
 	// Handle opening detail drawer
-	const handleViewDetails = React.useCallback((role: DashboardRole) => {
-		setSelectedRoleForDetails(role)
+	const handleViewDetails = React.useCallback((clusterRole: DashboardClusterRole) => {
+		setSelectedClusterRoleForDetails(clusterRole)
 		setIsDetailDrawerOpen(true)
 	}, [])
 
@@ -314,20 +303,19 @@ export function RolesDataTable() {
 
 	// Filter data based on global filter
 	const filteredData = React.useMemo(() => {
-		let filtered = roles
+		let filtered = clusterRoles
 
 		// Apply global filter (search)
 		if (globalFilter) {
 			const searchTerm = globalFilter.toLowerCase()
-			filtered = filtered.filter(role =>
-				role.name.toLowerCase().includes(searchTerm) ||
-				role.namespace.toLowerCase().includes(searchTerm) ||
-				role.rulesDisplay.toLowerCase().includes(searchTerm)
+			filtered = filtered.filter(clusterRole =>
+				clusterRole.name.toLowerCase().includes(searchTerm) ||
+				clusterRole.rulesDisplay.toLowerCase().includes(searchTerm)
 			)
 		}
 
 		return filtered
-	}, [roles, globalFilter])
+	}, [clusterRoles, globalFilter])
 
 	const table = useReactTable({
 		data: filteredData,
@@ -350,39 +338,39 @@ export function RolesDataTable() {
 		},
 	})
 
-	// Bulk actions for roles
-	const roleBulkActions: BulkAction[] = React.useMemo(() => [
+	// Bulk actions for cluster roles
+	const clusterRoleBulkActions: BulkAction[] = React.useMemo(() => [
 		{
 			id: "export-yaml",
 			label: "Export Selected as YAML",
 			icon: <IconDownload className="size-4" />,
 			action: () => {
-				const selectedRoles = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for roles:', selectedRoles.map(r => r.name))
+				const selectedClusterRoles = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Export YAML for cluster roles:', selectedClusterRoles.map(cr => cr.name))
 				// TODO: Implement bulk YAML export
 			},
 			requiresSelection: true,
 		},
 		{
 			id: "copy-names",
-			label: "Copy Role Names",
+			label: "Copy ClusterRole Names",
 			icon: <IconCopy className="size-4" />,
 			action: () => {
-				const selectedRoles = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedRoles.map(r => r.name).join('\n')
+				const selectedClusterRoles = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				const names = selectedClusterRoles.map(cr => cr.name).join('\n')
 				navigator.clipboard.writeText(names)
-				console.log('Copied role names:', names)
+				console.log('Copied cluster role names:', names)
 			},
 			requiresSelection: true,
 		},
 		{
-			id: "delete-roles",
-			label: "Delete Selected Roles",
+			id: "delete-cluster-roles",
+			label: "Delete Selected ClusterRoles",
 			icon: <IconTrash className="size-4" />,
 			action: () => {
-				const selectedRoles = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete roles:', selectedRoles.map(r => `${r.name} in ${r.namespace}`))
-				// TODO: Implement bulk role deletion with confirmation
+				const selectedClusterRoles = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+				console.log('Delete cluster roles:', selectedClusterRoles.map(cr => cr.name))
+				// TODO: Implement bulk cluster role deletion with confirmation
 			},
 			variant: "destructive" as const,
 			requiresSelection: true,
@@ -397,12 +385,12 @@ export function RolesDataTable() {
 	)
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		roles.map((role: DashboardRole) => role.id)
+		clusterRoles.map((clusterRole: DashboardClusterRole) => clusterRole.id)
 	)
 
 	React.useEffect(() => {
-		setSortableIds(roles.map((role: DashboardRole) => role.id))
-	}, [roles])
+		setSortableIds(clusterRoles.map((clusterRole: DashboardClusterRole) => clusterRole.id))
+	}, [clusterRoles])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -420,7 +408,7 @@ export function RolesDataTable() {
 			<div className="px-4 lg:px-6">
 				<div className="flex items-center justify-center py-10">
 					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading roles...</span>
+					<span className="ml-2">Loading cluster roles...</span>
 				</div>
 			</div>
 		)
@@ -444,10 +432,10 @@ export function RolesDataTable() {
 				<DataTableFilters
 					globalFilter={globalFilter}
 					onGlobalFilterChange={setGlobalFilter}
-					searchPlaceholder="Search roles by name, namespace, or rule details... (Press '/' to focus)"
+					searchPlaceholder="Search cluster roles by name or rule details... (Press '/' to focus)"
 					selectedCount={table.getFilteredSelectedRowModel().rows.length}
 					totalCount={table.getFilteredRowModel().rows.length}
-					bulkActions={roleBulkActions}
+					bulkActions={clusterRoleBulkActions}
 					bulkActionsLabel="Actions"
 					table={table}
 					showColumnToggle={true}
@@ -503,7 +491,7 @@ export function RolesDataTable() {
 													colSpan={columns.length}
 													className="h-24 text-center"
 												>
-													No roles found in {selectedNamespace === 'all' ? 'any namespace' : `namespace "${selectedNamespace}"`}.
+													No cluster roles found.
 												</TableCell>
 											</TableRow>
 										)}
@@ -590,10 +578,10 @@ export function RolesDataTable() {
 				</div>
 			</div>
 
-			{/* Role Detail Drawer */}
-			{selectedRoleForDetails && (
-				<RoleDetailDrawer
-					item={selectedRoleForDetails}
+			{/* ClusterRole Detail Drawer */}
+			{selectedClusterRoleForDetails && (
+				<ClusterRoleDetailDrawer
+					item={selectedClusterRoleForDetails}
 					open={isDetailDrawerOpen}
 					onOpenChange={setIsDetailDrawerOpen}
 				/>

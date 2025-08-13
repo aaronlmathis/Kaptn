@@ -63,8 +63,10 @@ type Manager struct {
 	CustomResourceDefinitionsInformer cache.SharedIndexInformer
 
 	// RBAC Resources
-	RolesInformer        cache.SharedIndexInformer
-	RoleBindingsInformer cache.SharedIndexInformer
+	RolesInformer               cache.SharedIndexInformer
+	RoleBindingsInformer        cache.SharedIndexInformer
+	ClusterRolesInformer        cache.SharedIndexInformer
+	ClusterRoleBindingsInformer cache.SharedIndexInformer
 
 	// Context for cancellation
 	ctx    context.Context
@@ -146,8 +148,10 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient d
 		NetworkPoliciesInformer: factory.Networking().V1().NetworkPolicies().Informer(),
 
 		// RBAC Resources
-		RolesInformer:        factory.Rbac().V1().Roles().Informer(),
-		RoleBindingsInformer: factory.Rbac().V1().RoleBindings().Informer(),
+		RolesInformer:               factory.Rbac().V1().Roles().Informer(),
+		RoleBindingsInformer:        factory.Rbac().V1().RoleBindings().Informer(),
+		ClusterRolesInformer:        factory.Rbac().V1().ClusterRoles().Informer(),
+		ClusterRoleBindingsInformer: factory.Rbac().V1().ClusterRoleBindings().Informer(),
 
 		ctx:    ctx,
 		cancel: cancel,
@@ -222,6 +226,8 @@ func (m *Manager) Start() error {
 		// RBAC Resources
 		m.RolesInformer.HasSynced,
 		m.RoleBindingsInformer.HasSynced,
+		m.ClusterRolesInformer.HasSynced,
+		m.ClusterRoleBindingsInformer.HasSynced,
 	}
 
 	// Add volume snapshot informers if available
@@ -407,6 +413,16 @@ func (m *Manager) AddRoleBindingEventHandler(handler cache.ResourceEventHandler)
 	m.RoleBindingsInformer.AddEventHandler(handler)
 }
 
+// AddClusterRoleEventHandler adds an event handler for cluster role events
+func (m *Manager) AddClusterRoleEventHandler(handler cache.ResourceEventHandler) {
+	m.ClusterRolesInformer.AddEventHandler(handler)
+}
+
+// AddClusterRoleBindingEventHandler adds an event handler for cluster role binding events
+func (m *Manager) AddClusterRoleBindingEventHandler(handler cache.ResourceEventHandler) {
+	m.ClusterRoleBindingsInformer.AddEventHandler(handler)
+}
+
 // GetNodeLister returns a lister for nodes
 func (m *Manager) GetNodeLister() cache.Indexer {
 	return m.NodesInformer.GetIndexer()
@@ -538,4 +554,14 @@ func (m *Manager) GetRoleLister() cache.Indexer {
 // GetRoleBindingLister returns a lister for role bindings
 func (m *Manager) GetRoleBindingLister() cache.Indexer {
 	return m.RoleBindingsInformer.GetIndexer()
+}
+
+// GetClusterRoleLister returns a lister for cluster roles
+func (m *Manager) GetClusterRoleLister() cache.Indexer {
+	return m.ClusterRolesInformer.GetIndexer()
+}
+
+// GetClusterRoleBindingLister returns a lister for cluster role bindings
+func (m *Manager) GetClusterRoleBindingLister() cache.Indexer {
+	return m.ClusterRoleBindingsInformer.GetIndexer()
 }
