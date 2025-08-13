@@ -109,7 +109,7 @@ func (h *ClusterRoleEventHandler) clusterRoleToSummary(clusterRole *rbacv1.Clust
 		for verb := range verbSet {
 			verbsList = append(verbsList, verb)
 		}
-		
+
 		var resourcesList []string
 		for resource := range resourceSet {
 			resourcesList = append(resourcesList, resource)
@@ -142,8 +142,8 @@ func (h *ClusterRoleEventHandler) clusterRoleToSummary(clusterRole *rbacv1.Clust
 		"name":              clusterRole.Name,
 		"age":               ageStr,
 		"creationTimestamp": clusterRole.CreationTimestamp.Time,
-		"rules":             ruleCount,        // Frontend expects 'rules', not 'ruleCount'
-		"rulesDisplay":      rulesDisplay,     // Frontend expects this field
+		"rules":             ruleCount,    // Frontend expects 'rules', not 'ruleCount'
+		"rulesDisplay":      rulesDisplay, // Frontend expects this field
 		"verbCount":         len(verbSet),
 		"resourceCount":     len(resourceSet),
 		"labels":            clusterRole.Labels,
@@ -275,10 +275,10 @@ func (h *ClusterRoleBindingEventHandler) clusterRoleBindingToSummary(clusterRole
 		"creationTimestamp":   clusterRoleBinding.CreationTimestamp.Time,
 		"roleName":            roleName,
 		"roleKind":            roleKind,
-		"roleRef":             roleRefStr,        // Frontend expects this field
-		"subjects":            subjectCount,      // Frontend expects 'subjects', not 'subjectCount'
-		"subjectsDisplay":     subjectsDisplay,   // Frontend expects this field
-		"subjectCount":        subjectCount,      // Keep for backward compatibility
+		"roleRef":             roleRefStr,      // Frontend expects this field
+		"subjects":            subjectCount,    // Frontend expects 'subjects', not 'subjectCount'
+		"subjectsDisplay":     subjectsDisplay, // Frontend expects this field
+		"subjectCount":        subjectCount,    // Keep for backward compatibility
 		"userCount":           userCount,
 		"groupCount":          groupCount,
 		"serviceAccountCount": serviceAccountCount,

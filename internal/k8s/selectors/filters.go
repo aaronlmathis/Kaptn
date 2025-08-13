@@ -147,6 +147,20 @@ type SecretFilterOptions struct {
 	Type          string // Filter by secret type (Opaque, kubernetes.io/tls, etc.)
 }
 
+// EventFilterOptions represents filtering options for events
+type EventFilterOptions struct {
+	Namespace     string
+	LabelSelector string
+	FieldSelector string
+	Page          int
+	PageSize      int
+	Sort          string // Field to sort by (name, namespace, type, reason, lastTimestamp, firstTimestamp, count, age)
+	SortOrder     string // Sort order (asc, desc)
+	Search        string // Text search across name, namespace, reason, message, involvedObject
+	Type          string // Filter by event type (Normal, Warning, Error)
+	Reason        string // Filter by event reason
+}
+
 // FilterPods filters a list of pods based on the given options
 func FilterPods(pods []v1.Pod, options PodFilterOptions) ([]v1.Pod, error) {
 	var filtered []v1.Pod
@@ -2003,6 +2017,192 @@ func sortSecrets(secrets []v1.Secret, sortField, order string) {
 			less = secrets[i].CreationTimestamp.Time.After(secrets[j].CreationTimestamp.Time)
 		default:
 			less = secrets[i].Name < secrets[j].Name
+		}
+
+		if order == "desc" {
+			return !less
+		}
+		return less
+	})
+}
+
+// FilterEvents filters a list of events based on the given options
+func FilterEvents(events []v1.Event, options EventFilterOptions) ([]v1.Event, error) {
+	var filtered []v1.Event
+
+	// Parse label selector
+	var labelSelector labels.Selector
+	if options.LabelSelector != "" {
+		var err error
+		labelSelector, err = labels.Parse(options.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid label selector: %w", err)
+		}
+	}
+
+	// Parse field selector
+	var fieldSelector fields.Selector
+	if options.FieldSelector != "" {
+		var err error
+		fieldSelector, err = fields.ParseSelector(options.FieldSelector)
+		if err != nil {
+			return nil, fmt.Errorf("invalid field selector: %w", err)
+		}
+	}
+
+	for _, event := range events {
+		// Filter by namespace
+		if options.Namespace != "" && event.Namespace != options.Namespace {
+			continue
+		}
+
+		// Filter by event type
+		if options.Type != "" && event.Type != options.Type {
+			continue
+		}
+
+		// Filter by event reason
+		if options.Reason != "" && event.Reason != options.Reason {
+			continue
+		}
+
+		// Apply label selector
+		if labelSelector != nil && !labelSelector.Matches(labels.Set(event.Labels)) {
+			continue
+		}
+
+		// Apply field selector
+		if fieldSelector != nil {
+			fieldSet := fields.Set{
+				"metadata.name":      event.Name,
+				"metadata.namespace": event.Namespace,
+				"type":               event.Type,
+				"reason":             event.Reason,
+			}
+			if !fieldSelector.Matches(fieldSet) {
+				continue
+			}
+		}
+
+		// Apply search filter
+		if options.Search != "" {
+			searchLower := strings.ToLower(options.Search)
+			found := false
+
+			// Search in name
+			if strings.Contains(strings.ToLower(event.Name), searchLower) {
+				found = true
+			}
+
+			// Search in namespace
+			if !found && strings.Contains(strings.ToLower(event.Namespace), searchLower) {
+				found = true
+			}
+
+			// Search in reason
+			if !found && strings.Contains(strings.ToLower(event.Reason), searchLower) {
+				found = true
+			}
+
+			// Search in message
+			if !found && strings.Contains(strings.ToLower(event.Message), searchLower) {
+				found = true
+			}
+
+			// Search in involved object
+			if !found {
+				involvedObj := fmt.Sprintf("%s/%s", event.InvolvedObject.Kind, event.InvolvedObject.Name)
+				if strings.Contains(strings.ToLower(involvedObj), searchLower) {
+					found = true
+				}
+			}
+
+			// Search in labels
+			if !found {
+				for key, value := range event.Labels {
+					if strings.Contains(strings.ToLower(key), searchLower) ||
+						strings.Contains(strings.ToLower(value), searchLower) {
+						found = true
+						break
+					}
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, event)
+	}
+
+	// Sort events
+	sortEvents(filtered, options.Sort, options.SortOrder)
+
+	// Apply pagination
+	if options.PageSize > 0 {
+		start := (options.Page - 1) * options.PageSize
+		if start >= len(filtered) {
+			return []v1.Event{}, nil
+		}
+		end := start + options.PageSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		filtered = filtered[start:end]
+	}
+
+	return filtered, nil
+}
+
+// sortEvents sorts events by the specified field and order
+func sortEvents(events []v1.Event, sortField, order string) {
+	if sortField == "" {
+		sortField = "lastTimestamp"
+	}
+	if order == "" {
+		order = "desc"
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		var less bool
+		switch sortField {
+		case "name":
+			less = events[i].Name < events[j].Name
+		case "namespace":
+			less = events[i].Namespace < events[j].Namespace
+		case "type":
+			less = events[i].Type < events[j].Type
+		case "reason":
+			less = events[i].Reason < events[j].Reason
+		case "lastTimestamp":
+			// Handle zero timestamps
+			iTime := events[i].LastTimestamp.Time
+			jTime := events[j].LastTimestamp.Time
+			if iTime.IsZero() {
+				iTime = events[i].FirstTimestamp.Time
+			}
+			if jTime.IsZero() {
+				jTime = events[j].FirstTimestamp.Time
+			}
+			less = iTime.Before(jTime)
+		case "firstTimestamp":
+			less = events[i].FirstTimestamp.Time.Before(events[j].FirstTimestamp.Time)
+		case "count":
+			less = events[i].Count < events[j].Count
+		case "age":
+			less = events[i].CreationTimestamp.Time.After(events[j].CreationTimestamp.Time)
+		default:
+			// Default to lastTimestamp
+			iTime := events[i].LastTimestamp.Time
+			jTime := events[j].LastTimestamp.Time
+			if iTime.IsZero() {
+				iTime = events[i].FirstTimestamp.Time
+			}
+			if jTime.IsZero() {
+				jTime = events[j].FirstTimestamp.Time
+			}
+			less = iTime.Before(jTime)
 		}
 
 		if order == "desc" {

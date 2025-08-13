@@ -31,6 +31,7 @@ type Manager struct {
 	ServicesInformer       cache.SharedIndexInformer
 	NamespacesInformer     cache.SharedIndexInformer
 	ResourceQuotasInformer cache.SharedIndexInformer
+	EventsInformer         cache.SharedIndexInformer
 
 	// Tier 2: Important Resources (Moderate real-time needs)
 	ReplicaSetsInformer            cache.SharedIndexInformer
@@ -127,6 +128,7 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient d
 		ServicesInformer:       factory.Core().V1().Services().Informer(),
 		NamespacesInformer:     factory.Core().V1().Namespaces().Informer(),
 		ResourceQuotasInformer: factory.Core().V1().ResourceQuotas().Informer(),
+		EventsInformer:         factory.Core().V1().Events().Informer(),
 
 		// Tier 2: Important Resources
 		ReplicaSetsInformer:            factory.Apps().V1().ReplicaSets().Informer(),
@@ -203,6 +205,7 @@ func (m *Manager) Start() error {
 		m.ServicesInformer.HasSynced,
 		m.NamespacesInformer.HasSynced,
 		m.ResourceQuotasInformer.HasSynced,
+		m.EventsInformer.HasSynced,
 
 		// Tier 2: Important Resources
 		m.ReplicaSetsInformer.HasSynced,
@@ -285,6 +288,11 @@ func (m *Manager) AddNamespaceEventHandler(handler cache.ResourceEventHandler) {
 // AddResourceQuotaEventHandler adds an event handler for resource quota events
 func (m *Manager) AddResourceQuotaEventHandler(handler cache.ResourceEventHandler) {
 	m.ResourceQuotasInformer.AddEventHandler(handler)
+}
+
+// AddEventEventHandler adds an event handler for event events
+func (m *Manager) AddEventEventHandler(handler cache.ResourceEventHandler) {
+	m.EventsInformer.AddEventHandler(handler)
 }
 
 // AddReplicaSetEventHandler adds an event handler for replicaset events
@@ -451,6 +459,11 @@ func (m *Manager) GetNamespaceLister() cache.Indexer {
 // GetResourceQuotaLister returns a lister for resource quotas
 func (m *Manager) GetResourceQuotaLister() cache.Indexer {
 	return m.ResourceQuotasInformer.GetIndexer()
+}
+
+// GetEventLister returns a lister for events
+func (m *Manager) GetEventLister() cache.Indexer {
+	return m.EventsInformer.GetIndexer()
 }
 
 // GetReplicaSetLister returns a lister for replicasets

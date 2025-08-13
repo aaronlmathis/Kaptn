@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { EventsPageContainer } from "@/components/containers/EventsPageContainer";
+
+const title = "Events";
+---
+
+<Layout title={title}>
+	<EventsPageContainer client:load />
+</Layout>

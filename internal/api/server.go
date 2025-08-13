@@ -190,6 +190,9 @@ func (s *Server) initInformers() error {
 	serviceHandler := informers.NewServiceEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddServiceEventHandler(serviceHandler)
 
+	eventHandler := informers.NewEventEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddEventEventHandler(eventHandler)
+
 	// Setup CRD event handler
 	crdHandler := informers.NewCustomResourceDefinitionEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddCustomResourceDefinitionEventHandler(crdHandler)
@@ -693,6 +696,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/services", s.handleListServices)
 			r.Get("/services/{namespace}", s.handleListServicesInNamespace)
 			r.Get("/services/{namespace}/{name}", s.handleGetService)
+			r.Get("/events", s.handleListEvents)
+			r.Get("/events/{namespace}", s.handleListEventsInNamespace)
+			r.Get("/events/{namespace}/{name}", s.handleGetEvent)
 			r.Get("/ingresses", s.handleListAllIngresses)
 			r.Get("/ingresses/{namespace}", s.handleListIngresses)
 			r.Get("/ingresses/{namespace}/{name}", s.handleGetIngress)

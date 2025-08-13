@@ -19,8 +19,8 @@ type ClusterRoleResponse struct {
 	Name              string            `json:"name"`
 	CreationTimestamp time.Time         `json:"creationTimestamp"`
 	Rules             int               `json:"rules"`
-	RulesDisplay      string            `json:"rulesDisplay"`    // Detailed rules display
-	Age               string            `json:"age"`             // Human-readable age
+	RulesDisplay      string            `json:"rulesDisplay"` // Detailed rules display
+	Age               string            `json:"age"`          // Human-readable age
 	Labels            map[string]string `json:"labels,omitempty"`
 	Annotations       map[string]string `json:"annotations,omitempty"`
 	ResourceVersion   string            `json:"resourceVersion"`
@@ -33,11 +33,11 @@ type ClusterRoleBindingResponse struct {
 	CreationTimestamp   time.Time         `json:"creationTimestamp"`
 	RoleName            string            `json:"roleName"`
 	RoleKind            string            `json:"roleKind"`
-	RoleRef             string            `json:"roleRef"`          // Formatted role reference
+	RoleRef             string            `json:"roleRef"` // Formatted role reference
 	SubjectCount        int               `json:"subjectCount"`
-	Subjects            int               `json:"subjects"`         // Alternative field name
-	SubjectsDisplay     string            `json:"subjectsDisplay"`  // Detailed subjects display
-	Age                 string            `json:"age"`              // Human-readable age
+	Subjects            int               `json:"subjects"`        // Alternative field name
+	SubjectsDisplay     string            `json:"subjectsDisplay"` // Detailed subjects display
+	Age                 string            `json:"age"`             // Human-readable age
 	UserCount           int               `json:"userCount"`
 	GroupCount          int               `json:"groupCount"`
 	ServiceAccountCount int               `json:"serviceAccountCount"`
@@ -100,7 +100,7 @@ func transformClusterRoleToResponse(clusterRole *rbacv1.ClusterRole) ClusterRole
 		for verb := range verbSet {
 			verbsList = append(verbsList, verb)
 		}
-		
+
 		var resourcesList []string
 		for resource := range resourceSet {
 			resourcesList = append(resourcesList, resource)
@@ -207,7 +207,7 @@ func transformClusterRoleBindingToResponse(clusterRoleBinding *rbacv1.ClusterRol
 		RoleKind:            roleKind,
 		RoleRef:             roleRefStr,
 		SubjectCount:        subjectCount,
-		Subjects:            subjectCount,      // Same as SubjectCount for frontend compatibility
+		Subjects:            subjectCount, // Same as SubjectCount for frontend compatibility
 		SubjectsDisplay:     subjectsDisplay,
 		Age:                 ageStr,
 		UserCount:           userCount,
@@ -580,7 +580,7 @@ func (s *Server) clusterRoleToResponse(clusterRole interface{}) map[string]inter
 		for verb := range verbSet {
 			verbsList = append(verbsList, verb)
 		}
-		
+
 		var resourcesList []string
 		for resource := range resourceSet {
 			resourcesList = append(resourcesList, resource)
@@ -613,8 +613,8 @@ func (s *Server) clusterRoleToResponse(clusterRole interface{}) map[string]inter
 		"name":              name,
 		"age":               ageStr,
 		"creationTimestamp": creationTime,
-		"rules":             ruleCount,        // Frontend expects 'rules', not 'ruleCount'
-		"rulesDisplay":      rulesDisplay,     // Frontend expects this field
+		"rules":             ruleCount,    // Frontend expects 'rules', not 'ruleCount'
+		"rulesDisplay":      rulesDisplay, // Frontend expects this field
 		"verbCount":         len(verbSet),
 		"resourceCount":     len(resourceSet),
 		"labels":            metadata["labels"],
@@ -719,10 +719,10 @@ func (s *Server) clusterRoleBindingToResponse(clusterRoleBinding interface{}) ma
 		"creationTimestamp":   creationTime,
 		"roleName":            roleName,
 		"roleKind":            roleKind,
-		"roleRef":             roleRefStr,        // Frontend expects this field
-		"subjects":            subjectCount,      // Frontend expects 'subjects', not 'subjectCount'
-		"subjectsDisplay":     subjectsDisplay,   // Frontend expects this field
-		"subjectCount":        subjectCount,      // Keep for backward compatibility
+		"roleRef":             roleRefStr,      // Frontend expects this field
+		"subjects":            subjectCount,    // Frontend expects 'subjects', not 'subjectCount'
+		"subjectsDisplay":     subjectsDisplay, // Frontend expects this field
+		"subjectCount":        subjectCount,    // Keep for backward compatibility
 		"userCount":           userCount,
 		"groupCount":          groupCount,
 		"serviceAccountCount": serviceAccountCount,

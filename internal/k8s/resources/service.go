@@ -671,6 +671,18 @@ func (rm *ResourceManager) ListEndpoints(ctx context.Context, namespace string) 
 	return endpoints.Items, nil
 }
 
+// ListEvents lists all events in a namespace or across all namespaces
+func (rm *ResourceManager) ListEvents(ctx context.Context, namespace string) ([]v1.Event, error) {
+	events, err := rm.kubeClient.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if events.Items == nil {
+		return []v1.Event{}, nil
+	}
+	return events.Items, nil
+}
+
 // ListEndpointSlices lists all endpoint slices in a namespace or across all namespaces
 func (rm *ResourceManager) ListEndpointSlices(ctx context.Context, namespace string) ([]interface{}, error) {
 	// Use dynamic client to get EndpointSlices from discovery.k8s.io/v1
