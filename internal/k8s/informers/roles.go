@@ -1,6 +1,10 @@
 package informers
 
 import (
+	"fmt"
+	"strings"
+	"time"
+
 	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
 	"go.uber.org/zap"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -67,7 +71,23 @@ func (h *RoleEventHandler) OnDelete(obj interface{}) {
 
 // roleToSummary converts a Kubernetes Role to summary format
 func (h *RoleEventHandler) roleToSummary(role *rbacv1.Role) map[string]interface{} {
-	// Count unique verbs and resources
+	// Calculate age
+	age := time.Since(role.CreationTimestamp.Time)
+	var ageStr string
+	if age < time.Minute {
+		ageStr = fmt.Sprintf("%ds", int(age.Seconds()))
+	} else if age < time.Hour {
+		ageStr = fmt.Sprintf("%dm", int(age.Minutes()))
+	} else if age < 24*time.Hour {
+		ageStr = fmt.Sprintf("%dh", int(age.Hours()))
+	} else {
+		ageStr = fmt.Sprintf("%dd", int(age.Hours()/24))
+	}
+
+	// Extract rules information
+	ruleCount := len(role.Rules)
+
+	// Count unique verbs and resources across all rules
 	verbSet := make(map[string]bool)
 	resourceSet := make(map[string]bool)
 
@@ -80,11 +100,52 @@ func (h *RoleEventHandler) roleToSummary(role *rbacv1.Role) map[string]interface
 		}
 	}
 
+	// Create a meaningful summary of all rules
+	var rulesDisplay string
+	if ruleCount == 0 {
+		rulesDisplay = "<none>"
+	} else {
+		// Get unique verbs and resources as slices for display
+		var verbsList []string
+		for verb := range verbSet {
+			verbsList = append(verbsList, verb)
+		}
+
+		var resourcesList []string
+		for resource := range resourceSet {
+			resourcesList = append(resourcesList, resource)
+		}
+
+		// Create a concise summary
+		if ruleCount == 1 {
+			// For single rule, show the exact verbs and resources
+			if len(verbsList) > 0 && len(resourcesList) > 0 {
+				if len(verbsList) <= 3 && len(resourcesList) <= 3 {
+					rulesDisplay = fmt.Sprintf("%s on %s", strings.Join(verbsList, ","), strings.Join(resourcesList, ","))
+				} else {
+					rulesDisplay = fmt.Sprintf("%d verbs on %d resources", len(verbsList), len(resourcesList))
+				}
+			} else {
+				rulesDisplay = "1 rule"
+			}
+		} else {
+			// For multiple rules, show a summary
+			if len(verbsList) > 0 && len(resourcesList) > 0 {
+				rulesDisplay = fmt.Sprintf("%d rules: %d verbs on %d resources", ruleCount, len(verbsList), len(resourcesList))
+			} else {
+				rulesDisplay = fmt.Sprintf("%d rules", ruleCount)
+			}
+		}
+	}
+
 	return map[string]interface{}{
+		"id":                len(role.Name), // Simple ID generation
 		"name":              role.Name,
 		"namespace":         role.Namespace,
+		"age":               ageStr,
 		"creationTimestamp": role.CreationTimestamp.Time,
-		"ruleCount":         len(role.Rules),
+		"rules":             ruleCount,    // Frontend expects 'rules', not 'ruleCount'
+		"rulesDisplay":      rulesDisplay, // Frontend expects this field
 		"verbCount":         len(verbSet),
 		"resourceCount":     len(resourceSet),
 		"labels":            role.Labels,
@@ -153,29 +214,75 @@ func (h *RoleBindingEventHandler) OnDelete(obj interface{}) {
 
 // roleBindingToSummary converts a Kubernetes RoleBinding to summary format
 func (h *RoleBindingEventHandler) roleBindingToSummary(roleBinding *rbacv1.RoleBinding) map[string]interface{} {
-	// Count subjects by kind
+	// Calculate age
+	age := time.Since(roleBinding.CreationTimestamp.Time)
+	var ageStr string
+	if age < time.Minute {
+		ageStr = fmt.Sprintf("%ds", int(age.Seconds()))
+	} else if age < time.Hour {
+		ageStr = fmt.Sprintf("%dm", int(age.Minutes()))
+	} else if age < 24*time.Hour {
+		ageStr = fmt.Sprintf("%dh", int(age.Hours()))
+	} else {
+		ageStr = fmt.Sprintf("%dd", int(age.Hours()/24))
+	}
+
+	// Extract role reference
+	roleName := roleBinding.RoleRef.Name
+	roleKind := roleBinding.RoleRef.Kind
+
+	// Extract subjects
+	subjectCount := len(roleBinding.Subjects)
+
+	// Count subjects by kind and create display list
 	userCount := 0
 	groupCount := 0
 	serviceAccountCount := 0
+	var subjectsDisplayList []string
 
 	for _, subject := range roleBinding.Subjects {
 		switch subject.Kind {
 		case "User":
 			userCount++
+			subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("User:%s", subject.Name))
 		case "Group":
 			groupCount++
+			subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("Group:%s", subject.Name))
 		case "ServiceAccount":
 			serviceAccountCount++
+			if subject.Namespace != "" {
+				subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("SA:%s/%s", subject.Namespace, subject.Name))
+			} else {
+				subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("SA:%s", subject.Name))
+			}
 		}
 	}
 
+	// Format subjects display
+	var subjectsDisplay string
+	if len(subjectsDisplayList) == 0 {
+		subjectsDisplay = "<none>"
+	} else if len(subjectsDisplayList) == 1 {
+		subjectsDisplay = subjectsDisplayList[0]
+	} else {
+		subjectsDisplay = fmt.Sprintf("%s +%d more", subjectsDisplayList[0], len(subjectsDisplayList)-1)
+	}
+
+	// Create role reference string
+	roleRefStr := fmt.Sprintf("%s/%s", roleKind, roleName)
+
 	return map[string]interface{}{
+		"id":                  len(roleBinding.Name), // Simple ID generation
 		"name":                roleBinding.Name,
 		"namespace":           roleBinding.Namespace,
+		"age":                 ageStr,
 		"creationTimestamp":   roleBinding.CreationTimestamp.Time,
-		"roleName":            roleBinding.RoleRef.Name,
-		"roleKind":            roleBinding.RoleRef.Kind,
-		"subjectCount":        len(roleBinding.Subjects),
+		"roleName":            roleName,
+		"roleKind":            roleKind,
+		"roleRef":             roleRefStr,      // Frontend expects this field
+		"subjects":            subjectCount,    // Frontend expects 'subjects', not 'subjectCount'
+		"subjectsDisplay":     subjectsDisplay, // Frontend expects this field
+		"subjectCount":        subjectCount,    // Keep for backward compatibility
 		"userCount":           userCount,
 		"groupCount":          groupCount,
 		"serviceAccountCount": serviceAccountCount,

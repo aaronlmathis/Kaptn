@@ -121,22 +121,89 @@ export function RoleDetailDrawer({ item, open, onOpenChange }: RoleDetailDrawerP
 		}
 
 		// Add rule details
-		if (roleDetails.spec?.rules && Array.isArray(roleDetails.spec.rules)) {
-			const rules = roleDetails.spec.rules as Array<Record<string, unknown>>
+		if (roleDetails.rules && Array.isArray(roleDetails.rules)) {
+			const rules = roleDetails.rules as Array<Record<string, unknown>>
 			additionalRows.push(["Rule Count", <div className="text-sm">{rules.length} rule(s)</div>])
 
 			// Show detailed rule information
 			rules.forEach((rule, index) => {
-				const apiGroups = Array.isArray(rule.apiGroups) ? (rule.apiGroups as string[]).join(', ') : ''
-				const resources = Array.isArray(rule.resources) ? (rule.resources as string[]).join(', ') : ''
-				const verbs = Array.isArray(rule.verbs) ? (rule.verbs as string[]).join(', ') : ''
+				additionalRows.push([`Rule ${index + 1}`, <div className="text-sm font-medium text-blue-600">Rule Details</div>])
 
-				const ruleDisplay = `${apiGroups || '*'}/${resources || '*'} [${verbs || '*'}]`
-				additionalRows.push([`Rule ${index + 1}`, <div className="font-mono text-sm">{ruleDisplay}</div>])
+				// API Groups
+				const apiGroups = Array.isArray(rule.apiGroups) ? (rule.apiGroups as string[]) : []
+				if (apiGroups.length > 0) {
+					additionalRows.push([`  API Groups`, (
+						<div className="flex flex-wrap gap-1">
+							{apiGroups.map((group, i) => (
+								<Badge key={i} variant="outline" className="text-xs">
+									{group || "core"}
+								</Badge>
+							))}
+						</div>
+					)])
+				} else {
+					additionalRows.push([`  API Groups`, <Badge variant="outline" className="text-xs">core</Badge>])
+				}
 
+				// Resources
+				const resources = Array.isArray(rule.resources) ? (rule.resources as string[]) : []
+				if (resources.length > 0) {
+					additionalRows.push([`  Resources`, (
+						<div className="flex flex-wrap gap-1">
+							{resources.map((resource, i) => (
+								<Badge key={i} variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+									{resource}
+								</Badge>
+							))}
+						</div>
+					)])
+				}
+
+				// Verbs
+				const verbs = Array.isArray(rule.verbs) ? (rule.verbs as string[]) : []
+				if (verbs.length > 0) {
+					additionalRows.push([`  Verbs`, (
+						<div className="flex flex-wrap gap-1">
+							{verbs.map((verb, i) => (
+								<Badge key={i} variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+									{verb}
+								</Badge>
+							))}
+						</div>
+					)])
+				}
+
+				// Resource Names (if specified)
 				if (rule.resourceNames && Array.isArray(rule.resourceNames) && rule.resourceNames.length > 0) {
-					const resourceNames = (rule.resourceNames as string[]).join(', ')
-					additionalRows.push([`  Resource Names`, <div className="font-mono text-sm text-muted-foreground">{resourceNames}</div>])
+					const resourceNames = rule.resourceNames as string[]
+					additionalRows.push([`  Resource Names`, (
+						<div className="flex flex-wrap gap-1">
+							{resourceNames.map((name, i) => (
+								<Badge key={i} variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+									{name}
+								</Badge>
+							))}
+						</div>
+					)])
+				}
+
+				// Non-Resource URLs (for ClusterRoles)
+				if (rule.nonResourceURLs && Array.isArray(rule.nonResourceURLs) && rule.nonResourceURLs.length > 0) {
+					const nonResourceURLs = rule.nonResourceURLs as string[]
+					additionalRows.push([`  Non-Resource URLs`, (
+						<div className="flex flex-wrap gap-1">
+							{nonResourceURLs.map((url, i) => (
+								<Badge key={i} variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+									{url}
+								</Badge>
+							))}
+						</div>
+					)])
+				}
+
+				// Add a separator between rules if there are multiple
+				if (index < rules.length - 1) {
+					additionalRows.push([" ", <hr className="my-2 border-border" />])
 				}
 			})
 		}

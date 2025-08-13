@@ -4,14 +4,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useNavigation } from "@/contexts/navigation-context"
 import { IconCloudUpload } from "@tabler/icons-react"
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+
+
 
 export function SiteHeader() {
   const { breadcrumbs, isHydrated } = useNavigation()
@@ -24,7 +18,7 @@ export function SiteHeader() {
           orientation="vertical"
           className="mr-2 data-[orientation=vertical]:h-4"
         />
-        <Breadcrumb>
+        {/* <Breadcrumb>
           <BreadcrumbList>
             {isHydrated ? (
               breadcrumbs.map((item, index) => (
@@ -52,7 +46,7 @@ export function SiteHeader() {
               </BreadcrumbItem>
             )}
           </BreadcrumbList>
-        </Breadcrumb>
+        </Breadcrumb> */}
         <div className="ml-auto flex items-center gap-2">
           {/* <SessionDebugPopover /> */}
           <Button variant="default" size="sm" className="flex items-center gap-2" asChild>

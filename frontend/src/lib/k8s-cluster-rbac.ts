@@ -2,40 +2,36 @@ import { apiClient } from "@/lib/api-client"
 
 // API Response Types
 export interface ClusterRoleResponse {
+	id: number             // Backend provides ID field
 	name: string
 	creationTimestamp: string
 	rules: number
+	rulesDisplay: string    // Backend provides detailed display string
+	age: string            // Backend provides age calculation
 	labels?: Record<string, string>
 	annotations?: Record<string, string>
-	resourceVersion: string
-	uid: string
+	resourceVersion?: string
+	uid?: string
+	verbCount?: number
+	resourceCount?: number
 }
 
 export interface ClusterRoleBindingResponse {
+	id: number             // Backend provides ID field
 	name: string
 	creationTimestamp: string
-	roleName: string
-	roleKind: string
-	subjectCount: number
-	userCount: number
-	groupCount: number
-	serviceAccountCount: number
+	roleName?: string
+	roleKind?: string
+	roleRef: string        // Backend provides formatted role reference
+	subjectCount?: number
+	subjects: number       // Backend provides this field name too
+	subjectsDisplay: string // Backend provides detailed display string
+	age: string           // Backend provides age calculation
+	userCount?: number
+	groupCount?: number
+	serviceAccountCount?: number
 	labels?: Record<string, string>
 	annotations?: Record<string, string>
-}
-
-export interface ClusterRolesListResponse {
-	items: ClusterRoleResponse[]
-	totalCount: number
-	page: number
-	limit: number
-}
-
-export interface ClusterRoleBindingsListResponse {
-	items: ClusterRoleBindingResponse[]
-	totalCount: number
-	page: number
-	limit: number
 }
 
 // Badge type for UI components
@@ -50,11 +46,12 @@ export interface ClusterRoleUI {
 	name: string
 	creationTimestamp: Date
 	rules: number
+	rulesDisplay: string   // Backend provides detailed display
 	labels: Record<string, string>
 	annotations: Record<string, string>
-	resourceVersion: string
-	uid: string
-	age: string
+	resourceVersion?: string
+	uid?: string
+	age: string           // Backend provides age calculation
 	labelBadges: BadgeData[]
 	annotationBadges: BadgeData[]
 }
@@ -62,13 +59,12 @@ export interface ClusterRoleUI {
 export interface ClusterRoleBindingUI {
 	name: string
 	creationTimestamp: Date
-	roleRef: string
+	roleRef: string       // Backend provides formatted role reference
 	subjects: number
+	subjectsDisplay: string // Backend provides detailed display
 	labels: Record<string, string>
 	annotations: Record<string, string>
-	resourceVersion: string
-	uid: string
-	age: string
+	age: string          // Backend provides age calculation
 	labelBadges: BadgeData[]
 	annotationBadges: BadgeData[]
 }
@@ -92,68 +88,24 @@ export interface DashboardClusterRoleBinding {
 }
 
 // API Functions
-export async function getClusterRoles(
-	page = 1,
-	limit = 50,
-	sortBy = "name",
-	sortOrder = "asc",
-	search?: string
-): Promise<ClusterRolesListResponse> {
-	const params = new URLSearchParams({
-		page: page.toString(),
-		limit: limit.toString(),
-		sortBy,
-		sortOrder,
-	})
-
-	if (search) {
-		params.append("search", search)
-	}
-
-	const response = await apiClient.get(`cluster-roles?${params}`) as { data: { items: ClusterRoleResponse[] } }
-	return {
-		items: response.data?.items || [],
-		totalCount: response.data?.items?.length || 0,
-		page: page,
-		limit: limit
-	}
+export async function getClusterRoles(): Promise<ClusterRoleResponse[]> {
+	const response = await apiClient.get<{ data: { items: ClusterRoleResponse[] }; status: string }>(`/cluster-roles`);
+	return response.data?.items || [];
 }
 
 export async function getClusterRole(name: string): Promise<ClusterRoleResponse> {
-	const response = await apiClient.get(`cluster-roles/${encodeURIComponent(name)}`) as { data: ClusterRoleResponse }
-	return response.data
+	const response = await apiClient.get<{ data: ClusterRoleResponse; status: string }>(`cluster-roles/${encodeURIComponent(name)}`);
+	return response.data;
 }
 
-export async function getClusterRoleBindings(
-	page = 1,
-	limit = 50,
-	sortBy = "name",
-	sortOrder = "asc",
-	search?: string
-): Promise<ClusterRoleBindingsListResponse> {
-	const params = new URLSearchParams({
-		page: page.toString(),
-		limit: limit.toString(),
-		sortBy,
-		sortOrder,
-	})
-
-	if (search) {
-		params.append("search", search)
-	}
-
-	const response = await apiClient.get(`cluster-role-bindings?${params}`) as { data: { items: ClusterRoleBindingResponse[] } }
-	return {
-		items: response.data?.items || [],
-		totalCount: response.data?.items?.length || 0,
-		page: page,
-		limit: limit
-	}
+export async function getClusterRoleBindings(): Promise<ClusterRoleBindingResponse[]> {
+	const response = await apiClient.get<{ data: { items: ClusterRoleBindingResponse[] }; status: string }>(`/cluster-role-bindings`);
+	return response.data?.items || [];
 }
 
 export async function getClusterRoleBinding(name: string): Promise<ClusterRoleBindingResponse> {
-	const response = await apiClient.get(`cluster-role-bindings/${encodeURIComponent(name)}`) as { data: ClusterRoleBindingResponse }
-	return response.data
+	const response = await apiClient.get<{ data: ClusterRoleBindingResponse; status: string }>(`cluster-role-bindings/${encodeURIComponent(name)}`);
+	return response.data;
 }
 
 // Transform functions
@@ -180,7 +132,8 @@ export function transformClusterRolesToUI(clusterRoles: ClusterRoleResponse[]): 
 		creationTimestamp: new Date(clusterRole.creationTimestamp),
 		labels: clusterRole.labels || {},
 		annotations: clusterRole.annotations || {},
-		age: formatAge(clusterRole.creationTimestamp),
+		// Use backend-provided age instead of calculating frontend
+		age: clusterRole.age || formatAge(clusterRole.creationTimestamp),
 		labelBadges: Object.entries(clusterRole.labels || {}).map(([key, value]) => ({ key, value, type: 'label' as const })),
 		annotationBadges: Object.entries(clusterRole.annotations || {}).map(([key, value]) => ({ key, value, type: 'annotation' as const })),
 	}))
@@ -192,7 +145,8 @@ export function transformClusterRoleBindingsToUI(clusterRoleBindings: ClusterRol
 		creationTimestamp: new Date(clusterRoleBinding.creationTimestamp),
 		labels: clusterRoleBinding.labels || {},
 		annotations: clusterRoleBinding.annotations || {},
-		age: formatAge(clusterRoleBinding.creationTimestamp),
+		// Use backend-provided age instead of calculating frontend
+		age: clusterRoleBinding.age || formatAge(clusterRoleBinding.creationTimestamp),
 		labelBadges: Object.entries(clusterRoleBinding.labels || {}).map(([key, value]) => ({ key, value, type: 'label' as const })),
 		annotationBadges: Object.entries(clusterRoleBinding.annotations || {}).map(([key, value]) => ({ key, value, type: 'annotation' as const })),
 	}))
@@ -204,11 +158,11 @@ export function transformClusterRolesToDashboard(clusterRoles: ClusterRoleRespon
 		return []
 	}
 	return clusterRoles.map((clusterRole, index) => ({
-		id: index, // Use simple index-based ID like services
+		id: index + 1, // Use index-based ID like roles do
 		name: clusterRole.name,
-		age: formatAge(clusterRole.creationTimestamp),
+		age: clusterRole.age || formatAge(clusterRole.creationTimestamp), // Use backend age if available
 		rules: clusterRole.rules,
-		rulesDisplay: clusterRole.rules === 1 ? "1 rule" : `${clusterRole.rules} rules`
+		rulesDisplay: clusterRole.rulesDisplay || (clusterRole.rules === 1 ? "1 rule" : `${clusterRole.rules} rules`) // Use backend display if available
 	}))
 }
 
@@ -217,12 +171,12 @@ export function transformClusterRoleBindingsToDashboard(clusterRoleBindings: Clu
 		return []
 	}
 	return clusterRoleBindings.map((clusterRoleBinding, index) => ({
-		id: index, // Use simple index-based ID like services
+		id: index + 1, // Use index-based ID like roles do
 		name: clusterRoleBinding.name,
-		age: formatAge(clusterRoleBinding.creationTimestamp),
-		roleRef: clusterRoleBinding.roleName,
-		subjects: clusterRoleBinding.subjectCount,
-		subjectsDisplay: clusterRoleBinding.subjectCount === 1 ? "1 subject" : `${clusterRoleBinding.subjectCount} subjects`
+		age: clusterRoleBinding.age || formatAge(clusterRoleBinding.creationTimestamp), // Use backend age if available
+		roleRef: clusterRoleBinding.roleRef || clusterRoleBinding.roleName || "", // Use backend roleRef if available
+		subjects: clusterRoleBinding.subjects || clusterRoleBinding.subjectCount || 0, // Use backend subjects field if available
+		subjectsDisplay: clusterRoleBinding.subjectsDisplay || (clusterRoleBinding.subjectCount === 1 ? "1 subject" : `${clusterRoleBinding.subjectCount || 0} subjects`) // Use backend display if available
 	}))
 }
 

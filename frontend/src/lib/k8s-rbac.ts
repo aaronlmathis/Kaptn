@@ -17,7 +17,7 @@ export interface Role {
 	labels: Record<string, string> | null;
 	annotations: Record<string, string> | null;
 	rules: number;
-	rulesDisplay: string[];
+	rulesDisplay: string; // Backend now returns a formatted string, not an array
 }
 
 // RoleBinding interfaces based on the actual backend API response
@@ -32,7 +32,7 @@ export interface RoleBinding {
 	roleName: string;
 	roleRef: string;
 	subjects: number;
-	subjectsDisplay: string[];
+	subjectsDisplay: string; // Backend now returns a formatted string, not an array
 }
 
 // Dashboard interfaces for transformed data that matches the current UI schema
@@ -65,8 +65,8 @@ export async function getRoles(namespace?: string): Promise<Role[]> {
 	return response.data?.items || [];
 }
 
-export async function getRole(namespace: string, name: string): Promise<{ summary: Role; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-	const response = await apiClient.get<{ data: { summary: Role; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/roles/${namespace}/${name}`);
+export async function getRole(namespace: string, name: string): Promise<{ summary: Role; rules: Array<Record<string, unknown>>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+	const response = await apiClient.get<{ data: { summary: Role; rules: Array<Record<string, unknown>>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/roles/${namespace}/${name}`);
 	return response.data;
 }
 
@@ -80,8 +80,8 @@ export async function getRoleBindings(namespace?: string): Promise<RoleBinding[]
 	return response.data?.items || [];
 }
 
-export async function getRoleBinding(namespace: string, name: string): Promise<{ summary: RoleBinding; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-	const response = await apiClient.get<{ data: { summary: RoleBinding; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/role-bindings/${namespace}/${name}`);
+export async function getRoleBinding(namespace: string, name: string): Promise<{ summary: RoleBinding; subjects: Array<Record<string, unknown>>; roleRef: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+	const response = await apiClient.get<{ data: { summary: RoleBinding; subjects: Array<Record<string, unknown>>; roleRef: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/role-bindings/${namespace}/${name}`);
 	return response.data;
 }
 
@@ -99,7 +99,7 @@ export function transformRolesToUI(roles: Role[]): DashboardRole[] {
 		namespace: role.namespace,
 		age: role.age,
 		rules: role.rules,
-		rulesDisplay: formatRulesDisplay(role.rulesDisplay)
+		rulesDisplay: role.rulesDisplay || '<none>' // Use the backend's formatted string directly
 	}));
 }
 
@@ -114,7 +114,7 @@ export function transformRoleBindingsToUI(roleBindings: RoleBinding[]): Dashboar
 		age: roleBinding.age,
 		roleRef: roleBinding.roleRef,
 		subjects: roleBinding.subjects,
-		subjectsDisplay: formatSubjectsDisplay(roleBinding.subjectsDisplay)
+		subjectsDisplay: roleBinding.subjectsDisplay || '<none>' // Use the backend's formatted string directly
 	}));
 }
 
@@ -122,14 +122,4 @@ export function transformRoleBindingsToUI(roleBindings: RoleBinding[]): Dashboar
  * Utility functions
  */
 
-function formatRulesDisplay(rules?: string[]): string {
-	if (!rules || rules.length === 0) return '<none>';
-	if (rules.length === 1) return rules[0];
-	return `${rules[0]} +${rules.length - 1} more`;
-}
-
-function formatSubjectsDisplay(subjects?: string[]): string {
-	if (!subjects || subjects.length === 0) return '<none>';
-	if (subjects.length === 1) return subjects[0];
-	return `${subjects[0]} +${subjects.length - 1} more`;
-}
+// No utility functions needed anymore - backend handles formatting

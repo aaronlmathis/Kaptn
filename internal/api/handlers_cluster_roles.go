@@ -19,6 +19,8 @@ type ClusterRoleResponse struct {
 	Name              string            `json:"name"`
 	CreationTimestamp time.Time         `json:"creationTimestamp"`
 	Rules             int               `json:"rules"`
+	RulesDisplay      string            `json:"rulesDisplay"`    // Detailed rules display
+	Age               string            `json:"age"`             // Human-readable age
 	Labels            map[string]string `json:"labels,omitempty"`
 	Annotations       map[string]string `json:"annotations,omitempty"`
 	ResourceVersion   string            `json:"resourceVersion"`
@@ -27,16 +29,20 @@ type ClusterRoleResponse struct {
 
 // ClusterRoleBindingResponse represents a cluster role binding in API responses
 type ClusterRoleBindingResponse struct {
-	Name                 string            `json:"name"`
-	CreationTimestamp    time.Time         `json:"creationTimestamp"`
-	RoleName             string            `json:"roleName"`
-	RoleKind             string            `json:"roleKind"`
-	SubjectCount         int               `json:"subjectCount"`
-	UserCount            int               `json:"userCount"`
-	GroupCount           int               `json:"groupCount"`
-	ServiceAccountCount  int               `json:"serviceAccountCount"`
-	Labels               map[string]string `json:"labels,omitempty"`
-	Annotations          map[string]string `json:"annotations,omitempty"`
+	Name                string            `json:"name"`
+	CreationTimestamp   time.Time         `json:"creationTimestamp"`
+	RoleName            string            `json:"roleName"`
+	RoleKind            string            `json:"roleKind"`
+	RoleRef             string            `json:"roleRef"`          // Formatted role reference
+	SubjectCount        int               `json:"subjectCount"`
+	Subjects            int               `json:"subjects"`         // Alternative field name
+	SubjectsDisplay     string            `json:"subjectsDisplay"`  // Detailed subjects display
+	Age                 string            `json:"age"`              // Human-readable age
+	UserCount           int               `json:"userCount"`
+	GroupCount          int               `json:"groupCount"`
+	ServiceAccountCount int               `json:"serviceAccountCount"`
+	Labels              map[string]string `json:"labels,omitempty"`
+	Annotations         map[string]string `json:"annotations,omitempty"`
 }
 
 // ClusterRolesListResponse represents the response for listing cluster roles
@@ -57,10 +63,77 @@ type ClusterRoleBindingsListResponse struct {
 
 // transformClusterRoleToResponse converts a Kubernetes ClusterRole to API response format
 func transformClusterRoleToResponse(clusterRole *rbacv1.ClusterRole) ClusterRoleResponse {
+	// Calculate age
+	age := time.Since(clusterRole.CreationTimestamp.Time)
+	var ageStr string
+	if age < time.Minute {
+		ageStr = fmt.Sprintf("%ds", int(age.Seconds()))
+	} else if age < time.Hour {
+		ageStr = fmt.Sprintf("%dm", int(age.Minutes()))
+	} else if age < 24*time.Hour {
+		ageStr = fmt.Sprintf("%dh", int(age.Hours()))
+	} else {
+		ageStr = fmt.Sprintf("%dd", int(age.Hours()/24))
+	}
+
+	// Count unique verbs and resources across all rules
+	verbSet := make(map[string]bool)
+	resourceSet := make(map[string]bool)
+	ruleCount := len(clusterRole.Rules)
+
+	for _, rule := range clusterRole.Rules {
+		for _, verb := range rule.Verbs {
+			verbSet[verb] = true
+		}
+		for _, resource := range rule.Resources {
+			resourceSet[resource] = true
+		}
+	}
+
+	// Create a meaningful summary of all rules
+	var rulesDisplay string
+	if ruleCount == 0 {
+		rulesDisplay = "<none>"
+	} else {
+		// Get unique verbs and resources as slices for display
+		var verbsList []string
+		for verb := range verbSet {
+			verbsList = append(verbsList, verb)
+		}
+		
+		var resourcesList []string
+		for resource := range resourceSet {
+			resourcesList = append(resourcesList, resource)
+		}
+
+		// Create a concise summary
+		if ruleCount == 1 {
+			// For single rule, show the exact verbs and resources
+			if len(verbsList) > 0 && len(resourcesList) > 0 {
+				if len(verbsList) <= 3 && len(resourcesList) <= 3 {
+					rulesDisplay = fmt.Sprintf("%s on %s", strings.Join(verbsList, ","), strings.Join(resourcesList, ","))
+				} else {
+					rulesDisplay = fmt.Sprintf("%d verbs on %d resources", len(verbsList), len(resourcesList))
+				}
+			} else {
+				rulesDisplay = "1 rule"
+			}
+		} else {
+			// For multiple rules, show a summary
+			if len(verbsList) > 0 && len(resourcesList) > 0 {
+				rulesDisplay = fmt.Sprintf("%d rules: %d verbs on %d resources", ruleCount, len(verbsList), len(resourcesList))
+			} else {
+				rulesDisplay = fmt.Sprintf("%d rules", ruleCount)
+			}
+		}
+	}
+
 	return ClusterRoleResponse{
 		Name:              clusterRole.Name,
 		CreationTimestamp: clusterRole.CreationTimestamp.Time,
 		Rules:             len(clusterRole.Rules),
+		RulesDisplay:      rulesDisplay,
+		Age:               ageStr,
 		Labels:            clusterRole.Labels,
 		Annotations:       clusterRole.Annotations,
 		ResourceVersion:   clusterRole.ResourceVersion,
@@ -70,28 +143,73 @@ func transformClusterRoleToResponse(clusterRole *rbacv1.ClusterRole) ClusterRole
 
 // transformClusterRoleBindingToResponse converts a Kubernetes ClusterRoleBinding to API response format
 func transformClusterRoleBindingToResponse(clusterRoleBinding *rbacv1.ClusterRoleBinding) ClusterRoleBindingResponse {
-	// Count subjects by kind
+	// Calculate age
+	age := time.Since(clusterRoleBinding.CreationTimestamp.Time)
+	var ageStr string
+	if age < time.Minute {
+		ageStr = fmt.Sprintf("%ds", int(age.Seconds()))
+	} else if age < time.Hour {
+		ageStr = fmt.Sprintf("%dm", int(age.Minutes()))
+	} else if age < 24*time.Hour {
+		ageStr = fmt.Sprintf("%dh", int(age.Hours()))
+	} else {
+		ageStr = fmt.Sprintf("%dd", int(age.Hours()/24))
+	}
+
+	// Extract role reference
+	roleName := clusterRoleBinding.RoleRef.Name
+	roleKind := clusterRoleBinding.RoleRef.Kind
+
+	// Extract subjects
+	subjectCount := len(clusterRoleBinding.Subjects)
+
+	// Count subjects by kind and create display list
 	userCount := 0
 	groupCount := 0
 	serviceAccountCount := 0
+	var subjectsDisplayList []string
 
 	for _, subject := range clusterRoleBinding.Subjects {
 		switch subject.Kind {
 		case "User":
 			userCount++
+			subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("User:%s", subject.Name))
 		case "Group":
 			groupCount++
+			subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("Group:%s", subject.Name))
 		case "ServiceAccount":
 			serviceAccountCount++
+			if subject.Namespace != "" {
+				subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("SA:%s/%s", subject.Namespace, subject.Name))
+			} else {
+				subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("SA:%s", subject.Name))
+			}
 		}
 	}
+
+	// Format subjects display
+	var subjectsDisplay string
+	if len(subjectsDisplayList) == 0 {
+		subjectsDisplay = "<none>"
+	} else if len(subjectsDisplayList) == 1 {
+		subjectsDisplay = subjectsDisplayList[0]
+	} else {
+		subjectsDisplay = fmt.Sprintf("%s +%d more", subjectsDisplayList[0], len(subjectsDisplayList)-1)
+	}
+
+	// Create role reference string
+	roleRefStr := fmt.Sprintf("%s/%s", roleKind, roleName)
 
 	return ClusterRoleBindingResponse{
 		Name:                clusterRoleBinding.Name,
 		CreationTimestamp:   clusterRoleBinding.CreationTimestamp.Time,
-		RoleName:            clusterRoleBinding.RoleRef.Name,
-		RoleKind:            clusterRoleBinding.RoleRef.Kind,
-		SubjectCount:        len(clusterRoleBinding.Subjects),
+		RoleName:            roleName,
+		RoleKind:            roleKind,
+		RoleRef:             roleRefStr,
+		SubjectCount:        subjectCount,
+		Subjects:            subjectCount,      // Same as SubjectCount for frontend compatibility
+		SubjectsDisplay:     subjectsDisplay,
+		Age:                 ageStr,
 		UserCount:           userCount,
 		GroupCount:          groupCount,
 		ServiceAccountCount: serviceAccountCount,
@@ -432,19 +550,79 @@ func (s *Server) clusterRoleToResponse(clusterRole interface{}) map[string]inter
 	rules := clusterRoleObj["rules"].([]interface{})
 	ruleCount := len(rules)
 
+	// Count unique verbs and resources across all rules
+	verbSet := make(map[string]bool)
+	resourceSet := make(map[string]bool)
+
+	for _, rule := range rules {
+		ruleMap := rule.(map[string]interface{})
+
+		if verbs, ok := ruleMap["verbs"].([]interface{}); ok {
+			for _, verb := range verbs {
+				verbSet[verb.(string)] = true
+			}
+		}
+
+		if resources, ok := ruleMap["resources"].([]interface{}); ok {
+			for _, resource := range resources {
+				resourceSet[resource.(string)] = true
+			}
+		}
+	}
+
+	// Create a meaningful summary of all rules
+	var rulesDisplay string
+	if ruleCount == 0 {
+		rulesDisplay = "<none>"
+	} else {
+		// Get unique verbs and resources as slices for display
+		var verbsList []string
+		for verb := range verbSet {
+			verbsList = append(verbsList, verb)
+		}
+		
+		var resourcesList []string
+		for resource := range resourceSet {
+			resourcesList = append(resourcesList, resource)
+		}
+
+		// Create a concise summary
+		if ruleCount == 1 {
+			// For single rule, show the exact verbs and resources
+			if len(verbsList) > 0 && len(resourcesList) > 0 {
+				if len(verbsList) <= 3 && len(resourcesList) <= 3 {
+					rulesDisplay = fmt.Sprintf("%s on %s", strings.Join(verbsList, ","), strings.Join(resourcesList, ","))
+				} else {
+					rulesDisplay = fmt.Sprintf("%d verbs on %d resources", len(verbsList), len(resourcesList))
+				}
+			} else {
+				rulesDisplay = "1 rule"
+			}
+		} else {
+			// For multiple rules, show a summary
+			if len(verbsList) > 0 && len(resourcesList) > 0 {
+				rulesDisplay = fmt.Sprintf("%d rules: %d verbs on %d resources", ruleCount, len(verbsList), len(resourcesList))
+			} else {
+				rulesDisplay = fmt.Sprintf("%d rules", ruleCount)
+			}
+		}
+	}
+
 	return map[string]interface{}{
 		"id":                len(name), // Simple ID generation
 		"name":              name,
 		"age":               ageStr,
 		"creationTimestamp": creationTime,
-		"rules":             ruleCount,
-		"rulesDisplay":      fmt.Sprintf("%d rules", ruleCount),
+		"rules":             ruleCount,        // Frontend expects 'rules', not 'ruleCount'
+		"rulesDisplay":      rulesDisplay,     // Frontend expects this field
+		"verbCount":         len(verbSet),
+		"resourceCount":     len(resourceSet),
 		"labels":            metadata["labels"],
 		"annotations":       metadata["annotations"],
 	}
 }
 
-// clusterRoleBindingToResponse converts a ClusterRoleBinding to response format  
+// clusterRoleBindingToResponse converts a ClusterRoleBinding to response format
 func (s *Server) clusterRoleBindingToResponse(clusterRoleBinding interface{}) map[string]interface{} {
 	var clusterRoleBindingObj map[string]interface{}
 
@@ -480,21 +658,76 @@ func (s *Server) clusterRoleBindingToResponse(clusterRoleBinding interface{}) ma
 	// Extract role reference
 	roleRef := clusterRoleBindingObj["roleRef"].(map[string]interface{})
 	roleName := roleRef["name"].(string)
+	roleKind := roleRef["kind"].(string)
 
 	// Extract subjects information
-	subjects := clusterRoleBindingObj["subjects"].([]interface{})
+	var subjects []interface{}
+	if subjectsInterface := clusterRoleBindingObj["subjects"]; subjectsInterface != nil {
+		subjects = subjectsInterface.([]interface{})
+	}
 	subjectCount := len(subjects)
 
+	// Count subjects by kind and create display list
+	userCount := 0
+	groupCount := 0
+	serviceAccountCount := 0
+	var subjectsDisplayList []string
+
+	for _, subject := range subjects {
+		subjectMap := subject.(map[string]interface{})
+		kind := subjectMap["kind"].(string)
+		name := subjectMap["name"].(string)
+
+		switch kind {
+		case "User":
+			userCount++
+			subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("User:%s", name))
+		case "Group":
+			groupCount++
+			subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("Group:%s", name))
+		case "ServiceAccount":
+			serviceAccountCount++
+			namespace := ""
+			if ns, ok := subjectMap["namespace"]; ok {
+				namespace = ns.(string)
+			}
+			if namespace != "" {
+				subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("SA:%s/%s", namespace, name))
+			} else {
+				subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("SA:%s", name))
+			}
+		}
+	}
+
+	// Format subjects display
+	var subjectsDisplay string
+	if len(subjectsDisplayList) == 0 {
+		subjectsDisplay = "<none>"
+	} else if len(subjectsDisplayList) == 1 {
+		subjectsDisplay = subjectsDisplayList[0]
+	} else {
+		subjectsDisplay = fmt.Sprintf("%s +%d more", subjectsDisplayList[0], len(subjectsDisplayList)-1)
+	}
+
+	// Create role reference string
+	roleRefStr := fmt.Sprintf("%s/%s", roleKind, roleName)
+
 	return map[string]interface{}{
-		"id":               len(name), // Simple ID generation
-		"name":             name,
-		"age":              ageStr,
-		"creationTimestamp": creationTime,
-		"roleRef":          roleName,
-		"subjects":         subjectCount,
-		"subjectsDisplay":  fmt.Sprintf("%d subjects", subjectCount),
-		"labels":           metadata["labels"],
-		"annotations":      metadata["annotations"],
+		"id":                  len(name), // Simple ID generation
+		"name":                name,
+		"age":                 ageStr,
+		"creationTimestamp":   creationTime,
+		"roleName":            roleName,
+		"roleKind":            roleKind,
+		"roleRef":             roleRefStr,        // Frontend expects this field
+		"subjects":            subjectCount,      // Frontend expects 'subjects', not 'subjectCount'
+		"subjectsDisplay":     subjectsDisplay,   // Frontend expects this field
+		"subjectCount":        subjectCount,      // Keep for backward compatibility
+		"userCount":           userCount,
+		"groupCount":          groupCount,
+		"serviceAccountCount": serviceAccountCount,
+		"labels":              metadata["labels"],
+		"annotations":         metadata["annotations"],
 	}
 }
 

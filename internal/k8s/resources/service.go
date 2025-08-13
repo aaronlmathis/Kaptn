@@ -479,6 +479,46 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 		// Convert map to unstructured
 		unstructuredVolumeSnapshotClass := &unstructured.Unstructured{Object: volumeSnapshotClassObj.(map[string]interface{})}
 		obj = rm.stripManagedFields(unstructuredVolumeSnapshotClass)
+	case "Role":
+		role, err := rm.kubeClient.RbacV1().Roles(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredRole := rm.convertToUnstructured(role)
+		if unstructuredRole == nil {
+			return nil, fmt.Errorf("failed to convert Role to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredRole)
+	case "RoleBinding":
+		roleBinding, err := rm.kubeClient.RbacV1().RoleBindings(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredRoleBinding := rm.convertToUnstructured(roleBinding)
+		if unstructuredRoleBinding == nil {
+			return nil, fmt.Errorf("failed to convert RoleBinding to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredRoleBinding)
+	case "ClusterRole":
+		clusterRole, err := rm.kubeClient.RbacV1().ClusterRoles().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredClusterRole := rm.convertToUnstructured(clusterRole)
+		if unstructuredClusterRole == nil {
+			return nil, fmt.Errorf("failed to convert ClusterRole to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredClusterRole)
+	case "ClusterRoleBinding":
+		clusterRoleBinding, err := rm.kubeClient.RbacV1().ClusterRoleBindings().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredClusterRoleBinding := rm.convertToUnstructured(clusterRoleBinding)
+		if unstructuredClusterRoleBinding == nil {
+			return nil, fmt.Errorf("failed to convert ClusterRoleBinding to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredClusterRoleBinding)
 	case "ResourceQuota":
 		resourceQuota, err := rm.kubeClient.CoreV1().ResourceQuotas(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {

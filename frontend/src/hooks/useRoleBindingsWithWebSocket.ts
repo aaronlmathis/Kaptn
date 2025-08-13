@@ -37,13 +37,6 @@ export function useRoleBindingsWithWebSocket(enableWebSocket: boolean = true) {
 			age = `${ageMinutes}m`;
 		}
 
-		// Format subjects display
-		const formatSubjectsDisplay = (subjects?: string[]): string => {
-			if (!subjects || subjects.length === 0) return '<none>';
-			if (subjects.length === 1) return subjects[0];
-			return `${subjects[0]} +${subjects.length - 1} more`;
-		};
-
 		return {
 			id: `${wsData.namespace}-${wsData.name}`.hashCode(),
 			name: wsData.name,
@@ -51,7 +44,7 @@ export function useRoleBindingsWithWebSocket(enableWebSocket: boolean = true) {
 			age: age,
 			roleRef: wsData.roleRef || '<none>',
 			subjects: wsData.subjects || 0,
-			subjectsDisplay: formatSubjectsDisplay(wsData.subjectsDisplay)
+			subjectsDisplay: wsData.subjectsDisplay || '<none>' // Use the backend's formatted string directly
 		};
 	}, []);
 

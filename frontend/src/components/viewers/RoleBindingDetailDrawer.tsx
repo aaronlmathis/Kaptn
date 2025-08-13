@@ -127,8 +127,8 @@ export function RoleBindingDetailDrawer({ item, open, onOpenChange }: RoleBindin
 		}
 
 		// Add role reference details
-		if (roleBindingDetails.spec?.roleRef) {
-			const roleRef = roleBindingDetails.spec.roleRef as Record<string, unknown>
+		if (roleBindingDetails.roleRef) {
+			const roleRef = roleBindingDetails.roleRef as Record<string, unknown>
 			additionalRows.push(["Role Kind", <div className="font-mono text-sm">{String(roleRef.kind || 'Unknown')}</div>])
 			additionalRows.push(["Role Name", <div className="font-mono text-sm">{String(roleRef.name || 'Unknown')}</div>])
 			if (roleRef.apiGroup) {
@@ -137,20 +137,32 @@ export function RoleBindingDetailDrawer({ item, open, onOpenChange }: RoleBindin
 		}
 
 		// Add subjects details
-		if (roleBindingDetails.spec?.subjects && Array.isArray(roleBindingDetails.spec.subjects)) {
-			const subjects = roleBindingDetails.spec.subjects as Array<Record<string, unknown>>
+		if (roleBindingDetails.subjects && Array.isArray(roleBindingDetails.subjects)) {
+			const subjects = roleBindingDetails.subjects as Array<Record<string, unknown>>
 			additionalRows.push(["Subject Count", <div className="text-sm">{subjects.length} subject(s)</div>])
 
 			// Show detailed subject information
 			subjects.forEach((subject, index) => {
+				additionalRows.push([`Subject ${index + 1}`, <div className="text-sm font-medium text-blue-600">Subject Details</div>])
+
 				const kind = String(subject.kind || 'Unknown')
 				const name = String(subject.name || 'Unknown')
-				const namespace = subject.namespace ? ` (${subject.namespace})` : ''
-				const subjectDisplay = `${kind}: ${name}${namespace}`
-				additionalRows.push([`Subject ${index + 1}`, <div className="font-mono text-sm">{subjectDisplay}</div>])
+				const namespace = subject.namespace ? String(subject.namespace) : null
+
+				additionalRows.push([`  Kind`, <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">{kind}</Badge>])
+				additionalRows.push([`  Name`, <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">{name}</Badge>])
+
+				if (namespace) {
+					additionalRows.push([`  Namespace`, <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">{namespace}</Badge>])
+				}
 
 				if (subject.apiGroup) {
-					additionalRows.push([`  API Group`, <div className="font-mono text-sm text-muted-foreground">{String(subject.apiGroup)}</div>])
+					additionalRows.push([`  API Group`, <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">{String(subject.apiGroup)}</Badge>])
+				}
+
+				// Add a separator between subjects if there are multiple
+				if (index < subjects.length - 1) {
+					additionalRows.push([" ", <hr className="my-2 border-border" />])
 				}
 			})
 		}

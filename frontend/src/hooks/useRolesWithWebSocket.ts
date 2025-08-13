@@ -37,20 +37,13 @@ export function useRolesWithWebSocket(enableWebSocket: boolean = true) {
 			age = `${ageMinutes}m`;
 		}
 
-		// Format rules display
-		const formatRulesDisplay = (rules?: string[]): string => {
-			if (!rules || rules.length === 0) return '<none>';
-			if (rules.length === 1) return rules[0];
-			return `${rules[0]} +${rules.length - 1} more`;
-		};
-
 		return {
 			id: `${wsData.namespace}-${wsData.name}`.hashCode(),
 			name: wsData.name,
 			namespace: wsData.namespace,
 			age: age,
 			rules: wsData.rules || 0,
-			rulesDisplay: formatRulesDisplay(wsData.rulesDisplay)
+			rulesDisplay: wsData.rulesDisplay || '<none>' // Use the backend's formatted string directly
 		};
 	}, []);
 

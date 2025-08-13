@@ -27,17 +27,17 @@ All migrated DataTable files currently have the old pagination layout:
 - ✅ `ReplicaSetsDataTable.tsx` - **Fixed**
 - ✅ `ServicesDataTable.tsx` - **Fixed**
 - 🔄 `PodsDataTable.tsx` - Needs fix
-- 🔄 `DeploymentsDataTable.tsx` - Needs fix
+- ✅ `DeploymentsDataTable.tsx` - **Fixed**
 - 🔄 `ApiResourcesDataTable.tsx` - Needs fix
 - 🔄 `ConfigMapsDataTable.tsx` - Needs fix
-- 🔄 `CronJobsDataTable.tsx` - Needs fix
+- ✅ `CronJobsDataTable.tsx` - **Fixed**
 - 🔄 `CSIDriversDataTable.tsx` - Needs fix
-- 🔄 `DaemonSetsDataTable.tsx` - Needs fix
-- 🔄 `EndpointsDataTable.tsx` - Needs fix
+- ✅ `DaemonSetsDataTable.tsx` - **Fixed**
+- ✅ `EndpointsDataTable.tsx` - **Fixed**
 - 🔄 `EndpointSlicesDataTable.tsx` - Needs fix
 - 🔄 `GatewaysDataTable.tsx` - Needs fix
 - 🔄 `IngressClassesDataTable.tsx` - Needs fix
-- 🔄 `JobsDataTable.tsx` - Needs fix
+- ✅ `JobsDataTable.tsx` - **Fixed**
 - 🔄 `LoadBalancersDataTable.tsx` - Needs fix
 - 🔄 `NamespacesDataTable.tsx` - Needs fix
 - 🔄 `NetworkPoliciesDataTable.tsx` - Needs fix

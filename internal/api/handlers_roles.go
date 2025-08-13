@@ -410,7 +410,7 @@ func (s *Server) roleToResponse(role interface{}) map[string]interface{} {
 	rules := roleObj["rules"].([]interface{})
 	ruleCount := len(rules)
 
-	// Count unique verbs and resources
+	// Count unique verbs and resources across all rules
 	verbSet := make(map[string]bool)
 	resourceSet := make(map[string]bool)
 
@@ -430,13 +430,52 @@ func (s *Server) roleToResponse(role interface{}) map[string]interface{} {
 		}
 	}
 
+	// Create a meaningful summary of all rules
+	var rulesDisplay string
+	if ruleCount == 0 {
+		rulesDisplay = "<none>"
+	} else {
+		// Get unique verbs and resources as slices for display
+		var verbsList []string
+		for verb := range verbSet {
+			verbsList = append(verbsList, verb)
+		}
+
+		var resourcesList []string
+		for resource := range resourceSet {
+			resourcesList = append(resourcesList, resource)
+		}
+
+		// Create a concise summary
+		if ruleCount == 1 {
+			// For single rule, show the exact verbs and resources
+			if len(verbsList) > 0 && len(resourcesList) > 0 {
+				if len(verbsList) <= 3 && len(resourcesList) <= 3 {
+					rulesDisplay = fmt.Sprintf("%s on %s", strings.Join(verbsList, ","), strings.Join(resourcesList, ","))
+				} else {
+					rulesDisplay = fmt.Sprintf("%d verbs on %d resources", len(verbsList), len(resourcesList))
+				}
+			} else {
+				rulesDisplay = "1 rule"
+			}
+		} else {
+			// For multiple rules, show a summary
+			if len(verbsList) > 0 && len(resourcesList) > 0 {
+				rulesDisplay = fmt.Sprintf("%d rules: %d verbs on %d resources", ruleCount, len(verbsList), len(resourcesList))
+			} else {
+				rulesDisplay = fmt.Sprintf("%d rules", ruleCount)
+			}
+		}
+	}
+
 	return map[string]interface{}{
 		"id":                len(name), // Simple ID generation
 		"name":              name,
 		"namespace":         namespace,
 		"age":               ageStr,
 		"creationTimestamp": creationTime,
-		"ruleCount":         ruleCount,
+		"rules":             ruleCount,    // Frontend expects 'rules', not 'ruleCount'
+		"rulesDisplay":      rulesDisplay, // Frontend expects this field
 		"verbCount":         len(verbSet),
 		"resourceCount":     len(resourceSet),
 		"labels":            metadata["labels"],
@@ -487,24 +526,50 @@ func (s *Server) roleBindingToResponse(roleBinding interface{}) map[string]inter
 	subjects := roleBindingObj["subjects"].([]interface{})
 	subjectCount := len(subjects)
 
-	// Count subjects by kind
+	// Count subjects by kind and create display list
 	userCount := 0
 	groupCount := 0
 	serviceAccountCount := 0
+	var subjectsDisplayList []string
 
 	for _, subject := range subjects {
 		subjectMap := subject.(map[string]interface{})
 		kind := subjectMap["kind"].(string)
+		name := subjectMap["name"].(string)
 
 		switch kind {
 		case "User":
 			userCount++
+			subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("User:%s", name))
 		case "Group":
 			groupCount++
+			subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("Group:%s", name))
 		case "ServiceAccount":
 			serviceAccountCount++
+			namespace := ""
+			if ns, ok := subjectMap["namespace"]; ok {
+				namespace = ns.(string)
+			}
+			if namespace != "" {
+				subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("SA:%s/%s", namespace, name))
+			} else {
+				subjectsDisplayList = append(subjectsDisplayList, fmt.Sprintf("SA:%s", name))
+			}
 		}
 	}
+
+	// Format subjects display
+	var subjectsDisplay string
+	if len(subjectsDisplayList) == 0 {
+		subjectsDisplay = "<none>"
+	} else if len(subjectsDisplayList) == 1 {
+		subjectsDisplay = subjectsDisplayList[0]
+	} else {
+		subjectsDisplay = fmt.Sprintf("%s +%d more", subjectsDisplayList[0], len(subjectsDisplayList)-1)
+	}
+
+	// Create role reference string
+	roleRefStr := fmt.Sprintf("%s/%s", roleKind, roleName)
 
 	return map[string]interface{}{
 		"id":                  len(name), // Simple ID generation
@@ -514,7 +579,10 @@ func (s *Server) roleBindingToResponse(roleBinding interface{}) map[string]inter
 		"creationTimestamp":   creationTime,
 		"roleName":            roleName,
 		"roleKind":            roleKind,
-		"subjectCount":        subjectCount,
+		"roleRef":             roleRefStr,      // Frontend expects this field
+		"subjects":            subjectCount,    // Frontend expects 'subjects', not 'subjectCount'
+		"subjectsDisplay":     subjectsDisplay, // Frontend expects this field
+		"subjectCount":        subjectCount,    // Keep for backward compatibility
 		"userCount":           userCount,
 		"groupCount":          groupCount,
 		"serviceAccountCount": serviceAccountCount,
@@ -579,11 +647,22 @@ func (s *Server) sortRoleBindings(roleBindings []interface{}, sortBy string) {
 			case "roleName":
 				val1 = rb1["roleName"].(string)
 				val2 = rb2["roleName"].(string)
+			case "roleRef":
+				val1 = rb1["roleRef"].(string)
+				val2 = rb2["roleRef"].(string)
 			case "age":
 				// For age, we want newest first, so reverse comparison
 				time1 := rb1["creationTimestamp"].(time.Time)
 				time2 := rb2["creationTimestamp"].(time.Time)
 				if time1.Before(time2) {
+					roleBindings[j], roleBindings[j+1] = roleBindings[j+1], roleBindings[j]
+				}
+				continue
+			case "subjects":
+				// Compare subject counts
+				subjects1 := rb1["subjects"].(int)
+				subjects2 := rb2["subjects"].(int)
+				if subjects1 > subjects2 {
 					roleBindings[j], roleBindings[j+1] = roleBindings[j+1], roleBindings[j]
 				}
 				continue
