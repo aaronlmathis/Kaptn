@@ -13,8 +13,8 @@ import { ClusterRoleBindingsDataTable } from "@/components/data_tables/ClusterRo
 
 // Inner component that can access the namespace context
 function ClusterRolesContent() {
-	const { data: clusterRoles, loading: rolesLoading, error: rolesError, isConnected: rolesConnected } = useClusterRolesWithWebSocket()
-	const { data: clusterRoleBindings, loading: bindingsLoading, error: bindingsError, isConnected: bindingsConnected } = useClusterRoleBindingsWithWebSocket()
+	const { data: clusterRoles = [], loading: rolesLoading, error: rolesError, isConnected: rolesConnected } = useClusterRolesWithWebSocket()
+	const { data: clusterRoleBindings = [], loading: bindingsLoading, error: bindingsError, isConnected: bindingsConnected } = useClusterRoleBindingsWithWebSocket()
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const [activeTab, setActiveTab] = React.useState("cluster-roles")
 

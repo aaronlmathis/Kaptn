@@ -58,7 +58,7 @@ export function useServicesWithWebSocket(enableWebSocket: boolean = true) {
 		}
 		
 		return {
-			id: `${wsData.namespace}-${wsData.name}`.hashCode(), // Simple hash for ID
+			id: 0, // Temporary ID, will be set properly when merged with API data
 			name: wsData.name,
 			namespace: wsData.namespace,
 			type: wsData.type || 'ClusterIP',
@@ -84,21 +84,3 @@ export function useServicesWithWebSocket(enableWebSocket: boolean = true) {
 	
 	return result;
 }
-
-// Extension to String prototype for simple hash code (for generating IDs)
-declare global {
-	interface String {
-		hashCode(): number;
-	}
-}
-
-String.prototype.hashCode = function() {
-	let hash = 0;
-	if (this.length === 0) return hash;
-	for (let i = 0; i < this.length; i++) {
-		const char = this.charCodeAt(i);
-		hash = ((hash << 5) - hash) + char;
-		hash = hash & hash; // Convert to 32bit integer
-	}
-	return Math.abs(hash);
-};

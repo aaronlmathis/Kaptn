@@ -18,8 +18,21 @@ interface WebSocketClusterRoleBindingData {
  */
 export function useClusterRoleBindingsWithWebSocket(enableWebSocket = true) {
 	const fetchData = useCallback(async () => {
-		const response = await getClusterRoleBindings(1, 1000); // Get all for display
-		return transformClusterRoleBindingsToDashboard(response.items);
+		try {
+			console.log('Fetching cluster role bindings...');
+			const response = await getClusterRoleBindings(1, 1000); // Get all for display
+			console.log('Cluster role bindings response:', response);
+			if (!response || !response.items) {
+				console.warn('Cluster role bindings API returned invalid response:', response);
+				return [];
+			}
+			const transformed = transformClusterRoleBindingsToDashboard(response.items);
+			console.log('Transformed cluster role bindings:', transformed);
+			return transformed;
+		} catch (error) {
+			console.error('Error fetching cluster role bindings:', error);
+			return [];
+		}
 	}, []);
 
 	const transformWebSocketData = useCallback((wsData: WebSocketClusterRoleBindingData): DashboardClusterRoleBinding => {
@@ -42,7 +55,7 @@ export function useClusterRoleBindingsWithWebSocket(enableWebSocket = true) {
 		const subjectsDisplay = subjects === 1 ? "1 subject" : `${subjects} subjects`;
 
 		return {
-			id: wsData.name.hashCode(),
+			id: 0, // Temporary ID, will be set properly when merged with API data
 			name: wsData.name,
 			age: age,
 			roleRef: wsData.roleName || "",
@@ -53,11 +66,12 @@ export function useClusterRoleBindingsWithWebSocket(enableWebSocket = true) {
 
 	const getItemKey = useCallback((item: DashboardClusterRoleBinding) => item.name, []);
 
-	const result = useResourceWithOverview<DashboardClusterRoleBinding>('clusterrolebinding', {
+	const result = useResourceWithOverview<DashboardClusterRoleBinding>('clusterrolebindings', {
 		fetchData,
 		transformWebSocketData: enableWebSocket ? transformWebSocketData : undefined,
 		getItemKey,
 		fetchDependencies: [], // No namespace dependency for cluster resources
+		debug: true // Enable debug to see what's happening
 	});
 
 	return {
@@ -66,25 +80,5 @@ export function useClusterRoleBindingsWithWebSocket(enableWebSocket = true) {
 		error: result.error,
 		isConnected: result.isConnected,
 		refetch: result.refetch,
-	};
-}
-
-// Extension to String prototype for simple hash code (for generating IDs)
-declare global {
-	interface String {
-		hashCode(): number;
-	}
-}
-
-if (!String.prototype.hashCode) {
-	String.prototype.hashCode = function () {
-		let hash = 0;
-		if (this.length === 0) return hash;
-		for (let i = 0; i < this.length; i++) {
-			const char = this.charCodeAt(i);
-			hash = ((hash << 5) - hash) + char;
-			hash = hash & hash; // Convert to 32bit integer
-		}
-		return Math.abs(hash);
 	};
 }

@@ -14,12 +14,14 @@ export interface ClusterRoleResponse {
 export interface ClusterRoleBindingResponse {
 	name: string
 	creationTimestamp: string
-	roleRef: string
-	subjects: number
+	roleName: string
+	roleKind: string
+	subjectCount: number
+	userCount: number
+	groupCount: number
+	serviceAccountCount: number
 	labels?: Record<string, string>
 	annotations?: Record<string, string>
-	resourceVersion: string
-	uid: string
 }
 
 export interface ClusterRolesListResponse {
@@ -108,8 +110,13 @@ export async function getClusterRoles(
 		params.append("search", search)
 	}
 
-	const response = await apiClient.get(`cluster-roles?${params}`) as { data: ClusterRolesListResponse }
-	return response.data
+	const response = await apiClient.get(`cluster-roles?${params}`) as { data: { items: ClusterRoleResponse[] } }
+	return {
+		items: response.data?.items || [],
+		totalCount: response.data?.items?.length || 0,
+		page: page,
+		limit: limit
+	}
 }
 
 export async function getClusterRole(name: string): Promise<ClusterRoleResponse> {
@@ -135,8 +142,13 @@ export async function getClusterRoleBindings(
 		params.append("search", search)
 	}
 
-	const response = await apiClient.get(`cluster-role-bindings?${params}`) as { data: ClusterRoleBindingsListResponse }
-	return response.data
+	const response = await apiClient.get(`cluster-role-bindings?${params}`) as { data: { items: ClusterRoleBindingResponse[] } }
+	return {
+		items: response.data?.items || [],
+		totalCount: response.data?.items?.length || 0,
+		page: page,
+		limit: limit
+	}
 }
 
 export async function getClusterRoleBinding(name: string): Promise<ClusterRoleBindingResponse> {
@@ -192,7 +204,7 @@ export function transformClusterRolesToDashboard(clusterRoles: ClusterRoleRespon
 		return []
 	}
 	return clusterRoles.map((clusterRole, index) => ({
-		id: index + 1,
+		id: index, // Use simple index-based ID like services
 		name: clusterRole.name,
 		age: formatAge(clusterRole.creationTimestamp),
 		rules: clusterRole.rules,
@@ -205,11 +217,13 @@ export function transformClusterRoleBindingsToDashboard(clusterRoleBindings: Clu
 		return []
 	}
 	return clusterRoleBindings.map((clusterRoleBinding, index) => ({
-		id: index + 1,
+		id: index, // Use simple index-based ID like services
 		name: clusterRoleBinding.name,
 		age: formatAge(clusterRoleBinding.creationTimestamp),
-		roleRef: clusterRoleBinding.roleRef,
-		subjects: clusterRoleBinding.subjects,
-		subjectsDisplay: clusterRoleBinding.subjects === 1 ? "1 subject" : `${clusterRoleBinding.subjects} subjects`
+		roleRef: clusterRoleBinding.roleName,
+		subjects: clusterRoleBinding.subjectCount,
+		subjectsDisplay: clusterRoleBinding.subjectCount === 1 ? "1 subject" : `${clusterRoleBinding.subjectCount} subjects`
 	}))
 }
+
+
