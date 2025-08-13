@@ -166,7 +166,7 @@ export function getGatewayServerTypeBadge(count: number, total: number, type: "H
 }
 
 // Generic resource icons
-export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints" | "daemonsets" | "cronjobs" | "endpointslices" | "ingresses" | "ingressclasses" | "networkpolicies" | "loadbalancers" | "persistentvolumes" | "persistentvolumeclaims" | "storageclasses" | "volumesnapshots" | "volumesnapshotclasses" | "namespaces" | "resourcequotas" | "gateways" | "virtualservices"): React.ReactNode {
+export function getResourceIcon(type: "deployments" | "services" | "pods" | "nodes" | "replicasets" | "jobs" | "statefulsets" | "configmaps" | "endpoints" | "daemonsets" | "cronjobs" | "endpointslices" | "ingresses" | "ingressclasses" | "networkpolicies" | "loadbalancers" | "persistentvolumes" | "persistentvolumeclaims" | "storageclasses" | "volumesnapshots" | "volumesnapshotclasses" | "namespaces" | "resourcequotas" | "gateways" | "virtualservices" | "crds"): React.ReactNode {
 	switch (type) {
 		case "deployments":
 			return <IconCube className="size-4" />
@@ -218,6 +218,8 @@ export function getResourceIcon(type: "deployments" | "services" | "pods" | "nod
 			return <IconRoute className="size-4" />
 		case "virtualservices":
 			return <IconRoute className="size-4" />
+		case "crds":
+			return <IconCube className="size-4" />
 		default:
 			return null
 	}
@@ -461,5 +463,53 @@ export function getVirtualServiceGatewaysBadge(gatewayCount: number): React.Reac
 		return createBadge("info", <IconRoute className="size-3" />, "Multi-Gateway")
 	} else {
 		return createBadge("warning", <IconRoute className="size-3" />, "Single Gateway")
+	}
+}
+
+// CRD-specific badges
+export function getCRDStatusBadge(total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconCube className="size-3" />, "No CRDs")
+
+	if (total >= 20) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Rich Ecosystem")
+	} else if (total >= 10) {
+		return createBadge("info", <IconCube className="size-3" />, "Active")
+	} else {
+		return createBadge("warning", <IconCube className="size-3" />, "Limited")
+	}
+}
+
+export function getCRDScopeBadge(count: number, total: number, scope: "Namespaced" | "Cluster"): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconCube className="size-3" />, "None")
+
+	switch (scope) {
+		case "Namespaced":
+			if (count > 0) {
+				return createBadge("info", <IconShield className="size-3" />, "Namespace Scoped")
+			} else {
+				return createBadge("info", <IconShield className="size-3" />, "No Namespaced")
+			}
+		case "Cluster":
+			if (count > 0) {
+				return createBadge("warning", <IconServer className="size-3" />, "Cluster Wide")
+			} else {
+				return createBadge("info", <IconServer className="size-3" />, "No Cluster-wide")
+			}
+		default:
+			return createBadge("info", <IconCube className="size-3" />, "Unknown")
+	}
+}
+
+export function getCRDEstablishedBadge(established: number, total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconCube className="size-3" />, "No CRDs")
+
+	const percentage = (established / total) * 100
+
+	if (percentage === 100) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "All Established")
+	} else if (percentage >= 80) {
+		return createBadge("info", <IconTrendingUp className="size-3" />, "Most Ready")
+	} else {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Issues")
 	}
 }

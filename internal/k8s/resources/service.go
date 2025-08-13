@@ -10,6 +10,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1607,4 +1608,101 @@ func (rm *ResourceManager) GetIngressClass(ctx context.Context, name string) (in
 	}
 
 	return ingressClassMap, nil
+}
+
+// ListCustomResourceDefinitions lists all CRDs in the cluster
+func (rm *ResourceManager) ListCustomResourceDefinitions(ctx context.Context) ([]interface{}, error) {
+	// Use dynamic client to get CRDs
+	gvr := schema.GroupVersionResource{
+		Group:    "apiextensions.k8s.io",
+		Version:  "v1",
+		Resource: "customresourcedefinitions",
+	}
+
+	result, err := rm.dynamicClient.Resource(gvr).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list custom resource definitions: %w", err)
+	}
+
+	var crds []interface{}
+	for _, item := range result.Items {
+		crdMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&item)
+		if err != nil {
+			rm.logger.Warn("Failed to convert CRD to map", zap.Error(err))
+			continue
+		}
+		crds = append(crds, crdMap)
+	}
+
+	return crds, nil
+}
+
+// GetCustomResourceDefinition gets a specific CRD by name
+func (rm *ResourceManager) GetCustomResourceDefinition(ctx context.Context, name string) (interface{}, error) {
+	// Use dynamic client to get CRD
+	gvr := schema.GroupVersionResource{
+		Group:    "apiextensions.k8s.io",
+		Version:  "v1",
+		Resource: "customresourcedefinitions",
+	}
+
+	result, err := rm.dynamicClient.Resource(gvr).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get custom resource definition %s: %w", name, err)
+	}
+
+	crdMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert CRD to map: %w", err)
+	}
+
+	return crdMap, nil
+}
+
+// ListRoles lists all roles in a namespace or across all namespaces
+func (rm *ResourceManager) ListRoles(ctx context.Context, namespace string) ([]interface{}, error) {
+	roles, err := rm.kubeClient.RbacV1().Roles(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list roles: %w", err)
+	}
+
+	var result []interface{}
+	for _, role := range roles.Items {
+		result = append(result, role)
+	}
+
+	return result, nil
+}
+
+// GetRole gets a specific role
+func (rm *ResourceManager) GetRole(ctx context.Context, namespace, name string) (*rbacv1.Role, error) {
+	role, err := rm.kubeClient.RbacV1().Roles(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get role %s in namespace %s: %w", name, namespace, err)
+	}
+	return role, nil
+}
+
+// ListRoleBindings lists all role bindings in a namespace or across all namespaces
+func (rm *ResourceManager) ListRoleBindings(ctx context.Context, namespace string) ([]interface{}, error) {
+	roleBindings, err := rm.kubeClient.RbacV1().RoleBindings(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list role bindings: %w", err)
+	}
+
+	var result []interface{}
+	for _, roleBinding := range roleBindings.Items {
+		result = append(result, roleBinding)
+	}
+
+	return result, nil
+}
+
+// GetRoleBinding gets a specific role binding
+func (rm *ResourceManager) GetRoleBinding(ctx context.Context, namespace, name string) (*rbacv1.RoleBinding, error) {
+	roleBinding, err := rm.kubeClient.RbacV1().RoleBindings(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get role binding %s in namespace %s: %w", name, namespace, err)
+	}
+	return roleBinding, nil
 }

@@ -54,6 +54,15 @@ interface JobDetails {
 	apiVersion: string
 }
 
+interface CRDDetails {
+	summary: any
+	spec: any
+	status: any
+	metadata: any
+	kind: string
+	apiVersion: string
+}
+
 interface CronJobDetails {
 	summary: any
 	spec: any
@@ -1176,6 +1185,43 @@ export function useNodeDetails(name: string, enabled: boolean = true) {
 		}
 
 		fetchNodeDetails()
+	}, [name, enabled])
+
+	return { data, loading, error }
+}
+
+export function useCRDDetails(name: string, enabled: boolean = true) {
+	const [data, setData] = useState<CRDDetails | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	useEffect(() => {
+		if (!enabled || !name) {
+			setData(null)
+			return
+		}
+
+		const fetchCRDDetails = async () => {
+			setLoading(true)
+			setError(null)
+
+			try {
+				const response = await fetch(`/api/v1/crds/${name}`)
+				const result = await response.json()
+
+				if (result.status === 'success') {
+					setData(result.data)
+				} else {
+					setError(result.error || 'Failed to fetch CRD details')
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : 'Unknown error')
+			} finally {
+				setLoading(false)
+			}
+		}
+
+		fetchCRDDetails()
 	}, [name, enabled])
 
 	return { data, loading, error }

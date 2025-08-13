@@ -47,6 +47,15 @@ import {
 } from './k8s-services';
 
 import {
+	getRoles,
+	getRole,
+	getRoleBindings,
+	getRoleBinding,
+	type Role,
+	type RoleBinding
+} from './k8s-rbac';
+
+import {
 	getConfigMaps,
 	getConfigMap,
 	getPersistentVolumes,
@@ -285,6 +294,24 @@ export class K8sService {
 		return getNetworkPolicy(namespace, name);
 	}
 
+	// Role operations
+	async getRoles(namespace?: string): Promise<Role[]> {
+		return getRoles(namespace);
+	}
+
+	async getRole(namespace: string, name: string): Promise<{ summary: Role; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		return getRole(namespace, name);
+	}
+
+	// RoleBinding operations
+	async getRoleBindings(namespace?: string): Promise<RoleBinding[]> {
+		return getRoleBindings(namespace);
+	}
+
+	async getRoleBinding(namespace: string, name: string): Promise<{ summary: RoleBinding; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
+		return getRoleBinding(namespace, name);
+	}
+
 	// Namespace operations
 	async getNamespaces(): Promise<Namespace[]> {
 		return getNamespaces();
@@ -358,3 +385,4 @@ export type * from './k8s-workloads';
 export type * from './k8s-services';
 export type * from './k8s-storage';
 export type * from './k8s-cluster';
+export type * from './k8s-rbac';

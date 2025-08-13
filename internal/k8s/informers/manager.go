@@ -59,6 +59,13 @@ type Manager struct {
 	// Istio Resources (CRDs)
 	GatewaysInformer cache.SharedIndexInformer
 
+	// Custom Resource Definitions
+	CustomResourceDefinitionsInformer cache.SharedIndexInformer
+
+	// RBAC Resources
+	RolesInformer        cache.SharedIndexInformer
+	RoleBindingsInformer cache.SharedIndexInformer
+
 	// Context for cancellation
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -97,6 +104,13 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient d
 		Resource: "gateways",
 	}
 
+	// Define CRD GVR
+	crdGVR := schema.GroupVersionResource{
+		Group:    "apiextensions.k8s.io",
+		Version:  "v1",
+		Resource: "customresourcedefinitions",
+	}
+
 	manager := &Manager{
 		logger:         logger,
 		client:         client,
@@ -131,6 +145,10 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient d
 		IngressClassesInformer:  factory.Networking().V1().IngressClasses().Informer(),
 		NetworkPoliciesInformer: factory.Networking().V1().NetworkPolicies().Informer(),
 
+		// RBAC Resources
+		RolesInformer:        factory.Rbac().V1().Roles().Informer(),
+		RoleBindingsInformer: factory.Rbac().V1().RoleBindings().Informer(),
+
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -146,6 +164,11 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient d
 		logger.Info("Creating Istio gateway informer")
 		manager.GatewaysInformer = dynamicFactory.ForResource(gatewayGVR).Informer()
 		logger.Info("Istio gateway informer created successfully")
+
+		// Add CRD informer
+		logger.Info("Creating CustomResourceDefinition informer")
+		manager.CustomResourceDefinitionsInformer = dynamicFactory.ForResource(crdGVR).Informer()
+		logger.Info("CustomResourceDefinition informer created successfully")
 	} else {
 		logger.Warn("Dynamic client not available, volume snapshot and Istio gateway informers will not be created")
 	}
@@ -195,6 +218,10 @@ func (m *Manager) Start() error {
 		m.IngressesInformer.HasSynced,
 		m.IngressClassesInformer.HasSynced,
 		m.NetworkPoliciesInformer.HasSynced,
+
+		// RBAC Resources
+		m.RolesInformer.HasSynced,
+		m.RoleBindingsInformer.HasSynced,
 	}
 
 	// Add volume snapshot informers if available
@@ -289,6 +316,13 @@ func (m *Manager) AddJobEventHandler(handler cache.ResourceEventHandler) {
 	m.JobsInformer.AddEventHandler(handler)
 }
 
+// AddCustomResourceDefinitionEventHandler adds an event handler for CRD events
+func (m *Manager) AddCustomResourceDefinitionEventHandler(handler cache.ResourceEventHandler) {
+	if m.CustomResourceDefinitionsInformer != nil {
+		m.CustomResourceDefinitionsInformer.AddEventHandler(handler)
+	}
+}
+
 // AddCronJobEventHandler adds an event handler for cronjob events
 func (m *Manager) AddCronJobEventHandler(handler cache.ResourceEventHandler) {
 	m.CronJobsInformer.AddEventHandler(handler)
@@ -361,6 +395,16 @@ func (m *Manager) AddGatewayEventHandler(handler cache.ResourceEventHandler) {
 	} else {
 		m.logger.Warn("Gateways informer is nil, cannot add event handler")
 	}
+}
+
+// AddRoleEventHandler adds an event handler for role events
+func (m *Manager) AddRoleEventHandler(handler cache.ResourceEventHandler) {
+	m.RolesInformer.AddEventHandler(handler)
+}
+
+// AddRoleBindingEventHandler adds an event handler for role binding events
+func (m *Manager) AddRoleBindingEventHandler(handler cache.ResourceEventHandler) {
+	m.RoleBindingsInformer.AddEventHandler(handler)
 }
 
 // GetNodeLister returns a lister for nodes
@@ -484,4 +528,14 @@ func (m *Manager) GetGatewayLister() cache.Indexer {
 		return m.GatewaysInformer.GetIndexer()
 	}
 	return nil
+}
+
+// GetRoleLister returns a lister for roles
+func (m *Manager) GetRoleLister() cache.Indexer {
+	return m.RolesInformer.GetIndexer()
+}
+
+// GetRoleBindingLister returns a lister for role bindings
+func (m *Manager) GetRoleBindingLister() cache.Indexer {
+	return m.RoleBindingsInformer.GetIndexer()
 }

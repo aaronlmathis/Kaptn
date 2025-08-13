@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { CRDsPageContainer } from "@/components/containers/CRDsPageContainer";
+
+const title = "Custom Resource Definitions";
+---
+
+<Layout title={title}>
+	<CRDsPageContainer client:load />
+</Layout>

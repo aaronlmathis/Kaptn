@@ -190,6 +190,10 @@ func (s *Server) initInformers() error {
 	serviceHandler := informers.NewServiceEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddServiceEventHandler(serviceHandler)
 
+	// Setup CRD event handler
+	crdHandler := informers.NewCustomResourceDefinitionEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddCustomResourceDefinitionEventHandler(crdHandler)
+
 	namespaceHandler := informers.NewNamespaceEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddNamespaceEventHandler(namespaceHandler)
 
@@ -254,6 +258,14 @@ func (s *Server) initInformers() error {
 	volumeSnapshotClassHandler := informers.NewVolumeSnapshotClassEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddVolumeSnapshotClassEventHandler(volumeSnapshotClassHandler)
 	s.logger.Info("Volume snapshot event handlers registered")
+
+	s.logger.Info("Registering RBAC event handlers")
+	roleHandler := informers.NewRoleEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddRoleEventHandler(roleHandler)
+
+	roleBindingHandler := informers.NewRoleBindingEventHandler(s.logger, s.wsHub)
+	s.informerManager.AddRoleBindingEventHandler(roleBindingHandler)
+	s.logger.Info("RBAC event handlers registered")
 
 	s.logger.Info("Registering Istio gateway event handler")
 	gatewayHandler := informers.NewGatewayEventHandler(s.logger, s.wsHub)
@@ -693,6 +705,10 @@ func (s *Server) setupRoutes() {
 			r.Get("/secrets/{namespace}/{name}/usage", s.handleGetSecretUsageExamples)
 			r.Get("/network-policies", s.handleListNetworkPolicies)
 			r.Get("/network-policies/{namespace}/{name}", s.handleGetNetworkPolicy)
+			r.Get("/roles", s.handleListRoles)
+			r.Get("/roles/{namespace}/{name}", s.handleGetRole)
+			r.Get("/role-bindings", s.handleListRoleBindings)
+			r.Get("/role-bindings/{namespace}/{name}", s.handleGetRoleBinding)
 			r.Get("/persistent-volumes", s.handleListPersistentVolumes)
 			r.Get("/persistent-volumes/{name}", s.handleGetPersistentVolume)
 			r.Get("/persistent-volume-claims", s.handleListPersistentVolumeClaims)
@@ -709,6 +725,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/resource-quotas/{namespace}/{name}", s.handleGetResourceQuota)
 			r.Get("/api-resources", s.handleListAPIResources)
 			r.Get("/api-resources/{name}", s.handleGetAPIResource)
+			r.Get("/crds", s.handleListCustomResourceDefinitions)
+			r.Get("/crds/{name}", s.handleGetCustomResourceDefinition)
 			r.Get("/export/{namespace}/{kind}/{name}", s.handleExportResource)
 			r.Get("/export/{kind}/{name}", s.handleExportClusterScopedResource)
 			r.Get("/pods/{namespace}/{podName}/logs", s.handleGetPodLogs)
