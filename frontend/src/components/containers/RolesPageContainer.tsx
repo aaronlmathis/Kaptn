@@ -140,8 +140,8 @@ function RolesContent() {
 			/>
 
 			{/* Tabbed Content */}
-			<div className="px-4 lg:px-6">
-				<Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+			<Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+				<div className="px-4 lg:px-6">
 					<TabsList className="grid w-full grid-cols-2">
 						<TabsTrigger value="roles" className="flex items-center gap-2">
 							<IconShield className="size-4" />
@@ -162,16 +162,16 @@ function RolesContent() {
 							)}
 						</TabsTrigger>
 					</TabsList>
+				</div>
 
-					<TabsContent value="roles" className="space-y-0">
-						<RolesDataTable />
-					</TabsContent>
+				<TabsContent value="roles" className="space-y-0">
+					<RolesDataTable />
+				</TabsContent>
 
-					<TabsContent value="rolebindings" className="space-y-0">
-						<RoleBindingsDataTable />
-					</TabsContent>
-				</Tabs>
-			</div>
+				<TabsContent value="rolebindings" className="space-y-0">
+					<RoleBindingsDataTable />
+				</TabsContent>
+			</Tabs>
 		</div>
 	)
 }
