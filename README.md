@@ -51,17 +51,17 @@ Manage/Add/Edit secrets securely (RBAC Enforced access) with the secrets page.
 **API Settings**
 
 
-![Resource Page - Services](images/api_settings.gif_)
+![Resource Page - Services](images/api_settings.gif)
 
 **Cluster Settings**
 
 
-![Resource Page - Services](images/cluster_settings.gif_)
+![Resource Page - Services](images/cluster_settings.gif)
 
 **User Settings**
 
 
-![Resource Page - Services](images/user_settings.gif_)
+![Resource Page - Services](images/user_settings.gif)
 ## Quick Start
 
 There are two ways to provide kaptn with access to your cluster. Either by KUBECONFIG (path added to config.yaml) or `incluster` mode. If deployed either way, you must have the proper cluster admin privileges, whether through KUBECONFIG or through a service account created/used when deploying Kaptn.
