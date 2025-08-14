@@ -14,6 +14,13 @@ Kaptn intends to be a secure, production-ready **Kubernetes admin dashboard** th
 - **Observability** - Integration with prometheus, grafana, and opentelemetry tracing
 - **Istio Service Mesh** - Full support for Istio Service Mesh - VirtualService and Gateways
 
+🚧 Under Development 🚧
+Please Note: Kaptn is currently under active development and should be considered pre-alpha software.
+
+Features may be incomplete, and you may encounter bugs or breaking changes. It is not recommended for use in production environments at this time. We appreciate your understanding and welcome any feedback as we work towards a stable release!
+
+---
+
 **Current Dashboard**
 
 Features live updates via kubernetes informer + websockets.
@@ -62,6 +69,10 @@ Manage/Add/Edit secrets securely (RBAC Enforced access) with the secrets page.
 
 
 ![Resource Page - Services](images/user_settings.gif)
+
+---
+
+
 ## Quick Start
 
 There are two ways to provide kaptn with access to your cluster. Either by KUBECONFIG (path added to config.yaml) or `incluster` mode. If deployed either way, you must have the proper cluster admin privileges, whether through KUBECONFIG or through a service account created/used when deploying Kaptn.
