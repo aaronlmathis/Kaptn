@@ -415,6 +415,18 @@ func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
 	// Get RBAC information
 	rbacInfo := s.getRBACInfo(r.Context(), username, user.Groups)
 
+	// Extract effective groups from RBAC info if available
+	effectiveGroups := user.Groups
+	if rbacInfo["user_bindings"] != nil {
+		if bindingMap, ok := rbacInfo["user_bindings"].(map[string]interface{}); ok {
+			if found, exists := bindingMap["found"].(bool); exists && found {
+				if groups, exists := bindingMap["groups"].([]string); exists {
+					effectiveGroups = groups
+				}
+			}
+		}
+	}
+
 	// Get SelfSubjectRulesReview info (whoami equivalent) to show effective Kubernetes identity
 	whoamiInfo := map[string]interface{}{
 		"error": "No impersonated clients available",
@@ -467,7 +479,7 @@ func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
 			"name":    user.Name,
 			"picture": user.Picture,
 		},
-		"groups":              user.Groups,
+		"groups":              effectiveGroups, // Use effective groups from ConfigMap if available
 		"kubernetes_identity": whoamiInfo,
 		"rbac":                rbacInfo,
 		"extra": map[string]interface{}{
@@ -482,6 +494,7 @@ func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
 			"user_sub_field":            user.Sub, // Show the raw Sub field for debugging
 			"user_id_field":             user.ID,  // Show the raw ID field for debugging
 			"has_impersonated_clients":  s.HasImpersonatedClients(r),
+			"original_groups":           user.Groups, // Show original groups from OIDC for comparison
 		},
 	}
 
@@ -502,6 +515,9 @@ func (s *Server) getRBACInfo(ctx context.Context, username string, groups []stri
 		},
 	}
 
+	// Groups to use for analysis - start with the passed-in groups
+	effectiveGroups := groups
+
 	// Check user bindings if auth middleware is available and has an authz resolver
 	if s.authMiddleware != nil {
 		if binding, err := s.getAuthzBinding(ctx, username); err == nil {
@@ -516,12 +532,21 @@ func (s *Server) getRBACInfo(ctx context.Context, username string, groups []stri
 			hasher.Write([]byte(username))
 			hashKey := hex.EncodeToString(hasher.Sum(nil))
 			rbacInfo["user_bindings"].(map[string]interface{})["hash_key"] = hashKey
+
+			// Use the groups from the ConfigMap binding instead of the passed-in groups
+			effectiveGroups = binding.Groups
 		} else {
 			rbacInfo["user_bindings"] = map[string]interface{}{
 				"found":      false,
 				"lookup_key": username,
 				"error":      err.Error(),
 			}
+
+			// Add hash key information for debugging even when lookup fails
+			hasher := sha256.New()
+			hasher.Write([]byte(username))
+			hashKey := hex.EncodeToString(hasher.Sum(nil))
+			rbacInfo["user_bindings"].(map[string]interface{})["hash_key"] = hashKey
 		}
 	}
 
@@ -569,10 +594,10 @@ func (s *Server) getRBACInfo(ctx context.Context, username string, groups []stri
 		}
 	}
 
-	// Add group analysis
+	// Add group analysis using the effective groups (from ConfigMap if available, otherwise from user)
 	adminGroups := []string{"kaptn-admins", "cluster-admins"}
 	userAdminGroups := []string{}
-	for _, group := range groups {
+	for _, group := range effectiveGroups {
 		for _, adminGroup := range adminGroups {
 			if group == adminGroup {
 				userAdminGroups = append(userAdminGroups, group)
@@ -581,6 +606,7 @@ func (s *Server) getRBACInfo(ctx context.Context, username string, groups []stri
 	}
 	rbacInfo["summary"].(map[string]interface{})["user_admin_groups"] = userAdminGroups
 	rbacInfo["summary"].(map[string]interface{})["is_admin"] = len(userAdminGroups) > 0
+	rbacInfo["summary"].(map[string]interface{})["effective_groups"] = effectiveGroups
 
 	return rbacInfo
 }
