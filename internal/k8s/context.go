@@ -68,6 +68,29 @@ func (im *ImpersonationManager) BuildClientsFromUser(user *auth.User, usernameFo
 	return clients, nil
 }
 
+// BuildClientsFromUserWithGroups creates impersonated clients from authenticated user with specific groups
+func (im *ImpersonationManager) BuildClientsFromUserWithGroups(user *auth.User, usernameFormat string, groups []string) (*ImpersonatedClients, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is required")
+	}
+
+	// Format username for impersonation
+	username := im.formatUsername(user, usernameFormat)
+
+	// Build impersonated clients with the provided groups
+	clients, err := im.factory.BuildImpersonatedClients(username, groups)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build impersonated clients for user %s: %w", username, err)
+	}
+
+	im.logger.Debug("Built impersonated clients from user with custom groups",
+		zap.String("username", username),
+		zap.String("userEmail", user.Email),
+		zap.Strings("groups", groups))
+
+	return clients, nil
+}
+
 // formatUsername applies the configured username format
 func (im *ImpersonationManager) formatUsername(user *auth.User, format string) string {
 	if format == "" {

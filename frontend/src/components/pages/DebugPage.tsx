@@ -288,8 +288,7 @@ export function DebugPage() {
 													return (
 														<Badge
 															key={index}
-															variant={isAdminGroup ? "default" : "secondary"}
-															className={isAdminGroup ? "bg-red-600 hover:bg-red-700" : ""}
+															variant={isAdminGroup ? "destructive" : "secondary"}
 														>
 															{group}
 															{isAdminGroup && " (Admin)"}
@@ -465,8 +464,8 @@ export function DebugPage() {
 												<div
 													key={index}
 													className={`flex items-center justify-between p-3 rounded-lg border ${permission.allowed
-															? 'bg-green-50 border-green-200'
-															: 'bg-red-50 border-red-200'
+														? 'bg-green-50 border-green-200'
+														: 'bg-red-50 border-red-200'
 														}`}
 												>
 													<div className="flex items-center space-x-3">

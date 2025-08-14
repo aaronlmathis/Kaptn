@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: demo-config
-  namespace: default
-data:
-  greeting: "Hello from Kaptn!"
-  timestamp: "2025-08-07T00:00:00Z"

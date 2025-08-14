@@ -221,22 +221,12 @@ func generatePermissionsSummary(permissions *NamespacePermissions) PermissionsSu
 
 	// Check if user appears to be a cluster admin based on permissions
 	// If they can create/delete namespaces or manage cluster roles, they're likely a cluster admin
-	summary.IsClusterAdmin = contains(permissions.ClusterPermissions.Namespaces, "create") ||
-		contains(permissions.ClusterPermissions.Namespaces, "delete") ||
-		contains(permissions.ClusterPermissions.ClusterRoles, "create") ||
-		contains(permissions.ClusterPermissions.ClusterRoleBindings, "create")
+	summary.IsClusterAdmin = containsString(permissions.ClusterPermissions.Namespaces, "create") ||
+		containsString(permissions.ClusterPermissions.Namespaces, "delete") ||
+		containsString(permissions.ClusterPermissions.ClusterRoles, "create") ||
+		containsString(permissions.ClusterPermissions.ClusterRoleBindings, "create")
 
 	return summary
-}
-
-// contains checks if a slice contains a string
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 // FilterResourcesByPermissions filters API responses based on user permissions

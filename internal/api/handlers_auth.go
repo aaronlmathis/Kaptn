@@ -413,7 +413,7 @@ func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get RBAC information
-	rbacInfo := s.getRBACInfo(r.Context(), username, user.Groups)
+	rbacInfo := s.getRBACInfo(r.Context(), r, username, user.Groups)
 
 	// Extract effective groups from RBAC info if available
 	effectiveGroups := user.Groups
@@ -427,11 +427,12 @@ func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get SelfSubjectRulesReview info (whoami equivalent) to show effective Kubernetes identity
+	// Get SelfSubjectReview info (whoami equivalent) to show effective Kubernetes identity
 	whoamiInfo := map[string]interface{}{
 		"error": "No impersonated clients available",
 	}
 
+	// Use impersonated clients to get the actual Kubernetes identity
 	if s.HasImpersonatedClients(r) {
 		if clients, err := s.GetImpersonatedClients(r); err == nil && clients != nil {
 			// Get the effective Kubernetes identity from the impersonation config
@@ -446,6 +447,7 @@ func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
 					"impersonated_username": config.Impersonate.UserName,
 					"impersonated_groups":   config.Impersonate.Groups,
 					"impersonated_extra":    config.Impersonate.Extra,
+					"note":                  "This shows your effective Kubernetes identity via impersonated SelfSubjectReview",
 				}
 			} else {
 				// Extract user info from the response
@@ -458,7 +460,7 @@ func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
 					"impersonated_username": config.Impersonate.UserName,
 					"impersonated_groups":   config.Impersonate.Groups,
 					"impersonated_extra":    config.Impersonate.Extra,
-					"note":                  "This shows your effective Kubernetes identity via SelfSubjectReview",
+					"note":                  "This shows your effective Kubernetes identity via impersonated SelfSubjectReview",
 				}
 			}
 		}
@@ -503,7 +505,7 @@ func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // getRBACInfo provides comprehensive RBAC information for the user
-func (s *Server) getRBACInfo(ctx context.Context, username string, groups []string) map[string]interface{} {
+func (s *Server) getRBACInfo(ctx context.Context, r *http.Request, username string, groups []string) map[string]interface{} {
 	rbacInfo := map[string]interface{}{
 		"user_bindings":         nil,
 		"effective_permissions": []map[string]interface{}{},
@@ -552,46 +554,96 @@ func (s *Server) getRBACInfo(ctx context.Context, username string, groups []stri
 
 	// Check namespace permissions if kubeClient is available
 	if s.kubeClient != nil {
-		// Convert interface to concrete clientset type
-		if clientset, ok := s.kubeClient.(*kubernetes.Clientset); ok {
-			permissions, err := GetUserNamespacePermissions(ctx, clientset, username)
-			if err == nil {
-				// Convert to the format expected by frontend
-				var effectivePerms []map[string]interface{}
-				totalPerms := 0
-				allowedPerms := 0
+		// For permissions checking, we MUST use the impersonated Kubernetes username
+		// because that's the actual user whose permissions we want to see
+		permissionsUser := ""
 
-				for namespace, resourcePerms := range permissions.Permissions {
-					// Count permissions for each resource type
-					for resource, verbs := range map[string][]string{
-						"pods":        resourcePerms.Pods,
-						"deployments": resourcePerms.Deployments,
-						"services":    resourcePerms.Services,
-						"secrets":     resourcePerms.Secrets,
-					} {
-						for _, verb := range verbs {
-							effectivePerms = append(effectivePerms, map[string]interface{}{
-								"namespace": namespace,
-								"resource":  resource,
-								"verb":      verb,
-								"allowed":   true,
-							})
-							totalPerms++
-							allowedPerms++
+		if s.HasImpersonatedClients(r) {
+			if clients, err := s.GetImpersonatedClients(r); err == nil && clients != nil {
+				config := clients.RESTConfig()
+				if config.Impersonate.UserName != "" {
+					permissionsUser = config.Impersonate.UserName
+					// Use the impersonated client for permission checks, not the regular client
+					if impersonatedClientset, ok := clients.Client().(*kubernetes.Clientset); ok {
+						permissions, err := GetUserNamespacePermissions(ctx, impersonatedClientset, permissionsUser)
+						if err == nil {
+							// Convert to the format expected by frontend
+							var effectivePerms []map[string]interface{}
+							totalPerms := 0
+							allowedPerms := 0
+
+							// Add cluster permissions to the display
+							if permissions.ClusterPermissions.Nodes != nil || permissions.ClusterPermissions.Namespaces != nil {
+								for resource, verbs := range map[string][]string{
+									"nodes":                     permissions.ClusterPermissions.Nodes,
+									"namespaces":                permissions.ClusterPermissions.Namespaces,
+									"clusterroles":              permissions.ClusterPermissions.ClusterRoles,
+									"clusterrolebindings":       permissions.ClusterPermissions.ClusterRoleBindings,
+									"persistentvolumes":         permissions.ClusterPermissions.PersistentVolumes,
+									"storageclasses":            permissions.ClusterPermissions.StorageClasses,
+									"customresourcedefinitions": permissions.ClusterPermissions.CustomResourceDefs,
+								} {
+									for _, verb := range verbs {
+										effectivePerms = append(effectivePerms, map[string]interface{}{
+											"namespace": "cluster-scoped",
+											"resource":  resource,
+											"verb":      verb,
+											"allowed":   true,
+										})
+										totalPerms++
+										allowedPerms++
+									}
+								}
+							}
+
+							// Add namespace permissions
+							for namespace, resourcePerms := range permissions.Permissions {
+								// Count permissions for each resource type
+								for resource, verbs := range map[string][]string{
+									"pods":        resourcePerms.Pods,
+									"deployments": resourcePerms.Deployments,
+									"services":    resourcePerms.Services,
+									"secrets":     resourcePerms.Secrets,
+								} {
+									for _, verb := range verbs {
+										effectivePerms = append(effectivePerms, map[string]interface{}{
+											"namespace": namespace,
+											"resource":  resource,
+											"verb":      verb,
+											"allowed":   true,
+										})
+										totalPerms++
+										allowedPerms++
+									}
+								}
+							}
+
+							rbacInfo["effective_permissions"] = effectivePerms
+							rbacInfo["cluster_permissions"] = permissions.ClusterPermissions
+							rbacInfo["permissions_summary"] = permissions.Summary
+							rbacInfo["summary"].(map[string]interface{})["total_permissions"] = totalPerms
+							rbacInfo["summary"].(map[string]interface{})["allowed_permissions"] = allowedPerms
+							rbacInfo["summary"].(map[string]interface{})["denied_permissions"] = 0 // We only track allowed perms for now
+							rbacInfo["permissions_user"] = permissionsUser                         // Show which user was used for permission checks
+						} else {
+							rbacInfo["permissions_error"] = err.Error()
+							rbacInfo["permissions_user"] = permissionsUser // Show which user was attempted
 						}
+					} else {
+						rbacInfo["permissions_error"] = "Impersonated client is not a Clientset type"
+						rbacInfo["permissions_user"] = permissionsUser
 					}
+				} else {
+					rbacInfo["permissions_error"] = "No impersonated username configured"
 				}
-
-				rbacInfo["effective_permissions"] = effectivePerms
-				rbacInfo["summary"].(map[string]interface{})["total_permissions"] = totalPerms
-				rbacInfo["summary"].(map[string]interface{})["allowed_permissions"] = allowedPerms
-				rbacInfo["summary"].(map[string]interface{})["denied_permissions"] = 0 // We only track allowed perms for now
 			} else {
-				rbacInfo["permissions_error"] = err.Error()
+				rbacInfo["permissions_error"] = fmt.Sprintf("Failed to get impersonated clients: %v", err)
 			}
 		} else {
-			rbacInfo["permissions_error"] = "Kubernetes client is not a Clientset type"
+			rbacInfo["permissions_error"] = "No impersonated clients available - cannot check Kubernetes user permissions"
 		}
+	} else {
+		rbacInfo["permissions_error"] = "Kubernetes client not available"
 	}
 
 	// Add group analysis using the effective groups (from ConfigMap if available, otherwise from user)

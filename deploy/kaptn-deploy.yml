@@ -62,7 +62,7 @@ spec:
       labels:
         app: kaptn
     spec:
-      serviceAccountName: kaptn-sa
+      serviceAccountName: kaptn-backend
       terminationGracePeriodSeconds: 10 
       containers:
       - name: kaptn

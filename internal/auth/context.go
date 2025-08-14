@@ -57,7 +57,7 @@ func (u *User) HasRole(role string) bool {
 
 // IsAdmin checks if the user has admin privileges
 func (u *User) IsAdmin() bool {
-	return u.HasRole("admin") || u.HasRole("cluster-admin") || u.HasRole("kad-admin")
+	return u.HasRole("admin") || u.HasRole("cluster-admin") || u.HasRole("cluster-admins") || u.HasRole("cluster-admins-group") || u.HasRole("kad-admin") || u.HasRole("kaptn-admins") || u.HasRole("kaptn-admins-group")
 }
 
 // CanWrite checks if the user can perform write operations

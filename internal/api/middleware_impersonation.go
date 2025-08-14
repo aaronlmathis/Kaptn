@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/aaronlmathis/kaptn/internal/k8s"
@@ -19,13 +20,39 @@ func (s *Server) ImpersonationMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Build impersonated clients for the authenticated user
-		clients, err := s.impersonationMgr.BuildClientsFromUser(user, s.config.Security.UsernameFormat)
+		// Get the formatted username for authorization lookup
+		username := user.ID
+		if s.config.Security.UsernameFormat != "" {
+			format := s.config.Security.UsernameFormat
+			username = strings.ReplaceAll(format, "{sub}", user.Sub)
+			username = strings.ReplaceAll(username, "{email}", user.Email)
+			username = strings.ReplaceAll(username, "{name}", user.Name)
+		}
+
+		// Try to get resolved groups from auth middleware (ConfigMap)
+		effectiveGroups := user.Groups // fallback to original groups
+		if s.authMiddleware != nil {
+			if binding, err := s.authMiddleware.GetUserBinding(r.Context(), username); err == nil {
+				effectiveGroups = binding.Groups
+				s.logger.Debug("Using resolved groups from ConfigMap for impersonation",
+					zap.String("username", username),
+					zap.Strings("original_groups", user.Groups),
+					zap.Strings("resolved_groups", effectiveGroups))
+			} else {
+				s.logger.Debug("Could not resolve groups from ConfigMap, using original groups",
+					zap.String("username", username),
+					zap.Error(err))
+			}
+		}
+
+		// Build impersonated clients with the correct groups
+		clients, err := s.impersonationMgr.BuildClientsFromUserWithGroups(user, s.config.Security.UsernameFormat, effectiveGroups)
 		if err != nil {
 			s.logger.Error("Failed to build impersonated clients",
 				zap.Error(err),
 				zap.String("userEmail", user.Email),
-				zap.String("userSub", user.Sub))
+				zap.String("userSub", user.Sub),
+				zap.Strings("effective_groups", effectiveGroups))
 			// Continue without impersonated clients rather than failing
 			next.ServeHTTP(w, r)
 			return
@@ -36,7 +63,8 @@ func (s *Server) ImpersonationMiddleware(next http.Handler) http.Handler {
 
 		s.logger.Debug("Added impersonated clients to request context",
 			zap.String("userEmail", user.Email),
-			zap.Strings("groups", user.Groups))
+			zap.String("username", username),
+			zap.Strings("effective_groups", effectiveGroups))
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

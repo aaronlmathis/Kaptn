@@ -8,35 +8,53 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: kaptn-sa
+  name: kaptn-backend
   namespace: kaptn
 ---
 # 3. ClusterRole (full admin access)
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-backend-impersonator
+rules:
+  # Impersonation permissions (required for OIDC)
+  - apiGroups: [""]
+    resources: ["users", "groups", "serviceaccounts"]
+    verbs: ["impersonate"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["userextras/*"]
+    verbs: ["impersonate"]
+  # Full cluster access for the backend itself
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kaptn-sa-cluster-admin
+  name: kaptn-backend-impersonator-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-backend-impersonator
+subjects:
+  - kind: ServiceAccount
+    name: kaptn-backend
+    namespace: kaptn
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-backend-cluster-admin
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-admin
 subjects:
   - kind: ServiceAccount
-    name: kaptn-sa
-    namespace: kaptn
----
-# 4. ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kaptn-read-cluster-binding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kaptn-read-cluster
-subjects:
-  - kind: ServiceAccount
-    name: kaptn-sa
+    name: kaptn-backend
     namespace: kaptn
 ---
 # 5. ConfigMap (full working config.yaml)
@@ -50,17 +68,31 @@ data:
     server:
       addr: "0.0.0.0:8080"
       base_path: "/"
+      cookie_secret: "kaptn-development-secret-key-32-chars-minimum"
       cors:
         allow_origins: ["*"]
         allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 
     security:
-      auth_mode: "none"
+      auth_mode: "oidc"
+      username_format: "email:{email}"
       oidc:
-        issuer: ""
-        client_id: ""
-        audience: ""
-        jwks_url: ""
+        issuer: "https://accounts.google.com"
+        client_id: "${GOOGLE_CLIENT_ID}"
+        client_secret: "${GOOGLE_CLIENT_SECRET}"
+        redirect_url: "${GOOGLE_REDIRECT_URI}"
+        audience: "${GOOGLE_CLIENT_ID}"
+        jwks_url: "https://www.googleapis.com/oauth2/v3/certs"
+        scopes: ["openid", "profile", "email"]
+
+    authz:
+      mode: "user_bindings"
+
+    bindings:
+      source: "configmap"
+      configmap:
+        namespace: "kaptn"
+        name: "kaptn-user-bindings"
 
     kubernetes:
       mode: "incluster"
@@ -114,7 +146,7 @@ spec:
       labels:
         app: kaptn
     spec:
-      serviceAccountName: kaptn-sa
+      serviceAccountName: kaptn-backend
       terminationGracePeriodSeconds: 10
       containers:
       - name: kaptn

@@ -1,0 +1,365 @@
+# ============================================================================
+# KAPTN COMPLETE DEPLOYMENT - EVERYTHING NEEDED FOR FRESH START
+# ============================================================================
+# This file contains all resources needed to deploy Kaptn with OIDC + RBAC
+# Apply with: kubectl apply -f kaptn-complete-deployment.yaml
+
+# ============================================================================
+# 1. NAMESPACE
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kaptn
+
+---
+# ============================================================================
+# 2. SERVICE ACCOUNT FOR KAPTN BACKEND
+# ============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kaptn-backend
+  namespace: kaptn
+
+---
+# ============================================================================
+# 3. CLUSTER ROLE - KAPTN BACKEND (IMPERSONATION + FULL ACCESS)
+# ============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-backend-impersonator
+rules:
+  # Impersonation permissions (required for OIDC)
+  - apiGroups: [""]
+    resources: ["users", "groups", "serviceaccounts"]
+    verbs: ["impersonate"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["userextras/*"]
+    verbs: ["impersonate"]
+  # Full cluster access for the backend itself
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+  - nonResourceURLs: ["*"]
+    verbs: ["*"]
+
+---
+# ============================================================================
+# 4. CLUSTER ROLE BINDING - KAPTN BACKEND
+# ============================================================================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-backend-impersonator-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-backend-impersonator
+subjects:
+  - kind: ServiceAccount
+    name: kaptn-backend
+    namespace: kaptn
+
+---
+# ============================================================================
+# 5. CLUSTER ROLES FOR USER GROUPS
+# ============================================================================
+# Super Admin ClusterRole for kaptn-admins-group
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-admins-super-admin-CR
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+- nonResourceURLs: ["*"]
+  verbs: ["*"]
+
+---
+# Super Admin ClusterRole for cluster-admins-group  
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-admins-super-admin-CR
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+- nonResourceURLs: ["*"]
+  verbs: ["*"]
+
+---
+# ============================================================================
+# 6. CLUSTER ROLE BINDINGS FOR USER GROUPS
+# ============================================================================
+# Bind kaptn-admins-group to built-in cluster-admin role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-admins-group-cluster-admin-CRB
+subjects:
+- kind: Group
+  name: kaptn-admins-group
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind cluster-admins-group to built-in cluster-admin role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admins-group-cluster-admin-CRB
+subjects:
+- kind: Group
+  name: cluster-admins-group
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind kaptn-admins-group to custom super admin role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-admins-group-super-admin-CRB
+subjects:
+- kind: Group
+  name: kaptn-admins-group
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: kaptn-admins-super-admin-CR
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind cluster-admins-group to custom super admin role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admins-group-super-admin-CRB
+subjects:
+- kind: Group
+  name: cluster-admins-group
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admins-super-admin-CR
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ============================================================================
+# 7. USER BINDINGS CONFIGMAP
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-user-bindings
+  namespace: kaptn
+data:
+  # Key is SHA256 hash of formatted username: email:aaron.mathis@gmail.com
+  # This approach is commonly used to handle special characters in ConfigMap keys
+  "dd80007678b17f98898eb5e8b5de0a32fbbbc74cdc7c135b8d3e5ad27469eeb9": |
+    {
+      "user_id": "aaron.mathis@gmail.com",
+      "email": "aaron.mathis@gmail.com", 
+      "groups": ["kaptn-admins-group", "cluster-admins-group"],
+      "namespaces": ["default", "kube-system", "monitoring", "istio-system", "kaptn"]
+    }
+
+---
+# ============================================================================
+# 8. KAPTN CONFIGURATION CONFIGMAP
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-config
+  namespace: kaptn
+data:
+  config.yaml: |
+    server:
+      addr: "0.0.0.0:8080"
+      base_path: "/"
+      cookie_secret: "kaptn-development-secret-key-32-chars-minimum"
+      cors:
+        allow_origins: ["*"]
+        allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+
+    security:
+      auth_mode: "oidc"
+      username_format: "email:{email}"
+      oidc:
+        issuer: "https://accounts.google.com"
+        client_id: "${GOOGLE_CLIENT_ID}"
+        client_secret: "${GOOGLE_CLIENT_SECRET}"
+        redirect_url: "${GOOGLE_REDIRECT_URI}"
+        audience: "${GOOGLE_CLIENT_ID}"
+        jwks_url: "https://www.googleapis.com/oauth2/v3/certs"
+        scopes: ["openid", "profile", "email"]
+
+    authz:
+      mode: "user_bindings"
+
+    bindings:
+      source: "configmap"
+      configmap:
+        namespace: "kaptn"
+        name: "kaptn-user-bindings"
+
+    kubernetes:
+      mode: "incluster"
+      kubeconfig_path: ""
+      namespace_default: "default"
+
+    features:
+      enable_apply: true
+      enable_nodes_actions: true
+      enable_overview: true
+      enable_prometheus_analytics: true
+
+    rate_limits:
+      apply_per_minute: 10
+      actions_per_minute: 20
+
+    logging:
+      level: "debug"
+
+    integrations:
+      prometheus:
+        url: "http://monitoring-stack-kube-prometheus-prometheus.monitoring.svc:9090"
+        timeout: "5s"
+        enabled: true
+
+    caching:
+      overview_ttl: "2s"
+      analytics_ttl: "60s"
+
+    jobs:
+      persistence_enabled: true
+      store_path: "./data/jobs"
+      cleanup_interval: "1h"
+      max_age: "24h"
+
+---
+# ============================================================================
+# 9. KAPTN DEPLOYMENT
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kaptn
+  namespace: kaptn
+  labels:
+    app: kaptn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kaptn
+  template:
+    metadata:
+      labels:
+        app: kaptn
+    spec:
+      serviceAccountName: kaptn-backend
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: kaptn
+        image: docker.io/aaronlmathis/kaptn:debug
+        imagePullPolicy: Always
+        args:
+          - "--config=/etc/kaptn/config.yaml"
+        ports:
+          - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 20
+          failureThreshold: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command: ["/server", "--health-check"]
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        volumeMounts:
+          - name: config
+            mountPath: /etc/kaptn
+            readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: kaptn-config
+
+---
+# ============================================================================
+# 10. KAPTN SERVICE
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: kaptn
+  namespace: kaptn
+spec:
+  selector:
+    app: kaptn
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+
+---
+# ============================================================================
+# 11. ISTIO GATEWAY
+# ============================================================================
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: kaptn-gateway
+  namespace: kaptn
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - dev.kaptn.dev
+
+---
+# ============================================================================
+# 12. ISTIO VIRTUAL SERVICE
+# ============================================================================
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: kaptn
+  namespace: kaptn
+spec:
+  hosts:
+    - dev.kaptn.dev
+  gateways:
+    - kaptn-gateway
+  http:
+    - route:
+        - destination:
+            host: kaptn.kaptn.svc.cluster.local
+            port:
+              number: 80
+
+---
+# ============================================================================
+# END OF DEPLOYMENT
+# ============================================================================

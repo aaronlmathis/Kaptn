@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kaptn-user-bindings
+  namespace: kaptn
+data:
+  # Key is SHA256 hash of formatted username: email:aaron.mathis@gmail.com
+  # This approach is commonly used to handle special characters in ConfigMap keys
+  "dd80007678b17f98898eb5e8b5de0a32fbbbc74cdc7c135b8d3e5ad27469eeb9": |
+    {
+      "user_id": "aaron.mathis@gmail.com",
+      "email": "aaron.mathis@gmail.com", 
+      "groups": ["kaptn-admins-group", "cluster-admins-group"],
+      "namespaces": ["default", "kube-system", "monitoring", "istio-system", "kaptn"]
+    }
+---
+# Super Admin ClusterRole for kaptn-admins-group
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-admins-super-admin-CR
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+- nonResourceURLs: ["*"]
+  verbs: ["*"]
+---
+# Super Admin ClusterRole for cluster-admins-group  
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-admins-super-admin-CR
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+- nonResourceURLs: ["*"]
+  verbs: ["*"]
+---
+# Bind kaptn-admins-group to built-in cluster-admin role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-admins-group-cluster-admin-CRB
+subjects:
+- kind: Group
+  name: kaptn-admins-group
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+# Bind cluster-admins-group to built-in cluster-admin role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admins-group-cluster-admin-CRB
+subjects:
+- kind: Group
+  name: cluster-admins-group
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+# Bind kaptn-admins-group to custom super admin role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-admins-group-super-admin-CRB
+subjects:
+- kind: Group
+  name: kaptn-admins-group
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: kaptn-admins-super-admin-CR
+  apiGroup: rbac.authorization.k8s.io
+---
+# Bind cluster-admins-group to custom super admin role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-admins-group-super-admin-CRB
+subjects:
+- kind: Group
+  name: cluster-admins-group
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admins-super-admin-CR
+  apiGroup: rbac.authorization.k8s.io

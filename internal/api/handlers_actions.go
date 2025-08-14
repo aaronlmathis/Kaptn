@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronlmathis/kaptn/internal/k8s"
 	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
 	"github.com/aaronlmathis/kaptn/internal/k8s/resources"
 	"github.com/go-chi/chi/v5"
@@ -163,6 +164,14 @@ func (s *Server) handleApplyYAML(w http.ResponseWriter, r *http.Request) {
 		zap.Bool("dryRun", dryRun),
 		zap.Bool("force", force))
 
+	// Get impersonated clients for this user
+	clients, err := s.GetImpersonatedClients(r)
+	if err != nil {
+		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
+		http.Error(w, "Failed to get user permissions", http.StatusInternalServerError)
+		return
+	}
+
 	// Read YAML content from request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -191,8 +200,16 @@ func (s *Server) handleApplyYAML(w http.ResponseWriter, r *http.Request) {
 		Namespace: namespace,
 	}
 
-	// Apply the YAML
-	result, err := s.applyService.ApplyYAML(r.Context(), requestID, userStr, yamlContent, opts)
+	// Create apply service using impersonated clients
+	impersonatedApplyService := actions.NewApplyService(
+		clients.Client(),
+		clients.DynamicClient(),
+		clients.DiscoveryClient(),
+		s.logger,
+	)
+
+	// Apply the YAML using impersonated clients
+	result, err := impersonatedApplyService.ApplyYAML(r.Context(), requestID, userStr, yamlContent, opts)
 	if err != nil {
 		s.logger.Error("Failed to apply YAML",
 			zap.String("requestId", requestID),
@@ -518,8 +535,27 @@ func (s *Server) handleApplyConfig(w http.ResponseWriter, r *http.Request) {
 		zap.String("namespace", req.Namespace),
 		zap.Int("fileCount", len(req.Files)))
 
-	// Process apply operation
-	response := s.processApplyConfig(r.Context(), requestID, userStr, &req)
+	// Get impersonated clients for this user
+	clients, err := s.GetImpersonatedClients(r)
+	if err != nil {
+		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
+		response := &ApplyConfigResponse{
+			Success: false,
+			Errors: []ValidationError{{
+				Type:     "authentication",
+				Message:  "Failed to get user permissions",
+				Severity: "error",
+			}},
+			Message: "Authentication error",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Process apply operation using impersonated clients
+	response := s.processApplyConfigWithClients(r.Context(), requestID, userStr, &req, clients)
 
 	// Set appropriate status code
 	statusCode := http.StatusOK
@@ -593,7 +629,7 @@ func (s *Server) validateApplyRequest(req *ApplyConfigRequest) []ValidationError
 }
 
 // processApplyConfig processes the apply operation
-func (s *Server) processApplyConfig(ctx context.Context, requestID, user string, req *ApplyConfigRequest) *ApplyConfigResponse {
+func (s *Server) processApplyConfigWithClients(ctx context.Context, requestID, user string, req *ApplyConfigRequest, clients *k8s.ImpersonatedClients) *ApplyConfigResponse {
 	response := &ApplyConfigResponse{
 		Success:   true,
 		Resources: []EnhancedResourceResult{},
@@ -645,8 +681,16 @@ func (s *Server) processApplyConfig(ctx context.Context, requestID, user string,
 			Namespace: req.Namespace,
 		}
 
-		// Apply using existing service
-		result, err := s.applyService.ApplyYAML(ctx, requestID, user, yamlSource.content, opts)
+		// Create apply service using impersonated clients
+		impersonatedApplyService := actions.NewApplyService(
+			clients.Client(),
+			clients.DynamicClient(),
+			clients.DiscoveryClient(),
+			s.logger,
+		)
+
+		// Apply using impersonated service
+		result, err := impersonatedApplyService.ApplyYAML(ctx, requestID, user, yamlSource.content, opts)
 		if err != nil {
 			s.logger.Error("Failed to apply YAML source",
 				zap.String("source", yamlSource.source),
