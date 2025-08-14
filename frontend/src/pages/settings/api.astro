@@ -1,0 +1,10 @@
+---
+import { ApiSettingsContainer } from "@/components/settings/api-settings-container";
+import Layout from "../../layouts/dashboard.astro";
+
+const title = "API Settings";
+---
+
+<Layout title={title}>
+	<ApiSettingsContainer client:load />
+</Layout>

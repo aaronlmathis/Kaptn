@@ -153,9 +153,9 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           url: "#",
           icon: IconSettings,
           items: [
-            { title: "Cluster Settings", url: "/cluster-settings" },
-            { title: "User Management", url: "/user-management" },
-            { title: "API Settings", url: "/api-settings" },
+            { title: "Cluster Settings", url: "/settings/cluster" },
+            { title: "User Management", url: "/settings/users" },
+            { title: "API Settings", url: "/settings/api" },
           ],
         },
       ],

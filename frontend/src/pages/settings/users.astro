@@ -1,0 +1,10 @@
+---
+import { UserSettingsContainer } from "@/components/settings/user-settings-container";
+import Layout from "../../layouts/dashboard.astro";
+
+const title = "User Settings";
+---
+
+<Layout title={title}>
+	<UserSettingsContainer client:load />
+</Layout>

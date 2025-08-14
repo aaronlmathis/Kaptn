@@ -1,0 +1,10 @@
+---
+import { ClusterSettingsContainer } from "@/components/settings/cluster-settings-container";
+import Layout from "../../layouts/dashboard.astro";
+
+const title = "Cluster Settings";
+---
+
+<Layout title={title}>
+	<ClusterSettingsContainer client:load />
+</Layout>
