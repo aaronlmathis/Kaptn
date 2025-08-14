@@ -41,6 +41,8 @@ integrations:
 caching:
   overview_ttl: "2s"
   analytics_ttl: "60s"
+  search_cache_ttl: "30s"
+  search_cache_max_size: 10000
 
 jobs:
   persistence_enabled: true

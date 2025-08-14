@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +13,9 @@ import (
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Authentication handlers
@@ -345,6 +351,247 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 			"username_format":     s.config.Security.UsernameFormat,
 		},
 	})
+}
+
+// handleDebugUser provides detailed debug information about the current user's authentication state
+func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
+	// Get authenticated user (when impersonation isn't set, it's the real login)
+	user, ok := auth.UserFromContext(r.Context())
+	if !ok || user == nil {
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	// Extract additional context from the request
+	authMethod := "unknown"
+	if _, err := r.Cookie("kaptn-session"); err == nil && s.sessionManager != nil {
+		authMethod = "session_cookie"
+	} else if r.Header.Get("Authorization") != "" {
+		authMethod = "bearer_token"
+	} else if s.config.Security.AuthMode == "header" {
+		authMethod = "headers"
+	} else if s.config.Security.AuthMode == "none" {
+		authMethod = "none_dev_mode"
+	}
+
+	// Get request headers for debugging
+	requestHeaders := make(map[string]string)
+	for key, values := range r.Header {
+		if len(values) > 0 {
+			// Only include auth-related headers and sanitize sensitive data
+			switch key {
+			case "Authorization", "X-Forwarded-User", "X-Forwarded-Email", "X-Forwarded-Groups", "X-Remote-User":
+				if key == "Authorization" && len(values[0]) > 10 {
+					requestHeaders[key] = values[0][:10] + "..." // Truncate token for security
+				} else {
+					requestHeaders[key] = values[0]
+				}
+			}
+		}
+	}
+
+	// Get cookies for debugging (sanitized)
+	cookies := make(map[string]string)
+	for _, cookie := range r.Cookies() {
+		switch cookie.Name {
+		case "kaptn-session", "kaptn-access-token", "kaptn-refresh-token":
+			if len(cookie.Value) > 10 {
+				cookies[cookie.Name] = cookie.Value[:10] + "..." // Truncate for security
+			} else {
+				cookies[cookie.Name] = cookie.Value
+			}
+		}
+	}
+
+	// Get username with format applied for RBAC lookup
+	username := user.ID
+	if s.config.Security.UsernameFormat != "" {
+		format := s.config.Security.UsernameFormat
+		username = strings.ReplaceAll(format, "{sub}", user.Sub)
+		username = strings.ReplaceAll(username, "{email}", user.Email)
+		username = strings.ReplaceAll(username, "{name}", user.Name)
+	}
+
+	// Get RBAC information
+	rbacInfo := s.getRBACInfo(r.Context(), username, user.Groups)
+
+	// Get SelfSubjectRulesReview info (whoami equivalent) to show effective Kubernetes identity
+	whoamiInfo := map[string]interface{}{
+		"error": "No impersonated clients available",
+	}
+
+	if s.HasImpersonatedClients(r) {
+		if clients, err := s.GetImpersonatedClients(r); err == nil && clients != nil {
+			// Get the effective Kubernetes identity from the impersonation config
+			config := clients.RESTConfig()
+
+			// Perform SelfSubjectReview to get the effective user identity (whoami)
+			whoami, err := clients.Client().AuthenticationV1().SelfSubjectReviews().Create(r.Context(), &authenticationv1.SelfSubjectReview{}, metav1.CreateOptions{})
+
+			if err != nil {
+				whoamiInfo = map[string]interface{}{
+					"error":                 fmt.Sprintf("SelfSubjectReview failed: %v", err),
+					"impersonated_username": config.Impersonate.UserName,
+					"impersonated_groups":   config.Impersonate.Groups,
+					"impersonated_extra":    config.Impersonate.Extra,
+				}
+			} else {
+				// Extract user info from the response
+				userInfo := whoami.Status.UserInfo
+				whoamiInfo = map[string]interface{}{
+					"effective_username":    userInfo.Username,
+					"effective_uid":         userInfo.UID,
+					"effective_groups":      userInfo.Groups,
+					"effective_extra":       userInfo.Extra,
+					"impersonated_username": config.Impersonate.UserName,
+					"impersonated_groups":   config.Impersonate.Groups,
+					"impersonated_extra":    config.Impersonate.Extra,
+					"note":                  "This shows your effective Kubernetes identity via SelfSubjectReview",
+				}
+			}
+		}
+	}
+
+	// Build the response with comprehensive debug info
+	// Use ID as sub if Sub is empty (fallback for older tokens)
+	subValue := user.Sub
+	if subValue == "" {
+		subValue = user.ID
+	}
+
+	response := map[string]interface{}{
+		"user": map[string]interface{}{
+			"sub":     subValue,
+			"id":      user.ID,
+			"email":   user.Email,
+			"name":    user.Name,
+			"picture": user.Picture,
+		},
+		"groups":              user.Groups,
+		"kubernetes_identity": whoamiInfo,
+		"rbac":                rbacInfo,
+		"extra": map[string]interface{}{
+			"auth_mode":                 s.config.Security.AuthMode,
+			"auth_method":               authMethod,
+			"username_format":           s.config.Security.UsernameFormat,
+			"authz_mode":                s.config.Authz.Mode,
+			"bindings_source":           s.config.Bindings.Source,
+			"request_headers":           requestHeaders,
+			"cookies":                   cookies,
+			"session_manager_available": s.sessionManager != nil,
+			"user_sub_field":            user.Sub, // Show the raw Sub field for debugging
+			"user_id_field":             user.ID,  // Show the raw ID field for debugging
+			"has_impersonated_clients":  s.HasImpersonatedClients(r),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// getRBACInfo provides comprehensive RBAC information for the user
+func (s *Server) getRBACInfo(ctx context.Context, username string, groups []string) map[string]interface{} {
+	rbacInfo := map[string]interface{}{
+		"user_bindings":         nil,
+		"effective_permissions": []map[string]interface{}{},
+		"summary": map[string]interface{}{
+			"total_permissions":   0,
+			"allowed_permissions": 0,
+			"denied_permissions":  0,
+			"admin_groups":        []string{"kaptn-admins", "cluster-admins"},
+		},
+	}
+
+	// Check user bindings if auth middleware is available and has an authz resolver
+	if s.authMiddleware != nil {
+		if binding, err := s.getAuthzBinding(ctx, username); err == nil {
+			rbacInfo["user_bindings"] = map[string]interface{}{
+				"found":      true,
+				"lookup_key": username,
+				"groups":     binding.Groups,
+			}
+
+			// Add hash key information for debugging
+			hasher := sha256.New()
+			hasher.Write([]byte(username))
+			hashKey := hex.EncodeToString(hasher.Sum(nil))
+			rbacInfo["user_bindings"].(map[string]interface{})["hash_key"] = hashKey
+		} else {
+			rbacInfo["user_bindings"] = map[string]interface{}{
+				"found":      false,
+				"lookup_key": username,
+				"error":      err.Error(),
+			}
+		}
+	}
+
+	// Check namespace permissions if kubeClient is available
+	if s.kubeClient != nil {
+		// Convert interface to concrete clientset type
+		if clientset, ok := s.kubeClient.(*kubernetes.Clientset); ok {
+			permissions, err := GetUserNamespacePermissions(ctx, clientset, username)
+			if err == nil {
+				// Convert to the format expected by frontend
+				var effectivePerms []map[string]interface{}
+				totalPerms := 0
+				allowedPerms := 0
+
+				for namespace, resourcePerms := range permissions.Permissions {
+					// Count permissions for each resource type
+					for resource, verbs := range map[string][]string{
+						"pods":        resourcePerms.Pods,
+						"deployments": resourcePerms.Deployments,
+						"services":    resourcePerms.Services,
+						"secrets":     resourcePerms.Secrets,
+					} {
+						for _, verb := range verbs {
+							effectivePerms = append(effectivePerms, map[string]interface{}{
+								"namespace": namespace,
+								"resource":  resource,
+								"verb":      verb,
+								"allowed":   true,
+							})
+							totalPerms++
+							allowedPerms++
+						}
+					}
+				}
+
+				rbacInfo["effective_permissions"] = effectivePerms
+				rbacInfo["summary"].(map[string]interface{})["total_permissions"] = totalPerms
+				rbacInfo["summary"].(map[string]interface{})["allowed_permissions"] = allowedPerms
+				rbacInfo["summary"].(map[string]interface{})["denied_permissions"] = 0 // We only track allowed perms for now
+			} else {
+				rbacInfo["permissions_error"] = err.Error()
+			}
+		} else {
+			rbacInfo["permissions_error"] = "Kubernetes client is not a Clientset type"
+		}
+	}
+
+	// Add group analysis
+	adminGroups := []string{"kaptn-admins", "cluster-admins"}
+	userAdminGroups := []string{}
+	for _, group := range groups {
+		for _, adminGroup := range adminGroups {
+			if group == adminGroup {
+				userAdminGroups = append(userAdminGroups, group)
+			}
+		}
+	}
+	rbacInfo["summary"].(map[string]interface{})["user_admin_groups"] = userAdminGroups
+	rbacInfo["summary"].(map[string]interface{})["is_admin"] = len(userAdminGroups) > 0
+
+	return rbacInfo
+}
+
+// getAuthzBinding is a helper method to access user bindings through the auth middleware
+func (s *Server) getAuthzBinding(ctx context.Context, username string) (*auth.UserBinding, error) {
+	if s.authMiddleware == nil {
+		return nil, fmt.Errorf("auth middleware not available")
+	}
+
+	return s.authMiddleware.GetUserBinding(ctx, username)
 }
 
 // handleAuthzPreview provides a preview of effective authorization for the current user

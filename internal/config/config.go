@@ -131,9 +131,11 @@ type PrometheusConfig struct {
 
 // CachingConfig represents caching configuration
 type CachingConfig struct {
-	OverviewTTL  string `yaml:"overview_ttl"`
-	AnalyticsTTL string `yaml:"analytics_ttl"`
-	SummaryTTL   string `yaml:"summary_ttl"`
+	OverviewTTL    string `yaml:"overview_ttl"`
+	AnalyticsTTL   string `yaml:"analytics_ttl"`
+	SummaryTTL     string `yaml:"summary_ttl"`
+	SearchCacheTTL string `yaml:"search_cache_ttl"`
+	SearchMaxSize  int    `yaml:"search_cache_max_size"`
 }
 
 // JobsConfig represents job management configuration
@@ -225,9 +227,11 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			},
 		},
 		Caching: CachingConfig{
-			OverviewTTL:  getEnv("KAD_OVERVIEW_TTL", "2s"),
-			AnalyticsTTL: getEnv("KAD_ANALYTICS_TTL", "60s"),
-			SummaryTTL:   getEnv("KAD_SUMMARY_TTL", "30s"),
+			OverviewTTL:    getEnv("KAD_OVERVIEW_TTL", "2s"),
+			AnalyticsTTL:   getEnv("KAD_ANALYTICS_TTL", "60s"),
+			SummaryTTL:     getEnv("KAD_SUMMARY_TTL", "30s"),
+			SearchCacheTTL: getEnv("KAD_SEARCH_CACHE_TTL", "30s"),
+			SearchMaxSize:  getEnvInt("KAD_SEARCH_MAX_SIZE", 10000),
 		},
 		Jobs: JobsConfig{
 			PersistenceEnabled: getEnvBool("KAD_JOBS_PERSISTENCE_ENABLED", true),

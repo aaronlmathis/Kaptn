@@ -1,9 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { 
-	IconApi, 
-	IconKey, 
+import {
+	IconApi,
+	IconKey,
 	IconShield,
 	IconSettings,
 	IconEdit,
@@ -426,7 +426,7 @@ export function ApiSettingsContainer() {
 										Generate API Key
 									</Button>
 								</div>
-								
+
 								<Table>
 									<TableHeader>
 										<TableRow>
@@ -553,8 +553,8 @@ export function ApiSettingsContainer() {
 														variant={endpoint.method === "GET" ? "secondary" : "default"}
 														className={
 															endpoint.method === "GET" ? "text-blue-600 border-blue-600" :
-															endpoint.method === "POST" ? "text-green-600 border-green-600" :
-															"text-orange-600 border-orange-600"
+																endpoint.method === "POST" ? "text-green-600 border-green-600" :
+																	"text-orange-600 border-orange-600"
 														}
 													>
 														{endpoint.method}

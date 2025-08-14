@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -59,12 +61,26 @@ func (s *ConfigMapBindingStore) GetUserBinding(ctx context.Context, key string) 
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
+	// First try direct lookup
 	binding, exists := s.bindings[key]
-	if !exists {
-		return nil, fmt.Errorf("user binding not found for key: %s", key)
+	if exists {
+		return binding, nil
 	}
 
-	return binding, nil
+	// If direct lookup fails, try SHA256 hash of the key (for email addresses with special characters)
+	hasher := sha256.New()
+	hasher.Write([]byte(key))
+	hashKey := hex.EncodeToString(hasher.Sum(nil))
+
+	binding, exists = s.bindings[hashKey]
+	if exists {
+		s.logger.Debug("Found user binding using SHA256 hash lookup",
+			zap.String("original_key", key),
+			zap.String("hash_key", hashKey))
+		return binding, nil
+	}
+
+	return nil, fmt.Errorf("user binding not found for key: %s (also tried hash: %s)", key, hashKey)
 }
 
 // Close implements BindingStore interface

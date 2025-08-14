@@ -9,6 +9,7 @@ import (
 
 	"github.com/aaronlmathis/kaptn/internal/analytics"
 	"github.com/aaronlmathis/kaptn/internal/auth"
+	"github.com/aaronlmathis/kaptn/internal/cache"
 	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/k8s"
 	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
@@ -50,6 +51,8 @@ type Server struct {
 	resourceManager  *resources.ResourceManager
 	analyticsService *analytics.AnalyticsService
 	summaryService   *summaries.SummaryService
+	resourceCache    *cache.ResourceCache
+	searchService    *cache.SearchService
 	authMiddleware   *auth.Middleware
 	oidcClient       *auth.OIDCClient
 	sessionManager   *auth.SessionManager
@@ -417,6 +420,60 @@ func (s *Server) initAnalytics() error {
 	// Initialize analytics service
 	s.analyticsService = analytics.NewAnalyticsService(s.logger, prometheusClient, cacheTTL)
 
+	// Initialize resource cache
+	if err := s.initResourceCache(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Server) initResourceCache() error {
+	s.logger.Info("Initializing resource cache")
+
+	// Parse search cache refresh interval with fallback
+	refreshTTLStr := s.config.Caching.SearchCacheTTL
+	if refreshTTLStr == "" {
+		refreshTTLStr = "30s"
+	}
+
+	refreshInterval, err := time.ParseDuration(refreshTTLStr)
+	if err != nil {
+		s.logger.Warn("Invalid search cache refresh TTL, using default",
+			zap.String("ttl", refreshTTLStr),
+			zap.Error(err))
+		refreshInterval = 30 * time.Second
+	}
+
+	// Set max size with fallback
+	maxSize := s.config.Caching.SearchMaxSize
+	if maxSize <= 0 {
+		maxSize = 10000
+	}
+
+	// Create cache configuration from main config
+	cacheConfig := &cache.CacheConfig{
+		RefreshInterval: refreshInterval,
+		MaxSize:         maxSize,
+		EnabledTypes: []string{
+			"pods", "deployments", "services", "configmaps", "secrets",
+			"nodes", "namespaces", "statefulsets", "daemonsets", "replicasets",
+			"jobs", "cronjobs", "persistent-volumes", "persistent-volume-claims",
+			"storage-classes", "ingresses", "network-policies", "endpoints",
+			"service-accounts", "roles", "rolebindings", "clusterroles",
+			"clusterrolebindings", "resource-quotas",
+		},
+	}
+
+	// Create resource cache
+	s.resourceCache = cache.NewResourceCache(s.logger, s.kubeClient, cacheConfig)
+
+	// Create search service
+	s.searchService = cache.NewSearchService(s.logger, s.resourceCache)
+
+	s.logger.Info("Resource cache initialized",
+		zap.Duration("refreshInterval", refreshInterval),
+		zap.Int("maxSize", maxSize))
 	return nil
 }
 
@@ -431,6 +488,13 @@ func (s *Server) Start(ctx context.Context) error {
 	// Start summary service background processing
 	if s.summaryService != nil {
 		s.summaryService.StartBackgroundProcessing()
+	}
+
+	// Start resource cache
+	if s.resourceCache != nil {
+		if err := s.resourceCache.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start resource cache: %w", err)
+		}
 	}
 
 	// Start informers
@@ -451,6 +515,10 @@ func (s *Server) Stop() {
 
 	if s.summaryService != nil {
 		s.summaryService.StopBackgroundProcessing()
+	}
+
+	if s.resourceCache != nil {
+		s.resourceCache.Stop()
 	}
 
 	if s.informerManager != nil {
@@ -616,6 +684,9 @@ func (s *Server) setupRoutes() {
 		r.Get("/auth/me", s.handleMe)
 		r.Get("/auth/jwks", s.handleJWKS) // New JWKS endpoint
 
+		// Debug endpoint for authentication state
+		r.Get("/auth/debug", s.handleDebugUser)
+
 		// Public configuration endpoint
 		r.Get("/config", s.handlePublicConfig)
 
@@ -668,6 +739,11 @@ func (s *Server) setupRoutes() {
 
 			// Capabilities endpoint
 			r.Get("/capabilities", s.handleGetCapabilities)
+
+			// Search endpoints
+			r.Get("/search", s.handleSearch)
+			r.Get("/search/stats", s.handleSearchStats)
+			r.Post("/search/refresh", s.handleRefreshSearchCache)
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)

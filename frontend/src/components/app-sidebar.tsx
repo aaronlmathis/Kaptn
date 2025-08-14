@@ -103,7 +103,6 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         url: "/cluster",
         icon: IconHexagons,
         items: [
-          { title: "Cluster Overview", url: "/overview" },
           { title: "Nodes", url: "/nodes" },
           { title: "Namespaces", url: "/namespaces" },
           { title: "Resource Quotas", url: "/resource-quotas" },
@@ -111,11 +110,11 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           { title: "CRDs", url: "/crds" },
           { title: "Roles & RoleBindings", url: "/roles" },
           { title: "ClusterRoles & Bindings", url: "/cluster-roles" },
-          { title: "Events", url: "/events" },
+
           { title: "Component Status", url: "/component-status" },
           { title: "Certificates", url: "/certificates" },
           { title: "Version & Upgrades", url: "/version-upgrades" },
-          { title: "Cluster Metrics", url: "/metrics" },
+
         ],
       },
     ];

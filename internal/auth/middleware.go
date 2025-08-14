@@ -725,3 +725,21 @@ func (m *Middleware) calculateBackoffDuration(attempts int) time.Duration {
 		return 1 * time.Hour
 	}
 }
+
+// GetUserBinding provides access to user bindings through the authz resolver
+func (m *Middleware) GetUserBinding(ctx context.Context, username string) (*UserBinding, error) {
+	if m.authzResolver == nil {
+		return nil, fmt.Errorf("authorization resolver not available")
+	}
+
+	if m.authzResolver.groupResolver == nil {
+		return nil, fmt.Errorf("group resolver not available")
+	}
+
+	// Check if the resolver is a UserBindingsResolver (which has access to the store)
+	if bindingResolver, ok := m.authzResolver.groupResolver.(*UserBindingsResolver); ok {
+		return bindingResolver.store.GetUserBinding(ctx, username)
+	}
+
+	return nil, fmt.Errorf("user bindings not available with current resolver type")
+}

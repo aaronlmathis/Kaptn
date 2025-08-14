@@ -1,12 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { 
-	IconUsers, 
-	IconUserPlus, 
+import {
+	IconUsers,
+	IconUserPlus,
 	IconUserMinus,
-	IconShield, 
-	IconKey, 
+	IconShield,
+	IconKey,
 	IconSettings,
 	IconEdit,
 	IconTrash,
@@ -151,7 +151,7 @@ export function UserSettingsContainer() {
 
 	const filteredUsers = usersData.filter(user => {
 		const matchesFilter = user.name.toLowerCase().includes(userFilter.toLowerCase()) ||
-							  user.email.toLowerCase().includes(userFilter.toLowerCase())
+			user.email.toLowerCase().includes(userFilter.toLowerCase())
 		const matchesStatus = showInactiveUsers || user.status === "active"
 		return matchesFilter && matchesStatus
 	})
@@ -416,7 +416,7 @@ export function UserSettingsContainer() {
 										Create Role
 									</Button>
 								</div>
-								
+
 								<div className="grid gap-4">
 									{rolesData.map((role, index) => (
 										<div key={index} className="border rounded-lg p-4">

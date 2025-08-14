@@ -1,12 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { 
-	IconServer, 
-	IconShield, 
-	IconNetwork, 
-	IconCloudComputing, 
-	IconDatabase, 
+import {
+	IconServer,
+	IconShield,
+	IconNetwork,
+	IconCloudComputing,
+	IconDatabase,
 	IconChartBar,
 	IconSettings,
 	IconAlertTriangle,

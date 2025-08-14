@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { DebugPage } from "@/components/pages/DebugPage";
+
+const title = "Authentication Debug";
+---
+
+<Layout title={title}>
+	<DebugPage client:load />
+</Layout>
