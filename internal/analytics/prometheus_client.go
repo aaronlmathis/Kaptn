@@ -29,7 +29,7 @@ type PrometheusConfig struct {
 	Enabled bool
 }
 
-// PrometheusResponse represents a response from Prometheus
+// PrometheusResponse represents a response from Prometheus.
 type PrometheusResponse struct {
 	Status string         `json:"status"`
 	Data   PrometheusData `json:"data"`
