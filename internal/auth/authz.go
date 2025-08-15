@@ -109,9 +109,16 @@ func (a *AuthzResolver) formatUsername(userInfo *User, format string) string {
 func (a *AuthzResolver) ValidateGroups(groups []string) []string {
 	validGroups := make([]string, 0, len(groups))
 	validGroupSet := map[string]bool{
+		// Legacy group names
 		"kaptn-admins":     true,
 		"kaptn-developers": true,
 		"kaptn-viewers":    true,
+		// New group names for RBAC bindings
+		"kaptn-admins-group":      true,
+		"cluster-admins-group":    true,
+		"kaptn-super-admins":      true,
+		"kaptn-developers-group":  true,
+		"kaptn-viewers-group":     true,
 	}
 
 	for _, group := range groups {

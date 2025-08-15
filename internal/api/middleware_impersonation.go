@@ -61,6 +61,20 @@ func (s *Server) ImpersonationMiddleware(next http.Handler) http.Handler {
 		// Add impersonated clients to request context
 		ctx := k8s.WithImpersonatedClients(r.Context(), clients)
 
+		// If we have resolved groups from ConfigMap, update the user object with effective groups
+		// This is important for permission checks in RequireWrite middleware
+		if len(effectiveGroups) > 0 && !slicesEqual(user.Groups, effectiveGroups) {
+			// Create a copy of the user with resolved groups
+			updatedUser := *user
+			updatedUser.Groups = effectiveGroups
+			ctx = auth.WithUser(ctx, &updatedUser)
+			
+			s.logger.Debug("Updated user context with resolved groups",
+				zap.String("userEmail", user.Email),
+				zap.Strings("original_groups", user.Groups),
+				zap.Strings("effective_groups", effectiveGroups))
+		}
+
 		s.logger.Debug("Added impersonated clients to request context",
 			zap.String("userEmail", user.Email),
 			zap.String("username", username),
@@ -68,6 +82,19 @@ func (s *Server) ImpersonationMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// slicesEqual checks if two string slices are equal
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // RequireImpersonation is middleware that ensures impersonated clients are available

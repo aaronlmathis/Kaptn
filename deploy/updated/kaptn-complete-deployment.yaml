@@ -331,13 +331,23 @@ spec:
   selector:
     istio: ingressgateway
   servers:
-    - port:
-        number: 80
-        name: http
-        protocol: HTTP
-      hosts:
-        - dev.kaptn.dev
-
+  - hosts:
+    - dev.kaptn.dev
+    port:
+      name: http
+      number: 80
+      protocol: HTTP
+    tls:
+      httpsRedirect: true
+  - hosts:
+    - dev.kaptn.dev
+    port:
+      name: https
+      number: 443
+      protocol: HTTPS
+    tls:
+      credentialName: kaptn-dev-cert
+      mode: SIMPLE
 ---
 # ============================================================================
 # 12. ISTIO VIRTUAL SERVICE
