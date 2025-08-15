@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// GetImpersonatedClient returns the impersonated Kubernetes client from request context
+// GetImpersonatedClient returns the impersonated Kubernetes client from request context.
 func (s *Server) GetImpersonatedClient(r *http.Request) (kubernetes.Interface, error) {
 	clients, ok := k8s.ImpersonatedClientsFromContext(r.Context())
 	if !ok {

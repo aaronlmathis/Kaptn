@@ -288,7 +288,7 @@ spec:
           periodSeconds: 10
         livenessProbe:
           exec:
-            command: ["/server", "--health-check"]
+            command: ["/server", "--health-check", "--config=/etc/kaptn/config.yaml"]
           initialDelaySeconds: 20
           periodSeconds: 30
         volumeMounts:
