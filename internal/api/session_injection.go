@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"go.uber.org/zap"
@@ -19,15 +22,17 @@ type SessionInjectionHandler struct {
 	filesDir       http.Dir
 	authMode       string
 	sessionManager *auth.SessionManager
+	authMiddleware *auth.Middleware
 }
 
 // NewSessionInjectionHandler creates a new session injection handler
-func NewSessionInjectionHandler(logger *zap.Logger, filesDir http.Dir, authMode string, sessionManager *auth.SessionManager) *SessionInjectionHandler {
+func NewSessionInjectionHandler(logger *zap.Logger, filesDir http.Dir, authMode string, sessionManager *auth.SessionManager, authMiddleware *auth.Middleware) *SessionInjectionHandler {
 	return &SessionInjectionHandler{
 		logger:         logger,
 		filesDir:       filesDir,
 		authMode:       authMode,
 		sessionManager: sessionManager,
+		authMiddleware: authMiddleware,
 	}
 }
 
@@ -156,7 +161,19 @@ func (h *SessionInjectionHandler) getSessionData(r *http.Request) *auth.MinimalU
 
 // injectSessionData injects session data into HTML content with CSP nonce
 func (h *SessionInjectionHandler) injectSessionData(content string, sessionData *auth.MinimalUser, nonce string) string {
-	// Add auth mode to the injected data
+	// Generate CSRF token for authenticated users
+	var csrfToken string
+	if sessionData.IsAuthenticated && h.authMiddleware != nil {
+		// Generate a new CSRF token
+		bytes := make([]byte, 32) // 32 bytes = 64 hex characters
+		if _, err := rand.Read(bytes); err == nil {
+			csrfToken = hex.EncodeToString(bytes)
+			// Store token in middleware with 1 hour expiration
+			h.authMiddleware.StoreCSRFToken(csrfToken, time.Hour)
+		}
+	}
+
+	// Add auth mode and CSRF token to the injected data
 	sessionWithMode := map[string]interface{}{
 		"id":              sessionData.ID,
 		"email":           sessionData.Email,
@@ -164,13 +181,14 @@ func (h *SessionInjectionHandler) injectSessionData(content string, sessionData 
 		"picture":         sessionData.Picture,
 		"isAuthenticated": sessionData.IsAuthenticated,
 		"authMode":        h.authMode,
+		"csrfToken":       csrfToken,
 	}
 
 	// Convert session data to JSON
 	sessionJSON, err := json.Marshal(sessionWithMode)
 	if err != nil {
 		h.logger.Error("Failed to marshal session data", zap.Error(err))
-		sessionJSON = []byte(fmt.Sprintf(`{"isAuthenticated":false,"authMode":"%s"}`, h.authMode))
+		sessionJSON = []byte(fmt.Sprintf(`{"isAuthenticated":false,"authMode":"%s","csrfToken":""}`, h.authMode))
 	}
 
 	// Create the injection script with CSP nonce

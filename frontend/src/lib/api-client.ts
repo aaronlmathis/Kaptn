@@ -1,5 +1,7 @@
 // API client for Kubernetes Admin Dashboard backend
 
+import type { KaptnSession } from '../types/session';
+
 export interface ApiResponse<T> {
 	data?: T;
 	status?: string;
@@ -35,6 +37,14 @@ export class ApiClient {
 			headers.Authorization = `Bearer ${this.token}`;
 		}
 
+		// Add CSRF token for state-changing operations
+		if (options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method)) {
+			const session = typeof window !== 'undefined' ? window.__KAPTN_SESSION__ : null;
+			if (session?.csrfToken) {
+				headers['X-CSRF-Token'] = session.csrfToken;
+			}
+		}
+
 		// Always include credentials for cookie-based auth
 		const defaultOptions = {
 			credentials: 'include' as const,
@@ -50,8 +60,7 @@ export class ApiClient {
 			console.log('API request received 401, attempting token refresh...');
 
 			// Check if auth mode is none - skip refresh attempts
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const session = typeof window !== 'undefined' ? (window as any).__KAPTN_SESSION__ : null;
+			const session = typeof window !== 'undefined' ? window.__KAPTN_SESSION__ : null;
 			if (session?.authMode === 'none') {
 				console.log('🔓 Auth mode is none - skipping token refresh for 401');
 				// For auth mode none, treat 401 as a normal error instead of trying to refresh
@@ -117,11 +126,10 @@ export class ApiClient {
 
 	private redirectToLogin(): void {
 		console.log('🚨 ApiClient redirectToLogin called - DEBUG INFO:');
-		console.log('🚨 window.__KAPTN_SESSION__:', typeof window !== 'undefined' ? (window as any).__KAPTN_SESSION__ : 'no window');
+		console.log('🚨 window.__KAPTN_SESSION__:', typeof window !== 'undefined' ? window.__KAPTN_SESSION__ : 'no window');
 
 		// Check if auth mode is none by looking at injected session data
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const session = typeof window !== 'undefined' ? (window as any).__KAPTN_SESSION__ : null;
+		const session = typeof window !== 'undefined' ? window.__KAPTN_SESSION__ : null;
 		console.log('🚨 Session auth mode:', session?.authMode);
 
 		if (session?.authMode === 'none') {
