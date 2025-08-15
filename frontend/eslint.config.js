@@ -39,7 +39,7 @@ export default [
 				{ allowConstantExport: true },
 			],
 
-			// Remove unused imports automatically
+			// Remove unused imports automatically.
 			'unused-imports/no-unused-imports': 'error',
 
 			// Warn on unused vars, ignore ones starting with "_"

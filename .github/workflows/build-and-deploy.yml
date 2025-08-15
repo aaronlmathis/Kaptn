@@ -62,9 +62,9 @@ jobs:
               echo "Using complete deployment file..."
               
               # Substitute secrets in deployment file
-              sed -e "s/\${GOOGLE_CLIENT_ID}/${{ secrets.GOOGLE_CLIENT_ID }}/g" \
-                  -e "s/\${GOOGLE_CLIENT_SECRET}/${{ secrets.GOOGLE_CLIENT_SECRET }}/g" \
-                  -e "s/\${GOOGLE_REDIRECT_URI}/${{ secrets.GOOGLE_REDIRECT_URI }}/g" \
+              sed -e "s|\${GOOGLE_CLIENT_ID}|${{ secrets.GOOGLE_CLIENT_ID }}|g" \
+                  -e "s|\${GOOGLE_CLIENT_SECRET}|${{ secrets.GOOGLE_CLIENT_SECRET }}|g" \
+                  -e "s|\${GOOGLE_REDIRECT_URI}|${{ secrets.GOOGLE_REDIRECT_URI }}|g" \
                   deploy/updated/kaptn-complete-deployment.yaml | kubectl apply -f -
             else
               echo "ERROR: Complete deployment file not found at deploy/updated/kaptn-complete-deployment.yaml"
