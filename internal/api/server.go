@@ -23,6 +23,8 @@ import (
 	"github.com/aaronlmathis/kaptn/internal/k8s/summaries"
 	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
 	apimiddleware "github.com/aaronlmathis/kaptn/internal/middleware"
+	"github.com/aaronlmathis/kaptn/internal/timeseries"
+	"github.com/aaronlmathis/kaptn/internal/timeseries/aggregator"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -35,29 +37,31 @@ import (
 
 // Server represents the API server
 type Server struct {
-	logger           *zap.Logger
-	config           *config.Config
-	router           chi.Router
-	kubeClient       kubernetes.Interface
-	dynamicClient    dynamic.Interface
-	informerManager  *informers.Manager
-	wsHub            *ws.Hub
-	actionsService   *actions.NodeActionsService
-	applyService     *actions.ApplyService
-	logsService      *logs.StreamManager
-	execService      *exec.ExecManager
-	metricsService   *metrics.MetricsService
-	overviewService  *overview.OverviewService
-	resourceManager  *resources.ResourceManager
-	analyticsService *analytics.AnalyticsService
-	summaryService   *summaries.SummaryService
-	resourceCache    *cache.ResourceCache
-	searchService    *cache.SearchService
-	authMiddleware   *auth.Middleware
-	oidcClient       *auth.OIDCClient
-	sessionManager   *auth.SessionManager
-	impersonationMgr *k8s.ImpersonationManager
-	clientFactory    *client.Factory
+	logger               *zap.Logger
+	config               *config.Config
+	router               chi.Router
+	kubeClient           kubernetes.Interface
+	dynamicClient        dynamic.Interface
+	informerManager      *informers.Manager
+	wsHub                *ws.Hub
+	actionsService       *actions.NodeActionsService
+	applyService         *actions.ApplyService
+	logsService          *logs.StreamManager
+	execService          *exec.ExecManager
+	metricsService       *metrics.MetricsService
+	overviewService      *overview.OverviewService
+	resourceManager      *resources.ResourceManager
+	analyticsService     *analytics.AnalyticsService
+	summaryService       *summaries.SummaryService
+	resourceCache        *cache.ResourceCache
+	searchService        *cache.SearchService
+	authMiddleware       *auth.Middleware
+	oidcClient           *auth.OIDCClient
+	sessionManager       *auth.SessionManager
+	impersonationMgr     *k8s.ImpersonationManager
+	clientFactory        *client.Factory
+	timeSeriesStore      *timeseries.MemStore
+	timeSeriesAggregator *aggregator.Aggregator
 }
 
 // NewServer creates a new API server
@@ -167,6 +171,11 @@ func (s *Server) initKubernetesClient() error {
 
 	// Initialize analytics service
 	if err := s.initAnalytics(); err != nil {
+		return err
+	}
+
+	// Initialize timeseries service
+	if err := s.initTimeSeries(); err != nil {
 		return err
 	}
 
@@ -477,6 +486,61 @@ func (s *Server) initResourceCache() error {
 	return nil
 }
 
+func (s *Server) initTimeSeries() error {
+	s.logger.Info("Initializing timeseries service")
+
+	// Check if timeseries is enabled in configuration
+	if !s.config.Timeseries.Enabled {
+		s.logger.Info("TimeSeries service disabled in configuration")
+		return nil
+	}
+
+	// Create timeseries store with configuration
+	timeseriesConfig := timeseries.DefaultConfig()
+	if s.config.Timeseries.Window != "" {
+		if window, err := time.ParseDuration(s.config.Timeseries.Window); err == nil {
+			timeseriesConfig.MaxWindow = window
+		}
+	}
+
+	s.timeSeriesStore = timeseries.NewMemStore(timeseriesConfig)
+
+	// Create metrics client for aggregator
+	var metricsClient metricsv1beta1typed.MetricsV1beta1Interface
+	if kubeMetricsClient, err := metricsv1beta1.NewForConfig(s.clientFactory.RESTConfig()); err == nil {
+		metricsClient = kubeMetricsClient.MetricsV1beta1()
+	}
+
+	// Create aggregator configuration
+	aggregatorConfig := aggregator.DefaultConfig()
+	if s.config.Timeseries.TickInterval != "" {
+		if interval, err := time.ParseDuration(s.config.Timeseries.TickInterval); err == nil {
+			aggregatorConfig.TickInterval = interval
+		}
+	}
+	if s.config.Timeseries.CapacityRefreshInterval != "" {
+		if interval, err := time.ParseDuration(s.config.Timeseries.CapacityRefreshInterval); err == nil {
+			aggregatorConfig.CapacityRefreshInterval = interval
+		}
+	}
+
+	// Create timeseries aggregator
+	s.timeSeriesAggregator = aggregator.NewAggregator(
+		s.logger,
+		s.timeSeriesStore,
+		s.kubeClient,
+		metricsClient,
+		s.clientFactory.RESTConfig(),
+		aggregatorConfig,
+	)
+
+	s.logger.Info("TimeSeries service initialized",
+		zap.Duration("window", timeseriesConfig.MaxWindow),
+		zap.Duration("tickInterval", aggregatorConfig.TickInterval))
+
+	return nil
+}
+
 // Start starts the server components
 func (s *Server) Start(ctx context.Context) error {
 	// Start WebSocket hub
@@ -495,6 +559,15 @@ func (s *Server) Start(ctx context.Context) error {
 		if err := s.resourceCache.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start resource cache: %w", err)
 		}
+	}
+
+	// Start timeseries aggregator
+	if s.timeSeriesAggregator != nil {
+		if err := s.timeSeriesAggregator.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start timeseries aggregator: %w", err)
+		}
+		// Start WebSocket broadcaster for timeseries
+		s.startTimeSeriesWebSocketBroadcaster()
 	}
 
 	// Start informers
@@ -519,6 +592,10 @@ func (s *Server) Stop() {
 
 	if s.resourceCache != nil {
 		s.resourceCache.Stop()
+	}
+
+	if s.timeSeriesAggregator != nil {
+		s.timeSeriesAggregator.Stop()
 	}
 
 	if s.informerManager != nil {
@@ -746,6 +823,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/search/stats", s.handleSearchStats)
 			r.Post("/search/refresh", s.handleRefreshSearchCache)
 
+			// TimeSeries endpoints
+			r.Get("/timeseries/cluster", s.handleGetClusterTimeSeries)
+
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)
 			r.Get("/pods", s.handleListPods)
@@ -849,6 +929,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/stream/overview", s.handleOverviewWebSocket)
 			r.Get("/stream/jobs/{jobId}", s.handleJobWebSocket)
 			r.Get("/stream/logs/{streamId}", s.handleLogsWebSocket)
+
+			// TimeSeries WebSocket endpoints
+			r.Get("/timeseries/cluster/live", s.handleClusterTimeSeriesLiveWebSocket)
 		})
 
 		// Write endpoints (require write permissions)

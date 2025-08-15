@@ -22,6 +22,7 @@ type Config struct {
 	Integrations IntegrationsConfig `yaml:"integrations"`
 	Caching      CachingConfig      `yaml:"caching"`
 	Jobs         JobsConfig         `yaml:"jobs"`
+	Timeseries   TimeseriesConfig   `yaml:"timeseries"`
 }
 
 // ServerConfig represents the server configuration
@@ -146,6 +147,20 @@ type JobsConfig struct {
 	MaxAge             string `yaml:"max_age"`
 }
 
+// TimeseriesConfig represents time series collection configuration
+type TimeseriesConfig struct {
+	Enabled                 bool   `yaml:"enabled"`
+	Window                  string `yaml:"window"`
+	TickInterval            string `yaml:"tick_interval"`
+	CapacityRefreshInterval string `yaml:"capacity_refresh_interval"`
+	HiRes                   struct {
+		Step string `yaml:"step"`
+	} `yaml:"hi_res"`
+	LoRes struct {
+		Step string `yaml:"step"`
+	} `yaml:"lo_res"`
+}
+
 // Load loads the configuration from environment variables and defaults
 func Load() (*Config, error) {
 	return loadWithDefaults("")
@@ -238,6 +253,22 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			StorePath:          getEnv("KAD_JOBS_STORE_PATH", "./data/jobs"),
 			CleanupInterval:    getEnv("KAD_JOBS_CLEANUP_INTERVAL", "1h"),
 			MaxAge:             getEnv("KAD_JOBS_MAX_AGE", "24h"),
+		},
+		Timeseries: TimeseriesConfig{
+			Enabled:                 getEnvBool("KAD_TIMESERIES_ENABLED", true),
+			Window:                  getEnv("KAD_TIMESERIES_WINDOW", "60m"),
+			TickInterval:            getEnv("KAD_TIMESERIES_TICK_INTERVAL", "1s"),
+			CapacityRefreshInterval: getEnv("KAD_TIMESERIES_CAPACITY_REFRESH_INTERVAL", "30s"),
+			HiRes: struct {
+				Step string `yaml:"step"`
+			}{
+				Step: getEnv("KAD_TIMESERIES_HI_RES_STEP", "1s"),
+			},
+			LoRes: struct {
+				Step string `yaml:"step"`
+			}{
+				Step: getEnv("KAD_TIMESERIES_LO_RES_STEP", "5s"),
+			},
 		},
 	}
 
