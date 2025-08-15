@@ -14,12 +14,12 @@ const (
 type Config struct {
 	// Maximum time window to keep data
 	MaxWindow time.Duration
-	
+
 	// High resolution settings
 	HiResStep   time.Duration // Step size for high resolution data
 	HiResPoints int           // Maximum points for high resolution
-	
-	// Low resolution settings  
+
+	// Low resolution settings
 	LoResStep   time.Duration // Step size for low resolution data
 	LoResPoints int           // Maximum points for low resolution
 }

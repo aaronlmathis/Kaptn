@@ -73,9 +73,9 @@ func main() {
 		LoResStep:   5 * time.Second,
 		LoResPoints: 5,
 	}
-	
+
 	testSeries = timeseries.NewSeries(smallConfig)
-	
+
 	// Add 8 points to a 5-point buffer
 	for i := 0; i < 8; i++ {
 		timestamp := now.Add(time.Duration(i) * time.Second)
@@ -85,7 +85,7 @@ func main() {
 	allPoints := testSeries.GetAll(timeseries.Hi)
 	fmt.Printf("  Added 8 points to 5-point buffer, got %d points\n", len(allPoints))
 	if len(allPoints) > 0 {
-		fmt.Printf("  Oldest value: %.0f, Newest value: %.0f\n", 
+		fmt.Printf("  Oldest value: %.0f, Newest value: %.0f\n",
 			allPoints[0].V, allPoints[len(allPoints)-1].V)
 	}
 

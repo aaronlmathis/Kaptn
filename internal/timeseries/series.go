@@ -7,23 +7,23 @@ import (
 
 // Series represents a time series with both high and low resolution ring buffers
 type Series struct {
-	mu        sync.RWMutex
-	config    Config
-	
+	mu     sync.RWMutex
+	config Config
+
 	// High resolution ring buffer
 	hi     []Point
 	headHi int
 	fullHi bool
-	
-	// Low resolution ring buffer  
+
+	// Low resolution ring buffer
 	lo     []Point
 	headLo int
 	fullLo bool
-	
+
 	// Downsampling state
-	lastBin   time.Time
-	binSum    float64
-	binCount  int
+	lastBin  time.Time
+	binSum   float64
+	binCount int
 }
 
 // NewSeries creates a new Series with the given configuration
@@ -39,10 +39,10 @@ func NewSeries(config Config) *Series {
 func (s *Series) Add(p Point) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// Add to high resolution buffer
 	s.addToHi(p)
-	
+
 	// Add to low resolution buffer (with downsampling)
 	s.addToLo(p)
 }
@@ -60,7 +60,7 @@ func (s *Series) addToHi(p Point) {
 func (s *Series) addToLo(p Point) {
 	// Determine which bin this point belongs to
 	binStart := p.T.Truncate(s.config.LoResStep)
-	
+
 	if s.lastBin.IsZero() {
 		// First point
 		s.lastBin = binStart
@@ -68,7 +68,7 @@ func (s *Series) addToLo(p Point) {
 		s.binCount = 1
 		return
 	}
-	
+
 	if binStart.Equal(s.lastBin) {
 		// Same bin, accumulate
 		s.binSum += p.V
@@ -78,14 +78,14 @@ func (s *Series) addToLo(p Point) {
 		if s.binCount > 0 {
 			avgValue := s.binSum / float64(s.binCount)
 			binPoint := Point{T: s.lastBin, V: avgValue}
-			
+
 			s.lo[s.headLo] = binPoint
 			s.headLo = (s.headLo + 1) % len(s.lo)
 			if s.headLo == 0 {
 				s.fullLo = true
 			}
 		}
-		
+
 		// Start new bin
 		s.lastBin = binStart
 		s.binSum = p.V
@@ -97,7 +97,7 @@ func (s *Series) addToLo(p Point) {
 func (s *Series) GetSince(since time.Time, res Resolution) []Point {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	switch res {
 	case Hi:
 		return s.getFromRing(s.hi, s.headHi, s.fullHi, since)
@@ -113,44 +113,44 @@ func (s *Series) getFromRing(ring []Point, head int, full bool, since time.Time)
 	if len(ring) == 0 {
 		return nil
 	}
-	
+
 	var result []Point
-	
+
 	// Calculate how many points we have
 	size := head
 	if full {
 		size = len(ring)
 	}
-	
+
 	if size == 0 {
 		return nil
 	}
-	
+
 	// For a non-full buffer, points are stored from index 0 to head-1
 	// For a full buffer, oldest point is at head, newest is at head-1
 	start := 0
 	if full {
 		start = head // oldest point in a full ring buffer
 	}
-	
+
 	// Collect points since the given time
 	for i := 0; i < size; i++ {
 		idx := (start + i) % len(ring)
 		point := ring[idx]
-		
+
 		// Skip zero points and points before the since time
 		if point.IsZero() || (!since.IsZero() && point.T.Before(since)) {
 			continue
 		}
-		
+
 		// Also check max window if since is not specified
 		if since.IsZero() && time.Since(point.T) > s.config.MaxWindow {
 			continue
 		}
-		
+
 		result = append(result, point)
 	}
-	
+
 	return result
 }
 
@@ -163,12 +163,12 @@ func (s *Series) GetAll(res Resolution) []Point {
 func (s *Series) Prune() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	cutoff := time.Now().Add(-s.config.MaxWindow)
-	
+
 	// Prune high resolution
 	s.pruneRing(s.hi, &s.headHi, &s.fullHi, cutoff)
-	
+
 	// Prune low resolution
 	s.pruneRing(s.lo, &s.headLo, &s.fullLo, cutoff)
 }
@@ -178,16 +178,16 @@ func (s *Series) pruneRing(ring []Point, head *int, full *bool, cutoff time.Time
 	if len(ring) == 0 {
 		return
 	}
-	
+
 	size := *head
 	if *full {
 		size = len(ring)
 	}
-	
+
 	if size == 0 {
 		return
 	}
-	
+
 	// Find oldest valid point
 	start := *head
 	if *full {
@@ -195,12 +195,12 @@ func (s *Series) pruneRing(ring []Point, head *int, full *bool, cutoff time.Time
 	} else {
 		start = 0
 	}
-	
+
 	prunedCount := 0
 	for i := 0; i < size; i++ {
 		idx := (start + i) % len(ring)
 		point := ring[idx]
-		
+
 		if point.IsZero() || point.T.Before(cutoff) {
 			// Clear this point
 			ring[idx] = Point{}
@@ -209,7 +209,7 @@ func (s *Series) pruneRing(ring []Point, head *int, full *bool, cutoff time.Time
 			break
 		}
 	}
-	
+
 	// Adjust head and full flag if we pruned points
 	if prunedCount > 0 && *full {
 		newSize := size - prunedCount
