@@ -114,11 +114,11 @@ func (a *AuthzResolver) ValidateGroups(groups []string) []string {
 		"kaptn-developers": true,
 		"kaptn-viewers":    true,
 		// New group names for RBAC bindings
-		"kaptn-admins-group":      true,
-		"cluster-admins-group":    true,
-		"kaptn-super-admins":      true,
-		"kaptn-developers-group":  true,
-		"kaptn-viewers-group":     true,
+		"kaptn-admins-group":     true,
+		"cluster-admins-group":   true,
+		"kaptn-super-admins":     true,
+		"kaptn-developers-group": true,
+		"kaptn-viewers-group":    true,
 	}
 
 	for _, group := range groups {

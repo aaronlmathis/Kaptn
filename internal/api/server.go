@@ -682,7 +682,7 @@ func (s *Server) setupRoutes() {
 		r.Post("/auth/logout", s.handleLogout)
 		r.Post("/auth/refresh", s.handleRefresh) // New refresh endpoint
 		r.Get("/auth/me", s.handleMe)
-		r.Get("/auth/jwks", s.handleJWKS) // New JWKS endpoint
+		r.Get("/auth/jwks", s.handleJWKS)            // New JWKS endpoint
 		r.Get("/auth/csrf-token", s.handleCSRFToken) // CSRF token endpoint
 
 		// Debug endpoint for authentication state
@@ -863,8 +863,9 @@ func (s *Server) setupRoutes() {
 			idempotencyMiddleware := apimiddleware.NewIdempotencyMiddleware(s.logger, 15*time.Minute)
 			r.Use(idempotencyMiddleware.Middleware)
 
-			// Add CSRF protection for high-risk operations
-			r.Use(s.authMiddleware.CSRFProtection)
+			// Add CSRF protection for high-risk operations (double-submit cookie pattern)
+			csrfMiddleware := auth.NewCSRFMiddleware(s.logger)
+			r.Use(csrfMiddleware.Middleware)
 
 			r.Post("/nodes/{nodeName}/cordon", s.handleCordonNode)
 			r.Post("/nodes/{nodeName}/uncordon", s.handleUncordonNode)
@@ -898,8 +899,9 @@ func (s *Server) setupRoutes() {
 			idempotencyMiddleware := apimiddleware.NewIdempotencyMiddleware(s.logger, 30*time.Minute)
 			r.Use(idempotencyMiddleware.Middleware)
 
-			// Add CSRF protection for high-risk operations
-			r.Use(s.authMiddleware.CSRFProtection)
+			// Add CSRF protection for high-risk operations (double-submit cookie pattern)
+			csrfMiddleware2 := auth.NewCSRFMiddleware(s.logger)
+			r.Use(csrfMiddleware2.Middleware)
 
 			// Enhanced apply endpoint for Apply Config drawer
 			r.Post("/apply", s.handleApplyConfig)

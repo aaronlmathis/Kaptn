@@ -60,7 +60,7 @@ func (s *Server) handleCSRFToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Debug("CSRF token generated", 
+	s.logger.Debug("CSRF token generated",
 		zap.String("userId", user.ID),
 		zap.String("tokenPrefix", token[:8]+"..."))
 }

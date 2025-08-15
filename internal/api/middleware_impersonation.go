@@ -68,7 +68,7 @@ func (s *Server) ImpersonationMiddleware(next http.Handler) http.Handler {
 			updatedUser := *user
 			updatedUser.Groups = effectiveGroups
 			ctx = auth.WithUser(ctx, &updatedUser)
-			
+
 			s.logger.Debug("Updated user context with resolved groups",
 				zap.String("userEmail", user.Email),
 				zap.Strings("original_groups", user.Groups),

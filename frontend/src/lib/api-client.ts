@@ -1,6 +1,5 @@
 // API client for Kubernetes Admin Dashboard backend
 
-import type { KaptnSession } from '../types/session';
 
 export interface ApiResponse<T> {
 	data?: T;
@@ -39,9 +38,9 @@ export class ApiClient {
 
 		// Add CSRF token for state-changing operations
 		if (options.method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method)) {
-			const session = typeof window !== 'undefined' ? window.__KAPTN_SESSION__ : null;
-			if (session?.csrfToken) {
-				headers['X-CSRF-Token'] = session.csrfToken;
+			const csrfToken = this.getCSRFTokenFromCookie();
+			if (csrfToken) {
+				headers['X-CSRF-Token'] = csrfToken;
 			}
 		}
 
@@ -227,6 +226,23 @@ export class ApiClient {
 			},
 			body: yaml,
 		});
+	}
+
+	// Get CSRF token from cookie (double-submit pattern)
+	private getCSRFTokenFromCookie(): string | null {
+		if (typeof document === 'undefined') return null;
+
+		const name = 'kaptn_csrf=';
+		const decodedCookie = decodeURIComponent(document.cookie);
+		const cookies = decodedCookie.split(';');
+
+		for (let cookie of cookies) {
+			cookie = cookie.trim();
+			if (cookie.indexOf(name) === 0) {
+				return cookie.substring(name.length);
+			}
+		}
+		return null;
 	}
 }
 

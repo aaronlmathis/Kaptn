@@ -42,7 +42,7 @@ type Middleware struct {
 	attemptMutex  sync.RWMutex
 
 	// CSRF token store
-	csrfTokens map[string]time.Time  // token -> expiration
+	csrfTokens map[string]time.Time // token -> expiration
 	csrfMutex  sync.RWMutex
 }
 
@@ -657,7 +657,7 @@ func (m *Middleware) validateCSRFToken(token, userID string) bool {
 // StoreCSRFToken stores a CSRF token with expiration
 func (m *Middleware) StoreCSRFToken(token string, duration time.Duration) {
 	expiration := time.Now().Add(duration)
-	
+
 	m.csrfMutex.Lock()
 	m.csrfTokens[token] = expiration
 	m.csrfMutex.Unlock()
@@ -666,7 +666,7 @@ func (m *Middleware) StoreCSRFToken(token string, duration time.Duration) {
 // CleanupExpiredCSRFTokens removes expired CSRF tokens
 func (m *Middleware) CleanupExpiredCSRFTokens() {
 	now := time.Now()
-	
+
 	m.csrfMutex.Lock()
 	for token, expiration := range m.csrfTokens {
 		if now.After(expiration) {
