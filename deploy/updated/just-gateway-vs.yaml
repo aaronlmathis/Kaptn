@@ -1,0 +1,32 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: kaptn
+  namespace: kaptn
+spec:
+  hosts:
+    - dev.deepthought.sh
+  gateways:
+    - kaptn-gateway
+  http:
+    - route:
+        - destination:
+            host: kaptn.kaptn.svc.cluster.local
+            port:
+              number: 80
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: kaptn-gateway
+  namespace: kaptn
+spec:
+  selector:
+    istio: ingressgateway   # matches istio-system/istio-ingressgateway Service
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - dev.deepthought.sh
