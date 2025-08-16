@@ -9,10 +9,10 @@ import * as React from "react";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { MetricAreaChart, MetricBarChart, MetricRadialChart, type ChartSeries } from "./charts";
@@ -22,590 +22,810 @@ import { formatCores, formatBytesIEC, formatRate, formatPct, calculateTrend } fr
 
 // Section configuration
 export interface MetricSection {
-  id: string;
-  title: string;
-  description: string;
-  icon?: React.ReactNode;
-  charts: MetricChart[];
+	id: string;
+	title: string;
+	description: string;
+	icon?: React.ReactNode;
+	charts: MetricChart[];
 }
 
 // Chart configuration within a section
 export interface MetricChart {
-  id: string;
-  title: string;
-  subtitle?: string;
-  type: 'area' | 'bar' | 'radial';
-  seriesKeys: string[];
-  unit?: string;
-  formatter?: (value: number) => string;
-  height?: number;
-  stacked?: boolean;
-  layout?: 'horizontal' | 'vertical';
-  aggregation?: 'latest' | 'avg' | 'max' | 'sum';
+	id: string;
+	title: string;
+	subtitle?: string;
+	type: 'area' | 'bar' | 'radial';
+	seriesKeys: string[];
+	unit?: string;
+	formatter?: (value: number) => string;
+	height?: number;
+	stacked?: boolean;
+	layout?: 'horizontal' | 'vertical';
+	aggregation?: 'latest' | 'avg' | 'max' | 'sum';
 }
 
 // Props for metric sections
 export interface MetricSectionsProps {
-  filters: MetricFilters;
-  density: GridDensity;
-  
-  // Data
-  seriesData: Record<string, ChartSeries>;
-  capabilities?: {
-    metricsAPI: boolean;
-    summaryAPI: boolean;
-  } | null;
-  
-  // State
-  isLoading?: boolean;
-  error?: string;
-  
-  // Accordion control
-  expandedSections: string[];
-  onExpandedSectionsChange: (sections: string[]) => void;
-  
-  className?: string;
+	filters: MetricFilters;
+	density: GridDensity;
+
+	// Data
+	seriesData: Record<string, ChartSeries>;
+	capabilities?: {
+		metricsAPI: boolean;
+		summaryAPI: boolean;
+	} | null;
+
+	// State
+	isLoading?: boolean;
+	error?: string;
+
+	// Accordion control
+	expandedSections: string[];
+	onExpandedSectionsChange: (sections: string[]) => void;
+
+	className?: string;
 }
 
 // Section KPI calculation
 interface SectionKPI {
-  label: string;
-  value: string;
-  trend?: {
-    direction: 'up' | 'down' | 'stable';
-    percentage: number;
-  };
-  variant?: 'default' | 'secondary' | 'destructive' | 'outline';
+	label: string;
+	value: string;
+	trend?: {
+		direction: 'up' | 'down' | 'stable';
+		percentage: number;
+	};
+	variant?: 'default' | 'secondary' | 'destructive' | 'outline';
 }
 
 /**
  * Get CPU section configuration
  */
-function getCPUSection(): MetricSection {
-  const charts: MetricChart[] = [
-    // Chart 1: Cluster CPU — Usage vs Capacity (Area chart, stacked or overlay)
-    {
-      id: 'cluster-cpu-usage-capacity',
-      title: 'Cluster CPU — Usage vs Capacity',
-      subtitle: 'CPU utilization against total capacity and allocatable resources',
-      type: 'area',
-      seriesKeys: ['cluster.cpu.used.cores', 'cluster.cpu.allocatable.cores', 'cluster.cpu.capacity.cores'],
-      unit: 'cores',
-      formatter: formatCores,
-      stacked: false,
-    },
-    // Chart 2: Cluster CPU — Requests vs Allocatable (Line/Area)
-    {
-      id: 'cluster-cpu-requests-allocatable',
-      title: 'Cluster CPU — Requests vs Allocatable',
-      subtitle: 'Resource requests compared to allocatable capacity',
-      type: 'area',
-      seriesKeys: ['cluster.cpu.requested.cores', 'cluster.cpu.allocatable.cores'],
-      unit: 'cores',
-      formatter: formatCores,
-      stacked: false,
-    },
-    // Chart 3: Top Nodes by CPU Utilization (Horizontal Bar)
-    {
-      id: 'top-nodes-cpu-utilization',
-      title: 'Top Nodes by CPU Utilization',
-      subtitle: 'Nodes with highest CPU usage percentage (avg over window)',
-      type: 'bar',
-      seriesKeys: ['node.cpu.usage.cores'],
-      unit: 'percent',
-      formatter: formatPct,
-      layout: 'horizontal',
-      aggregation: 'avg',
-    },
-    // Chart 4: CPU Heatmap by Node over Time (BarChart with time bins)
-    {
-      id: 'cpu-heatmap-nodes',
-      title: 'CPU Heatmap by Node over Time',
-      subtitle: 'CPU utilization distribution across nodes and time (heatmap view)',
-      type: 'bar',
-      seriesKeys: ['node.cpu.usage.cores'],
-      unit: 'percent',
-      formatter: formatPct,
-      layout: 'vertical',
-      aggregation: 'avg',
-    },
-    // Chart 5: Per-Node CPU Trend (Multi-Line with toggleable legend)
-    {
-      id: 'per-node-cpu-trend',
-      title: 'Per-Node CPU Trend',
-      subtitle: 'Individual node CPU usage trends over time',
-      type: 'area',
-      seriesKeys: ['node.cpu.usage.cores'],
-      unit: 'cores',
-      formatter: formatCores,
-      stacked: false,
-    },
-  ];
+function getCPUSection(scope: MetricScope): MetricSection {
+	const charts: MetricChart[] = [
+		// Chart 1: Cluster CPU — Usage vs Capacity (Area chart, stacked or overlay)
+		{
+			id: 'cluster-cpu-usage-capacity',
+			title: 'Cluster CPU — Usage vs Capacity',
+			subtitle: 'CPU utilization against total capacity and allocatable resources',
+			type: 'area',
+			seriesKeys: ['cluster.cpu.used.cores', 'cluster.cpu.allocatable.cores', 'cluster.cpu.capacity.cores'],
+			unit: 'cores',
+			formatter: formatCores,
+			stacked: false,
+		},
+		// Chart 2: Cluster CPU — Requests vs Allocatable (Line/Area)
+		{
+			id: 'cluster-cpu-requests-allocatable',
+			title: 'Cluster CPU — Requests vs Allocatable',
+			subtitle: 'Resource requests compared to allocatable capacity',
+			type: 'area',
+			seriesKeys: ['cluster.cpu.requested.cores', 'cluster.cpu.allocatable.cores'],
+			unit: 'cores',
+			formatter: formatCores,
+			stacked: false,
+		},
+	];
 
-  return {
-    id: 'cpu',
-    title: 'CPU',
-    description: 'Processor utilization and capacity metrics',
-    charts,
-  };
+	// Add node-specific charts for node scope (when node metrics are available)
+	if (scope === 'node') {
+		charts.push(
+			// Chart 3: Top Nodes by CPU Utilization (Horizontal Bar)
+			{
+				id: 'top-nodes-cpu-utilization',
+				title: 'Top Nodes by CPU Utilization',
+				subtitle: 'Nodes with highest CPU usage percentage (avg over window)',
+				type: 'bar',
+				seriesKeys: ['node.cpu.usage.cores'],
+				unit: 'percent',
+				formatter: formatPct,
+				layout: 'horizontal',
+				aggregation: 'avg',
+			},
+			// Chart 4: CPU Heatmap by Node over Time (BarChart with time bins)
+			{
+				id: 'cpu-heatmap-nodes',
+				title: 'CPU Heatmap by Node over Time',
+				subtitle: 'CPU utilization distribution across nodes and time (heatmap view)',
+				type: 'bar',
+				seriesKeys: ['node.cpu.usage.cores'],
+				unit: 'percent',
+				formatter: formatPct,
+				layout: 'vertical',
+				aggregation: 'avg',
+			},
+			// Chart 5: Per-Node CPU Trend (Multi-Line with toggleable legend)
+			{
+				id: 'per-node-cpu-trend',
+				title: 'Per-Node CPU Trend',
+				subtitle: 'Individual node CPU usage trends over time',
+				type: 'area',
+				seriesKeys: ['node.cpu.usage.cores'],
+				unit: 'cores',
+				formatter: formatCores,
+				stacked: false,
+			}
+		);
+	}
+
+	return {
+		id: 'cpu',
+		title: 'CPU',
+		description: 'Processor utilization and capacity metrics',
+		charts,
+	};
 }
 
 /**
  * Get Memory section configuration
  */
 function getMemorySection(scope: MetricScope): MetricSection {
-  const charts: MetricChart[] = [
-    {
-      id: 'cluster-memory-usage',
-      title: 'Cluster Memory — Used vs Allocatable',
-      subtitle: 'Memory consumption and available capacity',
-      type: 'area',
-      seriesKeys: ['cluster.mem.used.bytes', 'cluster.mem.allocatable.bytes', 'cluster.mem.requested.bytes'],
-      unit: 'bytes',
-      formatter: formatBytesIEC,
-      stacked: true,
-    },
-  ];
+	const charts: MetricChart[] = [
+		// Chart 1: Cluster Memory — Used vs Allocatable (Area stacked)
+		{
+			id: 'cluster-memory-usage',
+			title: 'Cluster Memory — Used vs Allocatable',
+			subtitle: 'Memory consumption and available capacity',
+			type: 'area',
+			seriesKeys: ['cluster.mem.used.bytes', 'cluster.mem.allocatable.bytes', 'cluster.mem.requested.bytes'],
+			unit: 'bytes',
+			formatter: formatBytesIEC,
+			stacked: true,
+		},
+	];
 
-  if (scope === 'node') {
-    charts.push(
-      {
-        id: 'top-nodes-memory',
-        title: 'Top Nodes by Memory Working Set %',
-        subtitle: 'Nodes with highest memory utilization',
-        type: 'bar',
-        seriesKeys: ['node.mem.working_set.bytes'],
-        unit: 'percent',
-        formatter: formatPct,
-        layout: 'horizontal',
-      },
-      {
-        id: 'node-memory-trend',
-        title: 'Per-Node Memory Usage',
-        subtitle: 'Memory consumption trends by node',
-        type: 'area',
-        seriesKeys: ['node.mem.usage.bytes', 'node.mem.working_set.bytes'],
-        unit: 'bytes',
-        formatter: formatBytesIEC,
-      }
-    );
-  }
+	if (scope === 'node') {
+		charts.push(
+			// Chart 2: Top Nodes by Memory Working Set %
+			{
+				id: 'top-nodes-memory',
+				title: 'Top Nodes by Memory Working Set %',
+				subtitle: 'Nodes with highest memory utilization',
+				type: 'bar',
+				seriesKeys: ['node.mem.working_set.bytes'],
+				unit: 'percent',
+				formatter: formatPct,
+				layout: 'horizontal',
+			},
+			// Chart 3: Per-Node Memory Usage
+			{
+				id: 'node-memory-trend',
+				title: 'Per-Node Memory Usage',
+				subtitle: 'Memory consumption trends by node',
+				type: 'area',
+				seriesKeys: ['node.mem.usage.bytes', 'node.mem.working_set.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+			},
+			// Chart 4: Memory Profile (Radar) - Advanced visualization
+			{
+				id: 'memory-profile-radar',
+				title: 'Memory Profile (Radar)',
+				subtitle: 'Multi-dimensional memory utilization overview',
+				type: 'radial',
+				seriesKeys: ['node.mem.usage.bytes', 'node.mem.working_set.bytes', 'node.fs.used.percent'],
+				unit: 'percent',
+				formatter: formatPct,
+			}
+		);
+	}
 
-  return {
-    id: 'memory',
-    title: 'Memory',
-    description: 'Memory usage and allocation metrics',
-    charts,
-  };
+	return {
+		id: 'memory',
+		title: 'Memory',
+		description: 'Memory usage and allocation metrics',
+		charts,
+	};
 }
 
 /**
  * Get Network section configuration
  */
 function getNetworkSection(scope: MetricScope): MetricSection {
-  const charts: MetricChart[] = [
-    {
-      id: 'cluster-network-throughput',
-      title: 'Cluster Network Throughput',
-      subtitle: 'Total receive and transmit rates',
-      type: 'area',
-      seriesKeys: ['cluster.net.rx.bps', 'cluster.net.tx.bps'],
-      unit: 'B/s',
-      formatter: (value) => formatRate(value, 'B/s'),
-    },
-  ];
+	const charts: MetricChart[] = [
+		// Chart 1: Cluster Network Throughput (Dual Line: RX/TX)
+		{
+			id: 'cluster-network-throughput',
+			title: 'Cluster Network Throughput',
+			subtitle: 'Total receive and transmit rates',
+			type: 'area',
+			seriesKeys: ['cluster.net.rx.bps', 'cluster.net.tx.bps'],
+			unit: 'B/s',
+			formatter: (value) => formatRate(value, 'B/s'),
+		},
+	];
 
-  if (scope === 'node') {
-    charts.push(
-      {
-        id: 'top-nodes-network',
-        title: 'Top Nodes by Network RX/TX',
-        subtitle: 'Nodes with highest network activity',
-        type: 'bar',
-        seriesKeys: ['node.net.rx.bps', 'node.net.tx.bps'],
-        unit: 'B/s',
-        formatter: (value) => formatRate(value, 'B/s'),
-        layout: 'horizontal',
-      },
-      {
-        id: 'node-network-trend',
-        title: 'Per-Node Network Trend',
-        subtitle: 'Network traffic patterns by node',
-        type: 'area',
-        seriesKeys: ['node.net.rx.bps', 'node.net.tx.bps'],
-        unit: 'B/s',
-        formatter: (value) => formatRate(value, 'B/s'),
-      }
-    );
-  }
+	if (scope === 'node') {
+		charts.push(
+			// Chart 2: Top Nodes by Network RX/TX (Grouped Bar)
+			{
+				id: 'top-nodes-network',
+				title: 'Top Nodes by Network RX/TX',
+				subtitle: 'Nodes with highest network activity',
+				type: 'bar',
+				seriesKeys: ['node.net.rx.bps', 'node.net.tx.bps'],
+				unit: 'B/s',
+				formatter: (value) => formatRate(value, 'B/s'),
+				layout: 'horizontal',
+			},
+			// Chart 3: Per-Node Network Trend (Line with smoothing)
+			{
+				id: 'node-network-trend',
+				title: 'Per-Node Network Trend',
+				subtitle: 'Network traffic patterns by node',
+				type: 'area',
+				seriesKeys: ['node.net.rx.bps', 'node.net.tx.bps'],
+				unit: 'B/s',
+				formatter: (value) => formatRate(value, 'B/s'),
+			}
+		);
+	}
 
-  return {
-    id: 'network',
-    title: 'Network',
-    description: 'Network throughput and traffic metrics',
-    charts,
-  };
+	if (scope === 'pod') {
+		charts.push(
+			// Chart 4: Pod Network RX/TX (Line or Grouped Bar)
+			{
+				id: 'pod-network-throughput',
+				title: 'Pod Network RX/TX',
+				subtitle: 'Network traffic for individual pods',
+				type: 'bar',
+				seriesKeys: ['pod.net.rx.bps', 'pod.net.tx.bps'],
+				unit: 'B/s',
+				formatter: (value) => formatRate(value, 'B/s'),
+				layout: 'horizontal',
+			}
+		);
+	}
+
+	return {
+		id: 'network',
+		title: 'Network',
+		description: 'Network throughput and traffic metrics',
+		charts,
+	};
 }
 
 /**
  * Get Storage section configuration
  */
 function getStorageSection(scope: MetricScope): MetricSection {
-  const charts: MetricChart[] = [];
+	const charts: MetricChart[] = [];
 
-  if (scope === 'node') {
-    charts.push(
-      {
-        id: 'node-filesystem-usage',
-        title: 'Node Filesystem Usage %',
-        subtitle: 'Filesystem utilization across nodes',
-        type: 'radial',
-        seriesKeys: ['node.fs.used.percent'],
-        unit: 'percent',
-        formatter: formatPct,
-      },
-      {
-        id: 'cluster-storage-used',
-        title: 'Cluster Storage — Used over Time',
-        subtitle: 'Total storage consumption trends',
-        type: 'area',
-        seriesKeys: ['node.fs.used.bytes', 'node.imagefs.used.bytes'],
-        unit: 'bytes',
-        formatter: formatBytesIEC,
-      },
-      {
-        id: 'top-nodes-imagefs',
-        title: 'Top Nodes by ImageFS Used',
-        subtitle: 'Container image storage consumption',
-        type: 'bar',
-        seriesKeys: ['node.imagefs.used.bytes'],
-        unit: 'bytes',
-        formatter: formatBytesIEC,
-        layout: 'horizontal',
-      }
-    );
-  }
+	if (scope === 'node') {
+		charts.push(
+			// Chart 1: Node Filesystem Usage % (Radial)
+			{
+				id: 'node-filesystem-usage',
+				title: 'Node Filesystem Usage %',
+				subtitle: 'Filesystem utilization across nodes',
+				type: 'radial',
+				seriesKeys: ['node.fs.used.percent'],
+				unit: 'percent',
+				formatter: formatPct,
+			},
+			// Chart 2: Cluster Storage — Used over Time (Area)
+			{
+				id: 'cluster-storage-used',
+				title: 'Cluster Storage — Used over Time',
+				subtitle: 'Total storage consumption trends',
+				type: 'area',
+				seriesKeys: ['node.fs.used.bytes', 'node.imagefs.used.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+			},
+			// Chart 3: Top Nodes by ImageFS Used (Horizontal Bar)
+			{
+				id: 'top-nodes-imagefs',
+				title: 'Top Nodes by ImageFS Used',
+				subtitle: 'Container image storage consumption',
+				type: 'bar',
+				seriesKeys: ['node.imagefs.used.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+				layout: 'horizontal',
+			}
+		);
+	}
 
-  return {
-    id: 'storage',
-    title: 'Storage',
-    description: 'Filesystem and storage utilization',
-    charts,
-  };
+	if (scope === 'pod') {
+		charts.push(
+			// Chart 4: Pod Ephemeral Storage Usage
+			{
+				id: 'pod-ephemeral-storage',
+				title: 'Pod Ephemeral Storage Usage',
+				subtitle: 'Temporary storage consumption by pods',
+				type: 'bar',
+				seriesKeys: ['pod.ephemeral.used.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+				layout: 'horizontal',
+			}
+		);
+	}
+
+	if (scope === 'container') {
+		charts.push(
+			// Chart 5: Container Storage (RootFS, Logs)
+			{
+				id: 'container-storage',
+				title: 'Container Storage (RootFS, Logs)',
+				subtitle: 'Root filesystem and log storage per container',
+				type: 'bar',
+				seriesKeys: ['ctr.rootfs.used.bytes', 'ctr.logs.used.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+				layout: 'horizontal',
+			}
+		);
+	}
+
+	return {
+		id: 'storage',
+		title: 'Storage',
+		description: 'Filesystem and storage utilization',
+		charts,
+	};
 }
 
 /**
  * Get Cluster State section configuration
  */
 function getClusterStateSection(): MetricSection {
-  return {
-    id: 'cluster-state',
-    title: 'Cluster State',
-    description: 'Pod phases and cluster capacity overview',
-    charts: [
-      {
-        id: 'pods-by-phase',
-        title: 'Pods by Phase',
-        subtitle: 'Pod lifecycle state distribution',
-        type: 'area',
-        seriesKeys: ['cluster.pods.running', 'cluster.pods.pending', 'cluster.pods.failed', 'cluster.pods.succeeded'],
-        unit: 'count',
-        stacked: true,
-      },
-      {
-        id: 'node-count',
-        title: 'Node Count',
-        subtitle: 'Total nodes in cluster',
-        type: 'area',
-        seriesKeys: ['cluster.nodes.count'],
-        unit: 'count',
-      },
-    ],
-  };
+	return {
+		id: 'cluster-state',
+		title: 'Cluster State',
+		description: 'Pod phases and cluster capacity overview',
+		charts: [
+			// Chart 1: Pods by Phase (Stacked Area)
+			{
+				id: 'pods-by-phase',
+				title: 'Pods by Phase',
+				subtitle: 'Pod lifecycle state distribution',
+				type: 'area',
+				seriesKeys: ['cluster.pods.running', 'cluster.pods.pending', 'cluster.pods.failed', 'cluster.pods.succeeded'],
+				unit: 'count',
+				stacked: true,
+			},
+			// Chart 2: Node Count (Line or Tiny Area)
+			{
+				id: 'node-count',
+				title: 'Node Count',
+				subtitle: 'Total nodes in cluster',
+				type: 'area',
+				seriesKeys: ['cluster.nodes.count'],
+				unit: 'count',
+			},
+			// Chart 3: CPU Requests vs Allocatable
+			{
+				id: 'cluster-cpu-requests-capacity',
+				title: 'CPU Requests vs Allocatable',
+				subtitle: 'CPU resource allocation overview',
+				type: 'area',
+				seriesKeys: ['cluster.cpu.requested.cores', 'cluster.cpu.allocatable.cores'],
+				unit: 'cores',
+				formatter: formatCores,
+				stacked: false,
+			},
+			// Chart 4: Memory Requests vs Allocatable
+			{
+				id: 'cluster-memory-requests-capacity',
+				title: 'Memory Requests vs Allocatable',
+				subtitle: 'Memory resource allocation overview',
+				type: 'area',
+				seriesKeys: ['cluster.mem.requested.bytes', 'cluster.mem.allocatable.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+				stacked: false,
+			},
+		],
+	};
+}
+
+/**
+ * Get Pod Deep Dive section configuration
+ */
+function getPodSection(scope: MetricScope): MetricSection {
+	const charts: MetricChart[] = [];
+
+	if (scope === 'pod' || scope === 'namespace' || scope === 'workload') {
+		charts.push(
+			// Chart 1: Top Pods by CPU
+			{
+				id: 'top-pods-cpu',
+				title: 'Top Pods by CPU',
+				subtitle: 'Pods with highest CPU usage',
+				type: 'bar',
+				seriesKeys: ['pod.cpu.usage.cores'],
+				unit: 'cores',
+				formatter: formatCores,
+				layout: 'horizontal',
+			},
+			// Chart 2: Top Pods by Memory
+			{
+				id: 'top-pods-memory',
+				title: 'Top Pods by Memory',
+				subtitle: 'Pods with highest memory usage',
+				type: 'bar',
+				seriesKeys: ['pod.mem.working_set.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+				layout: 'horizontal',
+			},
+			// Chart 3: Pod Network RX/TX
+			{
+				id: 'pod-network-rxTx',
+				title: 'Pod Network RX/TX',
+				subtitle: 'Network traffic for individual pods',
+				type: 'area',
+				seriesKeys: ['pod.net.rx.bps', 'pod.net.tx.bps'],
+				unit: 'B/s',
+				formatter: (value) => formatRate(value, 'B/s'),
+			},
+			// Chart 4: Pod Resource Usage Trend
+			{
+				id: 'pod-resource-trend',
+				title: 'Pod Resource Usage Trend',
+				subtitle: 'CPU and memory trends over time',
+				type: 'area',
+				seriesKeys: ['pod.cpu.usage.cores', 'pod.mem.usage.bytes'],
+				unit: 'mixed',
+				stacked: false,
+			}
+		);
+	}
+
+	return {
+		id: 'pods',
+		title: 'Pods',
+		description: 'Pod-level resource usage and performance metrics',
+		charts,
+	};
+}
+
+/**
+ * Get Container Deep Dive section configuration
+ */
+function getContainerSection(scope: MetricScope): MetricSection {
+	const charts: MetricChart[] = [];
+
+	if (scope === 'container' || scope === 'pod') {
+		charts.push(
+			// Chart 1: Container Working Set Trend
+			{
+				id: 'container-workingset-trend',
+				title: 'Container Working Set Trend',
+				subtitle: 'Memory working set per container over time',
+				type: 'area',
+				seriesKeys: ['ctr.mem.working_set.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+				stacked: false,
+			},
+			// Chart 2: Container CPU Usage
+			{
+				id: 'container-cpu-usage',
+				title: 'Container CPU Usage',
+				subtitle: 'CPU consumption per container',
+				type: 'area',
+				seriesKeys: ['ctr.cpu.usage.cores'],
+				unit: 'cores',
+				formatter: formatCores,
+				stacked: false,
+			},
+			// Chart 3: Container Storage (RootFS, Logs)
+			{
+				id: 'container-storage-breakdown',
+				title: 'Container Storage (RootFS, Logs)',
+				subtitle: 'Root filesystem and log storage breakdown',
+				type: 'bar',
+				seriesKeys: ['ctr.rootfs.used.bytes', 'ctr.logs.used.bytes'],
+				unit: 'bytes',
+				formatter: formatBytesIEC,
+				layout: 'horizontal',
+			}
+		);
+	}
+
+	return {
+		id: 'containers',
+		title: 'Containers',
+		description: 'Container-level resource usage and storage metrics',
+		charts,
+	};
 }
 
 /**
  * Get sections for current scope
  */
 function getSectionsForScope(scope: MetricScope): MetricSection[] {
-  const sections: MetricSection[] = [];
+	const sections: MetricSection[] = [];
 
-  // Always include CPU and Memory for all scopes
-  sections.push(getCPUSection());
-  sections.push(getMemorySection(scope));
-  sections.push(getNetworkSection(scope));
+	// Always include CPU and Memory for all scopes
+	sections.push(getCPUSection(scope));
+	sections.push(getMemorySection(scope));
+	sections.push(getNetworkSection(scope));
 
-  // Add storage section for node scope
-  if (scope === 'node') {
-    sections.push(getStorageSection(scope));
-  }
+	// Add storage section for node, pod, and container scopes
+	if (scope === 'node' || scope === 'pod' || scope === 'container') {
+		sections.push(getStorageSection(scope));
+	}
 
-  // Add cluster state for cluster scope
-  if (scope === 'cluster') {
-    sections.push(getClusterStateSection());
-  }
+	// Add cluster state for cluster scope
+	if (scope === 'cluster') {
+		sections.push(getClusterStateSection());
+	}
 
-  return sections.filter(section => section.charts.length > 0);
+	// Add pod section for relevant scopes
+	if (scope === 'pod' || scope === 'namespace' || scope === 'workload') {
+		sections.push(getPodSection(scope));
+	}
+
+	// Add container section for container and pod scopes
+	if (scope === 'container' || scope === 'pod') {
+		sections.push(getContainerSection(scope));
+	}
+
+	return sections.filter(section => section.charts.length > 0);
 }
 
 /**
  * Calculate KPIs for a section
  */
 function calculateSectionKPIs(
-  section: MetricSection,
-  seriesData: Record<string, ChartSeries>
+	section: MetricSection,
+	seriesData: Record<string, ChartSeries>
 ): SectionKPI[] {
-  const kpis: SectionKPI[] = [];
+	const kpis: SectionKPI[] = [];
 
-  // CPU section KPIs
-  if (section.id === 'cpu') {
-    const usedSeries = seriesData['cluster.cpu.used.cores'];
-    const allocatableSeries = seriesData['cluster.cpu.allocatable.cores'];
+	// CPU section KPIs
+	if (section.id === 'cpu') {
+		const usedSeries = seriesData['cluster.cpu.used.cores'];
+		const allocatableSeries = seriesData['cluster.cpu.allocatable.cores'];
 
-    if (usedSeries && allocatableSeries) {
-      const usedValues = usedSeries.data.map(([, value]) => value);
-      const allocatableValues = allocatableSeries.data.map(([, value]) => value);
+		if (usedSeries && allocatableSeries) {
+			const usedValues = usedSeries.data.map(([, value]) => value);
+			const allocatableValues = allocatableSeries.data.map(([, value]) => value);
 
-      if (usedValues.length > 0 && allocatableValues.length > 0) {
-        const latestUsed = usedValues[usedValues.length - 1];
-        const latestAllocatable = allocatableValues[allocatableValues.length - 1];
-        const utilization = latestAllocatable > 0 ? (latestUsed / latestAllocatable) * 100 : 0;
+			if (usedValues.length > 0 && allocatableValues.length > 0) {
+				const latestUsed = usedValues[usedValues.length - 1];
+				const latestAllocatable = allocatableValues[allocatableValues.length - 1];
+				const utilization = latestAllocatable > 0 ? (latestUsed / latestAllocatable) * 100 : 0;
 
-        const trend = calculateTrend(usedValues.slice(-10)); // Last 10 points
+				const trend = calculateTrend(usedValues.slice(-10)); // Last 10 points
 
-        kpis.push({
-          label: `${formatPct(utilization)} used`,
-          value: `${formatCores(latestAllocatable)} allocatable`,
-          trend,
-        });
-      }
-    }
-  }
+				kpis.push({
+					label: `${formatPct(utilization)} used`,
+					value: `${formatCores(latestAllocatable)} allocatable`,
+					trend,
+				});
+			}
+		}
+	}
 
-  // Memory section KPIs
-  if (section.id === 'memory') {
-    const usedSeries = seriesData['cluster.mem.used.bytes'];
-    const allocatableSeries = seriesData['cluster.mem.allocatable.bytes'];
+	// Memory section KPIs
+	if (section.id === 'memory') {
+		const usedSeries = seriesData['cluster.mem.used.bytes'];
+		const allocatableSeries = seriesData['cluster.mem.allocatable.bytes'];
 
-    if (usedSeries && allocatableSeries) {
-      const usedValues = usedSeries.data.map(([, value]) => value);
-      const allocatableValues = allocatableSeries.data.map(([, value]) => value);
+		if (usedSeries && allocatableSeries) {
+			const usedValues = usedSeries.data.map(([, value]) => value);
+			const allocatableValues = allocatableSeries.data.map(([, value]) => value);
 
-      if (usedValues.length > 0 && allocatableValues.length > 0) {
-        const latestUsed = usedValues[usedValues.length - 1];
-        const latestAllocatable = allocatableValues[allocatableValues.length - 1];
-        const utilization = latestAllocatable > 0 ? (latestUsed / latestAllocatable) * 100 : 0;
+			if (usedValues.length > 0 && allocatableValues.length > 0) {
+				const latestUsed = usedValues[usedValues.length - 1];
+				const latestAllocatable = allocatableValues[allocatableValues.length - 1];
+				const utilization = latestAllocatable > 0 ? (latestUsed / latestAllocatable) * 100 : 0;
 
-        kpis.push({
-          label: `${formatPct(utilization)} used`,
-          value: `${formatBytesIEC(latestAllocatable)} allocatable`,
-        });
-      }
-    }
-  }
+				kpis.push({
+					label: `${formatPct(utilization)} used`,
+					value: `${formatBytesIEC(latestAllocatable)} allocatable`,
+				});
+			}
+		}
+	}
 
-  return kpis;
+	return kpis;
 }
 
 /**
  * Section Header Component
  */
 function SectionHeader({
-  section,
-  kpis,
+	section,
+	kpis,
 }: {
-  section: MetricSection;
-  kpis: SectionKPI[];
+	section: MetricSection;
+	kpis: SectionKPI[];
 }) {
-  return (
-    <div className="flex items-center justify-between w-full">
-      <div className="flex items-center gap-3">
-        {section.icon}
-        <div>
-          <h3 className="font-medium">{section.title}</h3>
-          <p className="text-sm text-muted-foreground">{section.description}</p>
-        </div>
-      </div>
-      
-      {kpis.length > 0 && (
-        <div className="flex items-center gap-2">
-          {kpis.map((kpi, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <Badge variant={kpi.variant || 'secondary'} className="text-xs">
-                {kpi.label}
-              </Badge>
-              {kpi.trend && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  {kpi.trend.direction === 'up' && <TrendingUp className="h-3 w-3 text-green-500" />}
-                  {kpi.trend.direction === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
-                  {kpi.trend.direction === 'stable' && <Minus className="h-3 w-3" />}
-                  {kpi.trend.percentage.toFixed(1)}%
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+	return (
+		<div className="flex items-center justify-between w-full">
+			<div className="flex items-center gap-3">
+				{section.icon}
+				<div>
+					<h3 className="font-medium">{section.title}</h3>
+					<p className="text-sm text-muted-foreground">{section.description}</p>
+				</div>
+			</div>
+
+			{kpis.length > 0 && (
+				<div className="flex items-center gap-2">
+					{kpis.map((kpi, index) => (
+						<div key={index} className="flex items-center gap-2">
+							<Badge variant={kpi.variant || 'secondary'} className="text-xs">
+								{kpi.label}
+							</Badge>
+							{kpi.trend && (
+								<div className="flex items-center gap-1 text-xs text-muted-foreground">
+									{kpi.trend.direction === 'up' && <TrendingUp className="h-3 w-3 text-green-500" />}
+									{kpi.trend.direction === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
+									{kpi.trend.direction === 'stable' && <Minus className="h-3 w-3" />}
+									{kpi.trend.percentage.toFixed(1)}%
+								</div>
+							)}
+						</div>
+					))}
+				</div>
+			)}
+		</div>
+	);
 }
 
 /**
  * Chart Grid Component
  */
 function ChartGrid({
-  charts,
-  seriesData,
-  filters,
-  density,
-  capabilities,
-  isLoading,
-  error,
+	charts,
+	seriesData,
+	filters,
+	density,
+	capabilities,
+	isLoading,
+	error,
 }: {
-  charts: MetricChart[];
-  seriesData: Record<string, ChartSeries>;
-  filters: MetricFilters;
-  density: GridDensity;
-  capabilities?: { metricsAPI: boolean; summaryAPI: boolean } | null;
-  isLoading?: boolean;
-  error?: string;
+	charts: MetricChart[];
+	seriesData: Record<string, ChartSeries>;
+	filters: MetricFilters;
+	density: GridDensity;
+	capabilities?: { metricsAPI: boolean; summaryAPI: boolean } | null;
+	isLoading?: boolean;
+	error?: string;
 }) {
-  const gridClasses = React.useMemo(() => {
-    // Use CSS Grid with auto-fit and fixed card width
-    // Cards will be exactly 320px wide and grid will fit as many as possible per row
-    const base = "grid grid-cols-[repeat(auto-fit,320px)] justify-center";
-    
-    switch (density) {
-      case 'compact':
-        return cn(base, "gap-3");
-      case 'cozy':
-        return cn(base, "gap-4");
-      case 'comfortable':
-        return cn(base, "gap-5");
-      default:
-        return cn(base, "gap-4");
-    }
-  }, [density]);
+	const gridClasses = React.useMemo(() => {
+		// Use CSS Grid with auto-fit and fixed card width
+		// Cards will be exactly 320px wide and grid will fit as many as possible per row
+		const base = "grid grid-cols-[repeat(auto-fit,320px)] justify-center";
 
-  const capabilityBadge = React.useMemo(() => {
-    if (!capabilities || capabilities.summaryAPI) return null;
-    
-    return (
-      <Badge variant="outline" className="text-xs">
-        Limited data
-      </Badge>
-    );
-  }, [capabilities]);
+		switch (density) {
+			case 'compact':
+				return cn(base, "gap-3");
+			case 'cozy':
+				return cn(base, "gap-4");
+			case 'comfortable':
+				return cn(base, "gap-5");
+			default:
+				return cn(base, "gap-4");
+		}
+	}, [density]);
 
-  return (
-    <div className={gridClasses}>
-      {charts.map((chart) => {
-        const chartSeries = chart.seriesKeys
-          .map(key => seriesData[key])
-          .filter(Boolean);
+	const capabilityBadge = React.useMemo(() => {
+		if (!capabilities || capabilities.summaryAPI) return null;
 
-        const commonProps = {
-          title: chart.title,
-          subtitle: chart.subtitle,
-          series: chartSeries,
-          unit: chart.unit,
-          formatter: chart.formatter,
-          isLoading,
-          error,
-          capabilities: capabilityBadge,
-          scopeLabel: filters.scope,
-          timespanLabel: '1h',
-          resolutionLabel: filters.resolution,
-          height: chart.height,
-        };
+		return (
+			<Badge variant="outline" className="text-xs">
+				Limited data
+			</Badge>
+		);
+	}, [capabilities]);
 
-        switch (chart.type) {
-          case 'area':
-            return (
-              <MetricAreaChart
-                key={chart.id}
-                {...commonProps}
-                stacked={chart.stacked}
-              />
-            );
+	return (
+		<div className={gridClasses}>
+			{charts.map((chart) => {
+				const chartSeries = chart.seriesKeys
+					.map(key => seriesData[key])
+					.filter(Boolean);
 
-          case 'bar':
-            return (
-              <MetricBarChart
-                key={chart.id}
-                {...commonProps}
-                layout={chart.layout}
-              />
-            );
+				const commonProps = {
+					title: chart.title,
+					subtitle: chart.subtitle,
+					series: chartSeries,
+					unit: chart.unit,
+					formatter: chart.formatter,
+					isLoading,
+					error,
+					capabilities: capabilityBadge,
+					scopeLabel: filters.scope,
+					timespanLabel: '1h',
+					resolutionLabel: filters.resolution,
+					height: chart.height,
+				};
 
-          case 'radial':
-            return (
-              <MetricRadialChart
-                key={chart.id}
-                {...commonProps}
-              />
-            );
+				switch (chart.type) {
+					case 'area':
+						return (
+							<MetricAreaChart
+								key={chart.id}
+								{...commonProps}
+								stacked={chart.stacked}
+							/>
+						);
 
-          default:
-            return null;
-        }
-      })}
-    </div>
-  );
+					case 'bar':
+						return (
+							<MetricBarChart
+								key={chart.id}
+								{...commonProps}
+								layout={chart.layout}
+							/>
+						);
+
+					case 'radial':
+						return (
+							<MetricRadialChart
+								key={chart.id}
+								{...commonProps}
+							/>
+						);
+
+					default:
+						return null;
+				}
+			})}
+		</div>
+	);
 }
 
 /**
  * Main Metric Sections Component
  */
 export function MetricSections({
-  filters,
-  density,
-  seriesData,
-  capabilities,
-  isLoading,
-  error,
-  expandedSections,
-  onExpandedSectionsChange,
-  className,
+	filters,
+	density,
+	seriesData,
+	capabilities,
+	isLoading,
+	error,
+	expandedSections,
+	onExpandedSectionsChange,
+	className,
 }: MetricSectionsProps) {
-  const sections = React.useMemo(() => getSectionsForScope(filters.scope), [filters.scope]);
+	const sections = React.useMemo(() => getSectionsForScope(filters.scope), [filters.scope]);
 
-  return (
-    <div className={cn("space-y-4", className)}>
-      <Accordion
-        type="multiple"
-        value={expandedSections}
-        onValueChange={onExpandedSectionsChange}
-        className="space-y-4"
-      >
-        {sections.map((section) => {
-          const kpis = calculateSectionKPIs(section, seriesData);
+	return (
+		<div className={cn("space-y-4", className)}>
+			<Accordion
+				type="multiple"
+				value={expandedSections}
+				onValueChange={onExpandedSectionsChange}
+				className="space-y-4"
+			>
+				{sections.map((section) => {
+					const kpis = calculateSectionKPIs(section, seriesData);
 
-          return (
-            <AccordionItem
-              key={section.id}
-              value={section.id}
-              className="border rounded-lg"
-            >
-              <AccordionTrigger className="px-6 py-4 hover:no-underline">
-                <SectionHeader section={section} kpis={kpis} />
-              </AccordionTrigger>
-              
-              <AccordionContent className="px-6 pb-6">
-                <ChartGrid
-                  charts={section.charts}
-                  seriesData={seriesData}
-                  filters={filters}
-                  density={density}
-                  capabilities={capabilities}
-                  isLoading={isLoading}
-                  error={error}
-                />
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
-    </div>
-  );
+					return (
+						<AccordionItem
+							key={section.id}
+							value={section.id}
+							className="border rounded-lg"
+						>
+							<AccordionTrigger className="px-6 py-4 hover:no-underline">
+								<SectionHeader section={section} kpis={kpis} />
+							</AccordionTrigger>
+
+							<AccordionContent className="px-6 pb-6">
+								<ChartGrid
+									charts={section.charts}
+									seriesData={seriesData}
+									filters={filters}
+									density={density}
+									capabilities={capabilities}
+									isLoading={isLoading}
+									error={error}
+								/>
+							</AccordionContent>
+						</AccordionItem>
+					);
+				})}
+			</Accordion>
+		</div>
+	);
 }
