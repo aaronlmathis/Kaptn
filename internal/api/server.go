@@ -884,6 +884,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/cluster-roles/{name}", s.handleGetClusterRole)
 			r.Get("/cluster-role-bindings", s.handleListClusterRoleBindings)
 			r.Get("/cluster-role-bindings/{name}", s.handleGetClusterRoleBinding)
+			r.Get("/identities", s.handleListRBACIdentities)
 			r.Get("/persistent-volumes", s.handleListPersistentVolumes)
 			r.Get("/persistent-volumes/{name}", s.handleGetPersistentVolume)
 			r.Get("/persistent-volume-claims", s.handleListPersistentVolumeClaims)
@@ -970,6 +971,11 @@ func (s *Server) setupRoutes() {
 			r.Post("/secrets", s.handleCreateSecret)
 			r.Put("/secrets/{namespace}/{name}", s.handleUpdateSecret)
 			r.Delete("/secrets/{namespace}/{name}", s.handleDeleteSecret)
+
+			// RBAC builder endpoints
+			r.Post("/rbac/generate", s.handleGenerateRBACYAML)
+			r.Post("/rbac/dry-run", s.handleDryRunRBAC)
+			r.Post("/rbac/apply", s.handleApplyRBAC)
 		})
 
 		// Apply endpoints (require write permissions with higher rate limits)

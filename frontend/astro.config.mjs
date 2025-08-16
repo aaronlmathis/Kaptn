@@ -15,12 +15,12 @@ export default defineConfig({
       proxy: {
         // Proxy API calls to backend
         '/api': {
-          target: 'http://localhost:8080',
+          target: 'http://localhost:9999',
           changeOrigin: true,
         },
         // Proxy WebSocket connections
         '/stream': {
-          target: 'http://localhost:8080',
+          target: 'http://localhost:9999',
           changeOrigin: true,
           ws: true,
         },

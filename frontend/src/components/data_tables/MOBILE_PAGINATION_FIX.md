@@ -26,24 +26,25 @@ All migrated DataTable files currently have the old pagination layout:
 - ✅ `ResourceQuotasDataTable.tsx` - **Fixed**
 - ✅ `ReplicaSetsDataTable.tsx` - **Fixed**
 - ✅ `ServicesDataTable.tsx` - **Fixed**
-- 🔄 `PodsDataTable.tsx` - Needs fix
+- ✅ `PodsDataTable.tsx` - **Fixed**
 - ✅ `DeploymentsDataTable.tsx` - **Fixed**
 - 🔄 `ApiResourcesDataTable.tsx` - Needs fix
-- 🔄 `ConfigMapsDataTable.tsx` - Needs fix
+- ✅ `ConfigMapsDataTable.tsx` - **Fixed**
 - ✅ `CronJobsDataTable.tsx` - **Fixed**
-- 🔄 `CSIDriversDataTable.tsx` - Needs fix
+- ✅ `CSIDriversDataTable.tsx` - **Fixed**
 - ✅ `DaemonSetsDataTable.tsx` - **Fixed**
 - ✅ `EndpointsDataTable.tsx` - **Fixed**
-- 🔄 `EndpointSlicesDataTable.tsx` - Needs fix
-- 🔄 `GatewaysDataTable.tsx` - Needs fix
+- ✅ `EndpointSlicesDataTable.tsx` - **Fixed**
+- ✅ `GatewaysDataTable.tsx` - **Fixed**
+- ✅ `IngressesDataTable.tsx` - **Fixed**
 - 🔄 `IngressClassesDataTable.tsx` - Needs fix
 - ✅ `JobsDataTable.tsx` - **Fixed**
-- 🔄 `LoadBalancersDataTable.tsx` - Needs fix
-- 🔄 `NamespacesDataTable.tsx` - Needs fix
-- 🔄 `NetworkPoliciesDataTable.tsx` - Needs fix
-- 🔄 `NodesDataTable.tsx` - Needs fix
-- 🔄 `PersistentVolumeClaimsDataTable.tsx` - Needs fix
-- 🔄 `PersistentVolumesDataTable.tsx` - Needs fix
+- ✅ `LoadBalancersDataTable.tsx` - **Fixed**
+- ✅ `NamespacesDataTable.tsx` - **Fixed**
+- ✅ `NetworkPoliciesDataTable.tsx` - **Fixed**
+- ✅ `NodesDataTable.tsx` - **Fixed**
+- ✅ `PersistentVolumeClaimsDataTable.tsx` - **Fixed**
+- ✅ `PersistentVolumesDataTable.tsx` - **Fixed**
 
 ## Step-by-Step Fix
 
