@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,41 +42,22 @@ type SummaryStatsAdapter struct {
 
 // NewSummaryStatsAdapter creates a new summary stats adapter
 func NewSummaryStatsAdapter(logger *zap.Logger, kubeClient kubernetes.Interface, restConfig *rest.Config, insecureTLS bool) *SummaryStatsAdapter {
-	// Create HTTP client with the same transport as the rest config
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	// Use the same transport as kubernetes client for authentication
-	if restConfig.Transport != nil {
-		httpClient.Transport = restConfig.Transport
-	}
-
-	// If insecure TLS is enabled, create a custom transport that skips certificate verification
+	// Clone the rest config to avoid modifying the original
+	configCopy := rest.CopyConfig(restConfig)
+	
+	// Apply insecure TLS if requested
 	if insecureTLS {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-		// Copy authentication from the original transport if it exists
-		if restConfig.Transport != nil {
-			if rt, ok := restConfig.Transport.(*http.Transport); ok && rt.TLSClientConfig != nil {
-				// Preserve authentication settings but disable cert verification
-				transport.TLSClientConfig.Certificates = rt.TLSClientConfig.Certificates
-				if rt.TLSClientConfig.GetClientCertificate != nil {
-					transport.TLSClientConfig.GetClientCertificate = rt.TLSClientConfig.GetClientCertificate
-				}
-			}
-		}
-
-		httpClient.Transport = transport
+		configCopy.TLSClientConfig.Insecure = true
+		configCopy.TLSClientConfig.CAFile = ""
+		configCopy.TLSClientConfig.CAData = nil
 		logger.Warn("Summary API configured with insecure TLS - certificate verification disabled")
 	}
 
 	return &SummaryStatsAdapter{
 		logger:     logger,
 		kubeClient: kubeClient,
-		restConfig: restConfig,
-		httpClient: httpClient,
+		restConfig: configCopy,
+		httpClient: &http.Client{Timeout: 30 * time.Second}, // Will be replaced by transport-based client
 	}
 }
 
@@ -188,18 +168,37 @@ func (ssa *SummaryStatsAdapter) getNodeSummaryStats(ctx context.Context, nodeNam
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set authentication headers if available
-	if ssa.restConfig.BearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+ssa.restConfig.BearerToken)
+	// Use the rest config's transport for proper authentication
+	// This handles both kubeconfig and in-cluster service account authentication
+	transport := ssa.restConfig.Transport
+	if transport == nil {
+		// Fallback to creating transport from config
+		transport, err = rest.TransportFor(ssa.restConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create transport: %w", err)
+		}
 	}
 
-	resp, err := ssa.httpClient.Do(req)
+	// Create a temporary client with the proper transport
+	tempClient := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+
+	resp, err := tempClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request to node %s: %w", nodeName, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		// Log more details about the error for debugging
+		body, _ := io.ReadAll(resp.Body)
+		ssa.logger.Debug("Summary API request failed",
+			zap.String("node", nodeName),
+			zap.Int("status", resp.StatusCode),
+			zap.String("response", string(body)),
+			zap.String("url", url))
 		return nil, fmt.Errorf("node %s returned status %d", nodeName, resp.StatusCode)
 	}
 

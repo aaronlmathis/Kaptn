@@ -1,105 +1,121 @@
 # ============================================================================
-# KAPTN COMPLETE DEPLOYMENT - EVERYTHING NEEDED FOR FRESH START
+# KAPTN COMPLETE DEPLOYMENT - EVERYTHING NEEDED FOR FRESH START (ONE FILE)
+# Apply after creating the kaptn-oauth Secret from your .env
 # ============================================================================
-# This file contains all resources needed to deploy Kaptn with OIDC + RBAC
-# Apply with: kubectl apply -f kaptn-complete-deployment.yaml
 
-# ============================================================================
-# 1. NAMESPACE
-# ============================================================================
+# 1) NAMESPACE
 apiVersion: v1
 kind: Namespace
 metadata:
   name: kaptn
-
+  labels:
+    app: kaptn
 ---
-# ============================================================================
-# 2. SERVICE ACCOUNT FOR KAPTN BACKEND
-# ============================================================================
+# 2) SERVICE ACCOUNT
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: kaptn-backend
   namespace: kaptn
-
+  labels: { app: kaptn }
 ---
-# ============================================================================
-# 3. CLUSTER ROLE - KAPTN BACKEND (IMPERSONATION + FULL ACCESS)
-# ============================================================================
+# 3) CLUSTER ROLE (impersonation + full access)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: kaptn-backend-impersonator
+  labels: { app: kaptn }
 rules:
-  # Impersonation permissions (required for OIDC)
-  - apiGroups: [""]
-    resources: ["users", "groups", "serviceaccounts"]
-    verbs: ["impersonate"]
-  - apiGroups: ["authentication.k8s.io"]
-    resources: ["userextras/*"]
-    verbs: ["impersonate"]
-  # Full cluster access for the backend itself
-  - apiGroups: ["*"]
-    resources: ["*"]
-    verbs: ["*"]
-  - nonResourceURLs: ["*"]
-    verbs: ["*"]
-
+- apiGroups: [""]
+  resources: ["users", "groups", "serviceaccounts"]
+  verbs: ["impersonate"]
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["userextras/*"]
+  verbs: ["impersonate"]
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+- nonResourceURLs: ["*"]
+  verbs: ["*"]
 ---
-# ============================================================================
-# 4. CLUSTER ROLE BINDING - KAPTN BACKEND
-# ============================================================================
+# 3b) TELEMETRY CLUSTER ROLE (for metrics collection)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kaptn-telemetry-reader
+  labels: { app: kaptn }
+rules:
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["nodes", "pods", "namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["nodes/proxy"]   # for /api/v1/nodes/<node>/proxy/stats/summary
+  verbs: ["get"]
+---
+# 4) CLUSTER ROLE BINDING
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: kaptn-backend-impersonator-binding
+  labels: { app: kaptn }
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: kaptn-backend-impersonator
 subjects:
-  - kind: ServiceAccount
-    name: kaptn-backend
-    namespace: kaptn
-
+- kind: ServiceAccount
+  name: kaptn-backend
+  namespace: kaptn
 ---
-# ============================================================================
-# 5. CLUSTER ROLES FOR USER GROUPS
-# ============================================================================
-# Super Admin ClusterRole for kaptn-admins-group
+# 4b) TELEMETRY CLUSTER ROLE BINDING
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kaptn-telemetry-reader-binding
+  labels: { app: kaptn }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kaptn-telemetry-reader
+subjects:
+- kind: ServiceAccount
+  name: kaptn-backend
+  namespace: kaptn
+---
+# 5) CLUSTER ROLES FOR USER GROUPS
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: kaptn-admins-super-admin-CR
+  labels: { app: kaptn }
 rules:
 - apiGroups: ["*"]
   resources: ["*"]
   verbs: ["*"]
 - nonResourceURLs: ["*"]
   verbs: ["*"]
-
 ---
-# Super Admin ClusterRole for cluster-admins-group  
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: cluster-admins-super-admin-CR
+  labels: { app: kaptn }
 rules:
 - apiGroups: ["*"]
   resources: ["*"]
   verbs: ["*"]
 - nonResourceURLs: ["*"]
   verbs: ["*"]
-
 ---
-# ============================================================================
-# 6. CLUSTER ROLE BINDINGS FOR USER GROUPS
-# ============================================================================
-# Bind kaptn-admins-group to built-in cluster-admin role
+# 6) CLUSTER ROLE BINDINGS FOR USER GROUPS
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: kaptn-admins-group-cluster-admin-CRB
+  labels: { app: kaptn }
 subjects:
 - kind: Group
   name: kaptn-admins-group
@@ -108,13 +124,12 @@ roleRef:
   kind: ClusterRole
   name: cluster-admin
   apiGroup: rbac.authorization.k8s.io
-
 ---
-# Bind cluster-admins-group to built-in cluster-admin role
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: cluster-admins-group-cluster-admin-CRB
+  labels: { app: kaptn }
 subjects:
 - kind: Group
   name: cluster-admins-group
@@ -123,13 +138,12 @@ roleRef:
   kind: ClusterRole
   name: cluster-admin
   apiGroup: rbac.authorization.k8s.io
-
 ---
-# Bind kaptn-admins-group to custom super admin role
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: kaptn-admins-group-super-admin-CRB
+  labels: { app: kaptn }
 subjects:
 - kind: Group
   name: kaptn-admins-group
@@ -138,13 +152,12 @@ roleRef:
   kind: ClusterRole
   name: kaptn-admins-super-admin-CR
   apiGroup: rbac.authorization.k8s.io
-
 ---
-# Bind cluster-admins-group to custom super admin role
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: cluster-admins-group-super-admin-CRB
+  labels: { app: kaptn }
 subjects:
 - kind: Group
   name: cluster-admins-group
@@ -153,38 +166,32 @@ roleRef:
   kind: ClusterRole
   name: cluster-admins-super-admin-CR
   apiGroup: rbac.authorization.k8s.io
-
 ---
-# ============================================================================
-# 7. USER BINDINGS CONFIGMAP
-# ============================================================================
+# 7) USER BINDINGS CONFIGMAP (example)
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kaptn-user-bindings
   namespace: kaptn
+  labels: { app: kaptn }
 data:
-  # Key is SHA256 hash of formatted username: email:aaron.mathis@gmail.com
-  # This approach is commonly used to handle special characters in ConfigMap keys
   "dd80007678b17f98898eb5e8b5de0a32fbbbc74cdc7c135b8d3e5ad27469eeb9": |
     {
       "user_id": "aaron.mathis@gmail.com",
-      "email": "aaron.mathis@gmail.com", 
+      "email": "aaron.mathis@gmail.com",
       "groups": ["kaptn-admins-group", "cluster-admins-group"],
       "namespaces": ["default", "kube-system", "monitoring", "istio-system", "kaptn"]
     }
-
 ---
-# ============================================================================
-# 8. KAPTN CONFIGURATION CONFIGMAP
-# ============================================================================
+# 8) KAPTN CONFIG (TEMPLATE for envsubst in initContainer)
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kaptn-config
   namespace: kaptn
+  labels: { app: kaptn }
 data:
-  config.yaml: |
+  config.tmpl: |
     server:
       addr: "0.0.0.0:8080"
       base_path: "/"
@@ -200,7 +207,7 @@ data:
         issuer: "https://accounts.google.com"
         client_id: "${GOOGLE_CLIENT_ID}"
         client_secret: "${GOOGLE_CLIENT_SECRET}"
-        redirect_url: "${GOOGLE_REDIRECT_URI}"
+        redirect_url: "${GOOGLE_REDIRECT_URI}"   # fixed: uri (not url)
         audience: "${GOOGLE_CLIENT_ID}"
         jwks_url: "https://www.googleapis.com/oauth2/v3/certs"
         scopes: ["openid", "profile", "email"]
@@ -218,6 +225,7 @@ data:
       mode: "incluster"
       kubeconfig_path: ""
       namespace_default: "default"
+      insecure_tls: true
 
     features:
       enable_apply: true
@@ -248,128 +256,137 @@ data:
       cleanup_interval: "1h"
       max_age: "24h"
 
+    timeseries:
+      enabled: true
+      window: "60m"
+      tick_interval: "1s"
+      capacity_refresh_interval: "30s"
+      resource_poll_interval: "15s"
+      summary_poll_interval: "30s"
+      state_reconcile_interval: "60s"
+      prune_interval: "30s"
+      hi_res:
+        step: "1s"
+      lo_res:
+        step: "5s"
 ---
-# ============================================================================
-# 9. KAPTN DEPLOYMENT
-# ============================================================================
+# 9) DEPLOYMENT (initContainer renders /etc/kaptn/config.yaml from template)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kaptn
   namespace: kaptn
-  labels:
-    app: kaptn
+  labels: { app: kaptn }
 spec:
   replicas: 1
   selector:
-    matchLabels:
-      app: kaptn
+    matchLabels: { app: kaptn }
   template:
     metadata:
-      labels:
-        app: kaptn
+      labels: { app: kaptn }
     spec:
       serviceAccountName: kaptn-backend
-      terminationGracePeriodSeconds: 10
-      containers:
-      - name: kaptn
-        image: docker.io/aaronlmathis/kaptn:debug
-        imagePullPolicy: Always
-        args:
-          - "--config=/etc/kaptn/config.yaml"
-        ports:
-          - containerPort: 8080
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 20
-          failureThreshold: 5
-          periodSeconds: 10
-        livenessProbe:
-          exec:
-            command: ["/server", "--health-check", "--config=/etc/kaptn/config.yaml"]
-          initialDelaySeconds: 20
-          periodSeconds: 30
-        volumeMounts:
-          - name: config
-            mountPath: /etc/kaptn
-            readOnly: true
+      terminationGracePeriodSeconds: 20
       volumes:
-        - name: config
+        - name: kaptn-config
           configMap:
             name: kaptn-config
-
+        - name: rendered-config
+          emptyDir: {}
+      initContainers:
+        - name: render-config
+          image: alpine:3.20
+          command: ["/bin/sh","-c"]
+          args:
+            - apk add --no-cache gettext >/dev/null;
+              envsubst < /tmpl/config.tmpl > /out/config.yaml;
+              echo "Rendered /etc/kaptn/config.yaml:"; head -n 40 /out/config.yaml
+          env:
+            - name: GOOGLE_CLIENT_ID
+              valueFrom: { secretKeyRef: { name: kaptn-oauth, key: GOOGLE_CLIENT_ID } }
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: kaptn-oauth, key: GOOGLE_CLIENT_SECRET } }
+            - name: GOOGLE_REDIRECT_URI
+              valueFrom: { secretKeyRef: { name: kaptn-oauth, key: GOOGLE_REDIRECT_URI } }
+          volumeMounts:
+            - name: kaptn-config
+              mountPath: /tmpl
+            - name: rendered-config
+              mountPath: /out
+      containers:
+        - name: kaptn
+          image: docker.io/aaronlmathis/kaptn:debug
+          imagePullPolicy: Always
+          args: ["--config=/etc/kaptn/config.yaml"]
+          ports:
+            - containerPort: 8080
+          env:
+            - name: GOOGLE_CLIENT_ID
+              valueFrom: { secretKeyRef: { name: kaptn-oauth, key: GOOGLE_CLIENT_ID } }
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: kaptn-oauth, key: GOOGLE_CLIENT_SECRET } }
+            - name: GOOGLE_REDIRECT_URI
+              valueFrom: { secretKeyRef: { name: kaptn-oauth, key: GOOGLE_REDIRECT_URI } }
+          volumeMounts:
+            - name: rendered-config
+              mountPath: /etc/kaptn
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            failureThreshold: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["/server","--health-check","--config=/etc/kaptn/config.yaml"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
 ---
-# ============================================================================
-# 10. KAPTN SERVICE
-# ============================================================================
+# 10) SERVICE
 apiVersion: v1
 kind: Service
 metadata:
   name: kaptn
   namespace: kaptn
+  labels: { app: kaptn }
 spec:
-  selector:
-    app: kaptn
+  selector: { app: kaptn }
   ports:
     - name: http
       port: 80
       targetPort: 8080
   type: ClusterIP
-
 ---
-# ============================================================================
-# 11. ISTIO GATEWAY
-# ============================================================================
-apiVersion: networking.istio.io/v1beta1
+# 11) ISTIO GATEWAY
+apiVersion: networking.istio.io/v1
 kind: Gateway
 metadata:
   name: kaptn-gateway
   namespace: kaptn
+  labels: { app: kaptn }
 spec:
   selector:
     istio: ingressgateway
   servers:
-  - hosts:
-    - dev.kaptn.dev
+  - hosts: ["dev.deepthought.sh"]
     port:
       name: http
       number: 80
       protocol: HTTP
-    tls:
-      httpsRedirect: true
-  - hosts:
-    - dev.kaptn.dev
-    port:
-      name: https
-      number: 443
-      protocol: HTTPS
-    tls:
-      credentialName: kaptn-dev-cert
-      mode: SIMPLE
 ---
-# ============================================================================
-# 12. ISTIO VIRTUAL SERVICE
-# ============================================================================
+# 12) ISTIO VIRTUAL SERVICE
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: kaptn
   namespace: kaptn
+  labels: { app: kaptn }
 spec:
-  hosts:
-    - dev.kaptn.dev
-  gateways:
-    - kaptn-gateway
+  hosts: ["dev.deepthought.sh"]
+  gateways: ["kaptn-gateway"]
   http:
     - route:
         - destination:
             host: kaptn.kaptn.svc.cluster.local
-            port:
-              number: 80
-
----
-# ============================================================================
-# END OF DEPLOYMENT
-# ============================================================================
+            port: { number: 80 }

@@ -123,16 +123,22 @@ func TestMemStore(t *testing.T) {
 
 	t.Run("Prune", func(t *testing.T) {
 		shortConfig := Config{
-			MaxWindow:   1 * time.Second, // Very short window for testing
-			HiResStep:   100 * time.Millisecond,
-			HiResPoints: 100,
-			LoResStep:   500 * time.Millisecond,
-			LoResPoints: 100,
+			MaxWindow:          1 * time.Second, // Very short window for testing
+			HiResStep:          100 * time.Millisecond,
+			HiResPoints:        100,
+			LoResStep:          500 * time.Millisecond,
+			LoResPoints:        100,
+			MaxSeries:          1000, // Set reasonable health limits
+			MaxPointsPerSeries: 10000,
+			MaxWSClients:       500,
 		}
 
 		store := NewMemStore(shortConfig)
 		key := "test.metric"
 		series := store.Upsert(key)
+		if series == nil {
+			t.Fatal("Expected series creation to succeed")
+		}
 
 		now := time.Now()
 
@@ -177,4 +183,87 @@ func TestMemStore(t *testing.T) {
 				len(recentPointsBefore), len(recentPointsAfter))
 		}
 	})
+}
+
+func TestNewMemStore_SetsHealthLimits(t *testing.T) {
+	config := DefaultConfig()
+	config.MaxSeries = 100
+	config.MaxPointsPerSeries = 5000
+	config.MaxWSClients = 50
+
+	store := NewMemStore(config)
+
+	health := store.GetHealth()
+	snapshot := health.GetSnapshot()
+
+	if snapshot.MaxSeriesCount != 100 {
+		t.Errorf("Expected max series count 100, got %d", snapshot.MaxSeriesCount)
+	}
+
+	if snapshot.MaxPointsPerSeries != 5000 {
+		t.Errorf("Expected max points per series 5000, got %d", snapshot.MaxPointsPerSeries)
+	}
+
+	if snapshot.MaxWSClients != 50 {
+		t.Errorf("Expected max WS clients 50, got %d", snapshot.MaxWSClients)
+	}
+}
+
+func TestMemStore_Upsert_UsesHealthAwareSeries(t *testing.T) {
+	config := DefaultConfig()
+	config.MaxSeries = 2 // Low limit for testing
+
+	store := NewMemStore(config)
+
+	// Should succeed for first two series
+	series1 := store.Upsert("test.series.1")
+	if series1 == nil {
+		t.Fatal("Expected series creation to succeed")
+	}
+
+	series2 := store.Upsert("test.series.2")
+	if series2 == nil {
+		t.Fatal("Expected series creation to succeed")
+	}
+
+	// Third series should fail due to limit
+	series3 := store.Upsert("test.series.3")
+	if series3 != nil {
+		t.Error("Expected series creation to fail due to limit")
+	}
+
+	// Check that health metrics reflect the limit hit
+	health := store.GetHealth()
+	snapshot := health.GetSnapshot()
+
+	if snapshot.SeriesCount != 2 {
+		t.Errorf("Expected series count 2, got %d", snapshot.SeriesCount)
+	}
+
+	if snapshot.ErrorCount == 0 {
+		t.Error("Expected error count > 0 when hitting series limit")
+	}
+}
+
+func TestMemStore_SeriesWithHealth_RecordsPoints(t *testing.T) {
+	config := DefaultConfig()
+	store := NewMemStore(config)
+
+	series := store.Upsert("test.series")
+	if series == nil {
+		t.Fatal("Expected series creation to succeed")
+	}
+
+	// Add some points
+	now := time.Now()
+	series.Add(Point{T: now, V: 1.0})
+	series.Add(Point{T: now.Add(time.Second), V: 2.0})
+
+	// Check that health metrics recorded the points
+	health := store.GetHealth()
+	snapshot := health.GetSnapshot()
+
+	if snapshot.TotalPointsAdded != 2 {
+		t.Errorf("Expected total points added 2, got %d", snapshot.TotalPointsAdded)
+	}
 }

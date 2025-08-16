@@ -24,7 +24,7 @@ function DaemonSetsContent() {
 		}
 	}, [daemonSets])
 
-	// Generate summary cards from daemonset data
+	// Generate summary cards from daemonset data.
 	const summaryData: SummaryCard[] = React.useMemo(() => {
 		if (!daemonSets || daemonSets.length === 0) {
 			return [

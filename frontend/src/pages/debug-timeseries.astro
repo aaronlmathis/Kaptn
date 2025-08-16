@@ -1,0 +1,10 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { DebugTimeSeriesContainer } from "@/components/containers/DebugTimeSeriesContainer";
+
+const title = "Debug TimeSeries";
+---
+
+<Layout title={title}>
+	<DebugTimeSeriesContainer client:load />
+</Layout>

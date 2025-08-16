@@ -827,6 +827,7 @@ func (s *Server) setupRoutes() {
 
 			// TimeSeries endpoints
 			r.Get("/timeseries/cluster", s.handleGetClusterTimeSeries)
+			r.Get("/timeseries/health", s.handleTimeSeriesHealth)
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)

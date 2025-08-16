@@ -30,15 +30,22 @@ type MemStore struct {
 
 // NewMemStore creates a new in-memory store with the given configuration
 func NewMemStore(config Config) *MemStore {
+	health := NewHealthMetrics()
+	// Set health limits from config
+	health.SetLimits(config.MaxSeries, config.MaxPointsPerSeries, config.MaxWSClients)
+
 	return &MemStore{
 		series: make(map[string]*Series),
 		config: config,
-		health: NewHealthMetrics(),
+		health: health,
 	}
 }
 
 // NewMemStoreWithHealth creates a new in-memory store with custom health metrics
 func NewMemStoreWithHealth(config Config, health *HealthMetrics) *MemStore {
+	// Ensure health limits are set from config
+	health.SetLimits(config.MaxSeries, config.MaxPointsPerSeries, config.MaxWSClients)
+
 	return &MemStore{
 		series: make(map[string]*Series),
 		config: config,
@@ -62,8 +69,8 @@ func (m *MemStore) Upsert(key string) *Series {
 		return nil
 	}
 
-	// Create new series
-	series := NewSeries(m.config)
+	// Create new series with health awareness
+	series := NewSeriesWithHealth(m.config, m.health)
 	m.series[key] = series
 	m.health.IncrementSeriesCount()
 	return series

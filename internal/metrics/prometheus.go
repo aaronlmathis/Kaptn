@@ -141,6 +141,52 @@ var (
 			Help: "Total number of nodes in cluster",
 		},
 	)
+
+	// New: Kaptn internal telemetry metrics
+	collectorScrapeDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "kaptn_collector_scrape_duration_seconds",
+			Help:    "Duration of telemetry collector scrapes",
+			Buckets: []float64{0.1, 0.5, 1.0, 2.5, 5.0, 10.0}, // 100ms to 10s
+		},
+		[]string{"collector"},
+	)
+
+	collectorScrapeErrors = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "kaptn_collector_scrape_errors_total",
+			Help: "Total number of telemetry collector scrape errors",
+		},
+		[]string{"collector"},
+	)
+
+	ringBufferPointsTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "kaptn_ringbuffer_points_total",
+			Help: "Total number of points added to ring buffers",
+		},
+	)
+
+	ringBufferSeriesTotal = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "kaptn_ringbuffer_series_total",
+			Help: "Current number of active ring buffer series",
+		},
+	)
+
+	ringBufferDroppedPointsTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "kaptn_ringbuffer_dropped_points_total",
+			Help: "Total number of points dropped due to limits",
+		},
+	)
+
+	ringBufferPointsPerSecond = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "kaptn_ringbuffer_points_per_second",
+			Help: "Current rate of points being added to ring buffers",
+		},
+	)
 )
 
 // RecordHTTPRequest records metrics for HTTP requests
@@ -213,4 +259,30 @@ func UpdateClusterMetrics(cpuPercent, memoryPercent float64, podsRunning, podsTo
 	clusterPodsTotal.Set(float64(podsTotal))
 	clusterNodesReady.Set(float64(nodesReady))
 	clusterNodesTotal.Set(float64(nodesTotal))
+}
+
+// RecordCollectorScrape records telemetry collector scrape metrics
+func RecordCollectorScrape(collector string, duration time.Duration, hasError bool) {
+	collectorScrapeDuration.With(prometheus.Labels{"collector": collector}).Observe(duration.Seconds())
+
+	if hasError {
+		collectorScrapeErrors.With(prometheus.Labels{"collector": collector}).Inc()
+	}
+}
+
+// RecordRingBufferPoint records when a point is added to the ring buffer
+func RecordRingBufferPoint() {
+	ringBufferPointsTotal.Inc()
+}
+
+// UpdateRingBufferMetrics updates current ring buffer health metrics
+func UpdateRingBufferMetrics(seriesCount int64, pointsPerSec int64, droppedPoints int64) {
+	ringBufferSeriesTotal.Set(float64(seriesCount))
+	ringBufferPointsPerSecond.Set(float64(pointsPerSec))
+
+	// Note: we only set dropped points if they have increased
+	// to avoid constantly calling Add(0)
+	if droppedPoints > 0 {
+		ringBufferDroppedPointsTotal.Add(float64(droppedPoints))
+	}
 }

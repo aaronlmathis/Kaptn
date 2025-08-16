@@ -10,7 +10,8 @@ import (
 	"k8s.io/client-go/rest"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 
-	"github.com/aaronlmathis/kaptn/internal/kube/metrics"
+	kubemetrics "github.com/aaronlmathis/kaptn/internal/kube/metrics"
+	"github.com/aaronlmathis/kaptn/internal/metrics"
 	"github.com/aaronlmathis/kaptn/internal/timeseries"
 )
 
@@ -32,14 +33,19 @@ type Aggregator struct {
 	store  timeseries.Store
 
 	// Kubernetes adapters
-	nodesAdapter      *metrics.NodesAdapter
-	apiMetricsAdapter *metrics.APIMetricsAdapter
-	summaryAdapter    *metrics.SummaryStatsAdapter
+	nodesAdapter      *kubemetrics.NodesAdapter
+	apiMetricsAdapter *kubemetrics.APIMetricsAdapter
+	summaryAdapter    *kubemetrics.SummaryStatsAdapter
 
 	// State management
 	mu                  sync.RWMutex
 	hostSnapshots       map[string]*hostSnap
 	lastCapacityRefresh time.Time
+
+	// New: poll interval tracking for gating expensive operations
+	lastResourcePoll time.Time
+	lastSummaryPoll  time.Time
+	lastStateRecon   time.Time
 
 	// Configuration
 	config                  Config
@@ -56,6 +62,12 @@ type Config struct {
 	TickInterval            time.Duration `yaml:"tick_interval"`
 	CapacityRefreshInterval time.Duration `yaml:"capacity_refresh_interval"`
 
+	// New poll intervals for gating expensive operations
+	ResourcePollInterval   time.Duration `yaml:"resource_poll_interval"`   // metrics.k8s.io
+	SummaryPollInterval    time.Duration `yaml:"summary_poll_interval"`    // Summary API
+	StateReconcileInterval time.Duration `yaml:"state_reconcile_interval"` // Core API counts
+	PruneInterval          time.Duration `yaml:"prune_interval"`           // Background pruning
+
 	// Feature flags
 	Enabled                     bool `yaml:"enabled"`
 	DisableNetworkIfUnavailable bool `yaml:"disable_network_if_unavailable"`
@@ -69,6 +81,10 @@ func DefaultConfig() Config {
 	return Config{
 		TickInterval:                1 * time.Second,
 		CapacityRefreshInterval:     30 * time.Second,
+		ResourcePollInterval:        15 * time.Second, // metrics.k8s.io
+		SummaryPollInterval:         30 * time.Second, // Summary API
+		StateReconcileInterval:      60 * time.Second, // Core API counts
+		PruneInterval:               30 * time.Second, // Background pruning
 		Enabled:                     true,
 		DisableNetworkIfUnavailable: true,
 	}
@@ -93,9 +109,9 @@ func NewAggregator(
 		done:                    make(chan struct{}),
 
 		// Initialize adapters
-		nodesAdapter:      metrics.NewNodesAdapter(logger, kubeClient),
-		apiMetricsAdapter: metrics.NewAPIMetricsAdapter(logger, kubeClient, metricsClient),
-		summaryAdapter:    metrics.NewSummaryStatsAdapter(logger, kubeClient, restConfig, config.InsecureTLS),
+		nodesAdapter:      kubemetrics.NewNodesAdapter(logger, kubeClient),
+		apiMetricsAdapter: kubemetrics.NewAPIMetricsAdapter(logger, kubeClient, metricsClient),
+		summaryAdapter:    kubemetrics.NewSummaryStatsAdapter(logger, kubeClient, restConfig, config.InsecureTLS),
 	}
 }
 
@@ -109,6 +125,10 @@ func (a *Aggregator) Start(ctx context.Context) error {
 	a.logger.Info("Starting time series aggregator",
 		zap.Duration("tickInterval", a.config.TickInterval),
 		zap.Duration("capacityRefreshInterval", a.capacityRefreshInterval),
+		zap.Duration("resourcePollInterval", a.config.ResourcePollInterval),
+		zap.Duration("summaryPollInterval", a.config.SummaryPollInterval),
+		zap.Duration("stateReconcileInterval", a.config.StateReconcileInterval),
+		zap.Duration("pruneInterval", a.config.PruneInterval),
 	)
 
 	// Check capabilities on startup
@@ -121,6 +141,7 @@ func (a *Aggregator) Start(ctx context.Context) error {
 	)
 
 	go a.run(ctx)
+	go a.pruneLoop(ctx) // Start background pruning
 	return nil
 }
 
@@ -162,17 +183,39 @@ func (a *Aggregator) tick(ctx context.Context) {
 	// Refresh node capacities periodically
 	a.mu.RLock()
 	shouldRefreshCapacity := now.Sub(a.lastCapacityRefresh) >= a.capacityRefreshInterval
+	shouldCollectResource := now.Sub(a.lastResourcePoll) >= a.config.ResourcePollInterval
+	shouldCollectSummary := now.Sub(a.lastSummaryPoll) >= a.config.SummaryPollInterval
+	shouldReconcileState := now.Sub(a.lastStateRecon) >= a.config.StateReconcileInterval
 	a.mu.RUnlock()
 
 	if shouldRefreshCapacity {
 		a.refreshNodeCapacities(ctx, now)
 	}
 
-	// Collect CPU metrics
-	a.collectCPUMetrics(ctx, now)
+	// Gate expensive resource metrics collection
+	if shouldCollectResource {
+		a.collectCPUMetrics(ctx, now)
+		a.collectMemoryMetrics(ctx, now)
+		a.mu.Lock()
+		a.lastResourcePoll = now
+		a.mu.Unlock()
+	}
 
-	// Collect network metrics
-	a.collectNetworkMetrics(ctx, now)
+	// Gate expensive network/summary metrics collection
+	if shouldCollectSummary {
+		a.collectNetworkMetrics(ctx, now)
+		a.mu.Lock()
+		a.lastSummaryPoll = now
+		a.mu.Unlock()
+	}
+
+	// Gate state reconciliation (pod/node counts)
+	if shouldReconcileState {
+		a.collectStateMetrics(ctx, now)
+		a.mu.Lock()
+		a.lastStateRecon = now
+		a.mu.Unlock()
+	}
 }
 
 // refreshNodeCapacities updates node capacity information
@@ -215,6 +258,12 @@ func (a *Aggregator) refreshNodeCapacities(ctx context.Context, now time.Time) {
 
 // collectCPUMetrics collects and aggregates CPU metrics
 func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("resource", time.Since(start), hasError)
+	}()
+
 	// Collect CPU capacity (sum of all nodes)
 	var totalCapacity float64
 	a.mu.RLock()
@@ -233,10 +282,25 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 
 	// Collect CPU usage if Metrics API is available
 	if a.apiMetricsAdapter.HasMetricsAPI(ctx) {
-		totalUsage, err := a.apiMetricsAdapter.GetTotalClusterCPUUsage(ctx)
+		// Get individual node usage for node-level metrics
+		nodeUsageMap, err := a.apiMetricsAdapter.ListNodeCPUUsage(ctx)
 		if err != nil {
-			a.logger.Warn("Failed to collect CPU usage", zap.Error(err))
+			hasError = true
+			a.logger.Warn("Failed to collect node CPU usage", zap.Error(err))
 		} else {
+			var totalUsage float64
+			
+			// Store individual node usage metrics
+			for nodeName, usage := range nodeUsageMap {
+				totalUsage += usage
+				
+				nodeUsageSeries := a.store.Upsert(timeseries.NodeCPUUsageCores)
+				if nodeUsageSeries != nil {
+					nodeUsageSeries.Add(timeseries.Point{T: now, V: usage})
+				}
+			}
+
+			// Store cluster total usage
 			usageSeries := a.store.Upsert(timeseries.ClusterCPUUsedCores)
 			if usageSeries != nil {
 				usageSeries.Add(timeseries.Point{T: now, V: totalUsage})
@@ -245,6 +309,7 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 			a.logger.Debug("Collected CPU metrics",
 				zap.Float64("capacity", totalCapacity),
 				zap.Float64("usage", totalUsage),
+				zap.Int("nodes", len(nodeUsageMap)),
 			)
 		}
 	}
@@ -252,6 +317,12 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 
 // collectNetworkMetrics collects and aggregates network metrics
 func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("summary", time.Since(start), hasError)
+	}()
+
 	hasSummaryAPI := a.summaryAdapter.HasSummaryAPI(ctx)
 
 	// If network is disabled when unavailable and we don't have Summary API, skip
@@ -265,6 +336,7 @@ func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
 
 	networkStats, err := a.summaryAdapter.ListNodeNetworkStats(ctx)
 	if err != nil {
+		hasError = true
 		a.logger.Warn("Failed to collect network stats", zap.Error(err))
 		return
 	}
@@ -334,4 +406,120 @@ func (a *Aggregator) GetCapabilities(ctx context.Context) map[string]bool {
 		"metricsAPI": a.apiMetricsAdapter.HasMetricsAPI(ctx),
 		"summaryAPI": a.summaryAdapter.HasSummaryAPI(ctx),
 	}
+}
+
+// pruneLoop runs background pruning at configured intervals
+func (a *Aggregator) pruneLoop(ctx context.Context) {
+	ticker := time.NewTicker(a.config.PruneInterval)
+	defer ticker.Stop()
+
+	a.logger.Info("Starting background pruner",
+		zap.Duration("interval", a.config.PruneInterval))
+
+	for {
+		select {
+		case <-ctx.Done():
+			a.logger.Info("Pruner stopped due to context cancellation")
+			return
+		case <-a.stopCh:
+			a.logger.Info("Pruner stopped gracefully")
+			return
+		case <-ticker.C:
+			a.logger.Debug("Running background prune")
+			a.store.Prune()
+		}
+	}
+}
+
+// collectMemoryMetrics collects both cluster and node-level memory metrics
+func (a *Aggregator) collectMemoryMetrics(ctx context.Context, now time.Time) {
+	// Get node list for both capacity and individual node metrics
+	nodeList, err := a.nodesAdapter.ListNodes(ctx)
+	if err != nil {
+		a.logger.Error("Failed to collect nodes for memory metrics", zap.Error(err))
+		return
+	}
+
+	var totalMemoryCapacity float64
+
+	// Collect individual node capacity metrics
+	for _, node := range nodeList {
+		totalMemoryCapacity += node.MemoryBytes
+
+		// Store individual node capacity metrics
+		nodeCapSeries := a.store.Upsert(timeseries.NodeCapacityMemBytes)
+		if nodeCapSeries != nil {
+			nodeCapSeries.Add(timeseries.Point{T: now, V: node.MemoryBytes})
+		}
+
+		// Store individual node allocatable metrics (same as capacity for now)
+		nodeAllocSeries := a.store.Upsert(timeseries.NodeAllocatableMemBytes)
+		if nodeAllocSeries != nil {
+			nodeAllocSeries.Add(timeseries.Point{T: now, V: node.MemoryBytes})
+		}
+
+		// Also collect CPU capacity at node level
+		nodeCapCPUSeries := a.store.Upsert(timeseries.NodeCapacityCPUCores)
+		if nodeCapCPUSeries != nil {
+			nodeCapCPUSeries.Add(timeseries.Point{T: now, V: node.CPUCores})
+		}
+
+		nodeAllocCPUSeries := a.store.Upsert(timeseries.NodeAllocatableCPUCores)
+		if nodeAllocCPUSeries != nil {
+			nodeAllocCPUSeries.Add(timeseries.Point{T: now, V: node.CPUCores})
+		}
+	}
+
+	// Store cluster-level memory allocatable
+	if totalMemoryCapacity > 0 {
+		allocatableSeries := a.store.Upsert(timeseries.ClusterMemAllocatableBytes)
+		if allocatableSeries != nil {
+			allocatableSeries.Add(timeseries.Point{T: now, V: totalMemoryCapacity})
+		}
+	}
+
+	a.logger.Debug("Collected memory metrics",
+		zap.Float64("cluster_allocatable_gb", totalMemoryCapacity/(1024*1024*1024)),
+		zap.Int("node_count", len(nodeList)))
+}
+
+// collectStateMetrics collects cluster state metrics (pod counts, node counts)
+func (a *Aggregator) collectStateMetrics(ctx context.Context, now time.Time) {
+	// Collect node count
+	nodeList, err := a.nodesAdapter.ListNodes(ctx)
+	if err != nil {
+		a.logger.Error("Failed to collect node count", zap.Error(err))
+		return
+	}
+
+	nodeCount := float64(len(nodeList))
+	nodeCountSeries := a.store.Upsert(timeseries.ClusterNodesCount)
+	if nodeCountSeries != nil {
+		nodeCountSeries.Add(timeseries.Point{T: now, V: nodeCount})
+	}
+
+	// TODO: Pod state collection requires implementing pod state tracking
+	// For now, we'll populate with placeholder zeros to avoid empty series
+	runningPodsSeries := a.store.Upsert(timeseries.ClusterPodsRunning)
+	if runningPodsSeries != nil {
+		runningPodsSeries.Add(timeseries.Point{T: now, V: 0})
+	}
+
+	pendingPodsSeries := a.store.Upsert(timeseries.ClusterPodsPending)
+	if pendingPodsSeries != nil {
+		pendingPodsSeries.Add(timeseries.Point{T: now, V: 0})
+	}
+
+	failedPodsSeries := a.store.Upsert(timeseries.ClusterPodsFailed)
+	if failedPodsSeries != nil {
+		failedPodsSeries.Add(timeseries.Point{T: now, V: 0})
+	}
+
+	succeededPodsSeries := a.store.Upsert(timeseries.ClusterPodsSucceeded)
+	if succeededPodsSeries != nil {
+		succeededPodsSeries.Add(timeseries.Point{T: now, V: 0})
+	}
+
+	a.logger.Debug("Collected state metrics",
+		zap.Float64("nodes", nodeCount))
 }

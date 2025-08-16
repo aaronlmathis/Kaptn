@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/aaronlmathis/kaptn/internal/metrics"
 )
 
 // HealthMetrics tracks health and performance metrics for the timeseries system
@@ -68,6 +70,9 @@ func (h *HealthMetrics) RecordPointAdded() {
 	atomic.AddInt64(&h.totalPointsAdded, 1)
 	atomic.AddInt64(&h.pointsThisSecond, 1)
 	h.updatePerSecondCounters()
+
+	// Also update Prometheus metrics
+	metrics.RecordRingBufferPoint()
 }
 
 // RecordWSMessage records that a WebSocket message was sent
@@ -151,7 +156,7 @@ func (h *HealthMetrics) GetSnapshot() HealthSnapshot {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	return HealthSnapshot{
+	snapshot := HealthSnapshot{
 		SeriesCount:        atomic.LoadInt64(&h.seriesCount),
 		TotalPointsAdded:   atomic.LoadInt64(&h.totalPointsAdded),
 		PointsAddedPerSec:  atomic.LoadInt64(&h.pointsAddedPerSec),
@@ -165,6 +170,15 @@ func (h *HealthMetrics) GetSnapshot() HealthSnapshot {
 		MaxWSClients:       h.maxWSClients,
 		Timestamp:          time.Now(),
 	}
+
+	// Update Prometheus metrics with current snapshot
+	metrics.UpdateRingBufferMetrics(
+		snapshot.SeriesCount,
+		snapshot.PointsAddedPerSec,
+		0, // We don't track deltas for dropped points here
+	)
+
+	return snapshot
 }
 
 // HealthSnapshot represents a point-in-time snapshot of health metrics

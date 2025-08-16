@@ -12,8 +12,9 @@ import (
 
 // NodeCapacity represents a node's resource capacity
 type NodeCapacity struct {
-	Name     string  `json:"name"`
-	CPUCores float64 `json:"cpuCores"`
+	Name        string  `json:"name"`
+	CPUCores    float64 `json:"cpuCores"`
+	MemoryBytes float64 `json:"memoryBytes"`
 }
 
 // NodesAdapter provides node information and capacity data
@@ -44,9 +45,13 @@ func (na *NodesAdapter) ListNodes(ctx context.Context) ([]NodeCapacity, error) {
 		cpuQuantity := node.Status.Capacity[corev1.ResourceCPU]
 		cpuCores := float64(cpuQuantity.MilliValue()) / 1000.0 // Convert millicores to cores
 
+		memoryQuantity := node.Status.Capacity[corev1.ResourceMemory]
+		memoryBytes := float64(memoryQuantity.Value()) // Memory in bytes
+
 		nodeCapacity := NodeCapacity{
-			Name:     node.Name,
-			CPUCores: cpuCores,
+			Name:        node.Name,
+			CPUCores:    cpuCores,
+			MemoryBytes: memoryBytes,
 		}
 
 		nodeCapacities = append(nodeCapacities, nodeCapacity)
@@ -54,6 +59,7 @@ func (na *NodesAdapter) ListNodes(ctx context.Context) ([]NodeCapacity, error) {
 		na.logger.Debug("Node capacity collected",
 			zap.String("node", node.Name),
 			zap.Float64("cpuCores", cpuCores),
+			zap.Float64("memoryGiB", memoryBytes/(1024*1024*1024)),
 		)
 	}
 
@@ -81,4 +87,23 @@ func (na *NodesAdapter) GetTotalClusterCPUCapacity(ctx context.Context) (float64
 	)
 
 	return totalCores, nil
+}
+
+// GetTotalClusterMemoryCapacity returns the sum of all node memory capacities in bytes
+func (na *NodesAdapter) GetTotalClusterMemoryCapacity(ctx context.Context) (float64, error) {
+	nodeCapacities, err := na.ListNodes(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	var totalBytes float64
+	for _, node := range nodeCapacities {
+		totalBytes += node.MemoryBytes
+	}
+
+	na.logger.Debug("Total cluster memory capacity calculated",
+		zap.Float64("totalGiB", totalBytes/(1024*1024*1024)),
+	)
+
+	return totalBytes, nil
 }
