@@ -1,0 +1,10 @@
+---
+import { MetricExplorerContainer } from "@/components/metric-explorer-container";
+import Layout from "@/layouts/dashboard.astro";
+
+const title = "Metric Explorer";
+---
+
+<Layout title={title}>
+	<MetricExplorerContainer client:load />
+</Layout>
