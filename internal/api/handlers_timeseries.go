@@ -199,18 +199,23 @@ func (s *Server) handleClusterTimeSeriesLiveWebSocket(w http.ResponseWriter, r *
 		}
 	}
 
-	// Check if timeseries aggregator is available
-	if s.timeSeriesAggregator == nil {
-		s.logger.Error("TimeSeries aggregator not initialized for WebSocket")
+	// Check if timeseries store and aggregator are available
+	if s.timeSeriesStore == nil || s.timeSeriesAggregator == nil {
+		s.logger.Error("TimeSeries services not initialized for WebSocket")
 		http.Error(w, "TimeSeries service not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Check WebSocket client limits
+	health := s.timeSeriesStore.GetHealth()
+	if !health.CheckWSClientLimit() {
+		s.logger.Warn("WebSocket connection rejected - client limit reached")
+		http.Error(w, "WebSocket client limit reached", http.StatusServiceUnavailable)
 		return
 	}
 
 	// Create room name for this WebSocket connection
 	room := "timeseries:cluster:" + strings.Join(requestedKeys, ",")
-
-	// Store the requested keys in the room for later use by the broadcaster
-	// This is a simple approach - in a production system you might want more sophisticated tracking
 
 	s.logger.Info("Starting timeseries WebSocket connection",
 		zap.Strings("series", requestedKeys),
@@ -236,6 +241,12 @@ func (s *Server) startTimeSeriesWebSocketBroadcaster() {
 				// Check if we have timeseries data to broadcast
 				if s.timeSeriesStore == nil {
 					continue
+				}
+
+				// Update WebSocket client count in health metrics
+				if health := s.timeSeriesStore.GetHealth(); health != nil {
+					clientCount := int64(s.wsHub.ClientCount())
+					health.SetWSClientCount(clientCount)
 				}
 
 				// Check each series for new data
@@ -271,6 +282,11 @@ func (s *Server) startTimeSeriesWebSocketBroadcaster() {
 						Type:  "append",
 						Key:   key,
 						Point: &apiPoint,
+					}
+
+					// Record WebSocket message in health metrics
+					if health := s.timeSeriesStore.GetHealth(); health != nil {
+						health.RecordWSMessage()
 					}
 
 					// Find all rooms that should receive this key's updates
@@ -369,4 +385,54 @@ func getTotalPoints(seriesData map[string][]TimeSeriesPoint) int {
 		total += len(points)
 	}
 	return total
+}
+
+// handleGetTimeSeriesHealth handles GET /api/v1/timeseries/health
+func (s *Server) handleGetTimeSeriesHealth(w http.ResponseWriter, r *http.Request) {
+	// Check if timeseries store is available
+	if s.timeSeriesStore == nil {
+		s.logger.Error("TimeSeries store not initialized")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "TimeSeries service not available",
+		})
+		return
+	}
+
+	// Get health snapshot
+	health := s.timeSeriesStore.GetHealthSnapshot()
+
+	// Get capabilities if aggregator is available
+	capabilities := make(map[string]bool)
+	if s.timeSeriesAggregator != nil {
+		capabilities = s.timeSeriesAggregator.GetCapabilities(r.Context())
+	}
+
+	// Build response
+	response := struct {
+		Health       timeseries.HealthSnapshot `json:"health"`
+		Capabilities map[string]bool           `json:"capabilities"`
+		Status       string                    `json:"status"`
+	}{
+		Health:       health,
+		Capabilities: capabilities,
+		Status:       health.GetStatus(),
+	}
+
+	s.logger.Debug("TimeSeries health request",
+		zap.String("status", health.GetStatus()),
+		zap.Int64("series_count", health.SeriesCount),
+		zap.Int64("ws_clients", health.WSClientCount))
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Return appropriate HTTP status based on health
+	if health.IsHealthy() {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+
+	json.NewEncoder(w).Encode(response)
 }

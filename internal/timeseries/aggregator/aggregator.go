@@ -57,15 +57,20 @@ type Config struct {
 	CapacityRefreshInterval time.Duration `yaml:"capacity_refresh_interval"`
 
 	// Feature flags
-	Enabled bool `yaml:"enabled"`
+	Enabled                     bool `yaml:"enabled"`
+	DisableNetworkIfUnavailable bool `yaml:"disable_network_if_unavailable"`
+
+	// TLS configuration
+	InsecureTLS bool `yaml:"insecure_tls"`
 }
 
 // DefaultConfig returns the default aggregator configuration
 func DefaultConfig() Config {
 	return Config{
-		TickInterval:            1 * time.Second,
-		CapacityRefreshInterval: 30 * time.Second,
-		Enabled:                 true,
+		TickInterval:                1 * time.Second,
+		CapacityRefreshInterval:     30 * time.Second,
+		Enabled:                     true,
+		DisableNetworkIfUnavailable: true,
 	}
 }
 
@@ -90,7 +95,7 @@ func NewAggregator(
 		// Initialize adapters
 		nodesAdapter:      metrics.NewNodesAdapter(logger, kubeClient),
 		apiMetricsAdapter: metrics.NewAPIMetricsAdapter(logger, kubeClient, metricsClient),
-		summaryAdapter:    metrics.NewSummaryStatsAdapter(logger, kubeClient, restConfig),
+		summaryAdapter:    metrics.NewSummaryStatsAdapter(logger, kubeClient, restConfig, config.InsecureTLS),
 	}
 }
 
@@ -221,7 +226,9 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 	// Store CPU capacity
 	if totalCapacity > 0 {
 		capacitySeries := a.store.Upsert(timeseries.ClusterCPUCapacityCores)
-		capacitySeries.Add(timeseries.Point{T: now, V: totalCapacity})
+		if capacitySeries != nil {
+			capacitySeries.Add(timeseries.Point{T: now, V: totalCapacity})
+		}
 	}
 
 	// Collect CPU usage if Metrics API is available
@@ -231,7 +238,9 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 			a.logger.Warn("Failed to collect CPU usage", zap.Error(err))
 		} else {
 			usageSeries := a.store.Upsert(timeseries.ClusterCPUUsedCores)
-			usageSeries.Add(timeseries.Point{T: now, V: totalUsage})
+			if usageSeries != nil {
+				usageSeries.Add(timeseries.Point{T: now, V: totalUsage})
+			}
 
 			a.logger.Debug("Collected CPU metrics",
 				zap.Float64("capacity", totalCapacity),
@@ -243,7 +252,14 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 
 // collectNetworkMetrics collects and aggregates network metrics
 func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
-	if !a.summaryAdapter.HasSummaryAPI(ctx) {
+	hasSummaryAPI := a.summaryAdapter.HasSummaryAPI(ctx)
+
+	// If network is disabled when unavailable and we don't have Summary API, skip
+	if a.config.DisableNetworkIfUnavailable && !hasSummaryAPI {
+		return
+	}
+
+	if !hasSummaryAPI {
 		return
 	}
 
@@ -296,10 +312,14 @@ func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
 
 	// Store network rates
 	rxSeries := a.store.Upsert(timeseries.ClusterNetRxBps)
-	rxSeries.Add(timeseries.Point{T: now, V: totalRxRate})
+	if rxSeries != nil {
+		rxSeries.Add(timeseries.Point{T: now, V: totalRxRate})
+	}
 
 	txSeries := a.store.Upsert(timeseries.ClusterNetTxBps)
-	txSeries.Add(timeseries.Point{T: now, V: totalTxRate})
+	if txSeries != nil {
+		txSeries.Add(timeseries.Point{T: now, V: totalTxRate})
+	}
 
 	a.logger.Debug("Collected network metrics",
 		zap.Float64("rxBps", totalRxRate),

@@ -97,6 +97,7 @@ type KubernetesConfig struct {
 	Mode             string `yaml:"mode"`
 	KubeconfigPath   string `yaml:"kubeconfig_path"`
 	NamespaceDefault string `yaml:"namespace_default"`
+	InsecureTLS      bool   `yaml:"insecure_tls"` // Skip TLS verification for development environments
 }
 
 // FeaturesConfig represents the features configuration
@@ -159,6 +160,14 @@ type TimeseriesConfig struct {
 	LoRes struct {
 		Step string `yaml:"step"`
 	} `yaml:"lo_res"`
+
+	// Health and guardrails
+	MaxSeries          int `yaml:"max_series"`
+	MaxPointsPerSeries int `yaml:"max_points_per_series"`
+	MaxWSClients       int `yaml:"max_ws_clients"`
+
+	// Feature flags
+	DisableNetworkIfUnavailable bool `yaml:"disable_network_if_unavailable"`
 }
 
 // Load loads the configuration from environment variables and defaults
@@ -220,6 +229,7 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			Mode:             getEnv("KAD_KUBE_MODE", "kubeconfig"),
 			KubeconfigPath:   getEnv("KUBECONFIG", ""),
 			NamespaceDefault: getEnv("KAD_NAMESPACE_DEFAULT", "default"),
+			InsecureTLS:      getEnvBool("KAD_KUBE_INSECURE_TLS", false),
 		},
 		Features: FeaturesConfig{
 			EnableApply:               getEnvBool("KAD_ENABLE_APPLY", true),
@@ -269,6 +279,10 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			}{
 				Step: getEnv("KAD_TIMESERIES_LO_RES_STEP", "5s"),
 			},
+			MaxSeries:                   getEnvInt("KAD_TIMESERIES_MAX_SERIES", 1000),
+			MaxPointsPerSeries:          getEnvInt("KAD_TIMESERIES_MAX_POINTS_PER_SERIES", 10000),
+			MaxWSClients:                getEnvInt("KAD_TIMESERIES_MAX_WS_CLIENTS", 500),
+			DisableNetworkIfUnavailable: getEnvBool("KAD_TIMESERIES_DISABLE_NETWORK_IF_UNAVAILABLE", true),
 		},
 	}
 

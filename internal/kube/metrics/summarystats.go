@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -41,7 +42,7 @@ type SummaryStatsAdapter struct {
 }
 
 // NewSummaryStatsAdapter creates a new summary stats adapter
-func NewSummaryStatsAdapter(logger *zap.Logger, kubeClient kubernetes.Interface, restConfig *rest.Config) *SummaryStatsAdapter {
+func NewSummaryStatsAdapter(logger *zap.Logger, kubeClient kubernetes.Interface, restConfig *rest.Config, insecureTLS bool) *SummaryStatsAdapter {
 	// Create HTTP client with the same transport as the rest config
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
@@ -50,6 +51,26 @@ func NewSummaryStatsAdapter(logger *zap.Logger, kubeClient kubernetes.Interface,
 	// Use the same transport as kubernetes client for authentication
 	if restConfig.Transport != nil {
 		httpClient.Transport = restConfig.Transport
+	}
+
+	// If insecure TLS is enabled, create a custom transport that skips certificate verification
+	if insecureTLS {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
+		// Copy authentication from the original transport if it exists
+		if restConfig.Transport != nil {
+			if rt, ok := restConfig.Transport.(*http.Transport); ok && rt.TLSClientConfig != nil {
+				// Preserve authentication settings but disable cert verification
+				transport.TLSClientConfig.Certificates = rt.TLSClientConfig.Certificates
+				if rt.TLSClientConfig.GetClientCertificate != nil {
+					transport.TLSClientConfig.GetClientCertificate = rt.TLSClientConfig.GetClientCertificate
+				}
+			}
+		}
+
+		httpClient.Transport = transport
+		logger.Warn("Summary API configured with insecure TLS - certificate verification disabled")
 	}
 
 	return &SummaryStatsAdapter{

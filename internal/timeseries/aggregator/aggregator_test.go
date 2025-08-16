@@ -39,6 +39,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 1*time.Second, config.TickInterval)
 	assert.Equal(t, 30*time.Second, config.CapacityRefreshInterval)
 	assert.True(t, config.Enabled)
+	assert.False(t, config.InsecureTLS)
 }
 
 func TestAggregatorStartStop(t *testing.T) {

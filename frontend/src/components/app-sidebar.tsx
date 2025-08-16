@@ -14,7 +14,6 @@ import {
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { NavMain } from "@/components/nav-main";
-import { NavSecondary } from "@/components/nav-secondary";
 import { NavUser } from "@/components/nav-user";
 import { NamespaceSwitcher } from "@/components/namespace-switcher";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
@@ -27,7 +26,7 @@ import { useAuth } from "@/hooks/useAuth";
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { isMenuExpanded } = useNavigation();
   const { capabilities } = useCapabilities();
-  const { user, authMode } = useAuth();
+  const { user } = useAuth();
 
   // Debug: Log user data in sidebar
   React.useEffect(() => {
@@ -39,24 +38,6 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   // Build navigation data dynamically based on capabilities
   const getNavigationData = () => {
-    const baseNavMain = [
-      { title: "Dashboard", url: "/", icon: IconDashboard },
-      {
-        title: "Workloads",
-        url: "#",
-        icon: IconCloudComputing,
-        items: [
-          { title: "Pods", url: "/pods" },
-          { title: "Deployments", url: "/deployments" },
-          { title: "ReplicaSets", url: "/replicasets" },
-          { title: "StatefulSets", url: "/statefulsets" },
-          { title: "DaemonSets", url: "/daemonsets" },
-          { title: "Jobs", url: "/jobs" },
-          { title: "CronJobs", url: "/cronjobs" },
-        ],
-      },
-    ];
-
     // Base Services navigation
     const servicesNav = {
       title: "Services",
@@ -81,7 +62,23 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       );
     }
 
-    const restNavMain = [
+    // Unified navigation items combining main and secondary navigation
+    const allNavItems = [
+      { title: "Dashboard", url: "/", icon: IconDashboard },
+      {
+        title: "Workloads",
+        url: "#",
+        icon: IconCloudComputing,
+        items: [
+          { title: "Pods", url: "/pods" },
+          { title: "Deployments", url: "/deployments" },
+          { title: "ReplicaSets", url: "/replicasets" },
+          { title: "StatefulSets", url: "/statefulsets" },
+          { title: "DaemonSets", url: "/daemonsets" },
+          { title: "Jobs", url: "/jobs" },
+          { title: "CronJobs", url: "/cronjobs" },
+        ],
+      },
       servicesNav,
       {
         title: "Config & Storage",
@@ -110,11 +107,39 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           { title: "CRDs", url: "/crds" },
           { title: "Roles & RoleBindings", url: "/roles" },
           { title: "ClusterRoles & Bindings", url: "/cluster-roles" },
-
           { title: "Component Status", url: "/component-status" },
           { title: "Certificates", url: "/certificates" },
           { title: "Version & Upgrades", url: "/version-upgrades" },
-
+        ],
+      },
+      {
+        title: "Access Control",
+        url: "#",
+        icon: IconShield,
+        items: [
+          { title: "RBAC", url: "/rbac" },
+          { title: "Service Accounts", url: "/service-accounts" },
+          { title: "Pod Security", url: "/pod-security" },
+        ],
+      },
+      {
+        title: "Monitoring",
+        url: "#",
+        icon: IconChartBar,
+        items: [
+          { title: "Metrics", url: "/metrics" },
+          { title: "Logs", url: "/logs" },
+          { title: "Events", url: "/events" },
+        ],
+      },
+      {
+        title: "Settings",
+        url: "#",
+        icon: IconSettings,
+        items: [
+          { title: "Cluster Settings", url: "/settings/cluster" },
+          { title: "User Management", url: "/settings/users" },
+          { title: "API Settings", url: "/settings/api" },
         ],
       },
     ];
@@ -125,39 +150,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         email: user?.email || "no-email@localhost",
         avatar: user?.picture || "/avatars/default-user.jpg"
       },
-      navMain: [...baseNavMain, ...restNavMain],
-      navSecondary: [
-        {
-          title: "Access Control",
-          url: "#",
-          icon: IconShield,
-          items: [
-            { title: "RBAC", url: "/rbac" },
-            { title: "Service Accounts", url: "/service-accounts" },
-            { title: "Pod Security", url: "/pod-security" },
-          ],
-        },
-        {
-          title: "Monitoring",
-          url: "#",
-          icon: IconChartBar,
-          items: [
-            { title: "Metrics", url: "/metrics" },
-            { title: "Logs", url: "/logs" },
-            { title: "Events", url: "/events" },
-          ],
-        },
-        {
-          title: "Settings",
-          url: "#",
-          icon: IconSettings,
-          items: [
-            { title: "Cluster Settings", url: "/settings/cluster" },
-            { title: "User Management", url: "/settings/users" },
-            { title: "API Settings", url: "/settings/api" },
-          ],
-        },
-      ],
+      navItems: allNavItems,
     };
   };
 
@@ -173,8 +166,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent className="p-0">
         <ScrollArea className="h-full">
           <div className="flex flex-col h-full">
-            <NavMain items={data.navMain} />
-            <NavSecondary items={data.navSecondary} className="mt-auto" />
+            <NavMain items={data.navItems} />
           </div>
           <ScrollBar orientation="vertical" />
         </ScrollArea>

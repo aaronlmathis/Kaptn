@@ -9,6 +9,7 @@ import (
 type Series struct {
 	mu     sync.RWMutex
 	config Config
+	health *HealthMetrics
 
 	// High resolution ring buffer
 	hi     []Point
@@ -35,10 +36,30 @@ func NewSeries(config Config) *Series {
 	}
 }
 
+// NewSeriesWithHealth creates a new Series with health metrics tracking
+func NewSeriesWithHealth(config Config, health *HealthMetrics) *Series {
+	return &Series{
+		config: config,
+		health: health,
+		hi:     make([]Point, config.HiResPoints),
+		lo:     make([]Point, config.LoResPoints),
+	}
+}
+
 // Add adds a new point to the series
 func (s *Series) Add(p Point) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Check point limits if health metrics are available
+	if s.health != nil {
+		currentPoints := s.getPointCount()
+		if !s.health.CheckPointsLimit(currentPoints) {
+			s.health.RecordDroppedPoint()
+			return // Drop the point
+		}
+		s.health.RecordPointAdded()
+	}
 
 	// Add to high resolution buffer
 	s.addToHi(p)
@@ -221,4 +242,19 @@ func (s *Series) pruneRing(ring []Point, head *int, full *bool, cutoff time.Time
 			*head = newSize
 		}
 	}
+}
+
+// getPointCount returns the current number of points in the series
+func (s *Series) getPointCount() int {
+	hiCount := s.headHi
+	if s.fullHi {
+		hiCount = len(s.hi)
+	}
+
+	loCount := s.headLo
+	if s.fullLo {
+		loCount = len(s.lo)
+	}
+
+	return hiCount + loCount
 }

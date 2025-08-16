@@ -43,7 +43,7 @@ func main() {
 		apiMetricsAdapter = metrics.NewAPIMetricsAdapter(logger, factory.Client(), metricsClient.MetricsV1beta1())
 	}
 
-	summaryAdapter := metrics.NewSummaryStatsAdapter(logger, factory.Client(), factory.Config())
+	summaryAdapter := metrics.NewSummaryStatsAdapter(logger, factory.Client(), factory.Config(), false)
 
 	// Demonstrate node capacity collection
 	fmt.Println("=== Node Capacity Collection ===")

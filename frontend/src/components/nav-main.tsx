@@ -89,6 +89,8 @@ function NavGroupItem({ item }: { item: Item }) {
 
   React.useEffect(() => {
     if (!isHydrated) return;
+    // Auto-expand when a child is active, but only if no menu state exists yet
+    // This respects the single-expanded-section rule
     if (!hasMenuState(item.title) && childActive) {
       setMenuExpanded(item.title, true);
     }

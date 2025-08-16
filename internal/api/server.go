@@ -523,6 +523,8 @@ func (s *Server) initTimeSeries() error {
 			aggregatorConfig.CapacityRefreshInterval = interval
 		}
 	}
+	// Pass through TLS configuration from Kubernetes config
+	aggregatorConfig.InsecureTLS = s.config.Kubernetes.InsecureTLS
 
 	// Create timeseries aggregator
 	s.timeSeriesAggregator = aggregator.NewAggregator(

@@ -21,7 +21,7 @@ func TestSummaryStatsAdapter_NewSummaryStatsAdapter(t *testing.T) {
 		Host: "https://kubernetes.example.com",
 	}
 
-	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig)
+	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig, false)
 
 	assert.NotNil(t, adapter)
 	assert.Equal(t, logger, adapter.logger)
@@ -38,7 +38,7 @@ func TestSummaryStatsAdapter_HasSummaryAPI_NoNodes(t *testing.T) {
 		Host: "https://kubernetes.example.com",
 	}
 
-	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig)
+	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig, false)
 
 	result := adapter.HasSummaryAPI(context.Background())
 
@@ -70,7 +70,7 @@ func TestSummaryStatsAdapter_HasSummaryAPI_WithNodes(t *testing.T) {
 		Host: "https://kubernetes.example.com",
 	}
 
-	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig)
+	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig, false)
 
 	result := adapter.HasSummaryAPI(context.Background())
 
@@ -87,7 +87,7 @@ func TestSummaryStatsAdapter_ListNodeNetworkStats_NoNodes(t *testing.T) {
 		Host: "https://kubernetes.example.com",
 	}
 
-	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig)
+	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig, false)
 
 	result, err := adapter.ListNodeNetworkStats(context.Background())
 
@@ -103,7 +103,7 @@ func TestSummaryStatsAdapter_GetClusterNetworkStats_NoNodes(t *testing.T) {
 		Host: "https://kubernetes.example.com",
 	}
 
-	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig)
+	adapter := NewSummaryStatsAdapter(logger, kubeClient, restConfig, false)
 
 	result, err := adapter.GetClusterNetworkStats(context.Background())
 

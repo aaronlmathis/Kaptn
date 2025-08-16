@@ -76,7 +76,19 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 	};
 
 	const setMenuExpanded = (menuTitle: string, expanded: boolean) => {
-		persistMenus({ ...expandedMenus, [menuTitle]: expanded });
+		if (expanded) {
+			// Single-expanded-section rule: when expanding a section, collapse all others
+			const newMenus: Record<string, boolean> = {};
+			// Keep only the currently expanding menu as true, all others false
+			Object.keys(expandedMenus).forEach(key => {
+				newMenus[key] = key === menuTitle;
+			});
+			newMenus[menuTitle] = true;
+			persistMenus(newMenus);
+		} else {
+			// When collapsing, just update that specific menu
+			persistMenus({ ...expandedMenus, [menuTitle]: expanded });
+		}
 	};
 
 	const isMenuExpanded = (menuTitle: string) => !!expandedMenus[menuTitle];

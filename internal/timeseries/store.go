@@ -25,6 +25,7 @@ type MemStore struct {
 	mu     sync.RWMutex
 	series map[string]*Series
 	config Config
+	health *HealthMetrics
 }
 
 // NewMemStore creates a new in-memory store with the given configuration
@@ -32,6 +33,16 @@ func NewMemStore(config Config) *MemStore {
 	return &MemStore{
 		series: make(map[string]*Series),
 		config: config,
+		health: NewHealthMetrics(),
+	}
+}
+
+// NewMemStoreWithHealth creates a new in-memory store with custom health metrics
+func NewMemStoreWithHealth(config Config, health *HealthMetrics) *MemStore {
+	return &MemStore{
+		series: make(map[string]*Series),
+		config: config,
+		health: health,
 	}
 }
 
@@ -44,9 +55,17 @@ func (m *MemStore) Upsert(key string) *Series {
 		return series
 	}
 
+	// Check if we can create a new series (guardrail)
+	if !m.health.CheckSeriesLimit() {
+		m.health.RecordError()
+		// Return nil to indicate series creation was rejected
+		return nil
+	}
+
 	// Create new series
 	series := NewSeries(m.config)
 	m.series[key] = series
+	m.health.IncrementSeriesCount()
 	return series
 }
 
@@ -66,6 +85,7 @@ func (m *MemStore) Delete(key string) bool {
 
 	if _, exists := m.series[key]; exists {
 		delete(m.series, key)
+		m.health.DecrementSeriesCount()
 		return true
 	}
 	return false
@@ -98,4 +118,14 @@ func (m *MemStore) Prune() {
 			series.Prune()
 		}
 	}
+}
+
+// GetHealth returns the health metrics for the store
+func (m *MemStore) GetHealth() *HealthMetrics {
+	return m.health
+}
+
+// GetHealthSnapshot returns a snapshot of current health metrics
+func (m *MemStore) GetHealthSnapshot() HealthSnapshot {
+	return m.health.GetSnapshot()
 }

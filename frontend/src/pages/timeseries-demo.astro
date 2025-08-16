@@ -1,0 +1,12 @@
+---
+import { TimeSeriesChartsExample } from "@/components/examples/TimeSeriesChartsExample";
+import Layout from "@/layouts/dashboard.astro";
+
+const title = "Time Series Charts Demo";
+---
+
+<Layout title={title}>
+	<div class="container mx-auto px-4 py-6">
+		<TimeSeriesChartsExample client:load />
+	</div>
+</Layout>

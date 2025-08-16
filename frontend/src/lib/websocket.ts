@@ -47,10 +47,19 @@ export class WebSocketService {
 
 		this.ws.onmessage = (event) => {
 			try {
-				const message: WebSocketMessage = JSON.parse(event.data);
-				this.handleMessage(message);
+				// Handle multiple JSON messages separated by newlines
+				const messages = event.data.trim().split('\n').filter((line: string) => line.trim());
+				
+				for (const messageStr of messages) {
+					try {
+						const message: WebSocketMessage = JSON.parse(messageStr);
+						this.handleMessage(message);
+					} catch (parseError) {
+						console.error('Failed to parse individual WebSocket message:', parseError, 'Message:', messageStr);
+					}
+				}
 			} catch (error) {
-				console.error('Failed to parse WebSocket message:', error);
+				console.error('Failed to process WebSocket message:', error, 'Raw data:', event.data);
 			}
 		};
 
