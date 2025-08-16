@@ -30,15 +30,15 @@ func (s *Server) handleTimeSeriesHealth(w http.ResponseWriter, r *http.Request) 
 
 	// Get configuration details
 	health["config"] = map[string]interface{}{
-		"window":                          s.config.Timeseries.Window,
-		"tick_interval":                   s.config.Timeseries.TickInterval,
-		"capacity_refresh_interval":       s.config.Timeseries.CapacityRefreshInterval,
-		"hi_res_step":                     s.config.Timeseries.HiRes.Step,
-		"lo_res_step":                     s.config.Timeseries.LoRes.Step,
-		"max_series":                      s.config.Timeseries.MaxSeries,
-		"max_points_per_series":           s.config.Timeseries.MaxPointsPerSeries,
-		"max_ws_clients":                  s.config.Timeseries.MaxWSClients,
-		"disable_network_if_unavailable":  s.config.Timeseries.DisableNetworkIfUnavailable,
+		"window":                         s.config.Timeseries.Window,
+		"tick_interval":                  s.config.Timeseries.TickInterval,
+		"capacity_refresh_interval":      s.config.Timeseries.CapacityRefreshInterval,
+		"hi_res_step":                    s.config.Timeseries.HiRes.Step,
+		"lo_res_step":                    s.config.Timeseries.LoRes.Step,
+		"max_series":                     s.config.Timeseries.MaxSeries,
+		"max_points_per_series":          s.config.Timeseries.MaxPointsPerSeries,
+		"max_ws_clients":                 s.config.Timeseries.MaxWSClients,
+		"disable_network_if_unavailable": s.config.Timeseries.DisableNetworkIfUnavailable,
 	}
 
 	// Set HTTP status based on health

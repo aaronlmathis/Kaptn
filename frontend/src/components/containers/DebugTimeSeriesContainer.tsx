@@ -128,10 +128,10 @@ function DebugTimeSeriesContent() {
 
 	const getHealthStatus = (health?: HealthData) => {
 		if (!health) return { status: 'unknown', icon: AlertTriangle, color: 'text-yellow-500' }
-		
+
 		const hasErrors = health.errors && health.errors.length > 0
 		const hasData = (health.series_count || 0) > 0
-		
+
 		if (hasErrors) {
 			return { status: 'error', icon: XCircle, color: 'text-red-500' }
 		} else if (hasData) {

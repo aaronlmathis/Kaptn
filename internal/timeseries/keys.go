@@ -6,6 +6,9 @@ const (
 	ClusterCPUUsedCores     = "cluster.cpu.used.cores"
 	ClusterCPUCapacityCores = "cluster.cpu.capacity.cores"
 
+	// Cluster memory metrics
+	ClusterMemUsedBytes = "cluster.mem.used.bytes"
+
 	// Existing cluster network metrics
 	ClusterNetRxBps = "cluster.net.rx.bps"
 	ClusterNetTxBps = "cluster.net.tx.bps"
@@ -57,6 +60,7 @@ func AllSeriesKeys() []string {
 		// Existing cluster metrics
 		ClusterCPUUsedCores,
 		ClusterCPUCapacityCores,
+		ClusterMemUsedBytes,
 		ClusterNetRxBps,
 		ClusterNetTxBps,
 

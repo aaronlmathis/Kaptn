@@ -138,3 +138,34 @@ func (ama *APIMetricsAdapter) GetTotalClusterCPUUsage(ctx context.Context) (floa
 
 	return totalCores, nil
 }
+
+// ListPodMetrics returns metrics for all pods across all namespaces
+// Returns empty slice if Metrics API is not available
+func (ama *APIMetricsAdapter) ListPodMetrics(ctx context.Context) ([]interface{}, error) {
+	if !ama.HasMetricsAPI(ctx) {
+		ama.logger.Debug("Metrics API not available, returning empty pod metrics data")
+		return []interface{}{}, nil
+	}
+
+	if ama.metricsClient == nil {
+		return nil, fmt.Errorf("metrics client is nil but HasMetricsAPI returned true")
+	}
+
+	podMetrics, err := ama.metricsClient.PodMetricses("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		ama.logger.Error("Failed to list pod metrics", zap.Error(err))
+		return nil, fmt.Errorf("failed to list pod metrics: %w", err)
+	}
+
+	// Convert to interface{} slice to avoid exposing internal types
+	result := make([]interface{}, len(podMetrics.Items))
+	for i, pm := range podMetrics.Items {
+		result[i] = pm
+	}
+
+	ama.logger.Debug("Collected pod metrics",
+		zap.Int("pod_count", len(result)),
+	)
+
+	return result, nil
+}

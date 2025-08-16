@@ -29,7 +29,61 @@ type SummaryStatsResponse struct {
 			RxBytes uint64 `json:"rxBytes"`
 			TxBytes uint64 `json:"txBytes"`
 		} `json:"network"`
+		Fs struct {
+			UsedBytes     uint64 `json:"usedBytes"`
+			CapacityBytes uint64 `json:"capacityBytes"`
+		} `json:"fs"`
+		Runtime struct {
+			ImageFs struct {
+				UsedBytes     uint64 `json:"usedBytes"`
+				CapacityBytes uint64 `json:"capacityBytes"`
+			} `json:"imageFs"`
+		} `json:"runtime"`
+		Memory struct {
+			UsageBytes      uint64 `json:"usageBytes"`
+			WorkingSetBytes uint64 `json:"workingSetBytes"`
+		} `json:"memory"`
+		SystemContainers []struct {
+			Name string `json:"name"`
+		} `json:"systemContainers"`
 	} `json:"node"`
+	Pods []struct {
+		PodRef struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+		} `json:"podRef"`
+		Network struct {
+			RxBytes uint64 `json:"rxBytes"`
+			TxBytes uint64 `json:"txBytes"`
+		} `json:"network"`
+		EphemeralStorage struct {
+			UsedBytes uint64 `json:"usedBytes"`
+		} `json:"ephemeral-storage"`
+	} `json:"pods"`
+}
+
+// DetailedNodeStats represents detailed node statistics
+type DetailedNodeStats struct {
+	NodeName         string    `json:"nodeName"`
+	MemoryUsageBytes uint64    `json:"memoryUsageBytes"`
+	MemoryWorkingSet uint64    `json:"memoryWorkingSetBytes"`
+	FsUsedBytes      uint64    `json:"fsUsedBytes"`
+	FsCapacityBytes  uint64    `json:"fsCapacityBytes"`
+	ImageFsUsedBytes uint64    `json:"imageFsUsedBytes"`
+	ImageFsCapacity  uint64    `json:"imageFsCapacityBytes"`
+	ProcessCount     int       `json:"processCount"`
+	Timestamp        time.Time `json:"timestamp"`
+}
+
+// PodNetworkStats represents network statistics for a pod
+type PodNetworkStats struct {
+	PodName       string    `json:"podName"`
+	PodNamespace  string    `json:"podNamespace"`
+	NodeName      string    `json:"nodeName"`
+	RxBytes       uint64    `json:"rxBytes"`
+	TxBytes       uint64    `json:"txBytes"`
+	EphemeralUsed uint64    `json:"ephemeralUsedBytes"`
+	Timestamp     time.Time `json:"timestamp"`
 }
 
 // SummaryStatsAdapter provides Kubelet Summary API integration for network statistics
@@ -44,7 +98,7 @@ type SummaryStatsAdapter struct {
 func NewSummaryStatsAdapter(logger *zap.Logger, kubeClient kubernetes.Interface, restConfig *rest.Config, insecureTLS bool) *SummaryStatsAdapter {
 	// Clone the rest config to avoid modifying the original
 	configCopy := rest.CopyConfig(restConfig)
-	
+
 	// Apply insecure TLS if requested
 	if insecureTLS {
 		configCopy.TLSClientConfig.Insecure = true
