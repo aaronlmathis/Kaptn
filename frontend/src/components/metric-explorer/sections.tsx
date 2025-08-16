@@ -81,54 +81,66 @@ interface SectionKPI {
 /**
  * Get CPU section configuration
  */
-function getCPUSection(scope: MetricScope): MetricSection {
+function getCPUSection(): MetricSection {
   const charts: MetricChart[] = [
+    // Chart 1: Cluster CPU — Usage vs Capacity (Area chart, stacked or overlay)
     {
-      id: 'cluster-cpu-usage',
+      id: 'cluster-cpu-usage-capacity',
       title: 'Cluster CPU — Usage vs Capacity',
-      subtitle: 'Real-time CPU utilization and capacity',
+      subtitle: 'CPU utilization against total capacity and allocatable resources',
       type: 'area',
       seriesKeys: ['cluster.cpu.used.cores', 'cluster.cpu.allocatable.cores', 'cluster.cpu.capacity.cores'],
       unit: 'cores',
       formatter: formatCores,
       stacked: false,
     },
+    // Chart 2: Cluster CPU — Requests vs Allocatable (Line/Area)
     {
-      id: 'cluster-cpu-requests',
+      id: 'cluster-cpu-requests-allocatable',
       title: 'Cluster CPU — Requests vs Allocatable',
       subtitle: 'Resource requests compared to allocatable capacity',
       type: 'area',
       seriesKeys: ['cluster.cpu.requested.cores', 'cluster.cpu.allocatable.cores'],
       unit: 'cores',
       formatter: formatCores,
+      stacked: false,
+    },
+    // Chart 3: Top Nodes by CPU Utilization (Horizontal Bar)
+    {
+      id: 'top-nodes-cpu-utilization',
+      title: 'Top Nodes by CPU Utilization',
+      subtitle: 'Nodes with highest CPU usage percentage (avg over window)',
+      type: 'bar',
+      seriesKeys: ['node.cpu.usage.cores'],
+      unit: 'percent',
+      formatter: formatPct,
+      layout: 'horizontal',
+      aggregation: 'avg',
+    },
+    // Chart 4: CPU Heatmap by Node over Time (BarChart with time bins)
+    {
+      id: 'cpu-heatmap-nodes',
+      title: 'CPU Heatmap by Node over Time',
+      subtitle: 'CPU utilization distribution across nodes and time (heatmap view)',
+      type: 'bar',
+      seriesKeys: ['node.cpu.usage.cores'],
+      unit: 'percent',
+      formatter: formatPct,
+      layout: 'vertical',
+      aggregation: 'avg',
+    },
+    // Chart 5: Per-Node CPU Trend (Multi-Line with toggleable legend)
+    {
+      id: 'per-node-cpu-trend',
+      title: 'Per-Node CPU Trend',
+      subtitle: 'Individual node CPU usage trends over time',
+      type: 'area',
+      seriesKeys: ['node.cpu.usage.cores'],
+      unit: 'cores',
+      formatter: formatCores,
+      stacked: false,
     },
   ];
-
-  // Add node-specific charts for node scope
-  if (scope === 'node') {
-    charts.push(
-      {
-        id: 'top-nodes-cpu',
-        title: 'Top Nodes by CPU Utilization',
-        subtitle: 'Nodes with highest CPU usage percentage',
-        type: 'bar',
-        seriesKeys: ['node.cpu.usage.cores'],
-        unit: 'percent',
-        formatter: formatPct,
-        layout: 'horizontal',
-        aggregation: 'latest',
-      },
-      {
-        id: 'node-cpu-trend',
-        title: 'Per-Node CPU Trend',
-        subtitle: 'Individual node CPU usage over time',
-        type: 'area',
-        seriesKeys: ['node.cpu.usage.cores'],
-        unit: 'cores',
-        formatter: formatCores,
-      }
-    );
-  }
 
   return {
     id: 'cpu',
@@ -319,7 +331,7 @@ function getSectionsForScope(scope: MetricScope): MetricSection[] {
   const sections: MetricSection[] = [];
 
   // Always include CPU and Memory for all scopes
-  sections.push(getCPUSection(scope));
+  sections.push(getCPUSection());
   sections.push(getMemorySection(scope));
   sections.push(getNetworkSection(scope));
 

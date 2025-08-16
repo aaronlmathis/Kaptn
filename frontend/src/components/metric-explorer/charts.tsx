@@ -183,7 +183,7 @@ function ChartCard({
   return (
     <Card className={cn("@container/chart w-80 p-0", className)}>
       {/* Chart Type Header */}
-      <div className="flex items-center justify-between px-6 py-2 border-b">
+      <div className="flex items-center justify-between px-3 py-2 border-b">
         <div className="flex items-center gap-2">
           <ChartIcon className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground font-medium">{chartLabel}</span>
@@ -214,21 +214,21 @@ function ChartCard({
         </div>
       </div>
       
-      <CardHeader className="pb-4">
-        <CardTitle>{title}</CardTitle>
+      <CardHeader className="pb-2 px-3 pt-3">
+        <CardTitle className="text-base">{title}</CardTitle>
         {subtitle && (
-          <CardDescription>
+          <CardDescription className="text-sm">
             {subtitle}
           </CardDescription>
         )}
       </CardHeader>
       
-      <CardContent>
+      <CardContent className="px-3 pb-3">
         {children}
       </CardContent>
       
       {(insight || badges || scopeLabel || timespanLabel) && (
-        <CardFooter className="flex-col items-start gap-2 text-sm">
+        <CardFooter className="flex-col items-start gap-2 text-sm px-3 pt-2 pb-3">
           {(insight || badges) && (
             <div className="flex items-center gap-2 font-medium">
               {insight}
@@ -343,6 +343,7 @@ export function MetricAreaChart({
             minTickGap={32}
             tickFormatter={formatTimestamp}
             className="text-xs"
+            style={{ fontSize: '10px' }}
           />
           
           <YAxis
@@ -352,6 +353,7 @@ export function MetricAreaChart({
             tickFormatter={valueFormatter}
             className="text-xs"
             width={40}
+            style={{ fontSize: '10px' }}
           />
           
           <ChartTooltip
@@ -501,13 +503,13 @@ export function MetricBarChart({
           
           {layout === "horizontal" ? (
             <>
-              <XAxis type="number" tickFormatter={valueFormatter} />
-              <YAxis type="category" dataKey="name" width={100} />
+              <XAxis type="number" tickFormatter={valueFormatter} style={{ fontSize: '10px' }} />
+              <YAxis type="category" dataKey="name" width={100} style={{ fontSize: '10px' }} />
             </>
           ) : (
             <>
-              <XAxis type="category" dataKey="name" />
-              <YAxis type="number" tickFormatter={valueFormatter} width={40} />
+              <XAxis type="category" dataKey="name" style={{ fontSize: '10px' }} />
+              <YAxis type="number" tickFormatter={valueFormatter} width={40} style={{ fontSize: '10px' }} />
             </>
           )}
           
