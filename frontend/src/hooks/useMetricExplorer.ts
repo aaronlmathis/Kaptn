@@ -15,7 +15,6 @@ import {
   type MetricKey,
   type MetricFilters,
   type MetricScope,
-  type Timespan,
   type Resolution,
 } from "@/lib/metrics-api";
 import type { GridDensity, AutoRefreshInterval } from "@/components/metric-explorer/filter-bar";
@@ -139,9 +138,7 @@ export function useMetricExplorer(): UseMetricExplorerResult {
   const [filters, setFilters] = React.useState<MetricFilters>(() => ({
     scope: (urlParams.get('scope') as MetricScope) || 'cluster',
     entity: urlParams.get('entity') || undefined,
-    timespan: (urlParams.get('timespan') as Timespan) || '1h',
     resolution: (urlParams.get('resolution') as Resolution) || 'lo',
-    topN: urlParams.get('topN') ? parseInt(urlParams.get('topN') || '0', 10) : undefined,
     search: urlParams.get('search') || undefined,
   }));
   

@@ -459,7 +459,9 @@ function ChartGrid({
   error?: string;
 }) {
   const gridClasses = React.useMemo(() => {
-    const base = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+    // Use CSS Grid with auto-fit and fixed card width
+    // Cards will be exactly 320px wide and grid will fit as many as possible per row
+    const base = "grid grid-cols-[repeat(auto-fit,320px)] justify-center";
     
     switch (density) {
       case 'compact':
@@ -500,7 +502,7 @@ function ChartGrid({
           error,
           capabilities: capabilityBadge,
           scopeLabel: filters.scope,
-          timespanLabel: filters.timespan,
+          timespanLabel: '1h',
           resolutionLabel: filters.resolution,
           height: chart.height,
         };

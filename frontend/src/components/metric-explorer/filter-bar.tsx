@@ -31,17 +31,9 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
-import type { MetricScope, Timespan, Resolution } from "@/lib/metrics-api";
+import type { MetricScope, Resolution, MetricFilters } from "@/lib/metrics-api";
 
-// Filter state interface
-export interface MetricFilters {
-  scope: MetricScope;
-  entity?: string;
-  timespan: Timespan;
-  resolution: Resolution;
-  topN?: number;
-  search?: string;
-}
+// Filter state interface is now imported from metrics-api
 
 // Density options
 export type GridDensity = 'comfortable' | 'cozy' | 'compact';
@@ -91,29 +83,10 @@ const SCOPE_OPTIONS: Array<{ value: MetricScope; label: string; description: str
   { value: 'container', label: 'Container', description: 'Container-level metrics' },
 ];
 
-// Timespan options
-const TIMESPAN_OPTIONS: Array<{ value: Timespan; label: string }> = [
-  { value: '5m', label: '5 minutes' },
-  { value: '15m', label: '15 minutes' },
-  { value: '1h', label: '1 hour' },
-  { value: '6h', label: '6 hours' },
-  { value: '24h', label: '24 hours' },
-  { value: '7d', label: '7 days' },
-  { value: 'custom', label: 'Custom range' },
-];
-
 // Resolution options
 const RESOLUTION_OPTIONS: Array<{ value: Resolution; label: string; description: string }> = [
   { value: 'lo', label: 'Low (default)', description: 'Optimized for longer time ranges' },
   { value: 'hi', label: 'High', description: 'Higher resolution for detailed analysis' },
-];
-
-// Top-N options
-const TOP_N_OPTIONS = [
-  { value: undefined, label: 'All' },
-  { value: 5, label: 'Top 5' },
-  { value: 10, label: 'Top 10' },
-  { value: 20, label: 'Top 20' },
 ];
 
 /**
@@ -173,17 +146,8 @@ export function FilterBar({
     });
   };
   
-  const handleTimespanChange = (timespan: Timespan) => {
-    onFiltersChange({ ...filters, timespan });
-  };
-  
   const handleResolutionChange = (resolution: Resolution) => {
     onFiltersChange({ ...filters, resolution });
-  };
-  
-  const handleTopNChange = (topN: string) => {
-    const value = topN === 'all' ? undefined : parseInt(topN, 10);
-    onFiltersChange({ ...filters, topN: value });
   };
   
   return (

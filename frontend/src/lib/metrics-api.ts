@@ -56,13 +56,7 @@ export interface MetricsResponse extends TimeSeriesResponse {
 export interface MetricFilters {
   scope: MetricScope;
   entity?: string;
-  timespan: Timespan;
-  customTimeRange?: {
-    start: Date;
-    end: Date;
-  };
   resolution: Resolution;
-  topN?: number;
   search?: string;
 }
 
@@ -115,11 +109,11 @@ export async function fetchMetrics(
     throw new Error('No supported metrics found for the current selection');
   }
 
-  // Use the existing fetchClusterSeries function
+  // Use the existing fetchClusterSeries function with 1h fixed timespan
   const response = await fetchClusterSeries(
     timeSeriesKeys,
     filters.resolution,
-    filters.timespan
+    '1h'
   );
 
   // Return in our extended format
@@ -127,7 +121,7 @@ export async function fetchMetrics(
     ...response,
     metadata: {
       resolution: filters.resolution,
-      timespan: filters.timespan,
+      timespan: '1h',
       scope: filters.scope,
       entity: filters.entity,
     }
@@ -233,7 +227,7 @@ export function openMetricsWebSocket(
         ...data,
         metadata: {
           resolution: filters.resolution,
-          timespan: filters.timespan,
+          timespan: '1h',
           scope: filters.scope,
         }
       };

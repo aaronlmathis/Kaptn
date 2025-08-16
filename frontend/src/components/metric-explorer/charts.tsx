@@ -18,7 +18,7 @@ import {
   RadialBarChart,
   PolarGrid,
 } from "recharts";
-import { MoreVertical, Download, Copy, Eye } from "lucide-react";
+import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -43,7 +43,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { formatTimestamp, UNIT_FORMATTERS, getChartColor } from "@/lib/metric-utils";
 
 // Common chart data structure
@@ -134,6 +133,22 @@ function generateChartConfig(series: ChartSeries[]): ChartConfig {
 }
 
 /**
+ * Get chart type icon and label
+ */
+function getChartTypeInfo(type: 'area' | 'bar' | 'radial') {
+  switch (type) {
+    case 'area':
+      return { icon: Activity, label: 'Area Chart' };
+    case 'bar':
+      return { icon: BarChart3, label: 'Bar Chart' };
+    case 'radial':
+      return { icon: PieChart, label: 'Radial Chart' };
+    default:
+      return { icon: Activity, label: 'Chart' };
+  }
+}
+
+/**
  * Chart Card Wrapper
  */
 function ChartCard({
@@ -148,6 +163,7 @@ function ChartCard({
   resolutionLabel,
   actions,
   className,
+  chartType = 'area',
 }: {
   title: string;
   subtitle?: string;
@@ -160,47 +176,54 @@ function ChartCard({
   resolutionLabel?: string;
   actions?: ChartActions;
   className?: string;
+  chartType?: 'area' | 'bar' | 'radial';
 }) {
+  const { icon: ChartIcon, label: chartLabel } = getChartTypeInfo(chartType);
+
   return (
-    <Card className={cn("@container/chart", className)}>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-1">
-            <CardTitle className="text-base font-medium">{title}</CardTitle>
-            {subtitle && (
-              <CardDescription className="text-sm text-muted-foreground">
-                {subtitle}
-              </CardDescription>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {capabilities}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={actions?.onDownloadCSV}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={actions?.onCopyPNG}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy chart as PNG
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={actions?.onInspectSeries}>
-                  <Eye className="mr-2 h-4 w-4" />
-                  Inspect series
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+    <Card className={cn("@container/chart w-80 p-0", className)}>
+      {/* Chart Type Header */}
+      <div className="flex items-center justify-between px-6 py-2 border-b">
+        <div className="flex items-center gap-2">
+          <ChartIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground font-medium">{chartLabel}</span>
         </div>
+        <div className="flex items-center gap-2">
+          {capabilities}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={actions?.onDownloadCSV}>
+                <Download className="mr-2 h-4 w-4" />
+                Download CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={actions?.onCopyPNG}>
+                <Copy className="mr-2 h-4 w-4" />
+                Copy chart as PNG
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={actions?.onInspectSeries}>
+                <Eye className="mr-2 h-4 w-4" />
+                Inspect series
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      
+      <CardHeader className="pb-4">
+        <CardTitle>{title}</CardTitle>
+        {subtitle && (
+          <CardDescription>
+            {subtitle}
+          </CardDescription>
+        )}
       </CardHeader>
       
-      <CardContent className="px-2 pt-0 sm:px-6">
+      <CardContent>
         {children}
       </CardContent>
       
@@ -238,7 +261,6 @@ export function MetricAreaChart({
   error,
   emptyMessage = "No data available",
   className,
-  height = 250,
   showGrid = true,
   capabilities,
   insight,
@@ -263,7 +285,7 @@ export function MetricAreaChart({
   const content = React.useMemo(() => {
     if (isLoading) {
       return (
-        <div className="flex items-center justify-center" style={{ height }}>
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="flex items-center space-x-2 text-muted-foreground">
             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             <span>Loading chart data...</span>
@@ -274,7 +296,7 @@ export function MetricAreaChart({
 
     if (error) {
       return (
-        <div className="flex items-center justify-center" style={{ height }}>
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="text-center space-y-2">
             <div className="text-destructive text-sm font-medium">Error loading data</div>
             <div className="text-xs text-muted-foreground">{error}</div>
@@ -285,7 +307,7 @@ export function MetricAreaChart({
 
     if (chartData.length === 0) {
       return (
-        <div className="flex items-center justify-center" style={{ height }}>
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="text-center space-y-2">
             <div className="text-muted-foreground text-sm">{emptyMessage}</div>
             <div className="text-xs text-muted-foreground">
@@ -297,8 +319,8 @@ export function MetricAreaChart({
     }
 
     return (
-      <ChartContainer config={chartConfig} style={{ height }}>
-        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+      <ChartContainer config={chartConfig} className="h-[250px] w-full">
+        <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
           <defs>
             {series.map((s, index) => {
               const color = s.color || getChartColor(s.key, index);
@@ -326,10 +348,10 @@ export function MetricAreaChart({
           <YAxis
             tickLine={false}
             axisLine={false}
-            tickMargin={8}
+            tickMargin={4}
             tickFormatter={valueFormatter}
             className="text-xs"
-            width={60}
+            width={40}
           />
           
           <ChartTooltip
@@ -343,7 +365,7 @@ export function MetricAreaChart({
             }
           />
           
-          <ChartLegend content={<ChartLegendContent />} />
+          <ChartLegend content={<ChartLegendContent />} verticalAlign="bottom" height={36} />
           
           {series.map((s, index) => {
             const color = s.color || getChartColor(s.key, index);
@@ -362,7 +384,7 @@ export function MetricAreaChart({
         </AreaChart>
       </ChartContainer>
     );
-  }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, height, showGrid, emptyMessage, series, stacked]);
+  }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, showGrid, emptyMessage, series, stacked]);
 
   return (
     <ChartCard
@@ -376,6 +398,7 @@ export function MetricAreaChart({
       resolutionLabel={resolutionLabel}
       actions={actions}
       className={className}
+      chartType="area"
     >
       {content}
     </ChartCard>
@@ -395,7 +418,6 @@ export function MetricBarChart({
   error,
   emptyMessage = "No data available",
   className,
-  height = 250,
   showGrid = true,
   capabilities,
   insight,
@@ -437,12 +459,19 @@ export function MetricBarChart({
 
   const content = React.useMemo(() => {
     if (isLoading) {
-      return <Skeleton className="w-full" style={{ height }} />;
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span>Loading chart data...</span>
+          </div>
+        </div>
+      );
     }
 
     if (error) {
       return (
-        <div className="flex items-center justify-center" style={{ height }}>
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="text-center space-y-2">
             <div className="text-destructive text-sm font-medium">Error loading data</div>
             <div className="text-xs text-muted-foreground">{error}</div>
@@ -453,7 +482,7 @@ export function MetricBarChart({
 
     if (chartData.length === 0) {
       return (
-        <div className="flex items-center justify-center" style={{ height }}>
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="text-center space-y-2">
             <div className="text-muted-foreground text-sm">{emptyMessage}</div>
           </div>
@@ -462,23 +491,23 @@ export function MetricBarChart({
     }
 
     return (
-      <ChartContainer config={chartConfig} style={{ height }}>
+      <ChartContainer config={chartConfig} className="h-[250px] w-full">
         <BarChart
           data={chartData}
           layout={layout}
-          margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+          margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
         >
           {showGrid && <CartesianGrid strokeDasharray="3 3" />}
           
           {layout === "horizontal" ? (
             <>
               <XAxis type="number" tickFormatter={valueFormatter} />
-              <YAxis type="category" dataKey="name" width={120} />
+              <YAxis type="category" dataKey="name" width={100} />
             </>
           ) : (
             <>
               <XAxis type="category" dataKey="name" />
-              <YAxis type="number" tickFormatter={valueFormatter} />
+              <YAxis type="number" tickFormatter={valueFormatter} width={40} />
             </>
           )}
           
@@ -499,7 +528,7 @@ export function MetricBarChart({
         </BarChart>
       </ChartContainer>
     );
-  }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, height, showGrid, emptyMessage, layout]);
+  }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, showGrid, emptyMessage, layout]);
 
   return (
     <ChartCard
@@ -513,6 +542,7 @@ export function MetricBarChart({
       resolutionLabel={resolutionLabel}
       actions={actions}
       className={className}
+      chartType="bar"
     >
       {content}
     </ChartCard>
@@ -532,7 +562,7 @@ export function MetricRadialChart({
   error,
   emptyMessage = "No data available",
   className,
-  height = 250,
+  // height = 250, // Not used with fixed chart height
   capabilities,
   insight,
   badges,
@@ -566,12 +596,19 @@ export function MetricRadialChart({
 
   const content = React.useMemo(() => {
     if (isLoading) {
-      return <Skeleton className="w-full" style={{ height }} />;
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span>Loading chart data...</span>
+          </div>
+        </div>
+      );
     }
 
     if (error) {
       return (
-        <div className="flex items-center justify-center" style={{ height }}>
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="text-center space-y-2">
             <div className="text-destructive text-sm font-medium">Error loading data</div>
             <div className="text-xs text-muted-foreground">{error}</div>
@@ -582,7 +619,7 @@ export function MetricRadialChart({
 
     if (chartData.length === 0) {
       return (
-        <div className="flex items-center justify-center" style={{ height }}>
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="text-center space-y-2">
             <div className="text-muted-foreground text-sm">{emptyMessage}</div>
           </div>
@@ -591,7 +628,7 @@ export function MetricRadialChart({
     }
 
     return (
-      <ChartContainer config={{}} style={{ height }}>
+      <ChartContainer config={{}} className="h-[250px] w-full">
         <RadialBarChart data={chartData} innerRadius={60} outerRadius={120}>
           <PolarGrid gridType="circle" />
           <RadialBar dataKey="value" cornerRadius={8} />
@@ -606,7 +643,7 @@ export function MetricRadialChart({
         </RadialBarChart>
       </ChartContainer>
     );
-  }, [isLoading, error, chartData, valueFormatter, unit, height, emptyMessage]);
+  }, [isLoading, error, chartData, valueFormatter, unit, emptyMessage]);
 
   return (
     <ChartCard
@@ -620,6 +657,7 @@ export function MetricRadialChart({
       resolutionLabel={resolutionLabel}
       actions={actions}
       className={className}
+      chartType="radial"
     >
       {content}
     </ChartCard>

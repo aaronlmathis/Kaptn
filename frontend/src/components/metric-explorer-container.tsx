@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { FilterBar } from "@/components/metric-explorer/filter-bar";
+// import { FilterBar } from "@/components/metric-explorer/filter-bar";
 import { MetricSections } from "@/components/metric-explorer/sections";
 import { useMetricExplorer } from "@/hooks/useMetricExplorer";
 
@@ -100,24 +100,24 @@ export function MetricExplorerContainer() {
     // State
     filters,
     density,
-    autoRefresh,
+    // autoRefresh,
     seriesData,
     capabilities,
     expandedSections,
     isLoading,
     error,
-    availableEntities,
+    // availableEntities,
     isConnected,
     
     // Actions
-    updateFilters,
-    setDensity,
-    setAutoRefresh,
+    // updateFilters,
+    // setDensity,
+    // setAutoRefresh,
     refresh,
-    searchEntities,
+    // searchEntities,
     setExpandedSections,
-    expandAllSections,
-    collapseAllSections,
+    // expandAllSections,
+    // collapseAllSections,
     connect,
     disconnect,
   } = useMetricExplorer();
@@ -152,6 +152,7 @@ export function MetricExplorerContainer() {
       <TooltipProvider>
         <div className="min-h-screen bg-background">
           {/* Filter Bar */}
+          {/* 
           <FilterBar
             filters={filters}
             onFiltersChange={updateFilters}
@@ -167,6 +168,7 @@ export function MetricExplorerContainer() {
             availableEntities={availableEntities}
             onSearchEntities={searchEntities}
           />
+          */}
 
           {/* Main Content */}
           <div className="w-full px-4 lg:px-6 py-6">
