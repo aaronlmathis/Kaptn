@@ -21,5 +21,5 @@ func NewPointWithEntity(t time.Time, v float64, entity map[string]string) Point 
 
 // IsZero returns true if the point is the zero value
 func (p Point) IsZero() bool {
-	return p.T.IsZero() && p.V == 0
+	return p.T.IsZero() && p.V == 0 && (p.Entity == nil || len(p.Entity) == 0)
 }
