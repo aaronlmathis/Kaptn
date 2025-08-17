@@ -10,12 +10,12 @@ export { MetricExplorerContainer } from "../metric-explorer-container";
 // Core components
 export { FilterBar, type MetricFilters, type GridDensity, type AutoRefreshInterval } from "./filter-bar";
 export { MetricSections, type MetricSection, type MetricChart } from "./sections";
-export {
-	MetricAreaChart,
-	MetricBarChart,
-	MetricRadialChart,
-	type ChartSeries,
-	type ChartDataPoint
+export { 
+  MetricAreaChart, 
+  MetricBarChart, 
+  MetricRadialChart,
+  type ChartSeries,
+  type ChartDataPoint 
 } from "./charts";
 
 // Hook
