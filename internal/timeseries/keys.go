@@ -9,7 +9,8 @@ const (
 	ClusterCPUCapacityCores = "cluster.cpu.capacity.cores"
 
 	// Cluster memory metrics
-	ClusterMemUsedBytes = "cluster.mem.used.bytes"
+	ClusterMemUsedBytes     = "cluster.mem.used.bytes"
+	ClusterMemCapacityBytes = "cluster.mem.capacity.bytes"
 
 	// Existing cluster network metrics
 	ClusterNetRxBps = "cluster.net.rx.bps"
@@ -57,6 +58,7 @@ const (
 	// New node-level metrics
 	NodePodsCountBase           = "node.pods.count"
 	NodeImageFsCapacityBase     = "node.imagefs.capacity.bytes"
+	NodeImageFsUsedPercentBase  = "node.imagefs.used.percent"
 	NodeFsInodesUsedPercentBase = "node.fs.inodes.used.percent"
 	NodeNetRxPpsBase            = "node.net.rx.pps" // packets per second
 	NodeNetTxPpsBase            = "node.net.tx.pps" // packets per second
@@ -199,6 +201,7 @@ func AllSeriesKeys() []string {
 		ClusterCPUUsedCores,
 		ClusterCPUCapacityCores,
 		ClusterMemUsedBytes,
+		ClusterMemCapacityBytes,
 		ClusterNetRxBps,
 		ClusterNetTxBps,
 		ClusterNodesCount,
@@ -242,6 +245,7 @@ func GetNodeMetricBases() []string {
 		// New node metrics
 		NodePodsCountBase,
 		NodeImageFsCapacityBase,
+		NodeImageFsUsedPercentBase,
 		NodeFsInodesUsedPercentBase,
 		NodeNetRxPpsBase,
 		NodeNetTxPpsBase,

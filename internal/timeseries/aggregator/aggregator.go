@@ -508,6 +508,12 @@ func (a *Aggregator) collectMemoryMetrics(ctx context.Context, now time.Time) {
 		if allocatableSeries != nil {
 			allocatableSeries.Add(timeseries.Point{T: now, V: totalMemoryCapacity})
 		}
+
+		// Store cluster-level memory capacity
+		capacitySeries := a.store.Upsert(timeseries.ClusterMemCapacityBytes)
+		if capacitySeries != nil {
+			capacitySeries.Add(timeseries.Point{T: now, V: totalMemoryCapacity})
+		}
 	}
 
 	// Collect memory usage if Metrics API is available
@@ -1440,10 +1446,25 @@ func (a *Aggregator) collectBasicNodeMetrics(ctx context.Context, now time.Time)
 
 		// New: Image filesystem capacity
 		nodeImageFsCapacitySeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsCapacityBase, node.Name))
+		var imageFsCapacity float64
 		if nodeImageFsCapacitySeries != nil {
 			// Placeholder: 50GB image filesystem capacity per node
-			placeholderImageFsCapacity := float64(50 * 1024 * 1024 * 1024) // 50GB
-			nodeImageFsCapacitySeries.Add(timeseries.NewPointWithEntity(now, placeholderImageFsCapacity, nodeEntity))
+			imageFsCapacity = float64(50 * 1024 * 1024 * 1024) // 50GB
+			nodeImageFsCapacitySeries.Add(timeseries.NewPointWithEntity(now, imageFsCapacity, nodeEntity))
+		}
+
+		// New: Image filesystem used percentage
+		nodeImageFsPercentSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsUsedPercentBase, node.Name))
+		if nodeImageFsPercentSeries != nil {
+			// Calculate percentage: (used / capacity) * 100
+			imageFsUsed := node.MemoryBytes * 0.1 // Same placeholder as above
+			if imageFsCapacity > 0 {
+				percentUsed := (imageFsUsed / imageFsCapacity) * 100
+				nodeImageFsPercentSeries.Add(timeseries.NewPointWithEntity(now, percentUsed, nodeEntity))
+			} else {
+				// Fallback placeholder
+				nodeImageFsPercentSeries.Add(timeseries.NewPointWithEntity(now, 20.0, nodeEntity))
+			}
 		}
 
 		// New: Inode usage percentage
@@ -1616,6 +1637,18 @@ func (a *Aggregator) collectBasicPodNetworkMetrics(ctx context.Context, now time
 		if podEphemeralSeries != nil {
 			// Placeholder: 100MB ephemeral storage per pod
 			podEphemeralSeries.Add(timeseries.NewPointWithEntity(now, 100*1024*1024, podEntity))
+		}
+
+		// Add ephemeral storage percentage
+		podEphemeralPercentKey := timeseries.GeneratePodSeriesKey(timeseries.PodEphemeralPercentBase, podEntity["namespace"], podEntity["pod"])
+		podEphemeralPercentSeries := a.store.Upsert(podEphemeralPercentKey)
+		if podEphemeralPercentSeries != nil {
+			// Calculate percentage based on placeholder values
+			// Assume ephemeral capacity of 1GB per pod for percentage calculation
+			ephemeralUsed := float64(100 * 1024 * 1024)              // 100MB used (same as above)
+			ephemeralCapacity := float64(1024 * 1024 * 1024)         // 1GB capacity assumption
+			percentUsed := (ephemeralUsed / ephemeralCapacity) * 100 // Should be ~9.77%
+			podEphemeralPercentSeries.Add(timeseries.NewPointWithEntity(now, percentUsed, podEntity))
 		}
 
 		podIndex++

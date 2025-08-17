@@ -1,0 +1,10 @@
+---
+import { OpsViewContainer } from "@/components/opsview-container";
+import Layout from "@/layouts/dashboard.astro";
+
+const title = "OpsView";
+---
+
+<Layout title={title}>
+	<OpsViewContainer client:load />
+</Layout>
