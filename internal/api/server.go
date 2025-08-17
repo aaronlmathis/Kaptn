@@ -62,6 +62,7 @@ type Server struct {
 	clientFactory        *client.Factory
 	timeSeriesStore      *timeseries.MemStore
 	timeSeriesAggregator *aggregator.Aggregator
+	timeSeriesWSManager  *TimeSeriesWSManager
 }
 
 // NewServer creates a new API server
@@ -824,6 +825,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/timeseries/nodes/{nodeName}", s.handleGetNodeTimeSeries)
 			r.Get("/timeseries/pods", s.handleGetPodsTimeSeries)
 			r.Get("/timeseries/pods/{namespace}/{podName}", s.handleGetPodTimeSeries)
+			r.Get("/timeseries/namespaces", s.handleGetNamespacesTimeSeries)
+			r.Get("/timeseries/namespaces/{namespace}", s.handleGetNamespaceTimeSeries)
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)
@@ -931,6 +934,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/stream/logs/{streamId}", s.handleLogsWebSocket)
 
 			// TimeSeries WebSocket endpoints
+			r.Get("/timeseries/live", s.handleTimeSeriesLiveWebSocket)
 			r.Get("/timeseries/cluster/live", s.handleClusterTimeSeriesLiveWebSocket)
 		})
 

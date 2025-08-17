@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/timeseries"
 	"github.com/go-chi/chi/v5"
+	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
 
@@ -41,6 +43,143 @@ type LiveTimeSeriesMessage struct {
 	Key   string              `json:"key,omitempty"`   // Series key for append messages
 	Point *TimeSeriesPoint    `json:"point,omitempty"` // Data point for append messages
 	Data  *TimeSeriesResponse `json:"data,omitempty"`  // Full data for init messages
+}
+
+// New unified timeseries WebSocket message types
+type TimeSeriesHelloMessage struct {
+	Type         string                 `json:"type"`         // "hello"
+	Capabilities map[string]bool        `json:"capabilities"` // API capabilities
+	Limits       TimeSeriesLimits       `json:"limits"`       // Server limits
+}
+
+type TimeSeriesLimits struct {
+	MaxClients         int `json:"maxClients"`
+	MaxSeriesPerClient int `json:"maxSeriesPerClient"`
+	MaxRateHz          int `json:"maxRateHz"`
+}
+
+type TimeSeriesSubscribeMessage struct {
+	Type    string   `json:"type"`    // "subscribe"
+	GroupID string   `json:"groupId"` // Group identifier
+	Res     string   `json:"res"`     // Resolution: "hi" or "lo"
+	Since   string   `json:"since"`   // Time window like "15m"
+	Series  []string `json:"series"`  // Array of series keys
+}
+
+type TimeSeriesUnsubscribeMessage struct {
+	Type    string   `json:"type"`    // "unsubscribe"
+	GroupID string   `json:"groupId"` // Group identifier
+	Series  []string `json:"series"`  // Array of series keys to unsubscribe
+}
+
+type TimeSeriesAckMessage struct {
+	Type     string                    `json:"type"`               // "ack"
+	GroupID  string                    `json:"groupId"`            // Group identifier
+	Accepted []string                  `json:"accepted"`           // Accepted series keys
+	Rejected []TimeSeriesRejectedKey   `json:"rejected,omitempty"` // Rejected keys with reasons
+}
+
+type TimeSeriesRejectedKey struct {
+	Key    string `json:"key"`    // Series key
+	Reason string `json:"reason"` // Rejection reason
+}
+
+type TimeSeriesInitMessage struct {
+	Type    string              `json:"type"`    // "init"
+	GroupID string              `json:"groupId"` // Group identifier
+	Data    TimeSeriesResponse  `json:"data"`    // Initial buffer data
+}
+
+type TimeSeriesAppendMessage struct {
+	Type  string           `json:"type"`  // "append"
+	Key   string           `json:"key"`   // Series key
+	Point TimeSeriesPoint  `json:"point"` // New data point
+}
+
+type TimeSeriesErrorMessage struct {
+	Type  string `json:"type"`  // "error"
+	Error string `json:"error"` // Error message
+}
+
+// Client connection state for new WebSocket endpoint
+type TimeSeriesWSClient struct {
+	ID             string
+	Conn           *websocket.Conn
+	Send           chan []byte
+	Subscriptions  map[string]TimeSeriesSubscription // GroupID -> Subscription
+	LastActivity   time.Time
+	TotalSeriesCount int
+}
+
+type TimeSeriesSubscription struct {
+	GroupID    string
+	Resolution timeseries.Resolution
+	Since      time.Duration
+	Series     []string
+}
+
+// Global client manager for the new timeseries WebSocket endpoint
+type TimeSeriesWSManager struct {
+	clients map[string]*TimeSeriesWSClient
+	mu      sync.RWMutex
+}
+
+func newTimeSeriesWSManager() *TimeSeriesWSManager {
+	return &TimeSeriesWSManager{
+		clients: make(map[string]*TimeSeriesWSClient),
+	}
+}
+
+func (m *TimeSeriesWSManager) addClient(client *TimeSeriesWSClient) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.clients[client.ID] = client
+}
+
+func (m *TimeSeriesWSManager) removeClient(clientID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.clients, clientID)
+}
+
+func (m *TimeSeriesWSManager) broadcastToSubscribers(key string, point TimeSeriesPoint) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	message := TimeSeriesAppendMessage{
+		Type:  "append",
+		Key:   key,
+		Point: point,
+	}
+
+	for _, client := range m.clients {
+		// Check if client is subscribed to this series
+		isSubscribed := false
+		for _, subscription := range client.Subscriptions {
+			for _, seriesKey := range subscription.Series {
+				if seriesKey == key {
+					isSubscribed = true
+					break
+				}
+			}
+			if isSubscribed {
+				break
+			}
+		}
+
+		if isSubscribed {
+			select {
+			case client.Send <- mustMarshal(message):
+			default:
+				// Client send buffer full, skip
+			}
+		}
+	}
+}
+
+func mustMarshal(v interface{}) []byte {
+	data, _ := json.Marshal(v)
+	return data
 }
 
 // handleGetClusterTimeSeries handles GET /api/v1/timeseries/cluster
@@ -179,6 +318,378 @@ func (s *Server) handleGetClusterTimeSeries(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+// handleTimeSeriesLiveWebSocket handles the new unified WebSocket endpoint GET /api/v1/timeseries/live
+func (s *Server) handleTimeSeriesLiveWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Upgrade to WebSocket
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // Allow all origins for now
+		},
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		s.logger.Error("Failed to upgrade WebSocket connection", zap.Error(err))
+		return
+	}
+
+	// Check WebSocket client limits
+	if s.timeSeriesStore != nil {
+		health := s.timeSeriesStore.GetHealth()
+		if !health.CheckWSClientLimit() {
+			s.logger.Warn("WebSocket connection rejected - client limit reached")
+			conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "Client limit reached"))
+			conn.Close()
+			return
+		}
+	}
+
+	// Create client
+	clientID := fmt.Sprintf("ts-%d", time.Now().UnixNano())
+	client := &TimeSeriesWSClient{
+		ID:             clientID,
+		Conn:           conn,
+		Send:           make(chan []byte, 256),
+		Subscriptions:  make(map[string]TimeSeriesSubscription),
+		LastActivity:   time.Now(),
+		TotalSeriesCount: 0,
+	}
+
+	s.logger.Info("New timeseries WebSocket client connected", zap.String("clientId", clientID))
+
+	// Send hello message
+	s.sendTimeSeriesHello(client)
+
+	// Start client goroutines
+	go s.timeSeriesWSClientWriter(client)
+	go s.timeSeriesWSClientReader(client)
+}
+
+// sendTimeSeriesHello sends the hello message to a new client
+func (s *Server) sendTimeSeriesHello(client *TimeSeriesWSClient) {
+	capabilities := make(map[string]bool)
+	if s.timeSeriesAggregator != nil {
+		capabilities = s.timeSeriesAggregator.GetCapabilities(context.Background())
+	}
+
+	// Set capabilities based on what we support
+	capabilities["cluster"] = true
+	capabilities["node"] = false   // Not supported yet
+	capabilities["pod"] = false    // Not supported yet
+
+	hello := TimeSeriesHelloMessage{
+		Type:         "hello",
+		Capabilities: capabilities,
+		Limits: TimeSeriesLimits{
+			MaxClients:         200,
+			MaxSeriesPerClient: 2000,
+			MaxRateHz:          10,
+		},
+	}
+
+	if err := s.sendTimeSeriesMessage(client, hello); err != nil {
+		s.logger.Error("Failed to send hello message", zap.String("clientId", client.ID), zap.Error(err))
+	}
+}
+
+// sendTimeSeriesMessage sends a message to a WebSocket client
+func (s *Server) sendTimeSeriesMessage(client *TimeSeriesWSClient, message interface{}) error {
+	data, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
+	select {
+	case client.Send <- data:
+		return nil
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("client send timeout")
+	}
+}
+
+// timeSeriesWSClientReader handles incoming messages from WebSocket client
+func (s *Server) timeSeriesWSClientReader(client *TimeSeriesWSClient) {
+	defer func() {
+		client.Conn.Close()
+		s.logger.Info("TimeSeries WebSocket client disconnected", zap.String("clientId", client.ID))
+	}()
+
+	client.Conn.SetReadLimit(512)
+	client.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	client.Conn.SetPongHandler(func(string) error {
+		client.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
+	for {
+		_, messageBytes, err := client.Conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				s.logger.Error("Unexpected WebSocket close", zap.String("clientId", client.ID), zap.Error(err))
+			}
+			break
+		}
+
+		client.LastActivity = time.Now()
+
+		// Parse message type first
+		var baseMessage struct {
+			Type string `json:"type"`
+		}
+
+		if err := json.Unmarshal(messageBytes, &baseMessage); err != nil {
+			s.sendTimeSeriesError(client, "Invalid JSON format")
+			continue
+		}
+
+		switch baseMessage.Type {
+		case "subscribe":
+			s.handleTimeSeriesSubscribe(client, messageBytes)
+		case "unsubscribe":
+			s.handleTimeSeriesUnsubscribe(client, messageBytes)
+		default:
+			s.sendTimeSeriesError(client, fmt.Sprintf("Unknown message type: %s", baseMessage.Type))
+		}
+	}
+}
+
+// timeSeriesWSClientWriter handles outgoing messages to WebSocket client
+func (s *Server) timeSeriesWSClientWriter(client *TimeSeriesWSClient) {
+	ticker := time.NewTicker(54 * time.Second)
+	defer func() {
+		ticker.Stop()
+		client.Conn.Close()
+	}()
+
+	for {
+		select {
+		case message, ok := <-client.Send:
+			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if !ok {
+				client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			if err := client.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				return
+			}
+
+		case <-ticker.C:
+			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := client.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// handleTimeSeriesSubscribe handles subscribe messages
+func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBytes []byte) {
+	var subscribeMsg TimeSeriesSubscribeMessage
+	if err := json.Unmarshal(messageBytes, &subscribeMsg); err != nil {
+		s.sendTimeSeriesError(client, "Invalid subscribe message format")
+		return
+	}
+
+	// Validate resolution
+	var resolution timeseries.Resolution
+	switch subscribeMsg.Res {
+	case "hi":
+		resolution = timeseries.Hi
+	case "lo":
+		resolution = timeseries.Lo
+	default:
+		s.sendTimeSeriesError(client, "Invalid resolution. Must be 'hi' or 'lo'")
+		return
+	}
+
+	// Parse since duration
+	since, err := time.ParseDuration(subscribeMsg.Since)
+	if err != nil {
+		s.sendTimeSeriesError(client, "Invalid since parameter. Must be a valid duration (e.g., '15m', '1h')")
+		return
+	}
+
+	// Validate series keys and check limits
+	validKeys := make(map[string]bool)
+	for _, key := range timeseries.AllSeriesKeys() {
+		validKeys[key] = true
+	}
+
+	var accepted []string
+	var rejected []TimeSeriesRejectedKey
+
+	newSeriesCount := 0
+	for _, key := range subscribeMsg.Series {
+		if !validKeys[key] {
+			rejected = append(rejected, TimeSeriesRejectedKey{
+				Key:    key,
+				Reason: "Unknown series key",
+			})
+			continue
+		}
+
+		// Check if this is a new series for this client
+		isNew := true
+		for _, sub := range client.Subscriptions {
+			for _, existingKey := range sub.Series {
+				if existingKey == key {
+					isNew = false
+					break
+				}
+			}
+			if !isNew {
+				break
+			}
+		}
+
+		if isNew {
+			newSeriesCount++
+		}
+		accepted = append(accepted, key)
+	}
+
+	// Check series limit
+	if client.TotalSeriesCount + newSeriesCount > 2000 {
+		s.sendTimeSeriesError(client, "Series limit exceeded. Maximum 2000 series per client")
+		return
+	}
+
+	// Update subscription
+	subscription := TimeSeriesSubscription{
+		GroupID:    subscribeMsg.GroupID,
+		Resolution: resolution,
+		Since:      since,
+		Series:     accepted,
+	}
+
+	client.Subscriptions[subscribeMsg.GroupID] = subscription
+	client.TotalSeriesCount += newSeriesCount
+
+	// Send acknowledgment
+	ack := TimeSeriesAckMessage{
+		Type:     "ack",
+		GroupID:  subscribeMsg.GroupID,
+		Accepted: accepted,
+		Rejected: rejected,
+	}
+
+	if err := s.sendTimeSeriesMessage(client, ack); err != nil {
+		s.logger.Error("Failed to send ack message", zap.String("clientId", client.ID), zap.Error(err))
+		return
+	}
+
+	// Send initial data
+	s.sendTimeSeriesInitialData(client, subscribeMsg.GroupID, subscription)
+}
+
+// handleTimeSeriesUnsubscribe handles unsubscribe messages
+func (s *Server) handleTimeSeriesUnsubscribe(client *TimeSeriesWSClient, messageBytes []byte) {
+	var unsubscribeMsg TimeSeriesUnsubscribeMessage
+	if err := json.Unmarshal(messageBytes, &unsubscribeMsg); err != nil {
+		s.sendTimeSeriesError(client, "Invalid unsubscribe message format")
+		return
+	}
+
+	// Find and update subscription
+	if subscription, exists := client.Subscriptions[unsubscribeMsg.GroupID]; exists {
+		// Remove specified series from subscription
+		var remainingSeries []string
+		removedCount := 0
+
+		for _, existingKey := range subscription.Series {
+			shouldRemove := false
+			for _, keyToRemove := range unsubscribeMsg.Series {
+				if existingKey == keyToRemove {
+					shouldRemove = true
+					removedCount++
+					break
+				}
+			}
+			if !shouldRemove {
+				remainingSeries = append(remainingSeries, existingKey)
+			}
+		}
+
+		client.TotalSeriesCount -= removedCount
+
+		if len(remainingSeries) == 0 {
+			// Remove entire subscription
+			delete(client.Subscriptions, unsubscribeMsg.GroupID)
+		} else {
+			// Update subscription with remaining series
+			subscription.Series = remainingSeries
+			client.Subscriptions[unsubscribeMsg.GroupID] = subscription
+		}
+	}
+}
+
+// sendTimeSeriesInitialData sends initial data for a subscription
+func (s *Server) sendTimeSeriesInitialData(client *TimeSeriesWSClient, groupID string, subscription TimeSeriesSubscription) {
+	if s.timeSeriesStore == nil {
+		return
+	}
+
+	// Calculate time threshold
+	timeThreshold := time.Now().Add(-subscription.Since)
+
+	// Collect data for subscribed series
+	seriesData := make(map[string][]TimeSeriesPoint)
+
+	for _, key := range subscription.Series {
+		series, exists := s.timeSeriesStore.Get(key)
+		if !exists {
+			seriesData[key] = []TimeSeriesPoint{}
+			continue
+		}
+
+		points := series.GetSince(timeThreshold, subscription.Resolution)
+		var apiPoints []TimeSeriesPoint
+		for _, point := range points {
+			apiPoints = append(apiPoints, TimeSeriesPoint{
+				T:      point.T.UnixMilli(),
+				V:      point.V,
+				Entity: point.Entity,
+			})
+		}
+		seriesData[key] = apiPoints
+	}
+
+	// Get capabilities
+	capabilities := make(map[string]bool)
+	if s.timeSeriesAggregator != nil {
+		capabilities = s.timeSeriesAggregator.GetCapabilities(context.Background())
+	}
+
+	// Send initial data
+	response := TimeSeriesResponse{
+		Series:       seriesData,
+		Capabilities: capabilities,
+	}
+
+	initMsg := TimeSeriesInitMessage{
+		Type:    "init",
+		GroupID: groupID,
+		Data:    response,
+	}
+
+	if err := s.sendTimeSeriesMessage(client, initMsg); err != nil {
+		s.logger.Error("Failed to send initial data", zap.String("clientId", client.ID), zap.String("groupId", groupID), zap.Error(err))
+	}
+}
+
+// sendTimeSeriesError sends an error message to a client
+func (s *Server) sendTimeSeriesError(client *TimeSeriesWSClient, errorMsg string) {
+	errorMessage := TimeSeriesErrorMessage{
+		Type:  "error",
+		Error: errorMsg,
+	}
+
+	if err := s.sendTimeSeriesMessage(client, errorMessage); err != nil {
+		s.logger.Error("Failed to send error message", zap.String("clientId", client.ID), zap.Error(err))
+	}
 }
 
 // handleClusterTimeSeriesLiveWebSocket handles GET /api/v1/timeseries/cluster/live
@@ -787,4 +1298,161 @@ func (s *Server) handleGetPodTimeSeries(w http.ResponseWriter, r *http.Request) 
 	r.URL.RawQuery = q.Encode()
 
 	s.handleGetPodsTimeSeries(w, r)
+}
+
+// handleGetNamespacesTimeSeries handles GET /api/v1/timeseries/namespaces
+func (s *Server) handleGetNamespacesTimeSeries(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	seriesParam := r.URL.Query().Get("series")
+	resParam := r.URL.Query().Get("res")
+	sinceParam := r.URL.Query().Get("since")
+	namespaceFilter := r.URL.Query().Get("namespace")
+
+	// Default values
+	if resParam == "" {
+		resParam = "lo"
+	}
+	if sinceParam == "" {
+		sinceParam = "60m"
+	}
+
+	// Parse resolution
+	var resolution timeseries.Resolution
+	switch resParam {
+	case "hi":
+		resolution = timeseries.Hi
+	case "lo":
+		resolution = timeseries.Lo
+	default:
+		s.logger.Warn("Invalid resolution parameter", zap.String("res", resParam))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid resolution parameter. Must be 'hi' or 'lo'",
+		})
+		return
+	}
+
+	// Parse duration
+	since, err := time.ParseDuration(sinceParam)
+	if err != nil {
+		s.logger.Warn("Invalid since parameter", zap.String("since", sinceParam), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid since parameter. Must be a valid duration (e.g., '60m', '1h')",
+		})
+		return
+	}
+
+	// Parse series keys - default to namespace metrics if none specified
+	var requestedMetricBases []string
+	if seriesParam != "" {
+		requestedMetricBases = strings.Split(seriesParam, ",")
+		for i, key := range requestedMetricBases {
+			requestedMetricBases[i] = strings.TrimSpace(key)
+		}
+	} else {
+		requestedMetricBases = timeseries.GetNamespaceMetricBases()
+	}
+
+	// Check if timeseries store is available
+	if s.timeSeriesStore == nil {
+		s.logger.Error("TimeSeries store not initialized")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "TimeSeries service not available",
+		})
+		return
+	}
+
+	// Get capabilities
+	capabilities := make(map[string]bool)
+	if s.timeSeriesAggregator != nil {
+		capabilities = s.timeSeriesAggregator.GetCapabilities(r.Context())
+	}
+
+	// Calculate time threshold
+	timeThreshold := time.Now().Add(-since)
+
+	// Collect data for each requested metric base
+	seriesData := make(map[string][]TimeSeriesPoint)
+
+	// Get all series keys and filter for namespace metrics
+	allKeys := s.timeSeriesStore.Keys()
+	for _, seriesKey := range allKeys {
+		for _, metricBase := range requestedMetricBases {
+			if strings.HasPrefix(seriesKey, metricBase+".") {
+				// Extract namespace name from series key
+				_, namespace, ok := timeseries.ParseNodeSeriesKey(seriesKey) // Reuse parser since namespace format is similar
+				if !ok {
+					continue
+				}
+
+				// Apply namespace filter if specified
+				if namespaceFilter != "" && namespace != namespaceFilter {
+					continue
+				}
+
+				// Get the series from the store
+				series, exists := s.timeSeriesStore.Get(seriesKey)
+				if !exists {
+					continue
+				}
+
+				// Get points since the specified time
+				points := series.GetSince(timeThreshold, resolution)
+
+				// Convert to API format
+				var apiPoints []TimeSeriesPoint
+				for _, point := range points {
+					apiPoints = append(apiPoints, TimeSeriesPoint{
+						T:      point.T.UnixMilli(),
+						V:      point.V,
+						Entity: point.Entity,
+					})
+				}
+
+				seriesData[seriesKey] = apiPoints
+			}
+		}
+	}
+
+	// Build response
+	response := TimeSeriesResponse{
+		Series:       seriesData,
+		Capabilities: capabilities,
+		Metadata: &TimeSeriesMetadata{
+			Resolution: resParam,
+			TimeSpan:   sinceParam,
+			Scope:      "namespaces",
+			Entity:     namespaceFilter,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetNamespaceTimeSeries handles GET /api/v1/timeseries/namespaces/{namespace}
+func (s *Server) handleGetNamespaceTimeSeries(w http.ResponseWriter, r *http.Request) {
+	// Extract namespace from URL
+	namespace := chi.URLParam(r, "namespace")
+
+	if namespace == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Namespace is required",
+		})
+		return
+	}
+
+	// Add filter to query and delegate to handleGetNamespacesTimeSeries
+	q := r.URL.Query()
+	q.Set("namespace", namespace)
+	r.URL.RawQuery = q.Encode()
+
+	s.handleGetNamespacesTimeSeries(w, r)
 }
