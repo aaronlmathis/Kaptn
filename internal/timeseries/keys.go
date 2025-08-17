@@ -63,6 +63,8 @@ const (
 )
 
 // Legacy constants for backward compatibility - DEPRECATED
+// Deprecated since v1.2.0. These constants will be removed in v2.0.0.
+// Please migrate to the corresponding *Base constants above.
 const (
 	NodeCPUUsageCores       = NodeCPUUsageBase
 	NodeMemUsageBytes       = NodeMemUsageBase
