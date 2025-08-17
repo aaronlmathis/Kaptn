@@ -21,6 +21,9 @@ import {
 } from "@/components/ui/select";
 import type { MetricScope, Resolution, MetricFilters } from "@/lib/metrics-api";
 
+// Grid density for chart layout
+export type GridDensity = 'compact' | 'cozy' | 'comfortable';
+
 // Filter state interface is now imported from metrics-api
 
 // Filter bar props
@@ -49,7 +52,7 @@ const SCOPE_OPTIONS: Array<{ value: MetricScope; label: string; description: str
 
 // Resolution options
 const RESOLUTION_OPTIONS: Array<{ value: Resolution; label: string; description: string }> = [
-  { value: 'lo', label: 'Low (default)', description: 'Optimized for longer time ranges' },
+  { value: 'lo', label: 'Low', description: 'Optimized for longer time ranges' },
   { value: 'hi', label: 'High', description: 'Higher resolution for detailed analysis' },
 ];
 
@@ -109,45 +112,74 @@ export function FilterBar({
 
   return (
     <div className={cn(
-      "sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b",
+      "sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border/50",
       className
     )}>
-      <div className="flex flex-wrap items-center gap-3 p-4">
-        {/* Scope Selection */}
-        <div className="flex items-center gap-2">
-          <Label htmlFor="scope-select" className="text-sm font-medium">
-            Scope
-          </Label>
-          <Select value={filters.scope} onValueChange={handleScopeChange}>
-            <SelectTrigger id="scope-select" className="w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SCOPE_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  <div>
-                    <div className="font-medium">{option.label}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {option.description}
+      <div className="flex flex-wrap items-center gap-6 px-6 py-5">
+        {/* Primary Filter Group - Scope & Resolution */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 px-4 py-2.5 bg-muted/30 border border-border/40 rounded-lg">
+          {/* Scope Selection */}
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+            <Label htmlFor="scope-select" className="text-sm font-medium text-foreground whitespace-nowrap">
+              Scope
+            </Label>
+            <Select value={filters.scope} onValueChange={handleScopeChange}>
+              <SelectTrigger id="scope-select" className="flex-1 sm:w-[150px] border-0 bg-background/80 shadow-sm text-left justify-start">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCOPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <div>
+                      <div className="font-medium">{option.label}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {option.description}
+                      </div>
                     </div>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator orientation="vertical" className="h-8 hidden sm:block" />
+
+          {/* Resolution Selection */}
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+            <Label htmlFor="resolution-select" className="text-sm font-medium text-foreground whitespace-nowrap">
+              Resolution
+            </Label>
+            <Select value={filters.resolution} onValueChange={handleResolutionChange}>
+              <SelectTrigger id="resolution-select" className="flex-1 sm:w-[150px] border-0 bg-background/80 shadow-sm text-left justify-start">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RESOLUTION_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <div>
+                      <div className="font-medium">{option.label}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {option.description}
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Entity Selection */}
         {filters.scope !== 'cluster' && (
-          <div className="flex items-center gap-2">
-            <Label htmlFor="entity-select" className="text-sm font-medium">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Label htmlFor="entity-select" className="text-sm font-medium text-foreground whitespace-nowrap">
               Entity
             </Label>
             <Select
               value={filters.entity || 'all'}
               onValueChange={handleEntityChange}
             >
-              <SelectTrigger id="entity-select" className="w-[180px]">
+              <SelectTrigger id="entity-select" className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Select entity..." />
               </SelectTrigger>
               <SelectContent>
@@ -180,60 +212,40 @@ export function FilterBar({
           </div>
         )}
 
-        <Separator orientation="vertical" className="h-6" />
-
-        {/* Resolution Selection */}
-        <div className="flex items-center gap-2">
-          <Label htmlFor="resolution-select" className="text-sm font-medium">
-            Resolution
-          </Label>
-          <Select value={filters.resolution} onValueChange={handleResolutionChange}>
-            <SelectTrigger id="resolution-select" className="w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {RESOLUTION_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  <div>
-                    <div className="font-medium">{option.label}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {option.description}
-                    </div>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <Separator orientation="vertical" className="h-6" />
-
-        {/* Search */}
-        <div className="flex items-center gap-2">
-          <Label htmlFor="search-input" className="text-sm font-medium">
+        {/* Search - Primary Action */}
+        <div className="flex items-center gap-3 flex-1 min-w-[280px] w-full sm:w-auto">
+          <Label htmlFor="search-input" className="text-sm font-medium text-foreground whitespace-nowrap">
             Search
           </Label>
-          <div className="relative">
+          <div className="relative flex-1 max-w-[400px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="search-input"
-              placeholder="Filter metrics..."
+              placeholder="Filter metrics and chart titles..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              className="w-[200px] pl-9"
+              className="pl-10 pr-4 h-10 text-sm border-border/60 focus:border-primary/50 shadow-sm"
             />
           </div>
         </div>
 
-        <Separator orientation="vertical" className="h-6" />
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onExpandAll}>
+        {/* Action Buttons - Secondary */}
+        <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onExpandAll}
+            className="flex-1 sm:flex-none text-muted-foreground hover:text-foreground border border-border/40 hover:border-border"
+          >
             Expand all
           </Button>
 
-          <Button variant="outline" size="sm" onClick={onCollapseAll}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onCollapseAll}
+            className="flex-1 sm:flex-none text-muted-foreground hover:text-foreground border border-border/40 hover:border-border"
+          >
             Collapse all
           </Button>
         </div>
