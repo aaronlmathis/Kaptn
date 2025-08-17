@@ -504,6 +504,17 @@ func (s *Server) initTimeSeries() error {
 		}
 	}
 
+	// Apply additional timeseries configuration from YAML
+	if s.config.Timeseries.MaxSeries > 0 {
+		timeseriesConfig.MaxSeries = s.config.Timeseries.MaxSeries
+	}
+	if s.config.Timeseries.MaxPointsPerSeries > 0 {
+		timeseriesConfig.MaxPointsPerSeries = s.config.Timeseries.MaxPointsPerSeries
+	}
+	if s.config.Timeseries.MaxWSClients > 0 {
+		timeseriesConfig.MaxWSClients = s.config.Timeseries.MaxWSClients
+	}
+
 	s.timeSeriesStore = timeseries.NewMemStore(timeseriesConfig)
 
 	// Initialize TimeSeries WebSocket manager

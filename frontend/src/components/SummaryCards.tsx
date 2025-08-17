@@ -24,6 +24,7 @@ interface SummaryCardsProps {
 	loading?: boolean
 	error?: string | null
 	lastUpdated?: string | null
+	noPadding?: boolean
 }
 
 export function SummaryCards({
@@ -31,23 +32,24 @@ export function SummaryCards({
 	columns = 4,
 	loading = false,
 	error = null,
-	lastUpdated = null
+	lastUpdated = null,
+	noPadding = false
 }: SummaryCardsProps) {
 	if (loading) {
 		return (
 			<div
-				className="
-          /* slot‐based card styles */
-          [data-slot=card]:bg-gradient-to-t
-          [data-slot=card]:from-primary/5
-          [data-slot=card]:to-card
-          [data-slot=card]:shadow-xs
-          dark:[data-slot=card]:bg-card
+				className={`
+		        /* slot‐based card styles */
+		        [data-slot=card]:bg-gradient-to-t
+		        [data-slot=card]:from-primary/5
+		        [data-slot=card]:to-card
+		        [data-slot=card]:shadow-xs
+		        dark:[data-slot=card]:bg-card
 
-          /* grid layout */
-          grid grid-cols-1 gap-4 px-4 lg:px-6
-          @xl/main:grid-cols-2 @5xl/main:grid-cols-4
-        "
+		        /* grid layout */
+		        grid grid-cols-1 gap-4 ${noPadding ? '' : 'px-4 lg:px-6'}
+		        @xl/main:grid-cols-2 @5xl/main:grid-cols-4
+		      `}
 			>
 				{[...Array(columns)].map((_, i) => (
 					<Card key={i} className="@container/card">
@@ -78,7 +80,7 @@ export function SummaryCards({
 
 	if (error) {
 		return (
-			<div className="px-4 lg:px-6">
+			<div className={noPadding ? '' : 'px-4 lg:px-6'}>
 				<div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
 					<div className="flex items-center">
 						<span className="ml-2 text-sm font-medium text-red-800 dark:text-red-200">
@@ -117,7 +119,7 @@ export function SummaryCards({
 	}
 
 	return (
-		<div className="px-4 lg:px-6 mb-6">
+		<div className={noPadding ? 'mb-6' : 'px-4 lg:px-6 mb-6'}>
 			{/* Last Updated Info */}
 			{lastUpdated && (
 				<div className="mb-4 text-sm text-muted-foreground">

@@ -61,33 +61,50 @@ export function useLiveSeries(): UseLiveSeriesResult {
 	React.useEffect(() => {
 		const handleConnect = () => {
 			console.log('🔌 useLiveSeries: Connected');
+			console.log('🔌 useLiveSeries: Connection state:', liveSeriesClient.getConnectionState());
 			setConnectionState(liveSeriesClient.getConnectionState());
 		};
 
 		const handleDisconnect = () => {
 			console.log('🔌 useLiveSeries: Disconnected');
+			console.log('🔌 useLiveSeries: Connection state:', liveSeriesClient.getConnectionState());
 			setConnectionState(liveSeriesClient.getConnectionState());
 		};
 
 		const handleInit = (data: unknown) => {
 			const message = data as InitMessage;
-			console.log(`📊 useLiveSeries: Initial data for ${message.groupId}`,
-				Object.keys(message.data.series).length, 'series');
+			console.log(`📊 useLiveSeries: INIT MESSAGE RECEIVED for group ${message.groupId}`);
+			console.log('📊 useLiveSeries: Full init message:', JSON.stringify(message, null, 2));
+			console.log(`📊 useLiveSeries: Series count: ${Object.keys(message.data.series).length}`);
+
+			// Log each series
+			Object.entries(message.data.series).forEach(([key, points]) => {
+				console.log(`📊 useLiveSeries: Series ${key}: ${points.length} data points`);
+				if (points.length > 0) {
+					console.log(`📊 useLiveSeries: ${key} latest point:`, points[points.length - 1]);
+					console.log(`📊 useLiveSeries: ${key} first point:`, points[0]);
+				}
+			});
 
 			// Convert server data format to our format
 			const convertedData: Record<string, LiveDataPoint[]> = {};
 			Object.entries(message.data.series).forEach(([key, points]) => {
 				convertedData[key] = points.map(p => ({ t: p.t, v: p.v }));
+				console.log(`📊 useLiveSeries: Converted ${key}: ${convertedData[key].length} points`);
 			});
 
-			setSeriesData(prev => ({
-				...prev,
-				...convertedData,
-			}));
+			console.log('📊 useLiveSeries: Setting series data:', Object.keys(convertedData));
+			setSeriesData(prev => {
+				const newData = { ...prev, ...convertedData };
+				console.log('📊 useLiveSeries: New total series data keys:', Object.keys(newData));
+				return newData;
+			});
 		};
 
 		const handleAppend = (data: unknown) => {
 			const message = data as AppendMessage;
+			console.log(`📈 useLiveSeries: APPEND MESSAGE for ${message.key}`);
+			console.log('📈 useLiveSeries: Append data:', message);
 			const { key, point } = message;
 
 			setSeriesData(prev => {
@@ -96,6 +113,8 @@ export function useLiveSeries(): UseLiveSeriesResult {
 
 				// Keep only last 1000 points to prevent memory issues
 				const trimmed = updated.slice(-1000);
+
+				console.log(`📈 useLiveSeries: Updated ${key}: ${existing.length} -> ${trimmed.length} points, latest value: ${point.v}`);
 
 				return {
 					...prev,
@@ -106,7 +125,8 @@ export function useLiveSeries(): UseLiveSeriesResult {
 
 		const handleError = (data: unknown) => {
 			const error = data as Error;
-			console.error('❌ useLiveSeries: Error', error);
+			console.error('❌ useLiveSeries: WebSocket Error:', error);
+			console.error('❌ useLiveSeries: Error details:', JSON.stringify(error, null, 2));
 			setConnectionState(liveSeriesClient.getConnectionState());
 		};
 

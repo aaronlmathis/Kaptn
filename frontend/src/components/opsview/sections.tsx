@@ -13,6 +13,16 @@ import {
 } from "@/components/ui/accordion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SummaryCards, type SummaryCard } from "@/components/SummaryCards";
+import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
+import {
+	getPodStatusBadge,
+	getPodPhaseBadge,
+	getResourceIcon,
+	getNodeReadinessBadge,
+	getRestartCountBadge,
+} from "@/lib/summary-card-utils";
 import {
 	RefreshCw,
 	TrendingUp,
@@ -44,45 +54,121 @@ interface OpsViewSectionsProps {
  * Individual section components
  */
 function ClusterOverview() {
+	// WebSocket subscription for cluster overview metrics
+	const {
+		seriesData: liveData,
+		isConnected: wsConnected,
+		connectionState,
+	} = useLiveSeriesSubscription(
+		'cluster-overview-cards',
+		[
+			'cluster.nodes.ready',
+			'cluster.nodes.count',
+			'cluster.pods.running',
+			'cluster.pods.pending',
+			'cluster.pods.restarts.1h',
+			'cluster.pods.failed',
+		],
+		{
+			res: 'lo',
+			since: '15m',
+			autoConnect: true,
+		}
+	);
+
+	// Calculate current values from live data (use latest data point)
+	const getLatestValue = (key: string): number => {
+		const data = liveData[key];
+		return data && data.length > 0 ? data[data.length - 1].v : 0;
+	};
+
+	// Debug: Log the received data
+	React.useEffect(() => {
+		console.log('🔍 ClusterOverview: Received live data:', liveData);
+		console.log('🔍 ClusterOverview: Available keys:', Object.keys(liveData));
+		Object.entries(liveData).forEach(([key, data]) => {
+			console.log(`🔍 ${key}:`, data.length, 'points, latest:', data.length > 0 ? data[data.length - 1] : 'no data');
+		});
+	}, [liveData]);
+
+	const nodesReady = Math.round(getLatestValue('cluster.nodes.ready'));
+	const nodesTotal = Math.round(getLatestValue('cluster.nodes.count'));
+	const podsRunning = Math.round(getLatestValue('cluster.pods.running'));
+	const podsPending = Math.round(getLatestValue('cluster.pods.pending'));
+	const podsFailed = Math.round(getLatestValue('cluster.pods.failed'));
+	const podsRestarts1h = Math.round(getLatestValue('cluster.pods.restarts.1h'));
+
+	// Generate summary cards data
+	const summaryData: SummaryCard[] = React.useMemo(() => {
+		return [
+			{
+				title: "Nodes Ready",
+				value: nodesTotal > 0 ? `${nodesReady}/${nodesTotal}` : "0/0",
+				subtitle: nodesTotal > 0 ? `${nodesReady} of ${nodesTotal} nodes ready` : "No nodes found",
+				badge: getNodeReadinessBadge(nodesReady, nodesTotal),
+				icon: getResourceIcon("nodes"),
+				footer: nodesReady === nodesTotal && nodesTotal > 0 ?
+					"All nodes operational" :
+					nodesTotal > 0 ? `${nodesTotal - nodesReady} node(s) not ready` : "No cluster nodes detected"
+			},
+			{
+				title: "Pods Running",
+				value: podsRunning,
+				subtitle: `${podsRunning} pods currently running`,
+				badge: getPodStatusBadge(podsRunning, podsRunning + podsPending + podsFailed),
+				icon: getResourceIcon("pods"),
+				footer: podsRunning > 0 ? "Workloads active" : "No running workloads"
+			},
+			{
+				title: "Pods Pending",
+				value: podsPending,
+				subtitle: `${podsPending} pods waiting to start`,
+				badge: getPodPhaseBadge(podsPending, podsRunning + podsPending + podsFailed, "Pending"),
+				footer: podsPending === 0 ? "No scheduling issues" : "Pods awaiting resources or scheduling"
+			},
+			{
+				title: "Pod Restarts (1h)",
+				value: podsRestarts1h,
+				subtitle: `${podsRestarts1h} restarts in last hour`,
+				badge: getRestartCountBadge(podsRestarts1h),
+				footer: podsRestarts1h === 0 ? "No restarts - stable workloads" :
+					podsRestarts1h < 10 ? "Low restart activity" :
+						podsRestarts1h < 50 ? "Moderate restart activity - monitor" : "High restart activity - investigate"
+			},
+		];
+	}, [nodesReady, nodesTotal, podsRunning, podsPending, podsFailed, podsRestarts1h]);
+
 	return (
-		<div className="space-y-4">
-			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-				<Card>
-					<CardHeader className="pb-3">
-						<CardTitle className="text-sm font-medium">Nodes Ready</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">8/8</div>
-						<div className="text-xs text-muted-foreground">All healthy</div>
-					</CardContent>
-				</Card>
-				<Card>
-					<CardHeader className="pb-3">
-						<CardTitle className="text-sm font-medium">Pods Running</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">247</div>
-						<div className="text-xs text-muted-foreground">12 pending</div>
-					</CardContent>
-				</Card>
-				<Card>
-					<CardHeader className="pb-3">
-						<CardTitle className="text-sm font-medium">CPU Usage</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">45%</div>
-						<div className="text-xs text-muted-foreground">of limits</div>
-					</CardContent>
-				</Card>
-				<Card>
-					<CardHeader className="pb-3">
-						<CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">62%</div>
-						<div className="text-xs text-muted-foreground">of limits</div>
-					</CardContent>
-				</Card>
+		<div className="space-y-6">
+			{/* Connection Status */}
+			{connectionState.lastError && (
+				<Alert variant="destructive">
+					<AlertTriangle className="h-4 w-4" />
+					<AlertDescription>
+						WebSocket error: {connectionState.lastError}
+					</AlertDescription>
+				</Alert>
+			)}
+
+			{/* Summary Cards */}
+			<div className="space-y-4">
+				{wsConnected && (
+					<div className="flex items-center justify-end">
+						<div className="flex items-center gap-1.5 text-xs text-green-600">
+							<div className="size-2 bg-green-500 rounded-full animate-pulse" />
+							Live Data
+						</div>
+					</div>
+				)}
+
+				<SummaryCards
+					cards={summaryData}
+					columns={4}
+					loading={false}
+					error={connectionState.lastError}
+					lastUpdated={null}
+					noPadding={true}
+				/>
 			</div>
 
 			{/* Placeholder for charts and tables */}

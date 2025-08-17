@@ -369,30 +369,43 @@ export class LiveSeriesClient {
 	// Private methods
 
 	private handleMessage(data: string): void {
+		console.log('🌐 LiveSeriesClient: RAW WebSocket message received:', data);
+
 		try {
 			const message: WSMessage = JSON.parse(data);
+			console.log('🌐 LiveSeriesClient: PARSED WebSocket message:', message);
+			console.log('🌐 LiveSeriesClient: Message type:', message.type);
 
 			switch (message.type) {
 				case 'hello':
+					console.log('👋 LiveSeriesClient: Processing HELLO message');
 					this.handleHello(message);
 					break;
 				case 'ack':
+					console.log('✅ LiveSeriesClient: Processing ACK message');
 					this.handleAck(message);
 					break;
 				case 'init':
+					console.log('📊 LiveSeriesClient: Processing INIT message');
 					this.handleInit(message);
 					break;
 				case 'append':
+					console.log('📈 LiveSeriesClient: Processing APPEND message');
 					this.handleAppend(message);
 					break;
 				case 'error':
+					console.log('❌ LiveSeriesClient: Processing ERROR message');
 					this.handleError(message);
 					break;
 				default:
 					console.warn('⚠️ LiveSeriesClient: Unknown message type', (message as { type: string }).type);
+					console.warn('⚠️ LiveSeriesClient: Full unknown message:', message);
 			}
 		} catch (error) {
-			console.error('❌ LiveSeriesClient: Failed to parse message', error, data);
+			console.error('❌ LiveSeriesClient: Failed to parse message', error);
+			console.error('❌ LiveSeriesClient: Raw data that failed to parse:', data);
+			console.error('❌ LiveSeriesClient: Data type:', typeof data);
+			console.error('❌ LiveSeriesClient: Data length:', data.length);
 		}
 	}
 
