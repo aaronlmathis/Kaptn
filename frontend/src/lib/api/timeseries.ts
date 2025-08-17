@@ -8,9 +8,12 @@
 import { apiClient } from '@/lib/api-client';
 
 // Available time series keys
-export type TimeSeriesKey = 
+export type TimeSeriesKey =
   | 'cluster.cpu.used.cores'
   | 'cluster.cpu.capacity.cores'
+  | 'cluster.mem.used.bytes'
+  | 'cluster.mem.allocatable.bytes'
+  | 'cluster.mem.requested.bytes'
   | 'cluster.net.rx.bps'
   | 'cluster.net.tx.bps';
 
@@ -69,13 +72,13 @@ export async function fetchClusterSeries(
   since = '60m'
 ): Promise<TimeSeriesResponse> {
   const params = new URLSearchParams();
-  
+
   if (keys && keys.length > 0) {
     params.append('series', keys.join(','));
   }
   params.append('res', res);
   params.append('since', since);
-  
+
   const endpoint = `/timeseries/cluster?${params.toString()}`;
   return await apiClient.get<TimeSeriesResponse>(endpoint);
 }
@@ -93,32 +96,32 @@ export function openClusterLiveWS(
 ): WebSocket {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const params = new URLSearchParams();
-  
+
   if (keys && keys.length > 0) {
     params.append('series', keys.join(','));
   }
-  
+
   // Get auth token from session if available
   const session = (window as any).__KAPTN_SESSION__;
   if (session?.token) {
     params.append('token', session.token);
   }
-  
+
   const queryString = params.toString() ? `?${params.toString()}` : '';
   const url = `${protocol}//${window.location.host}/api/v1/timeseries/cluster/live${queryString}`;
-  
+
   const ws = new WebSocket(url);
-  
+
   ws.onopen = () => {
     console.log('✅ Timeseries WebSocket connected to:', url);
     handlers.onConnect?.();
   };
-  
+
   ws.onmessage = (event) => {
     try {
       // Add extra validation to ensure this is a timeseries message
       let message: any;
-      
+
       try {
         message = JSON.parse(event.data);
       } catch (parseError) {
@@ -130,19 +133,19 @@ export function openClusterLiveWS(
         handlers.onError?.(new Error('Invalid JSON format in WebSocket message'));
         return;
       }
-      
+
       // Validate message structure for timeseries
       if (!message || typeof message !== 'object') {
         console.error('❌ Timeseries WebSocket: Invalid message structure:', message);
         handlers.onError?.(new Error('Invalid message structure'));
         return;
       }
-      
+
       // Check if this is actually a timeseries message by looking for expected fields
-      const isTimeseriesMessage = 
+      const isTimeseriesMessage =
         (message.type === 'init' && message.data?.series) ||
         (message.type === 'append' && message.key && message.point);
-      
+
       if (!isTimeseriesMessage) {
         console.warn('⚠️ Timeseries WebSocket: Received non-timeseries message, ignoring:', {
           type: message.type,
@@ -152,21 +155,21 @@ export function openClusterLiveWS(
         });
         return;
       }
-      
+
       // Process valid timeseries message
       const tsMessage = message as TimeSeriesWSMessage;
-      
+
       switch (tsMessage.type) {
         case 'init':
           console.log('📊 Received initial timeseries data:', Object.keys(tsMessage.data.series));
           handlers.onInit?.(tsMessage.data);
           break;
-          
+
         case 'append':
           console.log(`📈 New data point for ${tsMessage.key}:`, tsMessage.point);
           handlers.onAppend?.(tsMessage.key, tsMessage.point);
           break;
-          
+
         default:
           console.warn('⚠️ Unknown timeseries message type:', (tsMessage as any).type);
       }
@@ -178,17 +181,17 @@ export function openClusterLiveWS(
       handlers.onError?.(error instanceof Error ? error : new Error('Message processing error'));
     }
   };
-  
+
   ws.onerror = (error) => {
     console.error('❌ Timeseries WebSocket error:', error);
     handlers.onError?.(new Error('WebSocket connection error'));
   };
-  
+
   ws.onclose = (event) => {
     console.log(`🔌 Timeseries WebSocket closed: ${event.code} ${event.reason}`);
     handlers.onDisconnect?.();
   };
-  
+
   return ws;
 }
 
@@ -200,10 +203,10 @@ export function formatSeriesForChart(
   points: TimeSeriesPoint[]
 ): [number, number][] {
   return points
-    .filter(point => 
-      point && 
-      Number.isFinite(point.t) && 
-      Number.isFinite(point.v) && 
+    .filter(point =>
+      point &&
+      Number.isFinite(point.t) &&
+      Number.isFinite(point.v) &&
       point.t > 0
     )
     .map(point => [point.t, point.v]);
@@ -217,10 +220,10 @@ export function getTimeWindow(durationStr: string): number {
   if (!match) {
     throw new Error(`Invalid duration format: ${durationStr}`);
   }
-  
+
   const value = parseInt(match[1], 10);
   const unit = match[2];
-  
+
   switch (unit) {
     case 's':
       return value * 1000;

@@ -47,9 +47,9 @@ type LiveTimeSeriesMessage struct {
 
 // New unified timeseries WebSocket message types
 type TimeSeriesHelloMessage struct {
-	Type         string                 `json:"type"`         // "hello"
-	Capabilities map[string]bool        `json:"capabilities"` // API capabilities
-	Limits       TimeSeriesLimits       `json:"limits"`       // Server limits
+	Type         string           `json:"type"`         // "hello"
+	Capabilities map[string]bool  `json:"capabilities"` // API capabilities
+	Limits       TimeSeriesLimits `json:"limits"`       // Server limits
 }
 
 type TimeSeriesLimits struct {
@@ -73,10 +73,10 @@ type TimeSeriesUnsubscribeMessage struct {
 }
 
 type TimeSeriesAckMessage struct {
-	Type     string                    `json:"type"`               // "ack"
-	GroupID  string                    `json:"groupId"`            // Group identifier
-	Accepted []string                  `json:"accepted"`           // Accepted series keys
-	Rejected []TimeSeriesRejectedKey   `json:"rejected,omitempty"` // Rejected keys with reasons
+	Type     string                  `json:"type"`               // "ack"
+	GroupID  string                  `json:"groupId"`            // Group identifier
+	Accepted []string                `json:"accepted"`           // Accepted series keys
+	Rejected []TimeSeriesRejectedKey `json:"rejected,omitempty"` // Rejected keys with reasons
 }
 
 type TimeSeriesRejectedKey struct {
@@ -85,15 +85,15 @@ type TimeSeriesRejectedKey struct {
 }
 
 type TimeSeriesInitMessage struct {
-	Type    string              `json:"type"`    // "init"
-	GroupID string              `json:"groupId"` // Group identifier
-	Data    TimeSeriesResponse  `json:"data"`    // Initial buffer data
+	Type    string             `json:"type"`    // "init"
+	GroupID string             `json:"groupId"` // Group identifier
+	Data    TimeSeriesResponse `json:"data"`    // Initial buffer data
 }
 
 type TimeSeriesAppendMessage struct {
-	Type  string           `json:"type"`  // "append"
-	Key   string           `json:"key"`   // Series key
-	Point TimeSeriesPoint  `json:"point"` // New data point
+	Type  string          `json:"type"`  // "append"
+	Key   string          `json:"key"`   // Series key
+	Point TimeSeriesPoint `json:"point"` // New data point
 }
 
 type TimeSeriesErrorMessage struct {
@@ -103,11 +103,11 @@ type TimeSeriesErrorMessage struct {
 
 // Client connection state for new WebSocket endpoint
 type TimeSeriesWSClient struct {
-	ID             string
-	Conn           *websocket.Conn
-	Send           chan []byte
-	Subscriptions  map[string]TimeSeriesSubscription // GroupID -> Subscription
-	LastActivity   time.Time
+	ID               string
+	Conn             *websocket.Conn
+	Send             chan []byte
+	Subscriptions    map[string]TimeSeriesSubscription // GroupID -> Subscription
+	LastActivity     time.Time
 	TotalSeriesCount int
 }
 
@@ -349,15 +349,18 @@ func (s *Server) handleTimeSeriesLiveWebSocket(w http.ResponseWriter, r *http.Re
 	// Create client
 	clientID := fmt.Sprintf("ts-%d", time.Now().UnixNano())
 	client := &TimeSeriesWSClient{
-		ID:             clientID,
-		Conn:           conn,
-		Send:           make(chan []byte, 256),
-		Subscriptions:  make(map[string]TimeSeriesSubscription),
-		LastActivity:   time.Now(),
+		ID:               clientID,
+		Conn:             conn,
+		Send:             make(chan []byte, 256),
+		Subscriptions:    make(map[string]TimeSeriesSubscription),
+		LastActivity:     time.Now(),
 		TotalSeriesCount: 0,
 	}
 
 	s.logger.Info("New timeseries WebSocket client connected", zap.String("clientId", clientID))
+
+	// Register client with manager
+	s.timeSeriesWSManager.addClient(client)
 
 	// Send hello message
 	s.sendTimeSeriesHello(client)
@@ -376,8 +379,8 @@ func (s *Server) sendTimeSeriesHello(client *TimeSeriesWSClient) {
 
 	// Set capabilities based on what we support
 	capabilities["cluster"] = true
-	capabilities["node"] = false   // Not supported yet
-	capabilities["pod"] = false    // Not supported yet
+	capabilities["node"] = false // Not supported yet
+	capabilities["pod"] = false  // Not supported yet
 
 	hello := TimeSeriesHelloMessage{
 		Type:         "hello",
@@ -391,7 +394,37 @@ func (s *Server) sendTimeSeriesHello(client *TimeSeriesWSClient) {
 
 	if err := s.sendTimeSeriesMessage(client, hello); err != nil {
 		s.logger.Error("Failed to send hello message", zap.String("clientId", client.ID), zap.Error(err))
+		return
 	}
+
+	// Send a default subscription after a short delay if client hasn't subscribed
+	go func() {
+		time.Sleep(2 * time.Second)
+
+		// Check if client is still connected and has no subscriptions
+		s.timeSeriesWSManager.mu.RLock()
+		stillConnected := s.timeSeriesWSManager.clients[client.ID] != nil
+		hasSubscriptions := len(client.Subscriptions) > 0
+		s.timeSeriesWSManager.mu.RUnlock()
+
+		if stillConnected && !hasSubscriptions {
+			s.logger.Info("Client has no subscriptions, sending default subscription", zap.String("clientId", client.ID))
+
+			// Create a default subscription for basic cluster metrics
+			defaultSub := TimeSeriesSubscribeMessage{
+				Type:    "subscribe",
+				GroupID: "default-cluster",
+				Res:     "hi",
+				Since:   "15m",
+				Series:  []string{"cluster.cpu.used_cores", "cluster.cpu.capacity_cores", "cluster.memory.used_bytes", "cluster.memory.capacity_bytes"},
+			}
+
+			// Convert to bytes and process as if it came from the client
+			if msgBytes, err := json.Marshal(defaultSub); err == nil {
+				s.handleTimeSeriesSubscribe(client, msgBytes)
+			}
+		}
+	}()
 }
 
 // sendTimeSeriesMessage sends a message to a WebSocket client
@@ -412,14 +445,15 @@ func (s *Server) sendTimeSeriesMessage(client *TimeSeriesWSClient, message inter
 // timeSeriesWSClientReader handles incoming messages from WebSocket client
 func (s *Server) timeSeriesWSClientReader(client *TimeSeriesWSClient) {
 	defer func() {
+		s.timeSeriesWSManager.removeClient(client.ID)
 		client.Conn.Close()
 		s.logger.Info("TimeSeries WebSocket client disconnected", zap.String("clientId", client.ID))
 	}()
 
 	client.Conn.SetReadLimit(512)
-	client.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	client.Conn.SetReadDeadline(time.Now().Add(300 * time.Second)) // 5 minutes instead of 60 seconds
 	client.Conn.SetPongHandler(func(string) error {
-		client.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		client.Conn.SetReadDeadline(time.Now().Add(300 * time.Second)) // 5 minutes instead of 60 seconds
 		return nil
 	})
 
@@ -552,7 +586,7 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 	}
 
 	// Check series limit
-	if client.TotalSeriesCount + newSeriesCount > 2000 {
+	if client.TotalSeriesCount+newSeriesCount > 2000 {
 		s.sendTimeSeriesError(client, "Series limit exceeded. Maximum 2000 series per client")
 		return
 	}
@@ -801,7 +835,12 @@ func (s *Server) startTimeSeriesWebSocketBroadcaster() {
 						V: latestPoint.V,
 					}
 
-					// Create broadcast message
+					// Broadcast to new unified WebSocket clients
+					if s.timeSeriesWSManager != nil {
+						s.timeSeriesWSManager.broadcastToSubscribers(key, apiPoint)
+					}
+
+					// Create broadcast message for legacy clients
 					message := LiveTimeSeriesMessage{
 						Type:  "append",
 						Key:   key,

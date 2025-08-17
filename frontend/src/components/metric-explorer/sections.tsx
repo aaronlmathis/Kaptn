@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { MetricAreaChart, MetricBarChart, MetricRadialChart, type ChartSeries } from "./charts";
+import { LiveMetricAreaChart } from "./live-charts";
 import type { MetricScope, MetricFilters } from "@/lib/metrics-api";
 import type { GridDensity } from "./filter-bar";
 import { formatCores, formatBytesIEC, formatRate, formatPct, calculateTrend } from "@/lib/metric-utils";
@@ -544,6 +545,30 @@ function ChartGrid({
 
         switch (chart.type) {
           case 'area':
+            // Use LiveMetricAreaChart for cluster memory chart
+            if (chart.id === 'cluster-memory-usage' && filters.scope === 'cluster') {
+              return (
+                <LiveMetricAreaChart
+                  key={chart.id}
+                  title={chart.title}
+                  subtitle={chart.subtitle}
+                  unit={chart.unit}
+                  formatter={chart.formatter}
+                  stacked={chart.stacked}
+                  height={chart.height}
+                  groupId="metric-explorer-memory"
+                  seriesKeys={chart.seriesKeys}
+                  fallbackSeries={chartSeries}
+                  isLoading={isLoading}
+                  error={error}
+                  capabilities={capabilityBadge}
+                  scopeLabel={filters.scope}
+                  timespanLabel="15m"
+                  resolutionLabel="hi"
+                />
+              );
+            }
+
             return (
               <MetricAreaChart
                 key={chart.id}

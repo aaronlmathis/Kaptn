@@ -506,6 +506,9 @@ func (s *Server) initTimeSeries() error {
 
 	s.timeSeriesStore = timeseries.NewMemStore(timeseriesConfig)
 
+	// Initialize TimeSeries WebSocket manager
+	s.timeSeriesWSManager = newTimeSeriesWSManager()
+
 	// Create metrics client for aggregator
 	var metricsClient metricsv1beta1typed.MetricsV1beta1Interface
 	if kubeMetricsClient, err := metricsv1beta1.NewForConfig(s.clientFactory.RESTConfig()); err == nil {
