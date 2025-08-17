@@ -444,8 +444,8 @@ function SectionHeader({
         <div className="flex items-center gap-3 ml-4">
           {kpis.map((kpi, index) => (
             <div key={index} className="flex items-center gap-2">
-              <Badge 
-                variant={kpi.variant || 'secondary'} 
+              <Badge
+                variant={kpi.variant || 'secondary'}
                 className="text-xs font-medium px-2.5 py-1"
               >
                 {kpi.label}

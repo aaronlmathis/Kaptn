@@ -116,8 +116,8 @@ export function MetricExplorerContainer() {
     refresh,
     // searchEntities,
     setExpandedSections,
-    // expandAllSections,
-    // collapseAllSections,
+    expandAllSections,
+    collapseAllSections,
     connect,
     disconnect,
   } = useMetricExplorer();
@@ -155,8 +155,8 @@ export function MetricExplorerContainer() {
           <FilterBar
             filters={filters}
             onFiltersChange={(newFilters) => updateFilters(newFilters)}
-            onExpandAll={() => { }}
-            onCollapseAll={() => { }}
+            onExpandAll={expandAllSections}
+            onCollapseAll={collapseAllSections}
           />
 
           {/* Main Content */}

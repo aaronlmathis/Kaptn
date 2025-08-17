@@ -124,12 +124,12 @@ export function FilterBar({
               Scope
             </Label>
             <Select value={filters.scope} onValueChange={handleScopeChange}>
-              <SelectTrigger id="scope-select" className="flex-1 sm:w-[150px] border-0 bg-background/80 shadow-sm text-left justify-start">
+              <SelectTrigger id="scope-select" className="flex-1 sm:w-[150px] border-0 bg-background/80 shadow-sm text-left ">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {SCOPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
+                  <SelectItem key={option.value} value={option.value} textValue={option.label}>
                     <div>
                       <div className="font-medium">{option.label}</div>
                       <div className="text-xs text-muted-foreground">
@@ -150,7 +150,7 @@ export function FilterBar({
               Resolution
             </Label>
             <Select value={filters.resolution} onValueChange={handleResolutionChange}>
-              <SelectTrigger id="resolution-select" className="flex-1 sm:w-[150px] border-0 bg-background/80 shadow-sm text-left justify-start">
+              <SelectTrigger id="resolution-select" className="flex-1 sm:w-[150px] border-0 bg-background/80 shadow-sm text-left ">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

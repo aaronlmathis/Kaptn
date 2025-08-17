@@ -187,7 +187,7 @@ function ChartCard({
         <div className="flex items-center justify-between px-3 py-2 border-b">
           <div className="flex items-center gap-2">
             <ChartIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground font-medium">{chartLabel}</span>
+            <span className="text-sm text-muted-foreground font-medium">{title}</span>
           </div>
           <div className="flex items-center gap-2">
             {capabilities}
