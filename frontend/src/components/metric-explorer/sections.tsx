@@ -6,7 +6,7 @@
  */
 
 import * as React from "react";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Cpu, MemoryStick, Network, HardDrive, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Accordion,
@@ -146,6 +146,7 @@ function getCPUSection(): MetricSection {
     id: 'cpu',
     title: 'CPU',
     description: 'Processor utilization and capacity metrics',
+    icon: <Cpu className="h-5 w-5" />,
     charts,
   };
 }
@@ -195,6 +196,7 @@ function getMemorySection(scope: MetricScope): MetricSection {
     id: 'memory',
     title: 'Memory',
     description: 'Memory usage and allocation metrics',
+    icon: <MemoryStick className="h-5 w-5" />,
     charts,
   };
 }
@@ -243,6 +245,7 @@ function getNetworkSection(scope: MetricScope): MetricSection {
     id: 'network',
     title: 'Network',
     description: 'Network throughput and traffic metrics',
+    icon: <Network className="h-5 w-5" />,
     charts,
   };
 }
@@ -290,6 +293,7 @@ function getStorageSection(scope: MetricScope): MetricSection {
     id: 'storage',
     title: 'Storage',
     description: 'Filesystem and storage utilization',
+    icon: <HardDrive className="h-5 w-5" />,
     charts,
   };
 }
@@ -302,6 +306,7 @@ function getClusterStateSection(): MetricSection {
     id: 'cluster-state',
     title: 'Cluster State',
     description: 'Pod phases and cluster capacity overview',
+    icon: <Activity className="h-5 w-5" />,
     charts: [
       {
         id: 'pods-by-phase',
@@ -418,20 +423,31 @@ function SectionHeader({
   kpis: SectionKPI[];
 }) {
   return (
-    <div className="flex items-center justify-between w-full">
-      <div className="flex items-center gap-3">
-        {section.icon}
-        <div>
-          <h3 className="font-medium">{section.title}</h3>
-          <p className="text-sm text-muted-foreground">{section.description}</p>
+    <div className="flex items-center justify-between w-full min-h-[3.5rem]">
+      <div className="flex items-center gap-4">
+        {section.icon && (
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary">
+            {section.icon}
+          </div>
+        )}
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold tracking-tight text-foreground">
+            {section.title}
+          </h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {section.description}
+          </p>
         </div>
       </div>
 
       {kpis.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 ml-4">
           {kpis.map((kpi, index) => (
             <div key={index} className="flex items-center gap-2">
-              <Badge variant={kpi.variant || 'secondary'} className="text-xs">
+              <Badge 
+                variant={kpi.variant || 'secondary'} 
+                className="text-xs font-medium px-2.5 py-1"
+              >
                 {kpi.label}
               </Badge>
               {kpi.trend && (
@@ -439,7 +455,7 @@ function SectionHeader({
                   {kpi.trend.direction === 'up' && <TrendingUp className="h-3 w-3 text-green-500" />}
                   {kpi.trend.direction === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
                   {kpi.trend.direction === 'stable' && <Minus className="h-3 w-3" />}
-                  {kpi.trend.percentage.toFixed(1)}%
+                  <span className="font-medium">{kpi.trend.percentage.toFixed(1)}%</span>
                 </div>
               )}
             </div>
@@ -578,7 +594,7 @@ export function MetricSections({
   const sections = React.useMemo(() => getSectionsForScope(filters.scope), [filters.scope]);
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("space-y-6", className)}>
       <Accordion
         type="multiple"
         value={expandedSections}
@@ -592,22 +608,24 @@ export function MetricSections({
             <AccordionItem
               key={section.id}
               value={section.id}
-              className="border rounded-lg"
+              className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
             >
-              <AccordionTrigger className="px-6 py-4 hover:no-underline">
+              <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40">
                 <SectionHeader section={section} kpis={kpis} />
               </AccordionTrigger>
 
-              <AccordionContent className="px-6 pb-6">
-                <ChartGrid
-                  charts={section.charts}
-                  seriesData={seriesData}
-                  filters={filters}
-                  density={density}
-                  capabilities={capabilities}
-                  isLoading={isLoading}
-                  error={error}
-                />
+              <AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+                <div className="border-t border-border/20 pt-6">
+                  <ChartGrid
+                    charts={section.charts}
+                    seriesData={seriesData}
+                    filters={filters}
+                    density={density}
+                    capabilities={capabilities}
+                    isLoading={isLoading}
+                    error={error}
+                  />
+                </div>
               </AccordionContent>
             </AccordionItem>
           );
