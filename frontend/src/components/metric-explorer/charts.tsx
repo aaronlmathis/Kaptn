@@ -18,15 +18,12 @@ import {
   RadialBarChart,
   PolarGrid,
 } from "recharts";
-import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart } from "lucide-react";
+import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   ChartContainer,
@@ -42,6 +39,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { formatTimestamp, UNIT_FORMATTERS, getChartColor } from "@/lib/metric-utils";
 
@@ -178,11 +180,11 @@ function ChartCard({
   className?: string;
   chartType?: 'area' | 'bar' | 'radial';
 }) {
-  const { icon: ChartIcon, label: chartLabel } = getChartTypeInfo(chartType);
+  const { icon: ChartIcon } = getChartTypeInfo(chartType);
 
   return (
     <div className="w-full max-w-[var(--card-max)] mx-auto">
-      <Card className={cn("@container/chart p-0", className)}>
+      <Card className={cn("@container/chart p-0 relative", className)}>
         {/* Chart Type Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b">
           <div className="flex items-center gap-2">
@@ -215,18 +217,36 @@ function ChartCard({
           </div>
         </div>
 
-        <CardHeader className="pb-2 px-3 pt-3">
-          <CardTitle className="text-base">{title}</CardTitle>
-          {subtitle && (
-            <CardDescription className="text-sm">
-              {subtitle}
-            </CardDescription>
-          )}
-        </CardHeader>
-
-        <CardContent className="px-3 pb-3">
+        <CardContent className="px-3 pb-3 pt-3">
           {children}
         </CardContent>
+
+        {/* Info Tooltip - Bottom Right Corner */}
+        {subtitle && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute bottom-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground z-10"
+              >
+                <Info className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="left"
+              align="end"
+              className="max-w-[300px] bg-popover border border-border shadow-md"
+            >
+              <div className="space-y-1">
+                <div className="font-medium text-sm text-popover-foreground">{title}</div>
+                <div className="text-xs text-muted-foreground leading-relaxed">
+                  {subtitle}
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        )}
 
         {(insight || badges || scopeLabel || timespanLabel) && (
           <CardFooter className="flex-col items-start gap-2 text-sm px-3 pt-2 pb-3">
