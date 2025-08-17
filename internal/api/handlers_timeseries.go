@@ -30,9 +30,9 @@ type TimeSeriesMetadata struct {
 
 // TimeSeriesPoint represents a single time series data point for API responses
 type TimeSeriesPoint struct {
-	T      int64                  `json:"t"`                // Unix timestamp in milliseconds
-	V      float64                `json:"v"`                // Value
-	Entity map[string]string      `json:"entity,omitempty"` // Entity metadata
+	T      int64             `json:"t"`                // Unix timestamp in milliseconds
+	V      float64           `json:"v"`                // Value
+	Entity map[string]string `json:"entity,omitempty"` // Entity metadata
 }
 
 // LiveTimeSeriesMessage represents a WebSocket message for live time series updates
@@ -159,7 +159,7 @@ func (s *Server) handleGetClusterTimeSeries(w http.ResponseWriter, r *http.Reque
 				Entity: point.Entity,
 			})
 		}
-		
+
 		seriesData[key] = apiPoints
 	}
 
@@ -462,7 +462,7 @@ func (s *Server) handleGetTimeSeriesCapabilities(w http.ResponseWriter, r *http.
 	}
 
 	capabilities := s.timeSeriesAggregator.GetCapabilities(r.Context())
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"capabilities": capabilities,

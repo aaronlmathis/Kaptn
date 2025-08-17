@@ -4,9 +4,9 @@ import "time"
 
 // Point represents a single time-series data point
 type Point struct {
-	T      time.Time          `json:"t"`                // Timestamp
-	V      float64            `json:"v"`                // Value
-	Entity map[string]string  `json:"entity,omitempty"` // Entity metadata (node, namespace, pod, container)
+	T      time.Time         `json:"t"`                // Timestamp
+	V      float64           `json:"v"`                // Value
+	Entity map[string]string `json:"entity,omitempty"` // Entity metadata (node, namespace, pod, container)
 }
 
 // NewPoint creates a new Point with the given timestamp and value

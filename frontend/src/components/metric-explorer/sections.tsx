@@ -48,22 +48,22 @@ export interface MetricChart {
 export interface MetricSectionsProps {
   filters: MetricFilters;
   density: GridDensity;
-  
+
   // Data
   seriesData: Record<string, ChartSeries>;
   capabilities?: {
     metricsAPI: boolean;
     summaryAPI: boolean;
   } | null;
-  
+
   // State
   isLoading?: boolean;
   error?: string;
-  
+
   // Accordion control
   expandedSections: string[];
   onExpandedSectionsChange: (sections: string[]) => void;
-  
+
   className?: string;
 }
 
@@ -426,7 +426,7 @@ function SectionHeader({
           <p className="text-sm text-muted-foreground">{section.description}</p>
         </div>
       </div>
-      
+
       {kpis.length > 0 && (
         <div className="flex items-center gap-2">
           {kpis.map((kpi, index) => (
@@ -481,7 +481,7 @@ function ChartGrid({
       2xl:grid-cols-4
       justify-center
     `.replace(/\s+/g, ' ').trim();
-    
+
     switch (density) {
       case 'compact':
         return cn(base, "gap-3");
@@ -496,7 +496,7 @@ function ChartGrid({
 
   const capabilityBadge = React.useMemo(() => {
     if (!capabilities || capabilities.summaryAPI) return null;
-    
+
     return (
       <Badge variant="outline" className="text-xs">
         Limited data
@@ -597,7 +597,7 @@ export function MetricSections({
               <AccordionTrigger className="px-6 py-4 hover:no-underline">
                 <SectionHeader section={section} kpis={kpis} />
               </AccordionTrigger>
-              
+
               <AccordionContent className="px-6 pb-6">
                 <ChartGrid
                   charts={section.charts}

@@ -28,13 +28,6 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { capabilities } = useCapabilities();
   const { user } = useAuth();
 
-  // Debug: Log user data in sidebar
-  React.useEffect(() => {
-    if (user) {
-      console.log('🔍 User data in sidebar:', user);
-      console.log('🔍 Picture URL:', user.picture);
-    }
-  }, [user]);
 
   // Build navigation data dynamically based on capabilities
   const getNavigationData = () => {
@@ -127,7 +120,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         url: "#",
         icon: IconChartBar,
         items: [
-          { title: "Metrics", url: "/metrics" },
+          { title: "Explore Metrics", url: "/metric-explorer" },
           { title: "Logs", url: "/logs" },
           { title: "Events", url: "/events" },
         ],
@@ -148,7 +141,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       user: {
         name: user?.name || "Unknown User",
         email: user?.email || "no-email@localhost",
-        avatar: user?.picture || "/avatars/default-user.jpg"
+        avatar: user?.picture || ""
       },
       navItems: allNavItems,
     };

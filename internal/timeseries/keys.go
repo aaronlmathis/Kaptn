@@ -29,17 +29,17 @@ const (
 
 // Node-level metric base keys (will be combined with node names)
 const (
-	NodeCPUUsageBase      = "node.cpu.usage.cores"
-	NodeMemUsageBase      = "node.mem.usage.bytes"
-	NodeMemWorkingSetBase = "node.mem.working_set.bytes"
-	NodeNetRxBase         = "node.net.rx.bps"
-	NodeNetTxBase         = "node.net.tx.bps"
-	NodeFsUsedBase        = "node.fs.used.bytes"
-	NodeFsUsedPercentBase = "node.fs.used.percent"
-	NodeImageFsUsedBase   = "node.imagefs.used.bytes"
-	NodeProcessCountBase  = "node.process.count"
-	NodeCapacityCPUBase   = "node.capacity.cpu.cores"
-	NodeCapacityMemBase   = "node.capacity.mem.bytes"
+	NodeCPUUsageBase       = "node.cpu.usage.cores"
+	NodeMemUsageBase       = "node.mem.usage.bytes"
+	NodeMemWorkingSetBase  = "node.mem.working_set.bytes"
+	NodeNetRxBase          = "node.net.rx.bps"
+	NodeNetTxBase          = "node.net.tx.bps"
+	NodeFsUsedBase         = "node.fs.used.bytes"
+	NodeFsUsedPercentBase  = "node.fs.used.percent"
+	NodeImageFsUsedBase    = "node.imagefs.used.bytes"
+	NodeProcessCountBase   = "node.process.count"
+	NodeCapacityCPUBase    = "node.capacity.cpu.cores"
+	NodeCapacityMemBase    = "node.capacity.mem.bytes"
 	NodeAllocatableCPUBase = "node.allocatable.cpu.cores"
 	NodeAllocatableMemBase = "node.allocatable.mem.bytes"
 )
@@ -116,11 +116,11 @@ func ParseNodeSeriesKey(seriesKey string) (metricBase, nodeName string, ok bool)
 			break
 		}
 	}
-	
+
 	if lastDot == -1 {
 		return "", "", false
 	}
-	
+
 	metricBase = seriesKey[:lastDot]
 	nodeName = seriesKey[lastDot+1:]
 	return metricBase, nodeName, true
@@ -135,13 +135,13 @@ func ParsePodSeriesKey(seriesKey string) (metricBase, namespace, podName string,
 			dots = append(dots, i)
 		}
 	}
-	
+
 	if len(dots) < 2 {
 		return "", "", "", false
 	}
-	
+
 	metricBase = seriesKey[:dots[1]]
-	namespace = seriesKey[dots[1]+1:dots[0]]
+	namespace = seriesKey[dots[1]+1 : dots[0]]
 	podName = seriesKey[dots[0]+1:]
 	return metricBase, namespace, podName, true
 }

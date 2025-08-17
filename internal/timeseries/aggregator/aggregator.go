@@ -697,7 +697,7 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 			"namespace": "default",
 			"pod":       fmt.Sprintf("pod-%d", podCount),
 		}
-		
+
 		// Generate unique series keys for each pod
 		podSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodCPUUsageBase, podEntity["namespace"], podEntity["pod"])
 		podCPUSeries := a.store.Upsert(podSeriesKey)
@@ -719,7 +719,7 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 			// Sample: 120MB working set per pod
 			podWorkingSetSeries.Add(timeseries.NewPointWithEntity(now, 120*1024*1024, podEntity))
 		}
-		
+
 		podCount++
 	}
 
@@ -760,7 +760,7 @@ func (a *Aggregator) collectContainerMetrics(ctx context.Context, now time.Time)
 			"pod":       fmt.Sprintf("pod-%d", i/2),
 			"container": fmt.Sprintf("container-%d", i%2),
 		}
-		
+
 		ctrCPUSeriesKey := timeseries.GenerateContainerSeriesKey(timeseries.ContainerCPUUsageBase, containerEntity["namespace"], containerEntity["pod"], containerEntity["container"])
 		ctrCPUSeries := a.store.Upsert(ctrCPUSeriesKey)
 		if ctrCPUSeries != nil {
@@ -820,7 +820,7 @@ func (a *Aggregator) collectNodeDetailedMetrics(ctx context.Context, now time.Ti
 			for _, node := range nodeList {
 				if _, exists := nodeUsageMap[node.Name]; exists {
 					nodeEntity := map[string]string{"node": node.Name}
-					
+
 					// Store individual node memory usage (using placeholder calculations)
 					nodeMemSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeMemUsageBase, node.Name))
 					if nodeMemSeries != nil {
@@ -851,7 +851,7 @@ func (a *Aggregator) collectNodeDetailedMetrics(ctx context.Context, now time.Ti
 					dt := now.Sub(snap.LastTs).Seconds()
 					if dt > 0 {
 						nodeEntity := map[string]string{"node": stat.NodeName}
-						
+
 						// Calculate per-node network rates
 						if stat.RxBytes >= snap.LastRx {
 							rxRate := float64(stat.RxBytes-snap.LastRx) / dt
@@ -979,7 +979,7 @@ func (a *Aggregator) collectBasicPodNetworkMetrics(ctx context.Context, now time
 			"namespace": "default",
 			"pod":       fmt.Sprintf("running-pod-%d", podIndex),
 		}
-		
+
 		podNetRxSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodNetRxBase, podEntity["namespace"], podEntity["pod"])
 		podNetRxSeries := a.store.Upsert(podNetRxSeriesKey)
 		if podNetRxSeries != nil {
@@ -1000,7 +1000,7 @@ func (a *Aggregator) collectBasicPodNetworkMetrics(ctx context.Context, now time
 			// Placeholder: 100MB ephemeral storage per pod
 			podEphemeralSeries.Add(timeseries.NewPointWithEntity(now, 100*1024*1024, podEntity))
 		}
-		
+
 		podIndex++
 	}
 

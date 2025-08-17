@@ -1,13 +1,53 @@
 import * as React from "react"
-import {
-	Sheet,
-	SheetContent,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/ui/sheet"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
+import { IconCalendarEvent, IconAlertTriangle, IconInfoCircle, IconClock } from "@tabler/icons-react"
+import { useIsMobile } from "@/hooks/use-mobile"
+import {
+	Drawer,
+	DrawerClose,
+	DrawerContent,
+	DrawerDescription,
+	DrawerFooter,
+	DrawerHeader,
+	DrawerTitle,
+} from "@/components/ui/drawer"
+import { DetailRows } from "@/components/ResourceDetailDrawer"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+
+// Helper function to get event level badge with appropriate styling
+function getEventLevelBadge(level: string) {
+	switch (level.toLowerCase()) {
+		case "warning":
+			return (
+				<Badge variant="outline" className="text-orange-600 border-orange-600 bg-transparent px-1.5">
+					<IconAlertTriangle className="size-3 fill-orange-600 mr-1" />
+					{level}
+				</Badge>
+			)
+		case "error":
+			return (
+				<Badge variant="outline" className="text-red-600 border-red-600 bg-transparent px-1.5">
+					<IconAlertTriangle className="size-3 fill-red-600 mr-1" />
+					{level}
+				</Badge>
+			)
+		case "normal":
+		case "info":
+			return (
+				<Badge variant="outline" className="text-blue-600 border-blue-600 bg-transparent px-1.5">
+					<IconInfoCircle className="size-3 fill-blue-600 mr-1" />
+					{level}
+				</Badge>
+			)
+		default:
+			return (
+				<Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
+					{level}
+				</Badge>
+			)
+	}
+}
 
 interface EventDetailDrawerProps {
 	event: {
@@ -27,89 +67,100 @@ interface EventDetailDrawerProps {
 	onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * Controlled EventDetailDrawer that shows full event details.
+ */
 export function EventDetailDrawer({ event, open, onOpenChange }: EventDetailDrawerProps) {
+	const isMobile = useIsMobile()
+
 	if (!event) {
-		return null;
+		return null
 	}
 
+	// Format rows for consistent display using DetailRows component
+	const detailRows: Array<[string, React.ReactNode]> = [
+		["Event Name", <div className="font-mono text-sm">{event.name}</div>],
+		["Namespace", (
+			<Badge variant="outline" className="text-muted-foreground px-1.5">
+				{event.namespace}
+			</Badge>
+		)],
+		["Type", (
+			<Badge variant="outline" className="text-muted-foreground px-1.5">
+				{event.type}
+			</Badge>
+		)],
+		["Level", getEventLevelBadge(event.level)],
+		["Reason", <div className="font-mono text-sm">{event.reason}</div>],
+		["Count", <div className="font-mono text-sm">{event.count}</div>],
+		["Age", (
+			<div className="flex items-center gap-2">
+				<IconClock className="size-4 text-muted-foreground" />
+				<div className="font-mono text-sm">{event.age}</div>
+			</div>
+		)],
+		["Source", <div className="font-mono text-sm">{event.source}</div>],
+		["Involved Object", <div className="font-mono text-sm">{event.involvedObject}</div>],
+	]
+
+	const actions = (
+		<>
+			<Button
+				size="sm"
+				className="w-full"
+				onClick={() => {
+					// TODO: Implement event filtering by this object
+					console.log('Filter events for object:', event.involvedObject)
+				}}
+			>
+				<IconInfoCircle className="size-4 mr-2" />
+				Filter by Object
+			</Button>
+		</>
+	)
+
 	return (
-		<Sheet open={open} onOpenChange={onOpenChange}>
-			<SheetContent className="w-[600px] sm:max-w-[600px]">
-				<SheetHeader>
-					<SheetTitle>Event Details</SheetTitle>
-				</SheetHeader>
-				<ScrollArea className="h-[calc(100vh-100px)] mt-4">
-					<div className="space-y-6">
-						{/* Basic Information */}
-						<div>
-							<h3 className="text-lg font-semibold mb-3">Basic Information</h3>
-							<div className="grid grid-cols-2 gap-4">
-								<div>
-									<label className="text-sm font-medium text-muted-foreground">Name</label>
-									<p className="text-sm font-mono">{event.name}</p>
-								</div>
-								<div>
-									<label className="text-sm font-medium text-muted-foreground">Namespace</label>
-									<Badge variant="outline" className="text-xs">{event.namespace}</Badge>
-								</div>
-								<div>
-									<label className="text-sm font-medium text-muted-foreground">Type</label>
-									<Badge variant="outline" className="text-xs">{event.type}</Badge>
-								</div>
-								<div>
-									<label className="text-sm font-medium text-muted-foreground">Level</label>
-									<Badge
-										variant="outline"
-										className={`text-xs ${event.level === 'Warning' ? 'text-orange-600 border-orange-600' :
-												event.level === 'Error' ? 'text-red-600 border-red-600' :
-													'text-blue-600 border-blue-600'
-											}`}
-									>
-										{event.level}
-									</Badge>
-								</div>
-								<div>
-									<label className="text-sm font-medium text-muted-foreground">Reason</label>
-									<p className="text-sm font-mono">{event.reason}</p>
-								</div>
-								<div>
-									<label className="text-sm font-medium text-muted-foreground">Count</label>
-									<p className="text-sm font-mono">{event.count}</p>
-								</div>
-								<div>
-									<label className="text-sm font-medium text-muted-foreground">Age</label>
-									<p className="text-sm font-mono">{event.age}</p>
-								</div>
-								<div>
-									<label className="text-sm font-medium text-muted-foreground">Source</label>
-									<p className="text-sm font-mono">{event.source}</p>
-								</div>
-							</div>
-						</div>
+		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>
+			<DrawerContent className="flex flex-col h-full">
+				{/* Header with title/description */}
+				<DrawerHeader className="flex justify-between items-start flex-shrink-0">
+					<div className="space-y-1">
+						<DrawerTitle className="flex items-center gap-2">
+							<IconCalendarEvent className="size-5 text-blue-600" />
+							{event.name}
+						</DrawerTitle>
+						<DrawerDescription>
+							Event details and information
+						</DrawerDescription>
+					</div>
+				</DrawerHeader>
 
-						<Separator />
+				{/* Content area with styled scrolling */}
+				<ScrollArea className="flex-1 min-h-0">
+					<div className="px-6 text-sm space-y-6">
+						<DetailRows rows={detailRows} />
 
-						{/* Involved Object */}
-						<div>
-							<h3 className="text-lg font-semibold mb-3">Involved Object</h3>
-							<div>
-								<label className="text-sm font-medium text-muted-foreground">Object</label>
-								<p className="text-sm font-mono">{event.involvedObject}</p>
-							</div>
-						</div>
-
-						<Separator />
-
-						{/* Message */}
-						<div>
-							<h3 className="text-lg font-semibold mb-3">Message</h3>
-							<div className="bg-muted p-3 rounded-md">
-								<p className="text-sm whitespace-pre-wrap">{event.message}</p>
+						{/* Message section with special formatting */}
+						<div className="space-y-3">
+							<h4 className="text-sm font-medium text-muted-foreground">Message</h4>
+							<div className="bg-muted p-4 rounded-md border">
+								<p className="text-sm whitespace-pre-wrap leading-relaxed">{event.message}</p>
 							</div>
 						</div>
 					</div>
+					<ScrollBar orientation="vertical" />
 				</ScrollArea>
-			</SheetContent>
-		</Sheet>
-	);
+
+				{/* Footer with actions */}
+				<DrawerFooter className="flex flex-col gap-2 px-6 pb-6 pt-4 flex-shrink-0">
+					{actions}
+					<DrawerClose asChild>
+						<Button variant="outline" size="sm" className="w-full">
+							Close
+						</Button>
+					</DrawerClose>
+				</DrawerFooter>
+			</DrawerContent>
+		</Drawer>
+	)
 }

@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TooltipProvider } from "@/components/ui/tooltip";
-// import { FilterBar } from "@/components/metric-explorer/filter-bar";
+import { FilterBar } from "@/components/metric-explorer/filter-bar";
 import { MetricSections } from "@/components/metric-explorer/sections";
 import { useMetricExplorer } from "@/hooks/useMetricExplorer";
 
@@ -108,9 +108,9 @@ export function MetricExplorerContainer() {
     error,
     // availableEntities,
     isConnected,
-    
+
     // Actions
-    // updateFilters,
+    updateFilters,
     // setDensity,
     // setAutoRefresh,
     refresh,
@@ -128,7 +128,7 @@ export function MetricExplorerContainer() {
 
   // Auto-connect on mount - only once
   const [hasAutoConnected, setHasAutoConnected] = React.useState(false);
-  
+
   React.useEffect(() => {
     if (!hasAutoConnected) {
       const timer = setTimeout(() => {
@@ -152,23 +152,12 @@ export function MetricExplorerContainer() {
       <TooltipProvider>
         <div className="min-h-screen bg-background">
           {/* Filter Bar */}
-          {/* 
           <FilterBar
             filters={filters}
-            onFiltersChange={updateFilters}
-            density={density}
-            onDensityChange={setDensity}
-            autoRefresh={autoRefresh}
-            onAutoRefreshChange={setAutoRefresh}
-            onRefresh={refresh}
-            onExpandAll={expandAllSections}
-            onCollapseAll={collapseAllSections}
-            isLoading={isLoading}
-            capabilities={capabilities}
-            availableEntities={availableEntities}
-            onSearchEntities={searchEntities}
+            onFiltersChange={(newFilters) => updateFilters(newFilters)}
+            onExpandAll={() => { }}
+            onCollapseAll={() => { }}
           />
-          */}
 
           {/* Main Content */}
           <div className="w-full px-4 lg:px-6 py-6">
