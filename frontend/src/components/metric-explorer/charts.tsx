@@ -18,15 +18,12 @@ import {
   RadialBarChart,
   PolarGrid,
 } from "recharts";
-import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart } from "lucide-react";
+import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   ChartContainer,
@@ -42,6 +39,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { formatTimestamp, UNIT_FORMATTERS, getChartColor } from "@/lib/metric-utils";
 
@@ -92,7 +94,7 @@ interface ChartActions {
  */
 function prepareChartData(series: ChartSeries[]): ChartDataPoint[] {
   if (series.length === 0) return [];
-  
+
   const timestampSet = new Set<number>();
   series.forEach(s => {
     s.data.forEach(([timestamp, value]) => {
@@ -101,17 +103,17 @@ function prepareChartData(series: ChartSeries[]): ChartDataPoint[] {
       }
     });
   });
-  
+
   const sortedTimestamps = Array.from(timestampSet).sort((a, b) => a - b);
-  
+
   return sortedTimestamps.map(timestamp => {
     const point: ChartDataPoint = { timestamp };
-    
+
     series.forEach(s => {
       const dataPoint = s.data.find(([ts, value]) => ts === timestamp && Number.isFinite(value));
       point[s.key] = dataPoint ? dataPoint[1] : 0;
     });
-    
+
     return point;
   });
 }
@@ -121,14 +123,14 @@ function prepareChartData(series: ChartSeries[]): ChartDataPoint[] {
  */
 function generateChartConfig(series: ChartSeries[]): ChartConfig {
   const config: ChartConfig = {};
-  
+
   series.forEach((s, index) => {
     config[s.key] = {
       label: s.name,
       color: s.color || getChartColor(s.key, index),
     };
   });
-  
+
   return config;
 }
 
@@ -178,73 +180,93 @@ function ChartCard({
   className?: string;
   chartType?: 'area' | 'bar' | 'radial';
 }) {
-  const { icon: ChartIcon, label: chartLabel } = getChartTypeInfo(chartType);
+  const { icon: ChartIcon } = getChartTypeInfo(chartType);
 
   return (
-    <Card className={cn("@container/chart w-80 p-0", className)}>
-      {/* Chart Type Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b">
-        <div className="flex items-center gap-2">
-          <ChartIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground font-medium">{chartLabel}</span>
+    <div className="w-full max-w-[var(--card-max)] mx-auto">
+      <Card className={cn("@container/chart p-0 relative", className)}>
+        {/* Chart Type Header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b">
+          <div className="flex items-center gap-2">
+            <ChartIcon className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground font-medium">{title}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {capabilities}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={actions?.onDownloadCSV}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={actions?.onCopyPNG}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy chart as PNG
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={actions?.onInspectSeries}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Inspect series
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {capabilities}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={actions?.onDownloadCSV}>
-                <Download className="mr-2 h-4 w-4" />
-                Download CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={actions?.onCopyPNG}>
-                <Copy className="mr-2 h-4 w-4" />
-                Copy chart as PNG
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={actions?.onInspectSeries}>
-                <Eye className="mr-2 h-4 w-4" />
-                Inspect series
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      
-      <CardHeader className="pb-2 px-3 pt-3">
-        <CardTitle className="text-base">{title}</CardTitle>
+
+        <CardContent className="px-3 pb-3 pt-3">
+          {children}
+        </CardContent>
+
+        {/* Info Tooltip - Bottom Right Corner */}
         {subtitle && (
-          <CardDescription className="text-sm">
-            {subtitle}
-          </CardDescription>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute bottom-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground z-10"
+              >
+                <Info className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="left"
+              align="end"
+              className="max-w-[300px] bg-popover border border-border shadow-md"
+            >
+              <div className="space-y-1">
+                <div className="font-medium text-sm text-popover-foreground">{title}</div>
+                <div className="text-xs text-muted-foreground leading-relaxed">
+                  {subtitle}
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         )}
-      </CardHeader>
-      
-      <CardContent className="px-3 pb-3">
-        {children}
-      </CardContent>
-      
-      {(insight || badges || scopeLabel || timespanLabel) && (
-        <CardFooter className="flex-col items-start gap-2 text-sm px-3 pt-2 pb-3">
-          {(insight || badges) && (
-            <div className="flex items-center gap-2 font-medium">
-              {insight}
-              {badges && <div className="flex gap-1">{badges}</div>}
-            </div>
-          )}
-          {(scopeLabel || timespanLabel || resolutionLabel) && (
-            <div className="text-muted-foreground">
-              Showing {scopeLabel ? `${scopeLabel} ` : ''}
-              {timespanLabel ? `for ${timespanLabel} ` : ''}
-              {resolutionLabel ? `at ${resolutionLabel}` : ''}
-            </div>
-          )}
-        </CardFooter>
-      )}
-    </Card>
+
+        {(insight || badges || scopeLabel || timespanLabel) && (
+          <CardFooter className="flex-col items-start gap-2 text-sm px-3 pt-2 pb-3">
+            {(insight || badges) && (
+              <div className="flex items-center gap-2 font-medium">
+                {insight}
+                {badges && <div className="flex gap-1">{badges}</div>}
+              </div>
+            )}
+            {(scopeLabel || timespanLabel || resolutionLabel) && (
+              <div className="text-muted-foreground">
+                Showing {scopeLabel ? `${scopeLabel} ` : ''}
+                {timespanLabel ? `for ${timespanLabel} ` : ''}
+                {resolutionLabel ? `at ${resolutionLabel}` : ''}
+              </div>
+            )}
+          </CardFooter>
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -273,7 +295,7 @@ export function MetricAreaChart({
 }: BaseChartProps & ChartActions & { stacked?: boolean }) {
   const chartData = React.useMemo(() => prepareChartData(series), [series]);
   const chartConfig = React.useMemo(() => generateChartConfig(series), [series]);
-  
+
   const valueFormatter = React.useMemo(() => {
     if (formatter) return formatter;
     if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
@@ -332,9 +354,9 @@ export function MetricAreaChart({
               );
             })}
           </defs>
-          
+
           {showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} />}
-          
+
           <XAxis
             dataKey="timestamp"
             tickLine={false}
@@ -345,7 +367,7 @@ export function MetricAreaChart({
             className="text-xs"
             style={{ fontSize: '10px' }}
           />
-          
+
           <YAxis
             tickLine={false}
             axisLine={false}
@@ -355,7 +377,7 @@ export function MetricAreaChart({
             width={40}
             style={{ fontSize: '10px' }}
           />
-          
+
           <ChartTooltip
             cursor={false}
             content={
@@ -366,9 +388,9 @@ export function MetricAreaChart({
               />
             }
           />
-          
+
           <ChartLegend content={<ChartLegendContent />} verticalAlign="bottom" height={36} />
-          
+
           {series.map((s, index) => {
             const color = s.color || getChartColor(s.key, index);
             return (
@@ -433,14 +455,14 @@ export function MetricBarChart({
   // For bar charts, we typically want aggregated data, not time series
   const chartData = React.useMemo(() => {
     if (series.length === 0) return [];
-    
+
     // Aggregate each series to get latest or average values
     return series.map(s => {
       const values = s.data.map(([, value]) => value).filter(Number.isFinite);
-      const aggregatedValue = values.length > 0 
+      const aggregatedValue = values.length > 0
         ? values[values.length - 1] // Use latest value
         : 0;
-      
+
       return {
         name: s.name,
         value: aggregatedValue,
@@ -448,9 +470,9 @@ export function MetricBarChart({
       };
     }).sort((a, b) => b.value - a.value); // Sort by value descending
   }, [series]);
-  
+
   const chartConfig = React.useMemo(() => generateChartConfig(series), [series]);
-  
+
   const valueFormatter = React.useMemo(() => {
     if (formatter) return formatter;
     if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
@@ -500,7 +522,7 @@ export function MetricBarChart({
           margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
         >
           {showGrid && <CartesianGrid strokeDasharray="3 3" />}
-          
+
           {layout === "horizontal" ? (
             <>
               <XAxis type="number" tickFormatter={valueFormatter} style={{ fontSize: '10px' }} />
@@ -512,7 +534,7 @@ export function MetricBarChart({
               <YAxis type="number" tickFormatter={valueFormatter} width={40} style={{ fontSize: '10px' }} />
             </>
           )}
-          
+
           <ChartTooltip
             content={
               <ChartTooltipContent
@@ -521,7 +543,7 @@ export function MetricBarChart({
               />
             }
           />
-          
+
           <Bar
             dataKey="value"
             fill="hsl(var(--chart-1))"
@@ -575,11 +597,11 @@ export function MetricRadialChart({
 }: BaseChartProps & ChartActions) {
   const chartData = React.useMemo(() => {
     if (series.length === 0) return [];
-    
+
     return series.map(s => {
       const values = s.data.map(([, value]) => value).filter(Number.isFinite);
       const latestValue = values.length > 0 ? values[values.length - 1] : 0;
-      
+
       return {
         name: s.name,
         value: latestValue,
@@ -587,7 +609,7 @@ export function MetricRadialChart({
       };
     });
   }, [series]);
-  
+
   const valueFormatter = React.useMemo(() => {
     if (formatter) return formatter;
     if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {

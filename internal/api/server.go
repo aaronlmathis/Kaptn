@@ -717,32 +717,21 @@ func (s *Server) setupRoutes() {
 	// Prometheus metrics endpoint
 	s.router.Handle("/metrics", promhttp.Handler())
 
-	// Test page for authentication (public)
-	s.router.Get("/test-login", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "test-login.html")
-	})
+	// // OAuth callback route - redirect to test page with parameters
+	// s.router.Get("/callback", func(w http.ResponseWriter, r *http.Request) {
+	// 	// Get the query parameters from the OAuth callback
+	// 	code := r.URL.Query().Get("code")
+	// 	state := r.URL.Query().Get("state")
 
-	// Phase 6 test page for SSAR UI gating
-	s.router.Get("/test-phase6", s.handlePhase6TestPage)
+	// 	if code == "" || state == "" {
+	// 		http.Error(w, "Missing code or state parameter", http.StatusBadRequest)
+	// 		return
+	// 	}
 
-	// Phase 6 test page (requires authentication)
-	s.router.Get("/test-phase6", s.handlePhase6TestPage)
-
-	// OAuth callback route - redirect to test page with parameters
-	s.router.Get("/callback", func(w http.ResponseWriter, r *http.Request) {
-		// Get the query parameters from the OAuth callback
-		code := r.URL.Query().Get("code")
-		state := r.URL.Query().Get("state")
-
-		if code == "" || state == "" {
-			http.Error(w, "Missing code or state parameter", http.StatusBadRequest)
-			return
-		}
-
-		// Redirect to test page with parameters
-		redirectURL := fmt.Sprintf("/test-login?code=%s&state=%s", code, state)
-		http.Redirect(w, r, redirectURL, http.StatusFound)
-	})
+	// 	// Redirect to test page with parameters
+	// 	redirectURL := fmt.Sprintf("/test-login?code=%s&state=%s", code, state)
+	// 	http.Redirect(w, r, redirectURL, http.StatusFound)
+	// })
 
 	// API routes
 	s.router.Route("/api/v1", func(r chi.Router) {
@@ -828,6 +817,13 @@ func (s *Server) setupRoutes() {
 			// TimeSeries endpoints
 			r.Get("/timeseries/cluster", s.handleGetClusterTimeSeries)
 			r.Get("/timeseries/health", s.handleTimeSeriesHealth)
+			r.Get("/timeseries/capabilities", s.handleGetTimeSeriesCapabilities)
+
+			// New entity-specific endpoints
+			r.Get("/timeseries/nodes", s.handleGetNodesTimeSeries)
+			r.Get("/timeseries/nodes/{nodeName}", s.handleGetNodeTimeSeries)
+			r.Get("/timeseries/pods", s.handleGetPodsTimeSeries)
+			r.Get("/timeseries/pods/{namespace}/{podName}", s.handleGetPodTimeSeries)
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)

@@ -8,14 +8,14 @@
 export { MetricExplorerContainer } from "../metric-explorer-container";
 
 // Core components
-export { FilterBar, type MetricFilters, type GridDensity, type AutoRefreshInterval } from "./filter-bar";
+export { FilterBar, type MetricFilters } from "./filter-bar";
 export { MetricSections, type MetricSection, type MetricChart } from "./sections";
-export { 
-  MetricAreaChart, 
-  MetricBarChart, 
+export {
+  MetricAreaChart,
+  MetricBarChart,
   MetricRadialChart,
   type ChartSeries,
-  type ChartDataPoint 
+  type ChartDataPoint
 } from "./charts";
 
 // Hook

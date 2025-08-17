@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/timeseries"
+	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
@@ -15,12 +17,22 @@ import (
 type TimeSeriesResponse struct {
 	Series       map[string][]TimeSeriesPoint `json:"series"`
 	Capabilities map[string]bool              `json:"capabilities"`
+	Metadata     *TimeSeriesMetadata          `json:"metadata,omitempty"`
+}
+
+// TimeSeriesMetadata provides additional context about the response
+type TimeSeriesMetadata struct {
+	Resolution string `json:"resolution"`
+	TimeSpan   string `json:"timespan"`
+	Scope      string `json:"scope"`
+	Entity     string `json:"entity,omitempty"`
 }
 
 // TimeSeriesPoint represents a single time series data point for API responses
 type TimeSeriesPoint struct {
-	T int64   `json:"t"` // Unix timestamp in milliseconds
-	V float64 `json:"v"` // Value
+	T      int64             `json:"t"`                // Unix timestamp in milliseconds
+	V      float64           `json:"v"`                // Value
+	Entity map[string]string `json:"entity,omitempty"` // Entity metadata
 }
 
 // LiveTimeSeriesMessage represents a WebSocket message for live time series updates
@@ -139,12 +151,13 @@ func (s *Server) handleGetClusterTimeSeries(w http.ResponseWriter, r *http.Reque
 		points := series.GetSince(timeThreshold, resolution)
 
 		// Convert to API format
-		apiPoints := make([]TimeSeriesPoint, len(points))
-		for i, point := range points {
-			apiPoints[i] = TimeSeriesPoint{
-				T: point.T.UnixMilli(), // Convert to milliseconds
-				V: point.V,
-			}
+		var apiPoints []TimeSeriesPoint
+		for _, point := range points {
+			apiPoints = append(apiPoints, TimeSeriesPoint{
+				T:      point.T.UnixMilli(),
+				V:      point.V,
+				Entity: point.Entity,
+			})
 		}
 
 		seriesData[key] = apiPoints
@@ -435,4 +448,343 @@ func (s *Server) handleGetTimeSeriesHealth(w http.ResponseWriter, r *http.Reques
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetTimeSeriesCapabilities handles GET /api/v1/timeseries/capabilities
+func (s *Server) handleGetTimeSeriesCapabilities(w http.ResponseWriter, r *http.Request) {
+	if s.timeSeriesAggregator == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "TimeSeries service not available",
+		})
+		return
+	}
+
+	capabilities := s.timeSeriesAggregator.GetCapabilities(r.Context())
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"capabilities": capabilities,
+	})
+}
+
+// handleGetNodesTimeSeries handles GET /api/v1/timeseries/nodes
+func (s *Server) handleGetNodesTimeSeries(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	seriesParam := r.URL.Query().Get("series")
+	resParam := r.URL.Query().Get("res")
+	sinceParam := r.URL.Query().Get("since")
+	nodeFilter := r.URL.Query().Get("node")
+
+	// Default values
+	if resParam == "" {
+		resParam = "lo"
+	}
+	if sinceParam == "" {
+		sinceParam = "60m"
+	}
+
+	// Parse resolution
+	var resolution timeseries.Resolution
+	switch resParam {
+	case "hi":
+		resolution = timeseries.Hi
+	case "lo":
+		resolution = timeseries.Lo
+	default:
+		s.logger.Warn("Invalid resolution parameter", zap.String("res", resParam))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid resolution parameter. Must be 'hi' or 'lo'",
+		})
+		return
+	}
+
+	// Parse duration
+	since, err := time.ParseDuration(sinceParam)
+	if err != nil {
+		s.logger.Warn("Invalid since parameter", zap.String("since", sinceParam), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid since parameter. Must be a valid duration (e.g., '60m', '1h')",
+		})
+		return
+	}
+
+	// Parse series keys - default to node metrics if none specified
+	var requestedMetricBases []string
+	if seriesParam != "" {
+		requestedMetricBases = strings.Split(seriesParam, ",")
+		for i, key := range requestedMetricBases {
+			requestedMetricBases[i] = strings.TrimSpace(key)
+		}
+	} else {
+		requestedMetricBases = timeseries.GetNodeMetricBases()
+	}
+
+	// Check if timeseries store is available
+	if s.timeSeriesStore == nil {
+		s.logger.Error("TimeSeries store not initialized")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "TimeSeries service not available",
+		})
+		return
+	}
+
+	// Get capabilities
+	capabilities := make(map[string]bool)
+	if s.timeSeriesAggregator != nil {
+		capabilities = s.timeSeriesAggregator.GetCapabilities(r.Context())
+	}
+
+	// Calculate time threshold
+	timeThreshold := time.Now().Add(-since)
+
+	// Collect data for each requested metric base
+	seriesData := make(map[string][]TimeSeriesPoint)
+
+	// Get all series keys and filter for node metrics
+	allKeys := s.timeSeriesStore.Keys()
+	for _, seriesKey := range allKeys {
+		for _, metricBase := range requestedMetricBases {
+			if strings.HasPrefix(seriesKey, metricBase+".") {
+				// Extract node name from series key
+				_, nodeName, ok := timeseries.ParseNodeSeriesKey(seriesKey)
+				if !ok {
+					continue
+				}
+
+				// Apply node filter if specified
+				if nodeFilter != "" && nodeName != nodeFilter {
+					continue
+				}
+
+				// Get the series from the store
+				series, exists := s.timeSeriesStore.Get(seriesKey)
+				if !exists {
+					continue
+				}
+
+				// Get points since the specified time
+				points := series.GetSince(timeThreshold, resolution)
+
+				// Convert to API format
+				var apiPoints []TimeSeriesPoint
+				for _, point := range points {
+					apiPoints = append(apiPoints, TimeSeriesPoint{
+						T:      point.T.UnixMilli(),
+						V:      point.V,
+						Entity: point.Entity,
+					})
+				}
+
+				seriesData[seriesKey] = apiPoints
+			}
+		}
+	}
+
+	// Build response
+	response := TimeSeriesResponse{
+		Series:       seriesData,
+		Capabilities: capabilities,
+		Metadata: &TimeSeriesMetadata{
+			Resolution: resParam,
+			TimeSpan:   sinceParam,
+			Scope:      "nodes",
+			Entity:     nodeFilter,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetNodeTimeSeries handles GET /api/v1/timeseries/nodes/{nodeName}
+func (s *Server) handleGetNodeTimeSeries(w http.ResponseWriter, r *http.Request) {
+	// Extract node name from URL
+	nodeName := chi.URLParam(r, "nodeName")
+
+	if nodeName == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Node name is required",
+		})
+		return
+	}
+
+	// Add node filter to query and delegate to handleGetNodesTimeSeries
+	q := r.URL.Query()
+	q.Set("node", nodeName)
+	r.URL.RawQuery = q.Encode()
+
+	s.handleGetNodesTimeSeries(w, r)
+}
+
+// handleGetPodsTimeSeries handles GET /api/v1/timeseries/pods
+func (s *Server) handleGetPodsTimeSeries(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	seriesParam := r.URL.Query().Get("series")
+	resParam := r.URL.Query().Get("res")
+	sinceParam := r.URL.Query().Get("since")
+	namespaceFilter := r.URL.Query().Get("namespace")
+	podFilter := r.URL.Query().Get("pod")
+
+	// Default values
+	if resParam == "" {
+		resParam = "lo"
+	}
+	if sinceParam == "" {
+		sinceParam = "60m"
+	}
+
+	// Parse resolution
+	var resolution timeseries.Resolution
+	switch resParam {
+	case "hi":
+		resolution = timeseries.Hi
+	case "lo":
+		resolution = timeseries.Lo
+	default:
+		s.logger.Warn("Invalid resolution parameter", zap.String("res", resParam))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid resolution parameter. Must be 'hi' or 'lo'",
+		})
+		return
+	}
+
+	// Parse duration
+	since, err := time.ParseDuration(sinceParam)
+	if err != nil {
+		s.logger.Warn("Invalid since parameter", zap.String("since", sinceParam), zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Invalid since parameter. Must be a valid duration (e.g., '60m', '1h')",
+		})
+		return
+	}
+
+	// Parse series keys - default to pod metrics if none specified
+	var requestedMetricBases []string
+	if seriesParam != "" {
+		requestedMetricBases = strings.Split(seriesParam, ",")
+		for i, key := range requestedMetricBases {
+			requestedMetricBases[i] = strings.TrimSpace(key)
+		}
+	} else {
+		requestedMetricBases = timeseries.GetPodMetricBases()
+	}
+
+	// Check if timeseries store is available
+	if s.timeSeriesStore == nil {
+		s.logger.Error("TimeSeries store not initialized")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "TimeSeries service not available",
+		})
+		return
+	}
+
+	// Get capabilities
+	capabilities := make(map[string]bool)
+	if s.timeSeriesAggregator != nil {
+		capabilities = s.timeSeriesAggregator.GetCapabilities(r.Context())
+	}
+
+	// Calculate time threshold
+	timeThreshold := time.Now().Add(-since)
+
+	// Collect data for each requested metric base
+	seriesData := make(map[string][]TimeSeriesPoint)
+
+	// Get all series keys and filter for pod metrics
+	allKeys := s.timeSeriesStore.Keys()
+	for _, seriesKey := range allKeys {
+		for _, metricBase := range requestedMetricBases {
+			if strings.HasPrefix(seriesKey, metricBase+".") {
+				// Extract namespace and pod name from series key
+				_, namespace, podName, ok := timeseries.ParsePodSeriesKey(seriesKey)
+				if !ok {
+					continue
+				}
+
+				// Apply filters if specified
+				if namespaceFilter != "" && namespace != namespaceFilter {
+					continue
+				}
+				if podFilter != "" && podName != podFilter {
+					continue
+				}
+
+				// Get the series from the store
+				series, exists := s.timeSeriesStore.Get(seriesKey)
+				if !exists {
+					continue
+				}
+
+				// Get points since the specified time
+				points := series.GetSince(timeThreshold, resolution)
+
+				// Convert to API format
+				var apiPoints []TimeSeriesPoint
+				for _, point := range points {
+					apiPoints = append(apiPoints, TimeSeriesPoint{
+						T:      point.T.UnixMilli(),
+						V:      point.V,
+						Entity: point.Entity,
+					})
+				}
+
+				seriesData[seriesKey] = apiPoints
+			}
+		}
+	}
+
+	// Build response
+	response := TimeSeriesResponse{
+		Series:       seriesData,
+		Capabilities: capabilities,
+		Metadata: &TimeSeriesMetadata{
+			Resolution: resParam,
+			TimeSpan:   sinceParam,
+			Scope:      "pods",
+			Entity:     fmt.Sprintf("namespace=%s,pod=%s", namespaceFilter, podFilter),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// handleGetPodTimeSeries handles GET /api/v1/timeseries/pods/{namespace}/{podName}
+func (s *Server) handleGetPodTimeSeries(w http.ResponseWriter, r *http.Request) {
+	// Extract namespace and pod name from URL
+	namespace := chi.URLParam(r, "namespace")
+	podName := chi.URLParam(r, "podName")
+
+	if namespace == "" || podName == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Namespace and pod name are required",
+		})
+		return
+	}
+
+	// Add filters to query and delegate to handleGetPodsTimeSeries
+	q := r.URL.Query()
+	q.Set("namespace", namespace)
+	q.Set("pod", podName)
+	r.URL.RawQuery = q.Encode()
+
+	s.handleGetPodsTimeSeries(w, r)
 }

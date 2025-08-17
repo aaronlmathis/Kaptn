@@ -2,6 +2,7 @@ package aggregator
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -307,12 +308,13 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 			var totalUsage float64
 
 			// Store individual node usage metrics
-			for _, usage := range nodeUsageMap {
+			for nodeName, usage := range nodeUsageMap {
+				nodeEntity := map[string]string{"node": nodeName}
 				totalUsage += usage
 
-				nodeUsageSeries := a.store.Upsert(timeseries.NodeCPUUsageCores)
+				nodeUsageSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeCPUUsageBase, nodeName))
 				if nodeUsageSeries != nil {
-					nodeUsageSeries.Add(timeseries.Point{T: now, V: usage})
+					nodeUsageSeries.Add(timeseries.NewPointWithEntity(now, usage, nodeEntity))
 				}
 			}
 
@@ -460,29 +462,30 @@ func (a *Aggregator) collectMemoryMetrics(ctx context.Context, now time.Time) {
 
 	// Collect individual node capacity metrics
 	for _, node := range nodeList {
+		nodeEntity := map[string]string{"node": node.Name}
 		totalMemoryCapacity += node.MemoryBytes
 
 		// Store individual node capacity metrics
-		nodeCapSeries := a.store.Upsert(timeseries.NodeCapacityMemBytes)
+		nodeCapSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeCapacityMemBase, node.Name))
 		if nodeCapSeries != nil {
-			nodeCapSeries.Add(timeseries.Point{T: now, V: node.MemoryBytes})
+			nodeCapSeries.Add(timeseries.NewPointWithEntity(now, node.MemoryBytes, nodeEntity))
 		}
 
 		// Store individual node allocatable metrics (same as capacity for now)
-		nodeAllocSeries := a.store.Upsert(timeseries.NodeAllocatableMemBytes)
+		nodeAllocSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeAllocatableMemBase, node.Name))
 		if nodeAllocSeries != nil {
-			nodeAllocSeries.Add(timeseries.Point{T: now, V: node.MemoryBytes})
+			nodeAllocSeries.Add(timeseries.NewPointWithEntity(now, node.MemoryBytes, nodeEntity))
 		}
 
 		// Also collect CPU capacity at node level
-		nodeCapCPUSeries := a.store.Upsert(timeseries.NodeCapacityCPUCores)
+		nodeCapCPUSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeCapacityCPUBase, node.Name))
 		if nodeCapCPUSeries != nil {
-			nodeCapCPUSeries.Add(timeseries.Point{T: now, V: node.CPUCores})
+			nodeCapCPUSeries.Add(timeseries.NewPointWithEntity(now, node.CPUCores, nodeEntity))
 		}
 
-		nodeAllocCPUSeries := a.store.Upsert(timeseries.NodeAllocatableCPUCores)
+		nodeAllocCPUSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeAllocatableCPUBase, node.Name))
 		if nodeAllocCPUSeries != nil {
-			nodeAllocCPUSeries.Add(timeseries.Point{T: now, V: node.CPUCores})
+			nodeAllocCPUSeries.Add(timeseries.NewPointWithEntity(now, node.CPUCores, nodeEntity))
 		}
 	}
 
@@ -686,28 +689,38 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 		return
 	}
 
-	// For each pod, store basic metrics
+	// For each pod, store basic metrics with proper entity identification
+	podCount := 0
 	for range podMetricsRaw {
-		// Store basic pod metrics (these will be aggregate/sample values)
-		// In a full implementation, we'd properly parse the pod metrics
+		// Create a synthetic pod entity for placeholder data
+		podEntity := map[string]string{
+			"namespace": "default",
+			"pod":       fmt.Sprintf("pod-%d", podCount),
+		}
 
-		podCPUSeries := a.store.Upsert(timeseries.PodCPUUsageCores)
+		// Generate unique series keys for each pod
+		podSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodCPUUsageBase, podEntity["namespace"], podEntity["pod"])
+		podCPUSeries := a.store.Upsert(podSeriesKey)
 		if podCPUSeries != nil {
 			// Sample: 0.1 cores per pod
-			podCPUSeries.Add(timeseries.Point{T: now, V: 0.1})
+			podCPUSeries.Add(timeseries.NewPointWithEntity(now, 0.1, podEntity))
 		}
 
-		podMemSeries := a.store.Upsert(timeseries.PodMemUsageBytes)
+		podMemSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodMemUsageBase, podEntity["namespace"], podEntity["pod"])
+		podMemSeries := a.store.Upsert(podMemSeriesKey)
 		if podMemSeries != nil {
 			// Sample: 128MB per pod
-			podMemSeries.Add(timeseries.Point{T: now, V: 128 * 1024 * 1024})
+			podMemSeries.Add(timeseries.NewPointWithEntity(now, 128*1024*1024, podEntity))
 		}
 
-		podWorkingSetSeries := a.store.Upsert(timeseries.PodMemWorkingSetBytes)
+		podWorkingSetSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodMemWorkingSetBase, podEntity["namespace"], podEntity["pod"])
+		podWorkingSetSeries := a.store.Upsert(podWorkingSetSeriesKey)
 		if podWorkingSetSeries != nil {
 			// Sample: 120MB working set per pod
-			podWorkingSetSeries.Add(timeseries.Point{T: now, V: 120 * 1024 * 1024})
+			podWorkingSetSeries.Add(timeseries.NewPointWithEntity(now, 120*1024*1024, podEntity))
 		}
+
+		podCount++
 	}
 
 	a.logger.Debug("Collected pod metrics",
@@ -741,29 +754,40 @@ func (a *Aggregator) collectContainerMetrics(ctx context.Context, now time.Time)
 	estimatedContainers := len(podMetricsRaw) * 2
 
 	for i := 0; i < estimatedContainers; i++ {
-		ctrCPUSeries := a.store.Upsert(timeseries.CtrCPUUsageCores)
-		if ctrCPUSeries != nil {
-			// Sample: 0.05 cores per container
-			ctrCPUSeries.Add(timeseries.Point{T: now, V: 0.05})
+		// Create synthetic container entity
+		containerEntity := map[string]string{
+			"namespace": "default",
+			"pod":       fmt.Sprintf("pod-%d", i/2),
+			"container": fmt.Sprintf("container-%d", i%2),
 		}
 
-		ctrMemSeries := a.store.Upsert(timeseries.CtrMemWorkingSetBytes)
+		ctrCPUSeriesKey := timeseries.GenerateContainerSeriesKey(timeseries.ContainerCPUUsageBase, containerEntity["namespace"], containerEntity["pod"], containerEntity["container"])
+		ctrCPUSeries := a.store.Upsert(ctrCPUSeriesKey)
+		if ctrCPUSeries != nil {
+			// Sample: 0.05 cores per container
+			ctrCPUSeries.Add(timeseries.NewPointWithEntity(now, 0.05, containerEntity))
+		}
+
+		ctrMemSeriesKey := timeseries.GenerateContainerSeriesKey(timeseries.ContainerMemWorkingSetBase, containerEntity["namespace"], containerEntity["pod"], containerEntity["container"])
+		ctrMemSeries := a.store.Upsert(ctrMemSeriesKey)
 		if ctrMemSeries != nil {
 			// Sample: 64MB per container
-			ctrMemSeries.Add(timeseries.Point{T: now, V: 64 * 1024 * 1024})
+			ctrMemSeries.Add(timeseries.NewPointWithEntity(now, 64*1024*1024, containerEntity))
 		}
 
 		// Add the missing container metrics you actually need!
-		ctrRootFsSeries := a.store.Upsert(timeseries.CtrRootFsUsedBytes)
+		ctrRootFsSeriesKey := timeseries.GenerateContainerSeriesKey(timeseries.ContainerRootFsUsedBase, containerEntity["namespace"], containerEntity["pod"], containerEntity["container"])
+		ctrRootFsSeries := a.store.Upsert(ctrRootFsSeriesKey)
 		if ctrRootFsSeries != nil {
 			// Sample: 500MB rootfs per container
-			ctrRootFsSeries.Add(timeseries.Point{T: now, V: 500 * 1024 * 1024})
+			ctrRootFsSeries.Add(timeseries.NewPointWithEntity(now, 500*1024*1024, containerEntity))
 		}
 
-		ctrLogsSeries := a.store.Upsert(timeseries.CtrLogsUsedBytes)
+		ctrLogsSeriesKey := timeseries.GenerateContainerSeriesKey(timeseries.ContainerLogsUsedBase, containerEntity["namespace"], containerEntity["pod"], containerEntity["container"])
+		ctrLogsSeries := a.store.Upsert(ctrLogsSeriesKey)
 		if ctrLogsSeries != nil {
 			// Sample: 50MB logs per container
-			ctrLogsSeries.Add(timeseries.Point{T: now, V: 50 * 1024 * 1024})
+			ctrLogsSeries.Add(timeseries.NewPointWithEntity(now, 50*1024*1024, containerEntity))
 		}
 	}
 
@@ -795,19 +819,21 @@ func (a *Aggregator) collectNodeDetailedMetrics(ctx context.Context, now time.Ti
 		if err == nil {
 			for _, node := range nodeList {
 				if _, exists := nodeUsageMap[node.Name]; exists {
+					nodeEntity := map[string]string{"node": node.Name}
+
 					// Store individual node memory usage (using placeholder calculations)
-					nodeMemSeries := a.store.Upsert(timeseries.NodeMemUsageBytes)
+					nodeMemSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeMemUsageBase, node.Name))
 					if nodeMemSeries != nil {
 						// Placeholder: 70% of capacity
 						placeholderMemUsage := node.MemoryBytes * 0.7
-						nodeMemSeries.Add(timeseries.Point{T: now, V: placeholderMemUsage})
+						nodeMemSeries.Add(timeseries.NewPointWithEntity(now, placeholderMemUsage, nodeEntity))
 					}
 
-					nodeWorkingSetSeries := a.store.Upsert(timeseries.NodeMemWorkingSetBytes)
+					nodeWorkingSetSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeMemWorkingSetBase, node.Name))
 					if nodeWorkingSetSeries != nil {
 						// Placeholder: 65% of capacity
 						placeholderWorkingSet := node.MemoryBytes * 0.65
-						nodeWorkingSetSeries.Add(timeseries.Point{T: now, V: placeholderWorkingSet})
+						nodeWorkingSetSeries.Add(timeseries.NewPointWithEntity(now, placeholderWorkingSet, nodeEntity))
 					}
 				}
 			}
@@ -824,20 +850,22 @@ func (a *Aggregator) collectNodeDetailedMetrics(ctx context.Context, now time.Ti
 				if exists && !snap.LastTs.IsZero() {
 					dt := now.Sub(snap.LastTs).Seconds()
 					if dt > 0 {
+						nodeEntity := map[string]string{"node": stat.NodeName}
+
 						// Calculate per-node network rates
 						if stat.RxBytes >= snap.LastRx {
 							rxRate := float64(stat.RxBytes-snap.LastRx) / dt
-							nodeRxSeries := a.store.Upsert(timeseries.NodeNetRxBps)
+							nodeRxSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetRxBase, stat.NodeName))
 							if nodeRxSeries != nil {
-								nodeRxSeries.Add(timeseries.Point{T: now, V: rxRate})
+								nodeRxSeries.Add(timeseries.NewPointWithEntity(now, rxRate, nodeEntity))
 							}
 						}
 
 						if stat.TxBytes >= snap.LastTx {
 							txRate := float64(stat.TxBytes-snap.LastTx) / dt
-							nodeTxSeries := a.store.Upsert(timeseries.NodeNetTxBps)
+							nodeTxSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetTxBase, stat.NodeName))
 							if nodeTxSeries != nil {
-								nodeTxSeries.Add(timeseries.Point{T: now, V: txRate})
+								nodeTxSeries.Add(timeseries.NewPointWithEntity(now, txRate, nodeEntity))
 							}
 						}
 					}
@@ -869,46 +897,48 @@ func (a *Aggregator) collectBasicNodeMetrics(ctx context.Context, now time.Time)
 		return
 	}
 
-	// For each node, add placeholder metrics for things that would normally come from Summary API
+	// For each node, add metrics with proper entity identification
 	for _, node := range nodeList {
+		nodeEntity := map[string]string{"node": node.Name}
+
 		// Add placeholder filesystem usage metrics (normally from Summary API)
-		nodeFilesystemSeries := a.store.Upsert(timeseries.NodeFsUsedBytes)
+		nodeFilesystemSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsUsedBase, node.Name))
 		if nodeFilesystemSeries != nil {
 			// Placeholder: 30% of node capacity as filesystem usage
 			placeholderFsUsage := node.MemoryBytes * 0.3 // Using memory as a proxy for disk
-			nodeFilesystemSeries.Add(timeseries.Point{T: now, V: placeholderFsUsage})
+			nodeFilesystemSeries.Add(timeseries.NewPointWithEntity(now, placeholderFsUsage, nodeEntity))
 		}
 
-		nodeFilesystemPercentSeries := a.store.Upsert(timeseries.NodeFsUsedPercent)
+		nodeFilesystemPercentSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsUsedPercentBase, node.Name))
 		if nodeFilesystemPercentSeries != nil {
 			// Placeholder: 30% filesystem usage
-			nodeFilesystemPercentSeries.Add(timeseries.Point{T: now, V: 30.0})
+			nodeFilesystemPercentSeries.Add(timeseries.NewPointWithEntity(now, 30.0, nodeEntity))
 		}
 
-		nodeImageFsSeries := a.store.Upsert(timeseries.NodeImageFsUsedBytes)
+		nodeImageFsSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsUsedBase, node.Name))
 		if nodeImageFsSeries != nil {
 			// Placeholder: 10% of memory capacity as image filesystem usage
 			placeholderImageFsUsage := node.MemoryBytes * 0.1
-			nodeImageFsSeries.Add(timeseries.Point{T: now, V: placeholderImageFsUsage})
+			nodeImageFsSeries.Add(timeseries.NewPointWithEntity(now, placeholderImageFsUsage, nodeEntity))
 		}
 
-		nodeProcessSeries := a.store.Upsert(timeseries.NodeProcessCount)
+		nodeProcessSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeProcessCountBase, node.Name))
 		if nodeProcessSeries != nil {
 			// Placeholder: 200 processes per node
-			nodeProcessSeries.Add(timeseries.Point{T: now, V: 200})
+			nodeProcessSeries.Add(timeseries.NewPointWithEntity(now, 200, nodeEntity))
 		}
 
 		// Add the missing node network metrics you actually need!
-		nodeNetRxSeries := a.store.Upsert(timeseries.NodeNetRxBps)
+		nodeNetRxSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetRxBase, node.Name))
 		if nodeNetRxSeries != nil {
 			// Placeholder: 10MB/s receive rate per node
-			nodeNetRxSeries.Add(timeseries.Point{T: now, V: 10 * 1024 * 1024})
+			nodeNetRxSeries.Add(timeseries.NewPointWithEntity(now, 10*1024*1024, nodeEntity))
 		}
 
-		nodeNetTxSeries := a.store.Upsert(timeseries.NodeNetTxBps)
+		nodeNetTxSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetTxBase, node.Name))
 		if nodeNetTxSeries != nil {
 			// Placeholder: 5MB/s transmit rate per node
-			nodeNetTxSeries.Add(timeseries.Point{T: now, V: 5 * 1024 * 1024})
+			nodeNetTxSeries.Add(timeseries.NewPointWithEntity(now, 5*1024*1024, nodeEntity))
 		}
 	}
 
@@ -942,24 +972,36 @@ func (a *Aggregator) collectBasicPodNetworkMetrics(ctx context.Context, now time
 	}
 
 	// Add placeholder pod network metrics for running pods
+	podIndex := 0
 	for i := 0; i < runningPods; i++ {
-		podNetRxSeries := a.store.Upsert(timeseries.PodNetRxBps)
+		// Create synthetic pod entity
+		podEntity := map[string]string{
+			"namespace": "default",
+			"pod":       fmt.Sprintf("running-pod-%d", podIndex),
+		}
+
+		podNetRxSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodNetRxBase, podEntity["namespace"], podEntity["pod"])
+		podNetRxSeries := a.store.Upsert(podNetRxSeriesKey)
 		if podNetRxSeries != nil {
 			// Placeholder: 1KB/s per pod
-			podNetRxSeries.Add(timeseries.Point{T: now, V: 1024})
+			podNetRxSeries.Add(timeseries.NewPointWithEntity(now, 1024, podEntity))
 		}
 
-		podNetTxSeries := a.store.Upsert(timeseries.PodNetTxBps)
+		podNetTxSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodNetTxBase, podEntity["namespace"], podEntity["pod"])
+		podNetTxSeries := a.store.Upsert(podNetTxSeriesKey)
 		if podNetTxSeries != nil {
 			// Placeholder: 1KB/s per pod
-			podNetTxSeries.Add(timeseries.Point{T: now, V: 1024})
+			podNetTxSeries.Add(timeseries.NewPointWithEntity(now, 1024, podEntity))
 		}
 
-		podEphemeralSeries := a.store.Upsert(timeseries.PodEphemeralUsedBytes)
+		podEphemeralSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodEphemeralUsedBase, podEntity["namespace"], podEntity["pod"])
+		podEphemeralSeries := a.store.Upsert(podEphemeralSeriesKey)
 		if podEphemeralSeries != nil {
 			// Placeholder: 100MB ephemeral storage per pod
-			podEphemeralSeries.Add(timeseries.Point{T: now, V: 100 * 1024 * 1024})
+			podEphemeralSeries.Add(timeseries.NewPointWithEntity(now, 100*1024*1024, podEntity))
 		}
+
+		podIndex++
 	}
 
 	a.logger.Debug("Collected basic pod network metrics",
