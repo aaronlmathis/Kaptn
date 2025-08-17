@@ -117,7 +117,7 @@ func ParseNodeSeriesKey(seriesKey string) (metricBase, nodeName string, ok bool)
 			lastDot = i
 			break
 		}
-	}
+	lastDot := strings.LastIndex(seriesKey, ".")
 
 	if lastDot == -1 {
 		return "", "", false
