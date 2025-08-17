@@ -32,6 +32,7 @@ const (
 	ClusterMemLimitsBytes       = "cluster.mem.limits.bytes"
 	ClusterPodsRestartsTotal    = "cluster.pods.restarts.total"
 	ClusterPodsRestartsRate     = "cluster.pods.restarts.rate"
+	ClusterPodsRestarts1h       = "cluster.pods.restarts.1h"
 	ClusterNodesReady           = "cluster.nodes.ready"
 	ClusterNodesNotReady        = "cluster.nodes.notready"
 	ClusterPodsUnschedulable    = "cluster.pods.unschedulable"
@@ -218,6 +219,7 @@ func AllSeriesKeys() []string {
 		ClusterMemLimitsBytes,
 		ClusterPodsRestartsTotal,
 		ClusterPodsRestartsRate,
+		ClusterPodsRestarts1h,
 		ClusterNodesReady,
 		ClusterNodesNotReady,
 		ClusterPodsUnschedulable,

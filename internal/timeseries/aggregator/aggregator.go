@@ -808,6 +808,39 @@ func (a *Aggregator) collectClusterRestartMetrics(ctx context.Context, now time.
 		restartsRateSeries.Add(timeseries.Point{T: now, V: restartRate})
 	}
 
+	// Calculate 1-hour restart count using sliding window
+	restarts1hSeries := a.store.Upsert(timeseries.ClusterPodsRestarts1h)
+	if restarts1hSeries != nil && restartsTotalSeries != nil {
+		// Get restart counter value from 1 hour ago (or oldest available data)
+		oneHourAgo := now.Add(-1 * time.Hour)
+
+		// Get the current total and the total from as far back as we have data
+		currentTotal := float64(totalRestarts)
+		var totalOneHourAgo float64 = currentTotal // Default to current if no historical data
+
+		// Get historical data points
+		if recentPoints := restartsTotalSeries.GetSince(oneHourAgo, timeseries.Hi); len(recentPoints) > 0 {
+			// Use the oldest available point (might be less than 1 hour old)
+			totalOneHourAgo = recentPoints[0].V
+		} else {
+			// If no historical data in hi-res, try low-res
+			if recentPoints := restartsTotalSeries.GetSince(oneHourAgo, timeseries.Lo); len(recentPoints) > 0 {
+				totalOneHourAgo = recentPoints[0].V
+			} else {
+				// No historical data available, use 0 as baseline
+				totalOneHourAgo = 0
+			}
+		}
+
+		// Calculate restarts in the last hour
+		restarts1h := currentTotal - totalOneHourAgo
+		if restarts1h < 0 {
+			restarts1h = 0 // Handle counter resets
+		}
+
+		restarts1hSeries.Add(timeseries.Point{T: now, V: restarts1h})
+	}
+
 	a.logger.Debug("Collected restart metrics",
 		zap.Int64("total_restarts", totalRestarts),
 		zap.Float64("restart_rate_per_sec", restartRate),
