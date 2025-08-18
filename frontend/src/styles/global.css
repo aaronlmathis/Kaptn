@@ -66,16 +66,26 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: 220 70% 50%;  /* Blue */
-  --chart-2: 160 84% 39%;  /* Green */
-  --chart-3: 45 93% 47%;   /* Amber */
-  --chart-4: 0 84% 60%;    /* Red */
-  --chart-5: 262 83% 58%;  /* Purple */
-  --chart-6: 335 78% 42%;  /* Pink */
-  --chart-7: 199 89% 48%;  /* Cyan */
-  --chart-8: 84 81% 44%;   /* Lime */
-  --chart-9: 25 95% 53%;   /* Orange */
-  --chart-10: 142 71% 45%; /* Emerald */
+  --chart-1: 220 70% 50%;
+  /* Blue */
+  --chart-2: 160 84% 39%;
+  /* Green */
+  --chart-3: 45 93% 47%;
+  /* Amber */
+  --chart-4: 0 84% 60%;
+  /* Red */
+  --chart-5: 262 83% 58%;
+  /* Purple */
+  --chart-6: 335 78% 42%;
+  /* Pink */
+  --chart-7: 199 89% 48%;
+  /* Cyan */
+  --chart-8: 84 81% 44%;
+  /* Lime */
+  --chart-9: 25 95% 53%;
+  /* Orange */
+  --chart-10: 142 71% 45%;
+  /* Emerald */
   --sidebar: oklch(0.96 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -105,16 +115,26 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: 220 70% 60%;  /* Lighter Blue */
-  --chart-2: 160 84% 50%;  /* Lighter Green */
-  --chart-3: 45 93% 58%;   /* Lighter Amber */
-  --chart-4: 0 84% 70%;    /* Lighter Red */
-  --chart-5: 262 83% 68%;  /* Lighter Purple */
-  --chart-6: 335 78% 52%;  /* Lighter Pink */
-  --chart-7: 199 89% 58%;  /* Lighter Cyan */
-  --chart-8: 84 81% 54%;   /* Lighter Lime */
-  --chart-9: 25 95% 63%;   /* Lighter Orange */
-  --chart-10: 142 71% 55%; /* Lighter Emerald */
+  --chart-1: 220 70% 60%;
+  /* Lighter Blue */
+  --chart-2: 160 84% 50%;
+  /* Lighter Green */
+  --chart-3: 45 93% 58%;
+  /* Lighter Amber */
+  --chart-4: 0 84% 70%;
+  /* Lighter Red */
+  --chart-5: 262 83% 68%;
+  /* Lighter Purple */
+  --chart-6: 335 78% 52%;
+  /* Lighter Pink */
+  --chart-7: 199 89% 58%;
+  /* Lighter Cyan */
+  --chart-8: 84 81% 54%;
+  /* Lighter Lime */
+  --chart-9: 25 95% 63%;
+  /* Lighter Orange */
+  --chart-10: 142 71% 55%;
+  /* Lighter Emerald */
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

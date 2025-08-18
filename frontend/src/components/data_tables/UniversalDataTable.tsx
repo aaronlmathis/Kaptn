@@ -359,7 +359,7 @@ export function UniversalDataTable<TData>(props: UniversalDataTableProps<TData>)
 	const totalCount = table.getFilteredRowModel().rows.length
 
 	return (
-		<div className={["px-4 lg:px-6", className].filter(Boolean).join(" ")}>
+		<div className={["", className].filter(Boolean).join(" ")}>
 			<div className="space-y-4">
 				{/* Filters / header (plug your DataTableFilters here) */}
 				{renderFilters?.({ table, selectedCount, totalCount })}

@@ -107,13 +107,13 @@ interface CustomTooltipProps {
   unit?: string;
 }
 
-function CustomChartTooltip({ 
-  active, 
-  payload, 
-  label, 
-  series, 
-  formatter, 
-  unit 
+function CustomChartTooltip({
+  active,
+  payload,
+  label,
+  series,
+  formatter,
+  unit
 }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) {
     return null;
@@ -132,7 +132,7 @@ function CustomChartTooltip({
           const seriesInfo = series.find(s => s.key === item.dataKey);
           const seriesName = seriesInfo?.name || item.dataKey;
           const color = seriesInfo?.color || item.color;
-          
+
           let formattedValue = '';
           if (formatter) {
             formattedValue = formatter(item.value);
@@ -149,8 +149,8 @@ function CustomChartTooltip({
 
           return (
             <div key={index} className="flex items-center gap-2 text-sm">
-              <div 
-                className="w-3 h-3 rounded-sm flex-shrink-0" 
+              <div
+                className="w-3 h-3 rounded-sm flex-shrink-0"
                 style={{ backgroundColor: color }}
               />
               <span className="text-muted-foreground min-w-0 flex-1">
