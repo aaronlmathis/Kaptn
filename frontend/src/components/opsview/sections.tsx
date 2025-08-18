@@ -28,6 +28,8 @@ import {
 import ClusterOverviewSection from "./sections/ClusterOverviewSection";
 import CapacityHeadroomSection from "./sections/CapacityHeadroomSection";
 import SchedulingPressureSection from "./sections/SchedulingPressureSection";
+import ReliabilitySection from "./sections/ReliabilitySection";
+import LimitRequestsComplianceSection from "./sections/LimitRequestsComplianceSection";
 
 
 interface OpsViewSectionsProps {
@@ -81,61 +83,7 @@ function SectionHeader({
 	);
 }
 
-/* ---------- Placeholder sections (unchanged) ---------- */
-
-function CapacityHeadroom() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Capacity vs Usage (Headroom)</CardTitle>
-					<CardDescription>Forecast saturation and available capacity</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Headroom charts and node capacity tables will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function SchedulingPressure() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Scheduling & Pressure</CardTitle>
-					<CardDescription>Pending pods and node pressure analysis</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Scheduling pressure metrics and pending pods table will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function ReliabilityMetrics() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Reliability (Restarts, OOM, CrashLoops)</CardTitle>
-					<CardDescription>Find unstable workloads and failure patterns</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Reliability metrics and restart analysis will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
+/* ---------- Placeholder sections (remaining) ---------- */
 
 function LimitsCompliance() {
 	return (
@@ -364,7 +312,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<ReliabilityMetrics />
+							<ReliabilitySection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -380,7 +328,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<LimitsCompliance />
+							<LimitRequestsComplianceSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>

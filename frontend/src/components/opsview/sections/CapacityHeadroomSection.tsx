@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
 import { MetricAreaChart, type ChartSeries } from "@/components/opsview/charts";
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable";
-import { DataTableFilters, type FilterOption } from "@/components/ui/data-table-filters";
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
 	getCoreRowModel,
@@ -21,7 +22,8 @@ import {
 	type SortingState,
 	type ColumnFiltersState,
 } from "@/lib/table";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Eye, Copy, Download, Trash } from "lucide-react";
+import { IconGripVertical } from "@tabler/icons-react";
 
 /**
  * Formatting helpers
@@ -85,6 +87,23 @@ interface NodeHeadroomRow {
  */
 function createColumns(): ColumnDef<NodeHeadroomRow>[] {
 	return [
+		{
+			id: "drag",
+			header: () => null,
+			cell: ({ row }) => (
+				<Button
+					variant="ghost"
+					size="icon"
+					className="text-muted-foreground size-7 hover:bg-transparent cursor-grab"
+				>
+					<IconGripVertical className="text-muted-foreground size-3" />
+					<span className="sr-only">Drag to reorder</span>
+				</Button>
+			),
+			enableSorting: false,
+			enableHiding: false,
+			size: 40,
+		},
 		{
 			id: "select",
 			header: ({ table }) => (
@@ -282,12 +301,6 @@ export default function CapacityHeadroomSection() {
 	}, [liveData, nodeNames]);
 
 	// Table state
-	const [sorting, setSorting] = React.useState<SortingState>([
-		{ id: "cpuHeadroomPct", desc: true },
-	]);
-	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-	const [rowSelection, setRowSelection] = React.useState({});
 	const [globalFilter, setGlobalFilter] = React.useState("");
 	const [dimensionFilter, setDimensionFilter] = React.useState<string>("all"); // cpu|mem|imgfs|all
 
@@ -299,54 +312,36 @@ export default function CapacityHeadroomSection() {
 		{ value: "imgfs", label: "ImageFS" },
 	]), []);
 
-	const filteredRows = React.useMemo(() => {
-		let rows = tableRows;
-
-		// Quick search across node name
-		if (globalFilter) {
-			const q = globalFilter.toLowerCase();
-			rows = rows.filter(r => r.node.toLowerCase().includes(q));
-		}
-
-		// Sort by the chosen dimension's headroom if a specific one is selected
-		if (dimensionFilter === "cpu") {
-			rows = [...rows].sort((a, b) => a.cpuHeadroomPct - b.cpuHeadroomPct);
-		} else if (dimensionFilter === "mem") {
-			rows = [...rows].sort((a, b) => a.memHeadroomPct - b.memHeadroomPct);
-		} else if (dimensionFilter === "imgfs") {
-			rows = [...rows].sort((a, b) => a.imgfsHeadroomPct - b.imgfsHeadroomPct);
-		} else {
-			// Default: sort by the lowest among the three (worst headroom)
-			rows = [...rows].sort((a, b) => {
-				const aMin = Math.min(a.cpuHeadroomPct, a.memHeadroomPct, a.imgfsHeadroomPct);
-				const bMin = Math.min(b.cpuHeadroomPct, b.memHeadroomPct, b.imgfsHeadroomPct);
-				return aMin - bMin;
-			});
-		}
-
-		return rows;
-	}, [tableRows, globalFilter, dimensionFilter]);
-
-	const table = useReactTable({
-		data: filteredRows,
-		columns,
-		onSortingChange: setSorting,
-		onColumnFiltersChange: setColumnFilters,
-		getCoreRowModel: getCoreRowModel(),
-		getPaginationRowModel: getPaginationRowModel(),
-		getSortedRowModel: getSortedRowModel(),
-		getFilteredRowModel: getFilteredRowModel(),
-		onColumnVisibilityChange: setColumnVisibility,
-		onRowSelectionChange: setRowSelection,
-		getFacetedRowModel: getFacetedRowModel(),
-		getFacetedUniqueValues: getFacetedUniqueValues(),
-		state: {
-			sorting,
-			columnFilters,
-			columnVisibility,
-			rowSelection,
+	// Bulk actions for selected nodes
+	const nodeBulkActions: BulkAction[] = React.useMemo(() => [
+		{
+			id: "view-details",
+			label: "View Node Details",
+			icon: <Eye className="size-4" />,
+			action: () => {
+				console.log('Bulk action triggered - this should be handled by the table');
+			},
+			requiresSelection: true,
 		},
-	});
+		{
+			id: "copy-names",
+			label: "Copy Node Names",
+			icon: <Copy className="size-4" />,
+			action: () => {
+				console.log('Bulk action triggered - this should be handled by the table');
+			},
+			requiresSelection: true,
+		},
+		{
+			id: "export-report",
+			label: "Export Headroom Report",
+			icon: <Download className="size-4" />,
+			action: () => {
+				console.log('Bulk action triggered - this should be handled by the table');
+			},
+			requiresSelection: true,
+		},
+	], []);
 
 	return (
 		<div className="space-y-6">
@@ -413,32 +408,37 @@ export default function CapacityHeadroomSection() {
 					</div>
 				</div>
 
-				<div className="p-4 space-y-4">
-					<DataTableFilters
-						globalFilter={globalFilter}
-						onGlobalFilterChange={setGlobalFilter}
-						searchPlaceholder="Filter by node…"
-						categoryFilter={dimensionFilter}
-						onCategoryFilterChange={setDimensionFilter}
-						categoryLabel="Sort dimension"
-						categoryOptions={dimensionOptions}
-						selectedCount={table.getFilteredSelectedRowModel().rows.length}
-						totalCount={table.getFilteredRowModel().rows.length}
-						table={table}
-						showColumnToggle={true}
-						onRefresh={() => {
-							// If your hook exposes a refresh, call it; otherwise noop.
-							console.log("Refresh node headroom data");
-						}}
-						isRefreshing={false}
-					/>
-				</div>
-
 				<div className="px-4 pb-6">
 					<UniversalDataTable
-						data={filteredRows}
+						data={tableRows}
 						columns={columns}
+						enableReorder={true}
+						enableRowSelection={true}
 						className="px-0 [&_tbody_tr]:bg-background/50"
+						getRowId={(row, index) => row.id}
+						renderFilters={({ table, selectedCount, totalCount }) => (
+							<div className="p-4 space-y-4">
+								<DataTableFilters
+									globalFilter={globalFilter}
+									onGlobalFilterChange={setGlobalFilter}
+									searchPlaceholder="Filter by node…"
+									categoryFilter={dimensionFilter}
+									onCategoryFilterChange={setDimensionFilter}
+									categoryLabel="Sort dimension"
+									categoryOptions={dimensionOptions}
+									selectedCount={selectedCount}
+									totalCount={totalCount}
+									bulkActions={nodeBulkActions}
+									bulkActionsLabel="Node Actions"
+									table={table}
+									showColumnToggle={true}
+									onRefresh={() => {
+										console.log("Refresh node headroom data");
+									}}
+									isRefreshing={false}
+								/>
+							</div>
+						)}
 					/>
 				</div>
 			</div>

@@ -211,10 +211,15 @@ export function UniversalDataTable<TData>(props: UniversalDataTableProps<TData>)
 	const table = useReactTable({
 		data: rowsWithId as unknown as TData[],
 		columns: React.useMemo(() => {
+			// Check if columns already include drag/select/actions columns
+			const hasSelectColumn = columns.some(col => col.id === 'select' || col.id === '__select')
+			const hasDragColumn = columns.some(col => col.id === 'drag' || col.id === '__drag')
+			const hasActionsColumn = columns.some(col => col.id === 'actions' || col.id === '__actions')
+
 			const base: ColumnDef<TData, unknown>[] = []
 
-			// Reorder handle column
-			if (enableReorder) {
+			// Reorder handle column (only add if not already present)
+			if (enableReorder && !hasDragColumn) {
 				base.push({
 					id: "__drag",
 					header: () => null,
@@ -224,8 +229,8 @@ export function UniversalDataTable<TData>(props: UniversalDataTableProps<TData>)
 				})
 			}
 
-			// Selection column
-			if (enableRowSelection) {
+			// Selection column (only add if not already present)
+			if (enableRowSelection && !hasSelectColumn) {
 				base.push({
 					id: "__select",
 					header: ({ table }) => (
@@ -257,8 +262,8 @@ export function UniversalDataTable<TData>(props: UniversalDataTableProps<TData>)
 			// User columns
 			base.push(...columns)
 
-			// Row actions column (resource-specific)
-			if (renderRowActions) {
+			// Row actions column (only add if not already present and renderRowActions is provided)
+			if (renderRowActions && !hasActionsColumn) {
 				base.push({
 					id: "__actions",
 					header: () => null,
@@ -308,22 +313,35 @@ export function UniversalDataTable<TData>(props: UniversalDataTableProps<TData>)
 		useSensor(TouchSensor, {}),
 		useSensor(KeyboardSensor, {})
 	)
-	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
-		rowsWithId.map((r: any) => r.__uid)
-	)
+	
+	// Use the table's actual data for sortable IDs, not the original rowsWithId
+	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>([])
 
 	React.useEffect(() => {
-		setSortableIds(rowsWithId.map((r: any) => r.__uid))
-	}, [rowsWithId])
+		// Use the current table data for sortable IDs
+		const ids = table.getRowModel().rows.map((row) => (row.original as any).__uid as UniqueIdentifier)
+		setSortableIds(ids)
+	}, [table.getRowModel().rows])
 
 	function handleDragEnd(e: DragEndEvent) {
 		const { active, over } = e
 		if (!over || active.id === over.id) return
-		setSortableIds((ids) => {
-			const oldIndex = ids.indexOf(active.id)
-			const newIndex = ids.indexOf(over.id)
-			return arrayMove(ids, oldIndex, newIndex)
-		})
+		
+		// Find the actual data items to reorder
+		const rows = table.getRowModel().rows
+		const activeIndex = rows.findIndex(row => (row.original as any).__uid === active.id)
+		const overIndex = rows.findIndex(row => (row.original as any).__uid === over.id)
+		
+		if (activeIndex !== -1 && overIndex !== -1) {
+			setSortableIds((ids) => {
+				const oldIndex = ids.indexOf(active.id)
+				const newIndex = ids.indexOf(over.id)
+				return arrayMove(ids, oldIndex, newIndex)
+			})
+			
+			// TODO: Call a callback to update the parent component's data order
+			// This would need to be passed as a prop if the parent wants to persist the order
+		}
 	}
 
 	// Detail drawer orchestration
@@ -456,30 +474,32 @@ export function UniversalDataTable<TData>(props: UniversalDataTableProps<TData>)
 						{selectedCount} of {totalCount} row(s) selected.
 					</div>
 
-					{/* Bulk actions */}
-					<div className="flex items-center gap-2">
-						{bulkActions.map((a) => {
-							const disabled = a.requiresSelection ? selectedCount === 0 : false
-							return (
-								<Button
-									key={a.id}
-									variant={a.variant ?? "outline"}
-									size="sm"
-									disabled={disabled}
-									onClick={() => runBulk(a)}
-								>
-									{a.icon ? <span className="mr-2">{a.icon}</span> : null}
-									{a.label}
+					{/* Bulk actions (only show if no renderFilters provided, since filters handle bulk actions) */}
+					{!renderFilters && (
+						<div className="flex items-center gap-2">
+							{bulkActions.map((a) => {
+								const disabled = a.requiresSelection ? selectedCount === 0 : false
+								return (
+									<Button
+										key={a.id}
+										variant={a.variant ?? "outline"}
+										size="sm"
+										disabled={disabled}
+										onClick={() => runBulk(a)}
+									>
+										{a.icon ? <span className="mr-2">{a.icon}</span> : null}
+										{a.label}
+									</Button>
+								)
+							})}
+							{onRefresh && (
+								<Button variant="outline" size="sm" onClick={onRefresh} disabled={!!isRefreshing}>
+									{isRefreshing ? <IconLoader className="mr-2 size-4 animate-spin" /> : null}
+									Refresh
 								</Button>
-							)
-						})}
-						{onRefresh && (
-							<Button variant="outline" size="sm" onClick={onRefresh} disabled={!!isRefreshing}>
-								{isRefreshing ? <IconLoader className="mr-2 size-4 animate-spin" /> : null}
-								Refresh
-							</Button>
-						)}
-					</div>
+							)}
+						</div>
+					)}
 
 					{/* Pager */}
 					<div className="flex items-center space-x-6 lg:space-x-8">

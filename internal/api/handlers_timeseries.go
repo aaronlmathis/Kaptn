@@ -379,8 +379,9 @@ func (s *Server) sendTimeSeriesHello(client *TimeSeriesWSClient) {
 
 	// Set capabilities based on what we support
 	capabilities["cluster"] = true
-	capabilities["node"] = false // Not supported yet
-	capabilities["pod"] = false  // Not supported yet
+	capabilities["namespace"] = true // Namespace metrics are now supported
+	capabilities["node"] = false     // Not supported yet
+	capabilities["pod"] = false      // Not supported yet
 
 	hello := TimeSeriesHelloMessage{
 		Type:         "hello",

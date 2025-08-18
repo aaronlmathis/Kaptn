@@ -11,12 +11,21 @@ import {
   AreaChart,
   Bar,
   BarChart,
+  Line,
+  LineChart,
+  Scatter,
+  ScatterChart,
   CartesianGrid,
   XAxis,
   YAxis,
   RadialBar,
   RadialBarChart,
   PolarGrid,
+  RadarChart,
+  Radar,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Cell,
 } from "recharts";
 import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -59,6 +68,13 @@ export interface ChartSeries {
   name: string;
   color?: string;
   data: [number, number][]; // [timestamp, value] tuples
+}
+
+// Categorical data for bar/radar charts (not time-series)
+export interface CategoricalDataPoint {
+  name: string;
+  value: number;
+  [key: string]: string | number;
 }
 
 // Common chart props
@@ -215,7 +231,7 @@ function generateChartConfig(series: ChartSeries[]): ChartConfig {
 /**
  * Get chart type icon and label
  */
-function getChartTypeInfo(type: 'area' | 'bar' | 'radial') {
+function getChartTypeInfo(type: 'area' | 'bar' | 'radial' | 'radar') {
   switch (type) {
     case 'area':
       return { icon: Activity, label: 'Area Chart' };
@@ -223,6 +239,8 @@ function getChartTypeInfo(type: 'area' | 'bar' | 'radial') {
       return { icon: BarChart3, label: 'Bar Chart' };
     case 'radial':
       return { icon: PieChart, label: 'Radial Chart' };
+    case 'radar':
+      return { icon: PieChart, label: 'Radar Chart' };
     default:
       return { icon: Activity, label: 'Chart' };
   }
@@ -256,7 +274,7 @@ function ChartCard({
   resolutionLabel?: string;
   actions?: ChartActions;
   className?: string;
-  chartType?: 'area' | 'bar' | 'radial';
+  chartType?: 'area' | 'bar' | 'radial' | 'radar';
 }) {
   const { icon: ChartIcon } = getChartTypeInfo(chartType);
 
@@ -652,6 +670,368 @@ export function MetricBarChart({
 }
 
 /**
+ * Line Chart Component
+ */
+export function MetricLineChart({
+  title,
+  subtitle,
+  series,
+  unit,
+  formatter,
+  isLoading = false,
+  error,
+  emptyMessage = "No data available",
+  className,
+  showGrid = true,
+  capabilities,
+  insight,
+  badges,
+  scopeLabel,
+  timespanLabel,
+  resolutionLabel,
+  ...actions
+}: BaseChartProps & ChartActions) {
+  const chartData = React.useMemo(() => prepareChartData(series), [series]);
+  const chartConfig = React.useMemo(() => generateChartConfig(series), [series]);
+
+  const valueFormatter = React.useMemo(() => {
+    if (formatter) return formatter;
+    if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
+      return UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS];
+    }
+    return (value: number) => value.toString();
+  }, [formatter, unit]);
+
+  const content = React.useMemo(() => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span>Loading chart data...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-destructive text-sm font-medium">Error loading data</div>
+            <div className="text-xs text-muted-foreground">{error}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (chartData.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-muted-foreground text-sm">{emptyMessage}</div>
+            <div className="text-xs text-muted-foreground">
+              Data will appear here when available
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ChartContainer config={chartConfig} className="h-[250px] w-full">
+        <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+          {showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} />}
+
+          <XAxis
+            dataKey="timestamp"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            minTickGap={32}
+            tickFormatter={formatTimestamp}
+            className="text-xs"
+            style={{ fontSize: '10px' }}
+          />
+
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tickMargin={4}
+            tickFormatter={valueFormatter}
+            className="text-xs"
+            width={40}
+            style={{ fontSize: '10px' }}
+          />
+
+          <ChartTooltip
+            cursor={false}
+            content={
+              <CustomChartTooltip
+                series={series}
+                formatter={valueFormatter}
+                unit={unit}
+              />
+            }
+          />
+
+          <ChartLegend content={<ChartLegendContent />} verticalAlign="bottom" height={36} />
+
+          {series.map((s, index) => {
+            const color = s.color || getChartColor(s.key, index);
+            return (
+              <Line
+                key={s.key}
+                dataKey={s.key}
+                type="monotone"
+                stroke={color}
+                strokeWidth={2}
+                dot={false}
+              />
+            );
+          })}
+        </LineChart>
+      </ChartContainer>
+    );
+  }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, showGrid, emptyMessage, series]);
+
+  return (
+    <ChartCard
+      title={title}
+      subtitle={subtitle}
+      capabilities={capabilities}
+      insight={insight}
+      badges={badges}
+      scopeLabel={scopeLabel}
+      timespanLabel={timespanLabel}
+      resolutionLabel={resolutionLabel}
+      actions={actions}
+      className={className}
+      chartType="area"
+    >
+      {content}
+    </ChartCard>
+  );
+}
+
+/**
+ * Categorical Bar Chart Component (for non-time-series data)
+ */
+export function MetricCategoricalBarChart({
+  title,
+  subtitle,
+  data,
+  unit,
+  formatter,
+  isLoading = false,
+  error,
+  emptyMessage = "No data available",
+  className,
+  showGrid = true,
+  showLegend = false,
+  capabilities,
+  insight,
+  badges,
+  scopeLabel,
+  timespanLabel,
+  resolutionLabel,
+  layout = "vertical",
+  ...actions
+}: Omit<BaseChartProps, 'series'> & ChartActions & {
+  data: CategoricalDataPoint[];
+  layout?: "horizontal" | "vertical";
+  showLegend?: boolean;
+}) {
+  // Generate chart config and colors for each category
+  const chartData = React.useMemo(() => {
+    return data.map((item, index) => ({
+      name: item.name,
+      value: item.value,
+      fill: `hsl(var(--chart-${(index % 5) + 1}))`,
+    }));
+  }, [data]);
+
+  const chartConfig: ChartConfig = React.useMemo(() => {
+    const config: ChartConfig = {};
+    // For categorical bar charts, we configure each category in the chart config
+    data.forEach((item, index) => {
+      config[item.name] = {
+        label: item.name,
+        color: `hsl(var(--chart-${(index % 5) + 1}))`,
+      };
+    });
+    return config;
+  }, [data]);
+
+  const valueFormatter = React.useMemo(() => {
+    if (formatter) return formatter;
+    if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
+      return UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS];
+    }
+    return (value: number) => value.toString();
+  }, [formatter, unit]);
+
+  const content = React.useMemo(() => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span>Loading chart data...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-destructive text-sm font-medium">Error loading data</div>
+            <div className="text-xs text-muted-foreground">{error}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (data.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-muted-foreground text-sm">{emptyMessage}</div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ChartContainer config={chartConfig} className="h-[250px] w-full">
+        <BarChart
+          data={chartData}
+          layout={layout}
+          margin={{ top: 10, right: 20, left: 10, bottom: layout === "vertical" ? 80 : 0 }}
+        >
+          {showGrid && <CartesianGrid strokeDasharray="3 3" vertical={layout === "horizontal"} />}
+
+          {layout === "horizontal" ? (
+            <>
+              <XAxis
+                type="number"
+                tickFormatter={valueFormatter}
+                style={{ fontSize: '10px' }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={120}
+                style={{ fontSize: '10px' }}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+              />
+            </>
+          ) : (
+            <>
+              <XAxis
+                type="category"
+                dataKey="name"
+                style={{ fontSize: '10px' }}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                type="number"
+                tickFormatter={valueFormatter}
+                width={40}
+                style={{ fontSize: '10px' }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
+            </>
+          )}
+
+          <ChartTooltip
+            content={({ active, payload, label }) => {
+              if (!active || !payload || !payload.length) return null;
+
+              const data = payload[0];
+              const value = data?.value || 0;
+              const namespaceName = data?.payload?.name || label || '';
+
+              return (
+                <div className="bg-background border border-border rounded-lg shadow-lg p-3">
+                  <div className="text-sm font-medium text-foreground mb-1">
+                    {namespaceName}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {valueFormatter(Number(value))} {unit || 'restarts'}
+                  </div>
+                </div>
+              );
+            }}
+          />
+
+          {showLegend && (
+            <ChartLegend 
+              content={() => (
+                <div className="flex flex-wrap justify-center gap-4 mt-2">
+                  {chartData.map((item, index) => (
+                    <div key={item.name} className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-sm" 
+                        style={{ backgroundColor: `hsl(var(--chart-${(index % 5) + 1}))` }}
+                      />
+                      <span className="text-xs text-muted-foreground">{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              verticalAlign="bottom" 
+              height={36} 
+            />
+          )}
+
+          <Bar
+            dataKey="value"
+            radius={layout === "horizontal" ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.fill} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ChartContainer>
+    );
+  }, [isLoading, error, data, chartData, chartConfig, valueFormatter, unit, showGrid, showLegend, emptyMessage, layout]);
+
+  return (
+    <ChartCard
+      title={title}
+      subtitle={subtitle}
+      capabilities={capabilities}
+      insight={insight}
+      badges={badges}
+      scopeLabel={scopeLabel}
+      timespanLabel={timespanLabel}
+      resolutionLabel={resolutionLabel}
+      actions={actions}
+      className={className}
+      chartType="bar"
+    >
+      {content}
+    </ChartCard>
+  );
+}
+
+/**
  * Radial Chart Component (for percentages/gauges)
  */
 export function MetricRadialChart({
@@ -760,6 +1140,562 @@ export function MetricRadialChart({
       actions={actions}
       className={className}
       chartType="radial"
+    >
+      {content}
+    </ChartCard>
+  );
+}
+
+/**
+ * Radar Chart Component (for multi-dimensional comparisons)
+ */
+export function MetricRadarChart({
+  title,
+  subtitle,
+  series,
+  unit,
+  formatter,
+  isLoading = false,
+  error,
+  emptyMessage = "No data available",
+  className,
+  capabilities,
+  insight,
+  badges,
+  scopeLabel,
+  timespanLabel,
+  resolutionLabel,
+  ...actions
+}: BaseChartProps & ChartActions) {
+  // For radar charts, we transform series data into radar format
+  const chartData = React.useMemo(() => {
+    if (series.length === 0) return [];
+
+    // Create a single radar data point with all series as axes
+    const radarPoint: { [key: string]: number } = {};
+
+    series.forEach(s => {
+      const values = s.data.map(([, value]) => value).filter(Number.isFinite);
+      const latestValue = values.length > 0 ? values[values.length - 1] : 0;
+      radarPoint[s.name] = latestValue;
+    });
+
+    // Convert to radar chart format
+    return series.map(s => {
+      const values = s.data.map(([, value]) => value).filter(Number.isFinite);
+      const latestValue = values.length > 0 ? values[values.length - 1] : 0;
+
+      return {
+        axis: s.name,
+        value: latestValue,
+      };
+    });
+  }, [series]);
+
+  const chartConfig = React.useMemo(() => generateChartConfig(series), [series]);
+
+  const valueFormatter = React.useMemo(() => {
+    if (formatter) return formatter;
+    if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
+      return UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS];
+    }
+    return (value: number) => value.toString();
+  }, [formatter, unit]);
+
+  const content = React.useMemo(() => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span>Loading chart data...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-destructive text-sm font-medium">Error loading data</div>
+            <div className="text-xs text-muted-foreground">{error}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (chartData.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-muted-foreground text-sm">{emptyMessage}</div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ChartContainer config={chartConfig} className="h-[250px] w-full">
+        <RadarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+          <PolarGrid />
+          <PolarAngleAxis dataKey="axis" />
+          <PolarRadiusAxis
+            angle={30}
+            domain={[0, 100]}
+            tickFormatter={valueFormatter}
+            style={{ fontSize: '10px' }}
+          />
+          <Radar
+            dataKey="value"
+            stroke="hsl(var(--chart-1))"
+            fill="hsl(var(--chart-1))"
+            fillOpacity={0.35}
+            strokeWidth={2}
+          />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                formatter={(value) => `${valueFormatter(Number(value))}${unit ? ` ${unit}` : ''}`}
+                labelKey="axis"
+              />
+            }
+          />
+        </RadarChart>
+      </ChartContainer>
+    );
+  }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, emptyMessage]);
+
+  return (
+    <ChartCard
+      title={title}
+      subtitle={subtitle}
+      capabilities={capabilities}
+      insight={insight}
+      badges={badges}
+      scopeLabel={scopeLabel}
+      timespanLabel={timespanLabel}
+      resolutionLabel={resolutionLabel}
+      actions={actions}
+      className={className}
+      chartType="radar"
+    >
+      {content}
+    </ChartCard>
+  );
+}
+
+/**
+ * Stacked Bar Chart Component (for multi-series stacked data)
+ */
+export function MetricStackedBarChart({
+  title,
+  subtitle,
+  data,
+  dataKeys,
+  unit,
+  formatter,
+  isLoading = false,
+  error,
+  emptyMessage = "No data available",
+  className,
+  showGrid = true,
+  showLegend = true,
+  capabilities,
+  insight,
+  badges,
+  scopeLabel,
+  timespanLabel,
+  resolutionLabel,
+  layout = "vertical",
+  colors,
+  ...actions
+}: Omit<BaseChartProps, 'series'> & ChartActions & {
+  data: Record<string, any>[];
+  dataKeys: string[];
+  layout?: "horizontal" | "vertical";
+  showLegend?: boolean;
+  colors?: string[];
+}) {
+  // Generate chart config and colors for each data key
+  const chartConfig: ChartConfig = React.useMemo(() => {
+    const config: ChartConfig = {};
+    dataKeys.forEach((key, index) => {
+      config[key] = {
+        label: key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'),
+        color: colors?.[index] || `hsl(var(--chart-${(index % 5) + 1}))`,
+      };
+    });
+    return config;
+  }, [dataKeys, colors]);
+
+  const valueFormatter = React.useMemo(() => {
+    if (formatter) return formatter;
+    if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
+      return UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS];
+    }
+    return (value: number) => value.toString();
+  }, [formatter, unit]);
+
+  const content = React.useMemo(() => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span>Loading chart data...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-destructive text-sm font-medium">Error loading data</div>
+            <div className="text-xs text-muted-foreground">{error}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (data.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-muted-foreground text-sm">{emptyMessage}</div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ChartContainer config={chartConfig} className="h-[250px] w-full">
+        <BarChart
+          data={data}
+          layout={layout}
+          margin={{ top: 10, right: 20, left: 10, bottom: layout === "vertical" ? 80 : 0 }}
+        >
+          {showGrid && <CartesianGrid strokeDasharray="3 3" vertical={layout === "horizontal"} />}
+
+          {layout === "horizontal" ? (
+            <>
+              <XAxis
+                type="number"
+                tickFormatter={valueFormatter}
+                style={{ fontSize: '10px' }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={120}
+                style={{ fontSize: '10px' }}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+              />
+            </>
+          ) : (
+            <>
+              <XAxis
+                type="category"
+                dataKey="name"
+                style={{ fontSize: '10px' }}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                type="number"
+                tickFormatter={valueFormatter}
+                width={40}
+                style={{ fontSize: '10px' }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
+            </>
+          )}
+
+          <ChartTooltip
+            content={({ active, payload, label }) => {
+              if (!active || !payload || !payload.length) return null;
+
+              return (
+                <div className="bg-background border border-border rounded-lg shadow-lg p-3">
+                  <div className="text-sm font-medium text-foreground mb-2">
+                    {label}
+                  </div>
+                  <div className="space-y-1">
+                    {payload.map((item: any, index: number) => (
+                      <div key={index} className="flex items-center gap-2 text-sm">
+                        <div
+                          className="w-3 h-3 rounded-sm flex-shrink-0"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="text-muted-foreground min-w-0 flex-1">
+                          {chartConfig[item.dataKey]?.label || item.dataKey}:
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {valueFormatter(Number(item.value))} {unit || ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }}
+          />
+
+          {showLegend && (
+            <ChartLegend 
+              content={() => (
+                <div className="flex flex-wrap justify-center gap-4 mt-2">
+                  {dataKeys.map((key, index) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-sm" 
+                        style={{ backgroundColor: colors?.[index] || `hsl(var(--chart-${(index % 5) + 1}))` }}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {chartConfig[key]?.label || key}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              verticalAlign="bottom" 
+              height={36} 
+            />
+          )}
+
+          {dataKeys.map((key, index) => (
+            <Bar
+              key={key}
+              dataKey={key}
+              stackId="stack"
+              fill={colors?.[index] || `hsl(var(--chart-${(index % 5) + 1}))`}
+              radius={index === dataKeys.length - 1 ? (layout === "horizontal" ? [0, 4, 4, 0] : [4, 4, 0, 0]) : [0, 0, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      </ChartContainer>
+    );
+  }, [isLoading, error, data, chartConfig, valueFormatter, unit, showGrid, showLegend, emptyMessage, layout, dataKeys, colors]);
+
+  return (
+    <ChartCard
+      title={title}
+      subtitle={subtitle}
+      capabilities={capabilities}
+      insight={insight}
+      badges={badges}
+      scopeLabel={scopeLabel}
+      timespanLabel={timespanLabel}
+      resolutionLabel={resolutionLabel}
+      actions={actions}
+      className={className}
+      chartType="bar"
+    >
+      {content}
+    </ChartCard>
+  );
+}
+
+/**
+ * Scatter Chart Component
+ */
+export function MetricScatterChart({
+  title,
+  subtitle,
+  data,
+  xKey,
+  yKey,
+  colorKey,
+  unit,
+  formatter,
+  isLoading = false,
+  error,
+  emptyMessage = "No data available",
+  className,
+  showGrid = true,
+  capabilities,
+  insight,
+  badges,
+  scopeLabel,
+  timespanLabel,
+  resolutionLabel,
+  colors,
+  ...actions
+}: Omit<BaseChartProps, 'series'> & ChartActions & {
+  data: Record<string, any>[];
+  xKey: string;
+  yKey: string;
+  colorKey?: string;
+  colors?: Record<string, string>;
+}) {
+  const chartConfig: ChartConfig = React.useMemo(() => {
+    const config: ChartConfig = {};
+    
+    if (colorKey && colors) {
+      Object.entries(colors).forEach(([key, color]) => {
+        config[key] = {
+          label: key,
+          color: color,
+        };
+      });
+    } else {
+      config[xKey] = {
+        label: xKey.charAt(0).toUpperCase() + xKey.slice(1).replace(/([A-Z])/g, ' $1'),
+        color: 'hsl(var(--chart-1))',
+      };
+    }
+    
+    return config;
+  }, [xKey, colorKey, colors]);
+
+  const valueFormatter = React.useMemo(() => {
+    if (formatter) return formatter;
+    if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
+      return UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS];
+    }
+    return (value: number) => value.toString();
+  }, [formatter, unit]);
+
+  const content = React.useMemo(() => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span>Loading chart data...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-destructive text-sm font-medium">Error loading data</div>
+            <div className="text-xs text-muted-foreground">{error}</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (data.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-[250px] w-full">
+          <div className="text-center space-y-2">
+            <div className="text-muted-foreground text-sm">{emptyMessage}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Group data by color key if provided
+    const groupedData = colorKey ? data.reduce((acc, item) => {
+      const group = item[colorKey] || 'default';
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(item);
+      return acc;
+    }, {} as Record<string, any[]>) : { default: data };
+
+    return (
+      <ChartContainer config={chartConfig} className="h-[250px] w-full">
+        <ScatterChart
+          data={data}
+          margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
+        >
+          {showGrid && <CartesianGrid strokeDasharray="3 3" />}
+
+          <XAxis
+            type="number"
+            dataKey={xKey}
+            name={xKey}
+            tickFormatter={valueFormatter}
+            style={{ fontSize: '10px' }}
+            tickLine={false}
+            axisLine={false}
+          />
+
+          <YAxis
+            type="number"
+            dataKey={yKey}
+            name={yKey}
+            tickFormatter={valueFormatter}
+            style={{ fontSize: '10px' }}
+            tickLine={false}
+            axisLine={false}
+          />
+
+          <ChartTooltip
+            content={({ active, payload }) => {
+              if (!active || !payload || !payload.length) return null;
+
+              const data = payload[0]?.payload;
+              if (!data) return null;
+
+              return (
+                <div className="bg-background border border-border rounded-lg shadow-lg p-3">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-foreground">
+                      {data.name || `Point ${data[xKey]}, ${data[yKey]}`}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {xKey}: {valueFormatter(Number(data[xKey]))} {unit || ''}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {yKey}: {valueFormatter(Number(data[yKey]))} {unit || ''}
+                    </div>
+                    {colorKey && data[colorKey] && (
+                      <div className="text-sm text-muted-foreground">
+                        {colorKey}: {data[colorKey]}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }}
+          />
+
+          {Object.entries(groupedData).map(([group, groupData], index) => {
+            const color = colors?.[group] || `hsl(var(--chart-${(index % 5) + 1}))`;
+            return (
+              <Scatter
+                key={group}
+                data={groupData}
+                fill={color}
+              />
+            );
+          })}
+        </ScatterChart>
+      </ChartContainer>
+    );
+  }, [isLoading, error, data, chartConfig, valueFormatter, unit, showGrid, emptyMessage, xKey, yKey, colorKey, colors]);
+
+  return (
+    <ChartCard
+      title={title}
+      subtitle={subtitle}
+      capabilities={capabilities}
+      insight={insight}
+      badges={badges}
+      scopeLabel={scopeLabel}
+      timespanLabel={timespanLabel}
+      resolutionLabel={resolutionLabel}
+      actions={actions}
+      className={className}
+      chartType="area"
     >
       {content}
     </ChartCard>

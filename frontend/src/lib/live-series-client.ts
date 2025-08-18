@@ -5,6 +5,63 @@
  * This is a singleton that manages all subscriptions across components.
  */
 
+const DEFAULT_WS_PATH = '/api/v1/timeseries/live';
+
+function resolveWsUrl(path = DEFAULT_WS_PATH) {
+	// 1) Full override (complete URL)
+	const envFull = (import.meta?.env?.VITE_WS_URL);
+	if (envFull) return envFull;
+
+	// 2) Base override (compose base + path)
+	const envBase = (import.meta?.env?.VITE_WS_BASE);
+	if (envBase) {
+		const u = new URL(path, envBase);
+		if (u.protocol === 'http:') u.protocol = 'ws:';
+		if (u.protocol === 'https:') u.protocol = 'wss:';
+		return u.toString();
+	}
+
+	// 3) <meta> tags (runtime control without rebuild)
+	const meta = (name) =>
+		(document.querySelector(`meta[name="${name}"]`)?.content || '').trim() || undefined;
+
+	const metaFull = meta('ws-url');
+	if (metaFull) return metaFull;
+
+	const metaBase = meta('ws-base');
+	const metaPath = meta('ws-path') || path;
+	if (metaBase) {
+		const u = new URL(metaPath, metaBase);
+		if (u.protocol === 'http:') u.protocol = 'ws:';
+		if (u.protocol === 'https:') u.protocol = 'wss:';
+		return u.toString();
+	}
+
+	// 4) Environment-aware defaults covering your three cases:
+	//    a) dev.deepthought.sh (cluster)  -> same-origin (wss), no hardcoded port
+	//    b) dev.deepthought.sh (proxy->9999) -> same-origin (wss), proxy maps internally
+	//    c) localhost:9999 (direct) -> keep :9999
+	const { hostname, port, href, protocol } = window.location;
+
+	// Localhost dev: if running frontend on a different dev port (e.g., 5173),
+	// talk to the backend on :9999 explicitly.
+	if (hostname === 'localhost' || hostname === '127.0.0.1') {
+		if (port && port !== '9999') {
+			return `ws://localhost:9999${path}`;
+		}
+		// Frontend is already on :9999 (case c) — just same-origin swap.
+		const u = new URL(metaPath, href);
+		u.protocol = (u.protocol === 'https:' ? 'wss:' : 'ws:');
+		return u.toString();
+	}
+
+	// Non-localhost (cases a & b): same-origin with protocol swap only.
+	const sameOrigin = new URL(metaPath, href);
+	sameOrigin.protocol = (protocol === 'https:' ? 'wss:' : 'ws:');
+	return sameOrigin.toString();
+}
+
+
 // Message types matching the server implementation
 interface HelloMessage {
 	type: 'hello';
@@ -133,10 +190,8 @@ export class LiveSeriesClient {
 			this.shouldAutoReconnect = true; // Re-enable auto-reconnect
 			this.disconnect(); // Clean up any existing connection
 
-			// Always connect directly to port 9999 for both development and production
-			const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-			const host = window.location.hostname;
-			const url = `${protocol}//${host}:9999/api/v1/timeseries/live`;
+
+			const url = resolveWsUrl();
 
 			console.log(`🔌 LiveSeriesClient: Attempting connection to ${url}`);
 			console.log(`🔌 WebSocket constructor available:`, typeof WebSocket !== 'undefined');
@@ -151,7 +206,7 @@ export class LiveSeriesClient {
 			console.log(`🔌 WebSocket created with readyState:`, this.ws.readyState);
 
 			this.ws.onopen = () => {
-				console.log('✅ LiveSeriesClient: Connected');
+				console.log('LiveSeriesClient: Connected');
 				this.connectionState.connected = true;
 				this.connectionState.lastError = null;
 				this.reconnectAttempts = 0;
@@ -165,7 +220,7 @@ export class LiveSeriesClient {
 			};
 
 			this.ws.onerror = (error) => {
-				console.error('❌ LiveSeriesClient: WebSocket error event', {
+				console.error('LiveSeriesClient: WebSocket error event', {
 					error: error,
 					type: error.type,
 					target: error.target,
@@ -175,7 +230,7 @@ export class LiveSeriesClient {
 				});
 
 				// Check WebSocket ready states
-				console.error('❌ WebSocket Ready States:', {
+				console.error('WebSocket Ready States:', {
 					CONNECTING: WebSocket.CONNECTING, // 0
 					OPEN: WebSocket.OPEN,             // 1
 					CLOSING: WebSocket.CLOSING,       // 2
@@ -206,13 +261,13 @@ export class LiveSeriesClient {
 				// Auto-reconnect with exponential backoff
 				if (this.reconnectAttempts < this.maxReconnectAttempts) {
 					const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-					console.log(`🔄 LiveSeriesClient: Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1})`);
+					console.log(`LiveSeriesClient: Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1})`);
 					setTimeout(() => {
 						this.reconnectAttempts++;
 						this.connect().catch(console.error);
 					}, delay);
 				} else {
-					console.error('❌ LiveSeriesClient: Max reconnection attempts reached');
+					console.error('LiveSeriesClient: Max reconnection attempts reached');
 					this.connectionState.lastError = 'Max reconnection attempts reached';
 					this.emit('disconnect', null);
 				}
@@ -237,7 +292,7 @@ export class LiveSeriesClient {
 	 * Subscribe to a group of series
 	 */
 	subscribe(config: SubscriptionConfig): void {
-		console.log('📤 LiveSeriesClient: Subscribe called', {
+		console.log('LiveSeriesClient: Subscribe called', {
 			groupId: config.groupId,
 			series: config.series,
 			res: config.res,
@@ -256,12 +311,12 @@ export class LiveSeriesClient {
 			newSeries.length > 0;
 
 		if (!hasChanges) {
-			console.log(`📊 LiveSeriesClient: No changes needed for group ${config.groupId}`);
+			console.log(`LiveSeriesClient: No changes needed for group ${config.groupId}`);
 			return;
 		}
 
 		// Store subscription
-		console.log('💾 LiveSeriesClient: Storing subscription for group:', config.groupId);
+		console.log('LiveSeriesClient: Storing subscription for group:', config.groupId);
 		this.subscriptions.set(config.groupId, config);
 
 		// Send subscribe message if connected
@@ -275,7 +330,7 @@ export class LiveSeriesClient {
 				series: config.series,
 			});
 		} else {
-			console.log('⚠️ LiveSeriesClient: Not connected, subscription stored for later');
+			console.log('LiveSeriesClient: Not connected, subscription stored for later');
 		}
 	}
 
@@ -378,46 +433,46 @@ export class LiveSeriesClient {
 
 			switch (message.type) {
 				case 'hello':
-					console.log('👋 LiveSeriesClient: Processing HELLO message');
+					console.log('LiveSeriesClient: Processing HELLO message');
 					this.handleHello(message);
 					break;
 				case 'ack':
-					console.log('✅ LiveSeriesClient: Processing ACK message');
+					console.log('LiveSeriesClient: Processing ACK message');
 					this.handleAck(message);
 					break;
 				case 'init':
-					console.log('📊 LiveSeriesClient: Processing INIT message');
+					console.log('LiveSeriesClient: Processing INIT message');
 					this.handleInit(message);
 					break;
 				case 'append':
-					console.log('📈 LiveSeriesClient: Processing APPEND message');
+					console.log('LiveSeriesClient: Processing APPEND message');
 					this.handleAppend(message);
 					break;
 				case 'error':
-					console.log('❌ LiveSeriesClient: Processing ERROR message');
+					console.log('LiveSeriesClient: Processing ERROR message');
 					this.handleError(message);
 					break;
 				default:
-					console.warn('⚠️ LiveSeriesClient: Unknown message type', (message as { type: string }).type);
-					console.warn('⚠️ LiveSeriesClient: Full unknown message:', message);
+					console.warn('LiveSeriesClient: Unknown message type', (message as { type: string }).type);
+					console.warn('LiveSeriesClient: Full unknown message:', message);
 			}
 		} catch (error) {
-			console.error('❌ LiveSeriesClient: Failed to parse message', error);
-			console.error('❌ LiveSeriesClient: Raw data that failed to parse:', data);
-			console.error('❌ LiveSeriesClient: Data type:', typeof data);
-			console.error('❌ LiveSeriesClient: Data length:', data.length);
+			console.error('LiveSeriesClient: Failed to parse message', error);
+			console.error('LiveSeriesClient: Raw data that failed to parse:', data);
+			console.error('LiveSeriesClient: Data type:', typeof data);
+			console.error('LiveSeriesClient: Data length:', data.length);
 		}
 	}
 
 	private handleHello(message: HelloMessage): void {
-		console.log('👋 LiveSeriesClient: Received hello', message);
-		console.log('👋 LiveSeriesClient: Current subscriptions count:', this.subscriptions.size);
+		console.log('LiveSeriesClient: Received hello', message);
+		console.log('LiveSeriesClient: Current subscriptions count:', this.subscriptions.size);
 		this.connectionState.capabilities = message.capabilities;
 		this.connectionState.limits = message.limits;
 
 		// Re-subscribe to all existing subscriptions
 		for (const subscription of this.subscriptions.values()) {
-			console.log('📤 LiveSeriesClient: Re-subscribing to group:', subscription.groupId, subscription);
+			console.log('LiveSeriesClient: Re-subscribing to group:', subscription.groupId, subscription);
 			this.sendMessage({
 				type: 'subscribe',
 				groupId: subscription.groupId,
@@ -431,10 +486,10 @@ export class LiveSeriesClient {
 	}
 
 	private handleAck(message: AckMessage): void {
-		console.log(`✅ LiveSeriesClient: Subscription ack for ${message.groupId}`, message);
+		console.log(`LiveSeriesClient: Subscription ack for ${message.groupId}`, message);
 
 		if (message.rejected && message.rejected.length > 0) {
-			console.warn('⚠️ LiveSeriesClient: Some series were rejected', message.rejected);
+			console.warn('LiveSeriesClient: Some series were rejected', message.rejected);
 		}
 
 		this.emit('ack', message);
@@ -442,7 +497,7 @@ export class LiveSeriesClient {
 	}
 
 	private handleInit(message: InitMessage): void {
-		console.log(`📊 LiveSeriesClient: Initial data for ${message.groupId}`,
+		console.log(`LiveSeriesClient: Initial data for ${message.groupId}`,
 			Object.keys(message.data.series).length, 'series');
 
 		this.emit('init', message);
@@ -455,14 +510,14 @@ export class LiveSeriesClient {
 	}
 
 	private handleError(message: ErrorMessage): void {
-		console.error('❌ LiveSeriesClient: Server error:', message.error);
+		console.error('LiveSeriesClient: Server error:', message.error);
 		this.connectionState.lastError = message.error;
 		this.emit('error', new Error(message.error));
 	}
 
 	private sendMessage(message: SubscribeMessage | UnsubscribeMessage): void {
 		if (!this.isConnected()) {
-			console.warn('⚠️ LiveSeriesClient: Cannot send message - not connected', {
+			console.warn('LiveSeriesClient: Cannot send message - not connected', {
 				wsReadyState: this.ws?.readyState,
 				connectionState: this.connectionState.connected
 			});
@@ -472,11 +527,11 @@ export class LiveSeriesClient {
 		try {
 			if (this.ws) {
 				const messageStr = JSON.stringify(message);
-				console.log('📤 LiveSeriesClient: Sending message:', messageStr);
+				console.log('LiveSeriesClient: Sending message:', messageStr);
 				this.ws.send(messageStr);
 			}
 		} catch (error) {
-			console.error('❌ LiveSeriesClient: Failed to send message', error, message);
+			console.error('LiveSeriesClient: Failed to send message', error, message);
 		}
 	}
 
@@ -487,7 +542,7 @@ export class LiveSeriesClient {
 				try {
 					listener(data);
 				} catch (error) {
-					console.error(`❌ LiveSeriesClient: Error in ${event} listener`, error);
+					console.error(`LiveSeriesClient: Error in ${event} listener`, error);
 				}
 			});
 		}
@@ -497,11 +552,11 @@ export class LiveSeriesClient {
 		this.reconnectAttempts++;
 		const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
-		console.log(`🔄 LiveSeriesClient: Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+		console.log(`LiveSeriesClient: Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
 		setTimeout(() => {
 			this.connect().catch(error => {
-				console.error('❌ LiveSeriesClient: Reconnection failed', error);
+				console.error('LiveSeriesClient: Reconnection failed', error);
 			});
 		}, delay);
 	}

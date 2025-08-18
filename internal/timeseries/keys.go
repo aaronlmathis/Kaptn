@@ -225,6 +225,15 @@ func AllSeriesKeys() []string {
 		ClusterPodsUnschedulable,
 		ClusterFsImageUsedBytes,
 		ClusterFsImageCapacityBytes,
+		// Namespace base keys
+		NamespaceCPUUsedBase,
+		NamespaceCPURequestBase,
+		NamespaceCPULimitBase,
+		NamespaceMemUsedBase,
+		NamespaceMemRequestBase,
+		NamespaceMemLimitBase,
+		NamespacePodsRunningBase,
+		NamespacePodsRestartsRateBase,
 	}
 }
 

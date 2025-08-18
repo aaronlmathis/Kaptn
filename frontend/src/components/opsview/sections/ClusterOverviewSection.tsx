@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
@@ -10,17 +11,7 @@ import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable"
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-	getCoreRowModel,
-	getFacetedRowModel,
-	getFacetedUniqueValues,
-	getFilteredRowModel,
-	getPaginationRowModel,
-	getSortedRowModel,
-	useReactTable,
 	type ColumnDef,
-	type VisibilityState,
-	type SortingState,
-	type ColumnFiltersState,
 } from "@/lib/table";
 import { formatCores, formatBytesIEC } from "@/lib/metric-utils";
 import {
@@ -36,6 +27,7 @@ import {
 	Download,
 	Trash,
 } from "lucide-react";
+import { IconGripVertical } from "@tabler/icons-react";
 
 /* ---------- Types & helpers for Unschedulable Pods ---------- */
 
@@ -73,6 +65,22 @@ function createUnschedulablePodsColumns(
 	onViewDetails: (pod: UnschedulablePod) => void
 ): ColumnDef<UnschedulablePod>[] {
 	return [
+		{
+			id: "drag",
+			header: () => null,
+			cell: ({ row }) => (
+				<Button
+					variant="ghost"
+					size="icon"
+					className="text-muted-foreground size-7 hover:bg-transparent cursor-grab"
+				>
+					<IconGripVertical className="text-muted-foreground size-3" />
+					<span className="sr-only">Drag to reorder</span>
+				</Button>
+			),
+			enableSorting: false,
+			enableHiding: false,
+		},
 		{
 			id: "select",
 			header: ({ table }) => (
@@ -181,12 +189,8 @@ function UnschedulablePodsSection() {
 		},
 	], []);
 
-	const [sorting, setSorting] = React.useState<SortingState>([]);
-	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-	const [rowSelection, setRowSelection] = React.useState({});
-	const [globalFilter, setGlobalFilter] = React.useState("");
-	const [reasonFilter, setReasonFilter] = React.useState<string>("all");
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [reasonFilter, setReasonFilter] = React.useState<string>("all")
 
 	const handleViewDetails = React.useCallback((pod: UnschedulablePod) => {
 		console.log('View details for pod:', pod.name);
@@ -207,46 +211,7 @@ function UnschedulablePodsSection() {
 		}));
 	}, [mockUnschedulablePods]);
 
-	const filteredData = React.useMemo(() => {
-		let filtered = mockUnschedulablePods;
 
-		if (reasonFilter !== "all") {
-			filtered = filtered.filter(pod => pod.reason === reasonFilter);
-		}
-
-		if (globalFilter) {
-			const searchTerm = globalFilter.toLowerCase();
-			filtered = filtered.filter(pod =>
-				pod.name.toLowerCase().includes(searchTerm) ||
-				pod.namespace.toLowerCase().includes(searchTerm) ||
-				pod.reason.toLowerCase().includes(searchTerm) ||
-				pod.message.toLowerCase().includes(searchTerm)
-			);
-		}
-
-		return filtered;
-	}, [mockUnschedulablePods, reasonFilter, globalFilter]);
-
-	const table = useReactTable({
-		data: filteredData,
-		columns,
-		onSortingChange: setSorting,
-		onColumnFiltersChange: setColumnFilters,
-		getCoreRowModel: getCoreRowModel(),
-		getPaginationRowModel: getPaginationRowModel(),
-		getSortedRowModel: getSortedRowModel(),
-		getFilteredRowModel: getFilteredRowModel(),
-		onColumnVisibilityChange: setColumnVisibility,
-		onRowSelectionChange: setRowSelection,
-		getFacetedRowModel: getFacetedRowModel(),
-		getFacetedUniqueValues: getFacetedUniqueValues(),
-		state: {
-			sorting,
-			columnFilters,
-			columnVisibility,
-			rowSelection,
-		},
-	});
 
 	const podBulkActions: BulkAction[] = React.useMemo(() => [
 		{
@@ -254,8 +219,7 @@ function UnschedulablePodsSection() {
 			label: "View Details",
 			icon: <Eye className="size-4" />,
 			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original);
-				console.log('View details for pods:', selectedPods.map(p => p.name));
+				console.log('Bulk action triggered - this should be handled by the table');
 			},
 			requiresSelection: true,
 		},
@@ -264,10 +228,7 @@ function UnschedulablePodsSection() {
 			label: "Copy Pod Names",
 			icon: <Copy className="size-4" />,
 			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original);
-				const names = selectedPods.map(p => p.name).join('\n');
-				navigator.clipboard.writeText(names);
-				console.log('Copied pod names:', names);
+				console.log('Bulk action triggered - this should be handled by the table');
 			},
 			requiresSelection: true,
 		},
@@ -276,8 +237,7 @@ function UnschedulablePodsSection() {
 			label: "Export as YAML",
 			icon: <Download className="size-4" />,
 			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original);
-				console.log('Export YAML for pods:', selectedPods.map(p => p.name));
+				console.log('Bulk action triggered - this should be handled by the table');
 			},
 			requiresSelection: true,
 		},
@@ -286,13 +246,12 @@ function UnschedulablePodsSection() {
 			label: "Delete Selected Pods",
 			icon: <Trash className="size-4" />,
 			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original);
-				console.log('Delete pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`));
+				console.log('Bulk action triggered - this should be handled by the table');
 			},
 			variant: "destructive" as const,
 			requiresSelection: true,
 		},
-	], [table]);
+	], []);
 
 	return (
 		<div className="border rounded-lg bg-card">
@@ -305,38 +264,41 @@ function UnschedulablePodsSection() {
 						</p>
 					</div>
 					<Badge variant="destructive" className="text-xs">
-						{filteredData.length} unschedulable
+						{mockUnschedulablePods.length} unschedulable
 					</Badge>
 				</div>
 			</div>
 
-			<div className="p-4 space-y-4">
-				<DataTableFilters
-					globalFilter={globalFilter}
-					onGlobalFilterChange={setGlobalFilter}
-					searchPlaceholder="Search pods by name, namespace, reason, or message..."
-					categoryFilter={reasonFilter}
-					onCategoryFilterChange={setReasonFilter}
-					categoryLabel="Filter by reason"
-					categoryOptions={reasonOptions}
-					selectedCount={table.getFilteredSelectedRowModel().rows.length}
-					totalCount={table.getFilteredRowModel().rows.length}
-					bulkActions={podBulkActions}
-					bulkActionsLabel="Pod Actions"
-					table={table}
-					showColumnToggle={true}
-					onRefresh={() => {
-						console.log('Refresh unschedulable pods data');
-					}}
-					isRefreshing={false}
-				/>
-			</div>
-
 			<div className="px-4 pb-6">
 				<UniversalDataTable
-					data={filteredData}
+					data={mockUnschedulablePods}
 					columns={columns}
+					enableReorder={true}
+					enableRowSelection={true}
 					className="px-0 [&_tbody_tr]:bg-background/50"
+					renderFilters={({ table, selectedCount, totalCount }) => (
+						<div className="p-4 space-y-4">
+							<DataTableFilters
+								globalFilter={globalFilter}
+								onGlobalFilterChange={setGlobalFilter}
+								searchPlaceholder="Search pods by name, namespace, reason, or message..."
+								categoryFilter={reasonFilter}
+								onCategoryFilterChange={setReasonFilter}
+								categoryLabel="Filter by reason"
+								categoryOptions={reasonOptions}
+								selectedCount={selectedCount}
+								totalCount={totalCount}
+								bulkActions={podBulkActions}
+								bulkActionsLabel="Pod Actions"
+								table={table}
+								showColumnToggle={true}
+								onRefresh={() => {
+									console.log('Refresh unschedulable pods data');
+								}}
+								isRefreshing={false}
+							/>
+						</div>
+					)}
 				/>
 			</div>
 		</div>

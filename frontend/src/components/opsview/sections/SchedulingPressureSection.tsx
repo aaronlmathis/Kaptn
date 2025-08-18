@@ -7,34 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
-import { MetricAreaChart } from "@/components/opsview/charts";
-import {
-	ChartContainer,
-	ChartTooltip,
-	ChartTooltipContent,
-	type ChartConfig,
-	ChartLegend,
-	ChartLegendContent,
-} from "@/components/ui/chart";
-import {
-	BarChart,
-	Bar,
-	CartesianGrid,
-	XAxis,
-	YAxis,
-	ResponsiveContainer,
-	RadarChart,
-	Radar,
-	PolarAngleAxis,
-	PolarGrid,
-	PolarRadiusAxis,
-} from "recharts";
+import { MetricAreaChart, MetricCategoricalBarChart, MetricRadarChart, type ChartSeries, type CategoricalDataPoint } from "@/components/opsview/charts";
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards";
 import { getResourceIcon } from "@/lib/summary-card-utils";
 
 type Point = { t: number; v: number };
 type SeriesMap = Record<string, Point[]>;
-const latest = (pts?: Point[]) => (pts?.length ? pts[pts.length - 1]!.v : 0);
+const latest = (pts?: Point[]) => (pts?.length ? pts[pts.length - 1]?.v || 0 : 0);
 
 function pct(n: number, d: number) {
 	if (!d || !isFinite(n) || !isFinite(d)) return 0;
@@ -77,23 +56,28 @@ export default function SchedulingPressureSection() {
 	}, [liveData]);
 
 	/** --- Pending by reason (bar, latest snapshot) --- */
-	const pendingReasons = React.useMemo(() => {
+	const pendingReasonsData: CategoricalDataPoint[] = React.useMemo(() => {
 		const pick = (key: string) => latest(liveData[key]);
-		const rows = [
-			{ reason: "Insufficient CPU", value: pick("cluster.pods.pending.by_reason:Insufficient CPU") },
-			{ reason: "Insufficient Memory", value: pick("cluster.pods.pending.by_reason:Insufficient Memory") },
-			{ reason: "Affinity", value: pick("cluster.pods.pending.by_reason:Affinity") },
-			{ reason: "Taints", value: pick("cluster.pods.pending.by_reason:Taints") },
+
+		const reasons = [
+			{ name: "Insufficient CPU", value: pick("cluster.pods.pending.by_reason:Insufficient CPU") || 0 },
+			{ name: "Insufficient Memory", value: pick("cluster.pods.pending.by_reason:Insufficient Memory") || 0 },
+			{ name: "Affinity", value: pick("cluster.pods.pending.by_reason:Affinity") || 0 },
+			{ name: "Taints", value: pick("cluster.pods.pending.by_reason:Taints") || 0 },
 		];
-		if (rows.every((r) => !r.value)) {
+
+		// If no real data, use mock data
+		if (reasons.every((r) => r.value === 0)) {
 			return [
-				{ reason: "Insufficient CPU", value: 8 },
-				{ reason: "Insufficient Memory", value: 5 },
-				{ reason: "Affinity", value: 2 },
-				{ reason: "Taints", value: 1 },
+				{ name: "Insufficient CPU", value: 8 },
+				{ name: "Insufficient Memory", value: 5 },
+				{ name: "Affinity", value: 2 },
+				{ name: "Taints", value: 1 },
 			];
 		}
-		return rows;
+
+		// Don't filter out zero values - show all categories for context
+		return reasons;
 	}, [liveData]);
 
 	/** --- Node pressure profile (radar) --- */
@@ -128,14 +112,29 @@ export default function SchedulingPressureSection() {
 		};
 	}, [liveData, nodeNames, nodesTotal]);
 
-	const radarData = React.useMemo(
-		() => [
-			{ axis: "Memory", value: Math.round(pressurePct.memory) },
-			{ axis: "Disk", value: Math.round(pressurePct.disk) },
-			{ axis: "PID", value: Math.round(pressurePct.pid) },
-		],
-		[pressurePct]
-	);
+	const radarSeries: ChartSeries[] = React.useMemo(() => {
+		const timestamp = Date.now(); // Current timestamp for radar data
+		return [
+			{
+				key: "memory",
+				name: "Memory",
+				color: "hsl(var(--chart-1))",
+				data: [[timestamp, Math.round(pressurePct.memory)]]
+			},
+			{
+				key: "disk",
+				name: "Disk",
+				color: "hsl(var(--chart-2))",
+				data: [[timestamp, Math.round(pressurePct.disk)]]
+			},
+			{
+				key: "pid",
+				name: "PID",
+				color: "hsl(var(--chart-3))",
+				data: [[timestamp, Math.round(pressurePct.pid)]]
+			},
+		];
+	}, [pressurePct]);
 
 	/** --- SummaryCards (Cluster KPIs) --- */
 	const pendingNow = Math.round(latest(liveData["cluster.pods.pending"]));
@@ -210,80 +209,45 @@ export default function SchedulingPressureSection() {
 			/>
 
 			{/* Charts: MAX 2 PER ROW */}
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 				{/* Pending over time */}
-				<div className="rounded-lg border bg-card p-4">
-					<div className="mb-3">
-						<div className="text-sm font-semibold">Pending Pods (30m)</div>
-						<div className="text-xs text-muted-foreground">Active scheduling backlog</div>
-					</div>
-					<div className="min-h-[240px]">
-						<MetricAreaChart
-							title=""
-							subtitle=""
-							series={pendingSeries}
-							unit="pods"
-							formatter={(v) => `${Math.round(v)}`}
-							stacked={false}
-							scopeLabel="cluster"
-							timespanLabel="30m"
-							resolutionLabel="hi"
-						/>
-					</div>
-				</div>
+				<MetricAreaChart
+					title="Pending Pods (30m)"
+					subtitle="Active scheduling backlog over time showing pods waiting for resources or placement"
+					series={pendingSeries}
+					unit="pods"
+					formatter={(v) => `${Math.round(v)}`}
+					stacked={false}
+					scopeLabel="cluster"
+					timespanLabel="30m"
+					resolutionLabel="hi"
+				/>
 
 				{/* Pending by Reason (bar) */}
-				<div className="rounded-lg border bg-card p-4 h-full">
-					<div className="mb-3">
-						<div className="text-sm font-semibold">Pending by Reason</div>
-						<div className="text-xs text-muted-foreground">Latest snapshot</div>
-					</div>
-					<ChartContainer
-						config={
-							{
-								value: { label: "Pending" },
-								cpu: { label: "Insufficient CPU", color: "hsl(var(--chart-1))" },
-								mem: { label: "Insufficient Memory", color: "hsl(var(--chart-2))" },
-								aff: { label: "Affinity", color: "hsl(var(--chart-3))" },
-								taints: { label: "Taints", color: "hsl(var(--chart-4))" },
-							} satisfies ChartConfig
-						}
-						className="min-h-[240px] w-full"
-					>
-						<ResponsiveContainer width="100%" height="100%">
-							<BarChart accessibilityLayer data={pendingReasons}>
-								<CartesianGrid vertical={false} />
-								<XAxis dataKey="reason" tickLine={false} axisLine={false} tickMargin={8} />
-								<YAxis allowDecimals={false} />
-								<Bar dataKey="value" radius={4} />
-								<ChartTooltip content={<ChartTooltipContent />} />
-							</BarChart>
-						</ResponsiveContainer>
-						<ChartLegend content={<ChartLegendContent nameKey="reason" />} />
-					</ChartContainer>
-				</div>
+				<MetricCategoricalBarChart
+					title="Pending Pods by Reason"
+					subtitle="Latest snapshot of pending pods categorized by scheduling reason. Shows which constraints are preventing pod scheduling."
+					data={pendingReasonsData}
+					unit="pods"
+					formatter={(v: number) => `${Math.round(v)}`}
+					layout="horizontal"
+					showLegend={true}
+					scopeLabel="cluster"
+					timespanLabel="latest"
+					resolutionLabel="snapshot"
+				/>
 
 				{/* Node Pressure Radar (wraps to next row) */}
-				<div className="rounded-lg border bg-card p-4 h-full">
-					<div className="mb-3">
-						<div className="text-sm font-semibold">Node Pressure Profile</div>
-						<div className="text-xs text-muted-foreground">% of nodes with condition=true</div>
-					</div>
-					<ChartContainer
-						config={{ value: { label: "% Nodes Under Pressure", color: "hsl(var(--chart-1))" } } as ChartConfig}
-						className="min-h-[240px] w-full"
-					>
-						<ResponsiveContainer width="100%" height="100%">
-							<RadarChart data={radarData}>
-								<PolarGrid />
-								<PolarAngleAxis dataKey="axis" />
-								<PolarRadiusAxis angle={30} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-								<Radar dataKey="value" fill="var(--color-value)" fillOpacity={0.35} />
-								<ChartTooltip content={<ChartTooltipContent />} />
-							</RadarChart>
-						</ResponsiveContainer>
-					</ChartContainer>
-				</div>
+				<MetricRadarChart
+					title="Node Pressure Profile"
+					subtitle="Percentage of nodes with each pressure condition active. Shows memory, disk, and PID pressure distribution across the cluster."
+					series={radarSeries}
+					unit="%"
+					formatter={(v) => `${Math.round(v)}`}
+					scopeLabel="cluster"
+					timespanLabel="current"
+					resolutionLabel="node-level"
+				/>
 			</div>
 
 			{/* Live badge (optional) */}
