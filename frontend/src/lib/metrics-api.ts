@@ -1,11 +1,22 @@
 /**
  * Extended TimeSeries API Client for Metric Explorer
  * 
- * Extends the existing timeseries API with additional functionality
+ * Extends the existing timeseries API w  // Convert to existing TimeSeriesKey format
+  const timeSeriesKeys = seriesKeys.filter(key => 
+    [
+      'cluster.cpu.used.cores', 
+      'cluster.cpu.capacity.cores', 
+      'cluster.mem.used.bytes',
+      'cluster.mem.allocatable.bytes',
+      'cluster.mem.requested.bytes',
+      'cluster.net.rx.bps', 
+      'cluster.net.tx.bps'
+    ].includes(key)
+  ) as TimeSeriesKey[];al functionality
  * while maintaining compatibility with the backend endpoints.
  */
 
-import { 
+import {
   fetchClusterSeries,
   openClusterLiveWS,
   type TimeSeriesKey,
@@ -101,8 +112,16 @@ export async function fetchMetrics(
   }
 
   // Convert our metric keys to the existing TimeSeriesKey format
-  const timeSeriesKeys = seriesKeys.filter(key => 
-    ['cluster.cpu.used.cores', 'cluster.cpu.capacity.cores', 'cluster.net.rx.bps', 'cluster.net.tx.bps'].includes(key)
+  const timeSeriesKeys = seriesKeys.filter(key =>
+    [
+      'cluster.cpu.used.cores',
+      'cluster.cpu.capacity.cores',
+      'cluster.mem.used.bytes',
+      'cluster.mem.allocatable.bytes',
+      'cluster.mem.requested.bytes',
+      'cluster.net.rx.bps',
+      'cluster.net.tx.bps'
+    ].includes(key)
   ) as TimeSeriesKey[];
 
   if (timeSeriesKeys.length === 0) {
@@ -180,10 +199,13 @@ export function getMetricsForScope(scope: MetricScope): MetricKey[] {
       return [
         'cluster.cpu.used.cores',
         'cluster.cpu.capacity.cores',
+        'cluster.mem.used.bytes',
+        'cluster.mem.allocatable.bytes',
+        'cluster.mem.requested.bytes',
         'cluster.net.rx.bps',
         'cluster.net.tx.bps'
       ] as MetricKey[];
-    
+
     case 'node':
     case 'namespace':
     case 'workload':
@@ -192,7 +214,7 @@ export function getMetricsForScope(scope: MetricScope): MetricKey[] {
       // For other scopes, return empty array for now
       // These would be implemented when backend support is added
       return [];
-    
+
     default:
       return [];
   }
@@ -212,7 +234,7 @@ export function openMetricsWebSocket(
   }
 
   // Convert to existing TimeSeriesKey format
-  const timeSeriesKeys = seriesKeys.filter(key => 
+  const timeSeriesKeys = seriesKeys.filter(key =>
     ['cluster.cpu.used.cores', 'cluster.cpu.capacity.cores', 'cluster.net.rx.bps', 'cluster.net.tx.bps'].includes(key)
   ) as TimeSeriesKey[];
 

@@ -121,6 +121,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         icon: IconChartBar,
         items: [
           { title: "Explore Metrics", url: "/metric-explorer" },
+          { title: "OpsView", url: "/opsview" },
           { title: "Logs", url: "/logs" },
           { title: "Events", url: "/events" },
         ],

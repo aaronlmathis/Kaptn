@@ -51,6 +51,10 @@ type Aggregator struct {
 	lastSummaryPoll  time.Time
 	lastStateRecon   time.Time
 
+	// New: restart tracking for rate calculation
+	lastRestartsTotal int64
+	lastRestartsTime  time.Time
+
 	// Configuration
 	config                  Config
 	capacityRefreshInterval time.Duration
@@ -202,6 +206,13 @@ func (a *Aggregator) tick(ctx context.Context) {
 		a.collectCPUMetrics(ctx, now)
 		a.collectMemoryMetrics(ctx, now)
 		a.collectResourceRequests(ctx, now)
+		a.collectResourceLimits(ctx, now)
+		a.collectPodResourceMetrics(ctx, now)
+		a.collectPodRestartMetrics(ctx, now)
+		a.collectNamespaceMetrics(ctx, now)
+		a.collectClusterRestartMetrics(ctx, now)
+		a.collectClusterNodeReadiness(ctx, now)
+		a.collectClusterImageFsMetrics(ctx, now)
 		a.collectPodMetrics(ctx, now)
 		a.collectContainerMetrics(ctx, now)
 		a.mu.Lock()
@@ -214,6 +225,8 @@ func (a *Aggregator) tick(ctx context.Context) {
 		a.collectNetworkMetrics(ctx, now)
 		a.collectNodeDetailedMetrics(ctx, now)
 		a.collectBasicNodeMetrics(ctx, now)
+		a.collectNodePodCounts(ctx, now)
+		a.collectNodePacketStats(ctx, now)
 		a.collectBasicPodNetworkMetrics(ctx, now)
 		a.mu.Lock()
 		a.lastSummaryPoll = now
@@ -495,6 +508,12 @@ func (a *Aggregator) collectMemoryMetrics(ctx context.Context, now time.Time) {
 		if allocatableSeries != nil {
 			allocatableSeries.Add(timeseries.Point{T: now, V: totalMemoryCapacity})
 		}
+
+		// Store cluster-level memory capacity
+		capacitySeries := a.store.Upsert(timeseries.ClusterMemCapacityBytes)
+		if capacitySeries != nil {
+			capacitySeries.Add(timeseries.Point{T: now, V: totalMemoryCapacity})
+		}
 	}
 
 	// Collect memory usage if Metrics API is available
@@ -543,14 +562,23 @@ func (a *Aggregator) collectStateMetrics(ctx context.Context, now time.Time) {
 		return
 	}
 
-	// Count pods by phase
-	var running, pending, failed, succeeded float64
+	// Count pods by phase and check for unschedulable conditions
+	var running, pending, failed, succeeded, unschedulable float64
 	for _, pod := range pods.Items {
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			running++
 		case corev1.PodPending:
 			pending++
+			// Check if pod is unschedulable
+			for _, condition := range pod.Status.Conditions {
+				if condition.Type == corev1.PodScheduled &&
+					condition.Status == corev1.ConditionFalse &&
+					condition.Reason == "Unschedulable" {
+					unschedulable++
+					break
+				}
+			}
 		case corev1.PodFailed:
 			failed++
 		case corev1.PodSucceeded:
@@ -579,12 +607,18 @@ func (a *Aggregator) collectStateMetrics(ctx context.Context, now time.Time) {
 		succeededPodsSeries.Add(timeseries.Point{T: now, V: succeeded})
 	}
 
+	unschedulablePodsSeries := a.store.Upsert(timeseries.ClusterPodsUnschedulable)
+	if unschedulablePodsSeries != nil {
+		unschedulablePodsSeries.Add(timeseries.Point{T: now, V: unschedulable})
+	}
+
 	a.logger.Debug("Collected state metrics",
 		zap.Float64("nodes", nodeCount),
 		zap.Float64("running_pods", running),
 		zap.Float64("pending_pods", pending),
 		zap.Float64("failed_pods", failed),
 		zap.Float64("succeeded_pods", succeeded),
+		zap.Float64("unschedulable_pods", unschedulable),
 	)
 }
 
@@ -665,6 +699,527 @@ func (a *Aggregator) collectResourceRequests(ctx context.Context, now time.Time)
 		zap.Float64("cpu_requests_cores", totalCPURequests),
 		zap.Float64("memory_requests_gb", totalMemoryRequests/(1024*1024*1024)),
 		zap.Int("total_pods", len(pods.Items)),
+	)
+}
+
+// collectResourceLimits collects cluster-level resource limits from pod specs
+func (a *Aggregator) collectResourceLimits(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("limits", time.Since(start), hasError)
+	}()
+
+	// Get all pods to sum up resource limits
+	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to collect pods for resource limits", zap.Error(err))
+		return
+	}
+
+	var totalCPULimits, totalMemoryLimits float64
+
+	for _, pod := range pods.Items {
+		// Skip completed pods for resource limits calculation
+		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+			continue
+		}
+
+		for _, container := range pod.Spec.Containers {
+			// Sum CPU limits
+			if cpuLimit, exists := container.Resources.Limits[corev1.ResourceCPU]; exists {
+				cpuCores := float64(cpuLimit.MilliValue()) / 1000.0 // Convert millicores to cores
+				totalCPULimits += cpuCores
+			}
+
+			// Sum memory limits
+			if memLimit, exists := container.Resources.Limits[corev1.ResourceMemory]; exists {
+				memoryBytes := float64(memLimit.Value())
+				totalMemoryLimits += memoryBytes
+			}
+		}
+	}
+
+	// Store cluster-level resource limits
+	cpuLimitsSeries := a.store.Upsert(timeseries.ClusterCPULimitsCores)
+	if cpuLimitsSeries != nil {
+		cpuLimitsSeries.Add(timeseries.Point{T: now, V: totalCPULimits})
+	}
+
+	memLimitsSeries := a.store.Upsert(timeseries.ClusterMemLimitsBytes)
+	if memLimitsSeries != nil {
+		memLimitsSeries.Add(timeseries.Point{T: now, V: totalMemoryLimits})
+	}
+
+	a.logger.Debug("Collected resource limits",
+		zap.Float64("cpu_limits_cores", totalCPULimits),
+		zap.Float64("memory_limits_gb", totalMemoryLimits/(1024*1024*1024)),
+		zap.Int("total_pods", len(pods.Items)),
+	)
+}
+
+// collectClusterRestartMetrics collects cluster-level pod restart metrics
+func (a *Aggregator) collectClusterRestartMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("restarts", time.Since(start), hasError)
+	}()
+
+	// Get all pods to sum up restart counts
+	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to collect pods for restart metrics", zap.Error(err))
+		return
+	}
+
+	var totalRestarts int64
+
+	for _, pod := range pods.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			totalRestarts += int64(containerStatus.RestartCount)
+		}
+	}
+
+	// Calculate restart rate (change per second)
+	a.mu.Lock()
+	var restartRate float64
+	if a.lastRestartsTotal > 0 && !a.lastRestartsTime.IsZero() {
+		deltaRestarts := totalRestarts - a.lastRestartsTotal
+		deltaTime := now.Sub(a.lastRestartsTime).Seconds()
+		if deltaTime > 0 {
+			restartRate = float64(deltaRestarts) / deltaTime
+		}
+	}
+	a.lastRestartsTotal = totalRestarts
+	a.lastRestartsTime = now
+	a.mu.Unlock()
+
+	// Store cluster-level restart metrics
+	restartsTotalSeries := a.store.Upsert(timeseries.ClusterPodsRestartsTotal)
+	if restartsTotalSeries != nil {
+		restartsTotalSeries.Add(timeseries.Point{T: now, V: float64(totalRestarts)})
+	}
+
+	restartsRateSeries := a.store.Upsert(timeseries.ClusterPodsRestartsRate)
+	if restartsRateSeries != nil {
+		restartsRateSeries.Add(timeseries.Point{T: now, V: restartRate})
+	}
+
+	// Calculate 1-hour restart count using sliding window
+	restarts1hSeries := a.store.Upsert(timeseries.ClusterPodsRestarts1h)
+	if restarts1hSeries != nil && restartsTotalSeries != nil {
+		// Get restart counter value from 1 hour ago (or oldest available data)
+		oneHourAgo := now.Add(-1 * time.Hour)
+
+		// Get the current total and the total from as far back as we have data
+		currentTotal := float64(totalRestarts)
+		var totalOneHourAgo float64 = currentTotal // Default to current if no historical data
+
+		// Get historical data points
+		if recentPoints := restartsTotalSeries.GetSince(oneHourAgo, timeseries.Hi); len(recentPoints) > 0 {
+			// Use the oldest available point (might be less than 1 hour old)
+			totalOneHourAgo = recentPoints[0].V
+		} else {
+			// If no historical data in hi-res, try low-res
+			if recentPoints := restartsTotalSeries.GetSince(oneHourAgo, timeseries.Lo); len(recentPoints) > 0 {
+				totalOneHourAgo = recentPoints[0].V
+			} else {
+				// No historical data available, use 0 as baseline
+				totalOneHourAgo = 0
+			}
+		}
+
+		// Calculate restarts in the last hour
+		restarts1h := currentTotal - totalOneHourAgo
+		if restarts1h < 0 {
+			restarts1h = 0 // Handle counter resets
+		}
+
+		restarts1hSeries.Add(timeseries.Point{T: now, V: restarts1h})
+	}
+
+	a.logger.Debug("Collected restart metrics",
+		zap.Int64("total_restarts", totalRestarts),
+		zap.Float64("restart_rate_per_sec", restartRate),
+		zap.Int("total_pods", len(pods.Items)),
+	)
+}
+
+// collectClusterNodeReadiness collects cluster-level node readiness metrics
+func (a *Aggregator) collectClusterNodeReadiness(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("node_readiness", time.Since(start), hasError)
+	}()
+
+	// Get all nodes to check readiness
+	nodes, err := a.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to collect nodes for readiness metrics", zap.Error(err))
+		return
+	}
+
+	var readyNodes, notReadyNodes int64
+
+	for _, node := range nodes.Items {
+		isReady := false
+		for _, condition := range node.Status.Conditions {
+			if condition.Type == corev1.NodeReady {
+				isReady = condition.Status == corev1.ConditionTrue
+				break
+			}
+		}
+
+		if isReady {
+			readyNodes++
+		} else {
+			notReadyNodes++
+		}
+	}
+
+	// Store cluster-level node readiness metrics
+	readyNodesSeries := a.store.Upsert(timeseries.ClusterNodesReady)
+	if readyNodesSeries != nil {
+		readyNodesSeries.Add(timeseries.Point{T: now, V: float64(readyNodes)})
+	}
+
+	notReadyNodesSeries := a.store.Upsert(timeseries.ClusterNodesNotReady)
+	if notReadyNodesSeries != nil {
+		notReadyNodesSeries.Add(timeseries.Point{T: now, V: float64(notReadyNodes)})
+	}
+
+	a.logger.Debug("Collected node readiness metrics",
+		zap.Int64("ready_nodes", readyNodes),
+		zap.Int64("not_ready_nodes", notReadyNodes),
+		zap.Int("total_nodes", len(nodes.Items)),
+	)
+}
+
+// collectClusterImageFsMetrics collects cluster-level image filesystem metrics
+func (a *Aggregator) collectClusterImageFsMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("imagefs", time.Since(start), hasError)
+	}()
+
+	if !a.summaryAdapter.HasSummaryAPI(ctx) {
+		a.logger.Debug("Summary API not available, skipping image filesystem metrics")
+		return
+	}
+
+	// TODO: Implement proper image filesystem collection via Summary API
+	// For now, use placeholder values
+
+	// Get all nodes for estimating
+	nodes, err := a.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to list nodes for image filesystem metrics", zap.Error(err))
+		return
+	}
+
+	// Placeholder: estimate 10GB used and 50GB capacity per node
+	var totalImageFsUsed = uint64(len(nodes.Items)) * 10 * 1024 * 1024 * 1024     // 10GB per node
+	var totalImageFsCapacity = uint64(len(nodes.Items)) * 50 * 1024 * 1024 * 1024 // 50GB per node
+
+	// Store cluster-level image filesystem metrics
+	imageFsUsedSeries := a.store.Upsert(timeseries.ClusterFsImageUsedBytes)
+	if imageFsUsedSeries != nil {
+		imageFsUsedSeries.Add(timeseries.Point{T: now, V: float64(totalImageFsUsed)})
+	}
+
+	imageFsCapacitySeries := a.store.Upsert(timeseries.ClusterFsImageCapacityBytes)
+	if imageFsCapacitySeries != nil {
+		imageFsCapacitySeries.Add(timeseries.Point{T: now, V: float64(totalImageFsCapacity)})
+	}
+
+	a.logger.Debug("Collected image filesystem metrics (placeholder)",
+		zap.Uint64("total_used_bytes", totalImageFsUsed),
+		zap.Uint64("total_capacity_bytes", totalImageFsCapacity),
+		zap.Int("total_nodes", len(nodes.Items)),
+	)
+}
+
+// collectPodResourceMetrics collects per-pod resource requests and limits
+func (a *Aggregator) collectPodResourceMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("pod_resources", time.Since(start), hasError)
+	}()
+
+	// Get all pods to collect individual resource metrics
+	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to collect pods for pod resource metrics", zap.Error(err))
+		return
+	}
+
+	podCount := 0
+	for _, pod := range pods.Items {
+		// Skip completed pods
+		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+			continue
+		}
+
+		podEntity := map[string]string{
+			"namespace": pod.Namespace,
+			"pod":       pod.Name,
+		}
+
+		var totalCPURequest, totalCPULimit, totalMemRequest, totalMemLimit float64
+
+		// Sum up resources from all containers in the pod
+		for _, container := range pod.Spec.Containers {
+			// CPU requests
+			if cpuRequest, exists := container.Resources.Requests[corev1.ResourceCPU]; exists {
+				totalCPURequest += float64(cpuRequest.MilliValue()) / 1000.0
+			}
+			// CPU limits
+			if cpuLimit, exists := container.Resources.Limits[corev1.ResourceCPU]; exists {
+				totalCPULimit += float64(cpuLimit.MilliValue()) / 1000.0
+			}
+			// Memory requests
+			if memRequest, exists := container.Resources.Requests[corev1.ResourceMemory]; exists {
+				totalMemRequest += float64(memRequest.Value())
+			}
+			// Memory limits
+			if memLimit, exists := container.Resources.Limits[corev1.ResourceMemory]; exists {
+				totalMemLimit += float64(memLimit.Value())
+			}
+		}
+
+		// Store CPU request/limit metrics
+		cpuRequestSeries := a.store.Upsert(timeseries.GeneratePodSeriesKey(timeseries.PodCPURequestBase, pod.Namespace, pod.Name))
+		if cpuRequestSeries != nil {
+			cpuRequestSeries.Add(timeseries.NewPointWithEntity(now, totalCPURequest, podEntity))
+		}
+
+		cpuLimitSeries := a.store.Upsert(timeseries.GeneratePodSeriesKey(timeseries.PodCPULimitBase, pod.Namespace, pod.Name))
+		if cpuLimitSeries != nil {
+			cpuLimitSeries.Add(timeseries.NewPointWithEntity(now, totalCPULimit, podEntity))
+		}
+
+		// Store memory request/limit metrics
+		memRequestSeries := a.store.Upsert(timeseries.GeneratePodSeriesKey(timeseries.PodMemRequestBase, pod.Namespace, pod.Name))
+		if memRequestSeries != nil {
+			memRequestSeries.Add(timeseries.NewPointWithEntity(now, totalMemRequest, podEntity))
+		}
+
+		memLimitSeries := a.store.Upsert(timeseries.GeneratePodSeriesKey(timeseries.PodMemLimitBase, pod.Namespace, pod.Name))
+		if memLimitSeries != nil {
+			memLimitSeries.Add(timeseries.NewPointWithEntity(now, totalMemLimit, podEntity))
+		}
+
+		podCount++
+	}
+
+	a.logger.Debug("Collected pod resource metrics",
+		zap.Int("active_pods", podCount),
+		zap.Int("total_pods", len(pods.Items)),
+	)
+}
+
+// collectPodRestartMetrics collects per-pod restart counts and rates
+func (a *Aggregator) collectPodRestartMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("pod_restarts", time.Since(start), hasError)
+	}()
+
+	// Get all pods to collect restart metrics
+	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to collect pods for restart metrics", zap.Error(err))
+		return
+	}
+
+	podCount := 0
+	for _, pod := range pods.Items {
+		podEntity := map[string]string{
+			"namespace": pod.Namespace,
+			"pod":       pod.Name,
+		}
+
+		var totalRestarts int32
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			totalRestarts += containerStatus.RestartCount
+		}
+
+		// Store restart count
+		restartTotalSeries := a.store.Upsert(timeseries.GeneratePodSeriesKey(timeseries.PodRestartsTotalBase, pod.Namespace, pod.Name))
+		if restartTotalSeries != nil {
+			restartTotalSeries.Add(timeseries.NewPointWithEntity(now, float64(totalRestarts), podEntity))
+		}
+
+		// TODO: Calculate restart rate (need to track previous values per pod)
+		// For now, store 0 as placeholder
+		restartRateSeries := a.store.Upsert(timeseries.GeneratePodSeriesKey(timeseries.PodRestartsRateBase, pod.Namespace, pod.Name))
+		if restartRateSeries != nil {
+			restartRateSeries.Add(timeseries.NewPointWithEntity(now, 0.0, podEntity))
+		}
+
+		podCount++
+	}
+
+	a.logger.Debug("Collected pod restart metrics",
+		zap.Int("total_pods", podCount),
+	)
+}
+
+// collectNamespaceMetrics collects namespace-level aggregated metrics
+func (a *Aggregator) collectNamespaceMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("namespace_metrics", time.Since(start), hasError)
+	}()
+
+	// Get all pods to aggregate by namespace
+	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to collect pods for namespace metrics", zap.Error(err))
+		return
+	}
+
+	// Get pod metrics for usage data if available
+	var podUsageMap map[string]map[string]float64 // namespace -> pod -> metric
+	if a.apiMetricsAdapter.HasMetricsAPI(ctx) {
+		_, err := a.apiMetricsAdapter.ListPodMetrics(ctx)
+		if err == nil {
+			podUsageMap = make(map[string]map[string]float64)
+			// TODO: Parse podMetrics and populate podUsageMap
+			// For now, use placeholder values
+		}
+	}
+
+	// Aggregate metrics by namespace
+	namespaceData := make(map[string]struct {
+		cpuUsed, cpuRequest, cpuLimit float64
+		memUsed, memRequest, memLimit float64
+		runningPods                   int
+		totalRestarts                 int64
+	})
+
+	for _, pod := range pods.Items {
+		namespace := pod.Namespace
+
+		// Initialize namespace data if not exists
+		if _, exists := namespaceData[namespace]; !exists {
+			namespaceData[namespace] = struct {
+				cpuUsed, cpuRequest, cpuLimit float64
+				memUsed, memRequest, memLimit float64
+				runningPods                   int
+				totalRestarts                 int64
+			}{}
+		}
+
+		data := namespaceData[namespace]
+
+		// Count running pods
+		if pod.Status.Phase == corev1.PodRunning {
+			data.runningPods++
+		}
+
+		// Skip completed pods for resource calculations
+		if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
+			namespaceData[namespace] = data
+			continue
+		}
+
+		// Sum up resource requests and limits
+		for _, container := range pod.Spec.Containers {
+			if cpuRequest, exists := container.Resources.Requests[corev1.ResourceCPU]; exists {
+				data.cpuRequest += float64(cpuRequest.MilliValue()) / 1000.0
+			}
+			if cpuLimit, exists := container.Resources.Limits[corev1.ResourceCPU]; exists {
+				data.cpuLimit += float64(cpuLimit.MilliValue()) / 1000.0
+			}
+			if memRequest, exists := container.Resources.Requests[corev1.ResourceMemory]; exists {
+				data.memRequest += float64(memRequest.Value())
+			}
+			if memLimit, exists := container.Resources.Limits[corev1.ResourceMemory]; exists {
+				data.memLimit += float64(memLimit.Value())
+			}
+		}
+
+		// Sum up restart counts
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			data.totalRestarts += int64(containerStatus.RestartCount)
+		}
+
+		// Add placeholder usage if real metrics not available
+		if podUsageMap == nil {
+			// Placeholder: 50% of requests as usage
+			data.cpuUsed += data.cpuRequest * 0.5
+			data.memUsed += data.memRequest * 0.5
+		}
+
+		namespaceData[namespace] = data
+	}
+
+	// Store namespace-level metrics
+	for namespace, data := range namespaceData {
+		nsEntity := map[string]string{"namespace": namespace}
+
+		// CPU metrics
+		cpuUsedSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespaceCPUUsedBase, namespace))
+		if cpuUsedSeries != nil {
+			cpuUsedSeries.Add(timeseries.NewPointWithEntity(now, data.cpuUsed, nsEntity))
+		}
+
+		cpuRequestSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespaceCPURequestBase, namespace))
+		if cpuRequestSeries != nil {
+			cpuRequestSeries.Add(timeseries.NewPointWithEntity(now, data.cpuRequest, nsEntity))
+		}
+
+		cpuLimitSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespaceCPULimitBase, namespace))
+		if cpuLimitSeries != nil {
+			cpuLimitSeries.Add(timeseries.NewPointWithEntity(now, data.cpuLimit, nsEntity))
+		}
+
+		// Memory metrics
+		memUsedSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespaceMemUsedBase, namespace))
+		if memUsedSeries != nil {
+			memUsedSeries.Add(timeseries.NewPointWithEntity(now, data.memUsed, nsEntity))
+		}
+
+		memRequestSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespaceMemRequestBase, namespace))
+		if memRequestSeries != nil {
+			memRequestSeries.Add(timeseries.NewPointWithEntity(now, data.memRequest, nsEntity))
+		}
+
+		memLimitSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespaceMemLimitBase, namespace))
+		if memLimitSeries != nil {
+			memLimitSeries.Add(timeseries.NewPointWithEntity(now, data.memLimit, nsEntity))
+		}
+
+		// Pod and restart metrics
+		runningPodsSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespacePodsRunningBase, namespace))
+		if runningPodsSeries != nil {
+			runningPodsSeries.Add(timeseries.NewPointWithEntity(now, float64(data.runningPods), nsEntity))
+		}
+
+		// Calculate restart rate (placeholder for now)
+		restartsRateSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespacePodsRestartsRateBase, namespace))
+		if restartsRateSeries != nil {
+			restartsRateSeries.Add(timeseries.NewPointWithEntity(now, 0.0, nsEntity)) // TODO: implement rate calculation
+		}
+	}
+
+	a.logger.Debug("Collected namespace metrics",
+		zap.Int("total_namespaces", len(namespaceData)),
+		zap.Bool("has_usage_metrics", podUsageMap != nil),
 	)
 }
 
@@ -922,6 +1477,36 @@ func (a *Aggregator) collectBasicNodeMetrics(ctx context.Context, now time.Time)
 			nodeImageFsSeries.Add(timeseries.NewPointWithEntity(now, placeholderImageFsUsage, nodeEntity))
 		}
 
+		// New: Image filesystem capacity
+		nodeImageFsCapacitySeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsCapacityBase, node.Name))
+		var imageFsCapacity float64
+		if nodeImageFsCapacitySeries != nil {
+			// Placeholder: 50GB image filesystem capacity per node
+			imageFsCapacity = float64(50 * 1024 * 1024 * 1024) // 50GB
+			nodeImageFsCapacitySeries.Add(timeseries.NewPointWithEntity(now, imageFsCapacity, nodeEntity))
+		}
+
+		// New: Image filesystem used percentage
+		nodeImageFsPercentSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsUsedPercentBase, node.Name))
+		if nodeImageFsPercentSeries != nil {
+			// Calculate percentage: (used / capacity) * 100
+			imageFsUsed := node.MemoryBytes * 0.1 // Same placeholder as above
+			if imageFsCapacity > 0 {
+				percentUsed := (imageFsUsed / imageFsCapacity) * 100
+				nodeImageFsPercentSeries.Add(timeseries.NewPointWithEntity(now, percentUsed, nodeEntity))
+			} else {
+				// Fallback placeholder
+				nodeImageFsPercentSeries.Add(timeseries.NewPointWithEntity(now, 20.0, nodeEntity))
+			}
+		}
+
+		// New: Inode usage percentage
+		nodeInodesPercentSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsInodesUsedPercentBase, node.Name))
+		if nodeInodesPercentSeries != nil {
+			// Placeholder: 15% inode usage
+			nodeInodesPercentSeries.Add(timeseries.NewPointWithEntity(now, 15.0, nodeEntity))
+		}
+
 		nodeProcessSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeProcessCountBase, node.Name))
 		if nodeProcessSeries != nil {
 			// Placeholder: 200 processes per node
@@ -946,6 +1531,92 @@ func (a *Aggregator) collectBasicNodeMetrics(ctx context.Context, now time.Time)
 		zap.Int("node_count", len(nodeList)),
 		zap.String("note", "using placeholder values - Summary API needed for real data"),
 	)
+}
+
+// collectNodePodCounts collects pod counts per node
+func (a *Aggregator) collectNodePodCounts(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("node_pod_counts", time.Since(start), hasError)
+	}()
+
+	// Get all pods to count per node
+	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to list pods for node pod counts", zap.Error(err))
+		return
+	}
+
+	// Count pods per node
+	podCountPerNode := make(map[string]int)
+	for _, pod := range pods.Items {
+		if pod.Spec.NodeName != "" && pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
+			podCountPerNode[pod.Spec.NodeName]++
+		}
+	}
+
+	// Store pod counts for each node
+	for nodeName, count := range podCountPerNode {
+		nodeEntity := map[string]string{"node": nodeName}
+		nodePodCountSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodePodsCountBase, nodeName))
+		if nodePodCountSeries != nil {
+			nodePodCountSeries.Add(timeseries.NewPointWithEntity(now, float64(count), nodeEntity))
+		}
+	}
+
+	a.logger.Debug("Collected node pod counts",
+		zap.Int("total_nodes_with_pods", len(podCountPerNode)),
+		zap.Int("total_pods", len(pods.Items)),
+	)
+}
+
+// collectNodePacketStats collects packet-per-second metrics for nodes
+func (a *Aggregator) collectNodePacketStats(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("node_packet_stats", time.Since(start), hasError)
+	}()
+
+	if !a.summaryAdapter.HasSummaryAPI(ctx) {
+		a.logger.Debug("Summary API not available, using placeholder packet stats")
+
+		// Get node list for placeholder stats
+		nodeList, err := a.nodesAdapter.ListNodes(ctx)
+		if err != nil {
+			hasError = true
+			a.logger.Error("Failed to get node list for packet stats", zap.Error(err))
+			return
+		}
+
+		// Add placeholder packet stats for each node
+		for _, node := range nodeList {
+			nodeEntity := map[string]string{"node": node.Name}
+
+			// Placeholder: 1000 packets/sec RX
+			nodeRxPpsSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetRxPpsBase, node.Name))
+			if nodeRxPpsSeries != nil {
+				nodeRxPpsSeries.Add(timeseries.NewPointWithEntity(now, 1000.0, nodeEntity))
+			}
+
+			// Placeholder: 800 packets/sec TX
+			nodeTxPpsSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetTxPpsBase, node.Name))
+			if nodeTxPpsSeries != nil {
+				nodeTxPpsSeries.Add(timeseries.NewPointWithEntity(now, 800.0, nodeEntity))
+			}
+		}
+
+		a.logger.Debug("Collected placeholder packet stats",
+			zap.Int("node_count", len(nodeList)),
+		)
+		return
+	}
+
+	// TODO: Implement real packet stats collection via Summary API
+	// For now, just use placeholder values even when Summary API is available
+	a.logger.Debug("Packet stats collection from Summary API not yet implemented")
 }
 
 // collectBasicPodNetworkMetrics collects basic pod network placeholder metrics
@@ -999,6 +1670,18 @@ func (a *Aggregator) collectBasicPodNetworkMetrics(ctx context.Context, now time
 		if podEphemeralSeries != nil {
 			// Placeholder: 100MB ephemeral storage per pod
 			podEphemeralSeries.Add(timeseries.NewPointWithEntity(now, 100*1024*1024, podEntity))
+		}
+
+		// Add ephemeral storage percentage
+		podEphemeralPercentKey := timeseries.GeneratePodSeriesKey(timeseries.PodEphemeralPercentBase, podEntity["namespace"], podEntity["pod"])
+		podEphemeralPercentSeries := a.store.Upsert(podEphemeralPercentKey)
+		if podEphemeralPercentSeries != nil {
+			// Calculate percentage based on placeholder values
+			// Assume ephemeral capacity of 1GB per pod for percentage calculation
+			ephemeralUsed := float64(100 * 1024 * 1024)              // 100MB used (same as above)
+			ephemeralCapacity := float64(1024 * 1024 * 1024)         // 1GB capacity assumption
+			percentUsed := (ephemeralUsed / ephemeralCapacity) * 100 // Should be ~9.77%
+			podEphemeralPercentSeries.Add(timeseries.NewPointWithEntity(now, percentUsed, podEntity))
 		}
 
 		podIndex++

@@ -1,7 +1,7 @@
 /**
- * Metric Explorer Hook
+ * OpsView Hook
  * 
- * Manages state for the metric explorer including filters, data fetching,
+ * Manages state for the operations view including filters, data fetching,
  * WebSocket connections, and section expansion state.
  */
 
@@ -16,11 +16,13 @@ import {
 	type MetricScope,
 	type Resolution,
 } from "@/lib/metrics-api";
-import type { GridDensity } from "@/components/metric-explorer/filter-bar";
 import type { ChartSeries } from "@/components/metric-explorer/charts";
 
+// Grid density for layout
+export type GridDensity = 'compact' | 'cozy' | 'comfortable';
+
 // Hook state
-export interface MetricExplorerState {
+export interface OpsViewState {
 	// Filter state
 	filters: MetricFilters;
 	density: GridDensity;
@@ -46,7 +48,7 @@ export interface MetricExplorerState {
 }
 
 // Hook actions
-export interface MetricExplorerActions {
+export interface OpsViewActions {
 	// Filter actions
 	updateFilters: (filters: Partial<MetricFilters>) => void;
 	setDensity: (density: GridDensity) => void;
@@ -67,10 +69,23 @@ export interface MetricExplorerActions {
 }
 
 // Combined hook return type
-export interface UseMetricExplorerResult extends MetricExplorerState, MetricExplorerActions { }
+export interface UseOpsViewResult extends OpsViewState, OpsViewActions { }
 
-// Default section IDs
-const DEFAULT_SECTIONS = ['cpu', 'memory', 'network', 'storage', 'cluster-state'];
+// Default section IDs for OpsView - all 12 sections available
+const DEFAULT_OPSVIEW_SECTIONS = [
+	'cluster-overview',
+	'capacity-headroom',
+	'scheduling-pressure',
+	'reliability',
+	'limits-compliance',
+	'noisy-neighbors',
+	'over-limits',
+	'node-health',
+	'pod-lifecycle',
+	'ephemeral-storage',
+	'network-health',
+	'namespace-views'
+];
 
 /**
  * URL state management - simplified
@@ -140,10 +155,10 @@ function formatSeriesName(key: string): string {
 /**
  * Main hook implementation
  */
-export function useMetricExplorer(): UseMetricExplorerResult {
+export function useOpsView(): UseOpsViewResult {
 	const { urlParams } = useURLState();
 
-	// Initialize state from URL params
+	// Initialize state from URL params - default to cluster scope for ops view
 	const [filters, setFilters] = React.useState<MetricFilters>(() => ({
 		scope: (urlParams.get('scope') as MetricScope) || 'cluster',
 		entity: urlParams.get('entity') || undefined,
@@ -164,8 +179,8 @@ export function useMetricExplorer(): UseMetricExplorerResult {
 		summaryAPI: boolean;
 	} | null>(null);
 
-	// UI state
-	const [expandedSections, setExpandedSections] = React.useState<string[]>(['cpu', 'memory']);
+	// UI state - default to cluster overview expanded
+	const [expandedSections, setExpandedSections] = React.useState<string[]>(['cluster-overview']);
 	const [isLoading, setIsLoading] = React.useState(false);
 	const [error, setError] = React.useState<string | undefined>();
 
@@ -175,22 +190,6 @@ export function useMetricExplorer(): UseMetricExplorerResult {
 	// WebSocket state - now handled by LiveSeriesClient
 	const [isConnected, setIsConnected] = React.useState(false);
 	const autoRefreshTimerRef = React.useRef<number | null>(null);
-
-	// Update URL when filters change - disabled to prevent refresh loops
-	React.useEffect(() => {
-		// Temporarily disable URL updates to prevent refresh loops
-		// const params = new URLSearchParams();
-		// 
-		// params.set('scope', filters.scope);
-		// if (filters.entity) params.set('entity', filters.entity);
-		// params.set('timespan', filters.timespan);
-		// params.set('resolution', filters.resolution);
-		// if (filters.topN) params.set('topN', filters.topN.toString());
-		// if (filters.search) params.set('search', filters.search);
-		// params.set('density', density);
-		// 
-		// updateURL(params);
-	}, []); // Empty dependency array to prevent updates
 
 	// Fetch capabilities on mount
 	React.useEffect(() => {
@@ -224,14 +223,14 @@ export function useMetricExplorer(): UseMetricExplorerResult {
 
 		try {
 			const metricsToFetch = getMetricsForScope(filtersToUse.scope) as MetricKey[];
-			console.log('MetricExplorer: Fetching metrics:', metricsToFetch, 'with filters:', filtersToUse);
+			console.log('OpsView: Fetching metrics:', metricsToFetch, 'with filters:', filtersToUse);
 
 			const response = await fetchMetrics(metricsToFetch, filtersToUse);
-			console.log('MetricExplorer: API response:', response);
+			console.log('OpsView: API response:', response);
 
 			// Ensure response has the expected structure
 			const seriesData = response?.series || {};
-			console.log('MetricExplorer: Processing series data:', seriesData);
+			console.log('OpsView: Processing series data:', seriesData);
 
 			setSeriesData(convertToChartSeries(seriesData));
 
@@ -239,8 +238,8 @@ export function useMetricExplorer(): UseMetricExplorerResult {
 				setCapabilities(response.capabilities);
 			}
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch metrics';
-			console.error('MetricExplorer: Fetch error:', err);
+			const errorMessage = err instanceof Error ? err.message : 'Failed to fetch operations data';
+			console.error('OpsView: Fetch error:', err);
 			setError(errorMessage);
 		} finally {
 			setIsLoading(false);
@@ -258,12 +257,6 @@ export function useMetricExplorer(): UseMetricExplorerResult {
 			clearInterval(autoRefreshTimerRef.current);
 			autoRefreshTimerRef.current = null;
 		}
-
-		// Temporarily disable auto-refresh to prevent refresh loops
-		// if (autoRefresh !== 'off') {
-		//   const intervalMs = parseInt(autoRefresh) * 1000;
-		//   autoRefreshTimerRef.current = window.setInterval(fetchData, intervalMs);
-		// }
 
 		return () => {
 			if (autoRefreshTimerRef.current) {
@@ -309,7 +302,6 @@ export function useMetricExplorer(): UseMetricExplorerResult {
 	// Cleanup on unmount - LiveSeriesClient handles its own cleanup
 	React.useEffect(() => {
 		return () => {
-			// disconnect(); // LiveSeriesClient manages its own lifecycle
 			if (autoRefreshTimerRef.current) {
 				clearInterval(autoRefreshTimerRef.current);
 			}
@@ -347,7 +339,7 @@ export function useMetricExplorer(): UseMetricExplorerResult {
 	}, [filters.scope]);
 
 	const expandAllSections = React.useCallback(() => {
-		setExpandedSections(DEFAULT_SECTIONS);
+		setExpandedSections(DEFAULT_OPSVIEW_SECTIONS);
 	}, []);
 
 	const collapseAllSections = React.useCallback(() => {

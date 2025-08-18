@@ -513,3 +513,46 @@ export function getCRDEstablishedBadge(established: number, total: number): Reac
 		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Issues")
 	}
 }
+
+// Node-specific badges for cluster overview
+export function getNodeReadinessBadge(ready: number, total: number): React.ReactNode {
+	if (total === 0) return createBadge("info", <IconServer className="size-3" />, "No Nodes")
+
+	const percentage = (ready / total) * 100
+
+	if (percentage === 100) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "All Ready")
+	} else if (percentage >= 80) {
+		return createBadge("warning", <IconAlertTriangle className="size-3" />, "Some Issues")
+	} else {
+		return createBadge("critical", <IconAlertTriangle className="size-3" />, "Critical")
+	}
+}
+
+// Restart rate badge for pod restarts
+export function getRestartRateBadge(restartsPerHour: number): React.ReactNode {
+	if (restartsPerHour < 1) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Stable")
+	} else if (restartsPerHour < 5) {
+		return createBadge("warning", <IconTrendingUp className="size-3" />, "Some Instability")
+	} else if (restartsPerHour < 20) {
+		return createBadge("critical", <IconAlertTriangle className="size-3" />, "High Restarts")
+	} else {
+		return createBadge("critical", <IconAlertTriangle className="size-3" />, "Very High")
+	}
+}
+
+// Restart count badge for pod restarts (total count in time period)
+export function getRestartCountBadge(restartCount: number): React.ReactNode {
+	if (restartCount === 0) {
+		return createBadge("healthy", <IconCheck className="size-3" />, "Stable")
+	} else if (restartCount < 10) {
+		return createBadge("info", <IconActivity className="size-3" />, "Low Activity")
+	} else if (restartCount < 50) {
+		return createBadge("warning", <IconTrendingUp className="size-3" />, "Moderate")
+	} else if (restartCount < 200) {
+		return createBadge("critical", <IconAlertTriangle className="size-3" />, "High Activity")
+	} else {
+		return createBadge("critical", <IconAlertTriangle className="size-3" />, "Very High")
+	}
+}

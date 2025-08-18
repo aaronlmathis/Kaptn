@@ -5,6 +5,7 @@
     "eslint-plugin-unused-imports": "^4.1.4"
   },
   "dependencies": {
-    "@tabler/icons-react": "^3.34.1"
+    "@tabler/icons-react": "^3.34.1",
+    "ws": "^8.18.3"
   }
 }

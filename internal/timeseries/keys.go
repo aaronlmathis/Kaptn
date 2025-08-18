@@ -9,7 +9,8 @@ const (
 	ClusterCPUCapacityCores = "cluster.cpu.capacity.cores"
 
 	// Cluster memory metrics
-	ClusterMemUsedBytes = "cluster.mem.used.bytes"
+	ClusterMemUsedBytes     = "cluster.mem.used.bytes"
+	ClusterMemCapacityBytes = "cluster.mem.capacity.bytes"
 
 	// Existing cluster network metrics
 	ClusterNetRxBps = "cluster.net.rx.bps"
@@ -25,6 +26,18 @@ const (
 	ClusterMemAllocatableBytes = "cluster.mem.allocatable.bytes"
 	ClusterCPURequestedCores   = "cluster.cpu.requested.cores" // optional
 	ClusterMemRequestedBytes   = "cluster.mem.requested.bytes" // optional
+
+	// New cluster-level aggregated metrics
+	ClusterCPULimitsCores       = "cluster.cpu.limits.cores"
+	ClusterMemLimitsBytes       = "cluster.mem.limits.bytes"
+	ClusterPodsRestartsTotal    = "cluster.pods.restarts.total"
+	ClusterPodsRestartsRate     = "cluster.pods.restarts.rate"
+	ClusterPodsRestarts1h       = "cluster.pods.restarts.1h"
+	ClusterNodesReady           = "cluster.nodes.ready"
+	ClusterNodesNotReady        = "cluster.nodes.notready"
+	ClusterPodsUnschedulable    = "cluster.pods.unschedulable"
+	ClusterFsImageUsedBytes     = "cluster.fs.image.used.bytes"
+	ClusterFsImageCapacityBytes = "cluster.fs.image.capacity.bytes"
 )
 
 // Node-level metric base keys (will be combined with node names)
@@ -42,6 +55,14 @@ const (
 	NodeCapacityMemBase    = "node.capacity.mem.bytes"
 	NodeAllocatableCPUBase = "node.allocatable.cpu.cores"
 	NodeAllocatableMemBase = "node.allocatable.mem.bytes"
+
+	// New node-level metrics
+	NodePodsCountBase           = "node.pods.count"
+	NodeImageFsCapacityBase     = "node.imagefs.capacity.bytes"
+	NodeImageFsUsedPercentBase  = "node.imagefs.used.percent"
+	NodeFsInodesUsedPercentBase = "node.fs.inodes.used.percent"
+	NodeNetRxPpsBase            = "node.net.rx.pps" // packets per second
+	NodeNetTxPpsBase            = "node.net.tx.pps" // packets per second
 )
 
 // Pod-level metric base keys (will be combined with namespace and pod names)
@@ -52,6 +73,27 @@ const (
 	PodNetRxBase         = "pod.net.rx.bps"
 	PodNetTxBase         = "pod.net.tx.bps"
 	PodEphemeralUsedBase = "pod.ephemeral.used.bytes"
+
+	// New pod-level metrics for requests/limits
+	PodCPURequestBase       = "pod.cpu.request.cores"
+	PodCPULimitBase         = "pod.cpu.limit.cores"
+	PodMemRequestBase       = "pod.mem.request.bytes"
+	PodMemLimitBase         = "pod.mem.limit.bytes"
+	PodRestartsTotalBase    = "pod.restarts.total"
+	PodRestartsRateBase     = "pod.restarts.rate"
+	PodEphemeralPercentBase = "pod.ephemeral.used.percent"
+)
+
+// Namespace-level metric base keys (will be combined with namespace names)
+const (
+	NamespaceCPUUsedBase          = "ns.cpu.used.cores"
+	NamespaceCPURequestBase       = "ns.cpu.request.cores"
+	NamespaceCPULimitBase         = "ns.cpu.limit.cores"
+	NamespaceMemUsedBase          = "ns.mem.used.bytes"
+	NamespaceMemRequestBase       = "ns.mem.request.bytes"
+	NamespaceMemLimitBase         = "ns.mem.limit.bytes"
+	NamespacePodsRunningBase      = "ns.pods.running"
+	NamespacePodsRestartsRateBase = "ns.pods.restarts.rate"
 )
 
 // Container-level metric base keys (will be combined with namespace, pod, and container names)
@@ -108,6 +150,11 @@ func GenerateContainerSeriesKey(metricBase, namespace, podName, containerName st
 	return fmt.Sprintf("%s.%s.%s.%s", metricBase, namespace, podName, containerName)
 }
 
+// GenerateNamespaceSeriesKey creates a namespace-specific series key
+func GenerateNamespaceSeriesKey(metricBase, namespace string) string {
+	return fmt.Sprintf("%s.%s", metricBase, namespace)
+}
+
 // ParseNodeSeriesKey extracts node name from a node series key
 func ParseNodeSeriesKey(seriesKey string) (metricBase, nodeName string, ok bool) {
 	// Find the last dot separator
@@ -117,7 +164,7 @@ func ParseNodeSeriesKey(seriesKey string) (metricBase, nodeName string, ok bool)
 			lastDot = i
 			break
 		}
-	lastDot := strings.LastIndex(seriesKey, ".")
+	}
 
 	if lastDot == -1 {
 		return "", "", false
@@ -155,6 +202,7 @@ func AllSeriesKeys() []string {
 		ClusterCPUUsedCores,
 		ClusterCPUCapacityCores,
 		ClusterMemUsedBytes,
+		ClusterMemCapacityBytes,
 		ClusterNetRxBps,
 		ClusterNetTxBps,
 		ClusterNodesCount,
@@ -166,6 +214,17 @@ func AllSeriesKeys() []string {
 		ClusterMemAllocatableBytes,
 		ClusterCPURequestedCores,
 		ClusterMemRequestedBytes,
+		// New cluster metrics
+		ClusterCPULimitsCores,
+		ClusterMemLimitsBytes,
+		ClusterPodsRestartsTotal,
+		ClusterPodsRestartsRate,
+		ClusterPodsRestarts1h,
+		ClusterNodesReady,
+		ClusterNodesNotReady,
+		ClusterPodsUnschedulable,
+		ClusterFsImageUsedBytes,
+		ClusterFsImageCapacityBytes,
 	}
 }
 
@@ -185,6 +244,13 @@ func GetNodeMetricBases() []string {
 		NodeCapacityMemBase,
 		NodeAllocatableCPUBase,
 		NodeAllocatableMemBase,
+		// New node metrics
+		NodePodsCountBase,
+		NodeImageFsCapacityBase,
+		NodeImageFsUsedPercentBase,
+		NodeFsInodesUsedPercentBase,
+		NodeNetRxPpsBase,
+		NodeNetTxPpsBase,
 	}
 }
 
@@ -197,6 +263,14 @@ func GetPodMetricBases() []string {
 		PodNetRxBase,
 		PodNetTxBase,
 		PodEphemeralUsedBase,
+		// New pod metrics
+		PodCPURequestBase,
+		PodCPULimitBase,
+		PodMemRequestBase,
+		PodMemLimitBase,
+		PodRestartsTotalBase,
+		PodRestartsRateBase,
+		PodEphemeralPercentBase,
 	}
 }
 
@@ -207,5 +281,19 @@ func GetContainerMetricBases() []string {
 		ContainerMemWorkingSetBase,
 		ContainerRootFsUsedBase,
 		ContainerLogsUsedBase,
+	}
+}
+
+// GetNamespaceMetricBases returns all namespace-level metric base keys
+func GetNamespaceMetricBases() []string {
+	return []string{
+		NamespaceCPUUsedBase,
+		NamespaceCPURequestBase,
+		NamespaceCPULimitBase,
+		NamespaceMemUsedBase,
+		NamespaceMemRequestBase,
+		NamespaceMemLimitBase,
+		NamespacePodsRunningBase,
+		NamespacePodsRestartsRateBase,
 	}
 }

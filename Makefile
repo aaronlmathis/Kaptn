@@ -19,7 +19,7 @@ all: build ## Build everything
 
 dev: ## Run backend in development mode with hot reload
 	@echo "Starting development server..."
-	@go run -ldflags "$(LDFLAGS)" ./cmd/server --config=config.yaml &
+	@go run -ldflags "$(LDFLAGS)" ./cmd/server --config=config.dev.yaml &
 	@echo "Backend PID: $$!"
 	@echo "Starting frontend development server..."
 	@cd frontend && npm run dev

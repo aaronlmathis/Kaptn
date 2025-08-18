@@ -62,6 +62,7 @@ type Server struct {
 	clientFactory        *client.Factory
 	timeSeriesStore      *timeseries.MemStore
 	timeSeriesAggregator *aggregator.Aggregator
+	timeSeriesWSManager  *TimeSeriesWSManager
 }
 
 // NewServer creates a new API server
@@ -503,7 +504,21 @@ func (s *Server) initTimeSeries() error {
 		}
 	}
 
+	// Apply additional timeseries configuration from YAML
+	if s.config.Timeseries.MaxSeries > 0 {
+		timeseriesConfig.MaxSeries = s.config.Timeseries.MaxSeries
+	}
+	if s.config.Timeseries.MaxPointsPerSeries > 0 {
+		timeseriesConfig.MaxPointsPerSeries = s.config.Timeseries.MaxPointsPerSeries
+	}
+	if s.config.Timeseries.MaxWSClients > 0 {
+		timeseriesConfig.MaxWSClients = s.config.Timeseries.MaxWSClients
+	}
+
 	s.timeSeriesStore = timeseries.NewMemStore(timeseriesConfig)
+
+	// Initialize TimeSeries WebSocket manager
+	s.timeSeriesWSManager = newTimeSeriesWSManager()
 
 	// Create metrics client for aggregator
 	var metricsClient metricsv1beta1typed.MetricsV1beta1Interface
@@ -824,6 +839,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/timeseries/nodes/{nodeName}", s.handleGetNodeTimeSeries)
 			r.Get("/timeseries/pods", s.handleGetPodsTimeSeries)
 			r.Get("/timeseries/pods/{namespace}/{podName}", s.handleGetPodTimeSeries)
+			r.Get("/timeseries/namespaces", s.handleGetNamespacesTimeSeries)
+			r.Get("/timeseries/namespaces/{namespace}", s.handleGetNamespaceTimeSeries)
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)
@@ -931,6 +948,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/stream/logs/{streamId}", s.handleLogsWebSocket)
 
 			// TimeSeries WebSocket endpoints
+			r.Get("/timeseries/live", s.handleTimeSeriesLiveWebSocket)
 			r.Get("/timeseries/cluster/live", s.handleClusterTimeSeriesLiveWebSocket)
 		})
 
