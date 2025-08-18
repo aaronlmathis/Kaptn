@@ -91,29 +91,32 @@ export const UNIT_FORMATTERS = {
   count: formatCount,
 } as const;
 
-// Chart color palettes
+// Chart color palettes - using CSS custom properties
 export const CHART_COLORS = {
   primary: [
-    '#3b82f6', // blue-500
-    '#10b981', // emerald-500
-    '#f59e0b', // amber-500
-    '#ef4444', // red-500
-    '#8b5cf6', // violet-500
-    '#06b6d4', // cyan-500
-    '#84cc16', // lime-500
-    '#f97316', // orange-500
+    'hsl(var(--chart-1))', // Vibrant primary colors from CSS
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))',
+    'hsl(var(--chart-6))',
+    'hsl(var(--chart-7))',
+    'hsl(var(--chart-8))',
+    'hsl(var(--chart-9))',
+    'hsl(var(--chart-10))',
   ],
   semantic: {
-    used: '#3b82f6',      // blue
-    capacity: '#10b981',   // green
-    allocatable: '#06b6d4', // cyan
-    requested: '#f59e0b',  // amber
-    rx: '#8b5cf6',        // violet
-    tx: '#f97316',        // orange
-    running: '#10b981',    // green
-    pending: '#f59e0b',    // amber
-    failed: '#ef4444',     // red
-    succeeded: '#06b6d4',  // cyan
+    used: 'hsl(var(--chart-1))',      // Primary blue
+    capacity: 'hsl(var(--chart-2))',   // Secondary green/cyan  
+    allocatable: 'hsl(var(--chart-3))', // Tertiary color
+    requested: 'hsl(var(--chart-4))',  // Quaternary color
+    limits: 'hsl(var(--chart-5))',     // Quinary color
+    rx: 'hsl(var(--chart-6))',        // Network receive
+    tx: 'hsl(var(--chart-7))',        // Network transmit
+    running: 'hsl(var(--chart-2))',    // Success state
+    pending: 'hsl(var(--chart-4))',    // Warning state
+    failed: 'hsl(var(--chart-5))',     // Error state
+    succeeded: 'hsl(var(--chart-2))',  // Success state
   }
 } as const;
 

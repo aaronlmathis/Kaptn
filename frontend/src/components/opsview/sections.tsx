@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
+import { MetricAreaChart, type ChartSeries } from "@/components/opsview/charts";
+import { formatCores, formatBytesIEC } from "@/lib/metric-utils";
 import {
 	getPodStatusBadge,
 	getPodPhaseBadge,
@@ -51,8 +53,44 @@ interface OpsViewSectionsProps {
 }
 
 /**
- * Individual section components
+ * Section Header Component
  */
+function SectionHeader({
+	icon,
+	title,
+	description,
+	badge,
+}: {
+	icon: React.ReactNode;
+	title: string;
+	description: string;
+	badge?: React.ReactNode;
+}) {
+	return (
+		<div className="flex items-center justify-between w-full min-h-[3.5rem]">
+			<div className="flex items-center gap-4">
+				{icon && (
+					<div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary">
+						{icon}
+					</div>
+				)}
+				<div className="space-y-1">
+					<h3 className="text-lg font-semibold tracking-tight text-foreground">
+						{title}
+					</h3>
+					<p className="text-sm text-muted-foreground leading-relaxed">
+						{description}
+					</p>
+				</div>
+			</div>
+			{badge && (
+				<div className="flex items-center gap-3 ml-4">
+					{badge}
+				</div>
+			)}
+		</div>
+	);
+}
 function ClusterOverview() {
 	// WebSocket subscription for cluster overview metrics
 	const {
@@ -68,6 +106,12 @@ function ClusterOverview() {
 			'cluster.pods.pending',
 			'cluster.pods.restarts.1h',
 			'cluster.pods.failed',
+			'cluster.cpu.used.cores',
+			'cluster.cpu.requested.cores',
+			'cluster.cpu.limits.cores',
+			'cluster.mem.used.bytes',
+			'cluster.mem.requested.bytes',
+			'cluster.mem.limits.bytes'
 		],
 		{
 			res: 'lo',
@@ -76,7 +120,48 @@ function ClusterOverview() {
 		}
 	);
 
-	// Calculate current values from live data (use latest data point)
+	// Prepare chart series data
+	const cpuSeries: ChartSeries[] = [
+		{
+			key: 'cluster.cpu.used.cores',
+			name: 'Used',
+			color: '#3b82f6', // Vibrant blue
+			data: (liveData['cluster.cpu.used.cores'] || []).map(point => [point.t, point.v])
+		},
+		{
+			key: 'cluster.cpu.requested.cores',
+			name: 'Requested',
+			color: '#f59e0b', // Vibrant amber
+			data: (liveData['cluster.cpu.requested.cores'] || []).map(point => [point.t, point.v])
+		},
+		{
+			key: 'cluster.cpu.limits.cores',
+			name: 'Limits',
+			color: '#ef4444', // Vibrant red
+			data: (liveData['cluster.cpu.limits.cores'] || []).map(point => [point.t, point.v])
+		}
+	];
+
+	const memorySeries: ChartSeries[] = [
+		{
+			key: 'cluster.mem.used.bytes',
+			name: 'Used',
+			color: '#06b6d4', // Vibrant cyan
+			data: (liveData['cluster.mem.used.bytes'] || []).map(point => [point.t, point.v])
+		},
+		{
+			key: 'cluster.mem.requested.bytes',
+			name: 'Requested',
+			color: '#8b5cf6', // Vibrant purple
+			data: (liveData['cluster.mem.requested.bytes'] || []).map(point => [point.t, point.v])
+		},
+		{
+			key: 'cluster.mem.limits.bytes',
+			name: 'Limits',
+			color: '#ec4899', // Vibrant pink
+			data: (liveData['cluster.mem.limits.bytes'] || []).map(point => [point.t, point.v])
+		}
+	];	// Calculate current values from live data (use latest data point)
 	const getLatestValue = (key: string): number => {
 		const data = liveData[key];
 		return data && data.length > 0 ? data[data.length - 1].v : 0;
@@ -171,18 +256,34 @@ function ClusterOverview() {
 				/>
 			</div>
 
-			{/* Placeholder for charts and tables */}
-			<Card>
-				<CardHeader>
-					<CardTitle>Resource Usage Trends</CardTitle>
-					<CardDescription>CPU and Memory usage vs requests vs limits</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Charts will be implemented here
-					</div>
-				</CardContent>
-			</Card>
+			{/* Resource Usage Charts */}
+			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+				{/* CPU Usage Chart */}
+				<MetricAreaChart
+					title="CPU Usage vs Requests vs Limits"
+					subtitle="Real-time cluster CPU utilization showing used cores against requested and limit allocations. Helps identify under-provisioning (usage near requests) and throttling risks (usage near limits)."
+					series={cpuSeries}
+					unit="cores"
+					formatter={formatCores}
+					stacked={true}
+					scopeLabel="cluster"
+					timespanLabel="15m"
+					resolutionLabel="hi"
+				/>
+
+				{/* Memory Usage Chart */}
+				<MetricAreaChart
+					title="Memory Usage vs Requests vs Limits"
+					subtitle="Real-time cluster memory utilization showing used memory against requested and limit allocations. Helps identify under-provisioning (usage near requests) and OOM risks (usage near limits)."
+					series={memorySeries}
+					unit="bytes"
+					formatter={formatBytesIEC}
+					stacked={true}
+					scopeLabel="cluster"
+					timespanLabel="15m"
+					resolutionLabel="hi"
+				/>
+			</div>
 		</div>
 	);
 }
@@ -404,161 +505,195 @@ export function OpsViewSections({
 				className="space-y-4"
 			>
 				{/* Cluster Overview - Open by default */}
-				<AccordionItem value="cluster-overview" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<Activity className="h-4 w-4" />
-							<span className="font-semibold">Cluster Overview</span>
-							<Badge variant="secondary" className="ml-2">
-								NOC Screen
-							</Badge>
-						</div>
+				<AccordionItem value="cluster-overview" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/40 cursor-pointer">
+						<SectionHeader
+							icon={<Activity className="h-5 w-5" />}
+							title="Cluster Overview"
+							description="Real-time operational metrics and health indicators"
+							badge={<Badge variant="secondary" className="ml-2">NOC Screen</Badge>}
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<ClusterOverview />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<ClusterOverview />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Capacity vs Usage (Headroom) */}
-				<AccordionItem value="capacity-headroom" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<TrendingUp className="h-4 w-4" />
-							<span className="font-semibold">Capacity vs Usage (Headroom)</span>
-						</div>
+				<AccordionItem value="capacity-headroom" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<TrendingUp className="h-5 w-5" />}
+							title="Capacity vs Usage (Headroom)"
+							description="Forecast saturation and available capacity"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<CapacityHeadroom />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<CapacityHeadroom />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Scheduling & Pressure */}
-				<AccordionItem value="scheduling-pressure" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<Calendar className="h-4 w-4" />
-							<span className="font-semibold">Scheduling & Pressure</span>
-						</div>
+				<AccordionItem value="scheduling-pressure" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<Calendar className="h-5 w-5" />}
+							title="Scheduling & Pressure"
+							description="Pending pods and node pressure analysis"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<SchedulingPressure />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<SchedulingPressure />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Reliability */}
-				<AccordionItem value="reliability" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<Shield className="h-4 w-4" />
-							<span className="font-semibold">Reliability (Restarts, OOM, CrashLoops)</span>
-						</div>
+				<AccordionItem value="reliability" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<Shield className="h-5 w-5" />}
+							title="Reliability (Restarts, OOM, CrashLoops)"
+							description="Find unstable workloads and failure patterns"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<ReliabilityMetrics />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<ReliabilityMetrics />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Limits/Requests Compliance */}
-				<AccordionItem value="limits-compliance" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<AlertTriangle className="h-4 w-4" />
-							<span className="font-semibold">Limits/Requests Compliance</span>
-						</div>
+				<AccordionItem value="limits-compliance" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<AlertTriangle className="h-5 w-5" />}
+							title="Limits/Requests Compliance"
+							description="Enforce good SRE hygiene and resource governance"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<LimitsCompliance />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<LimitsCompliance />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Noisy Neighbor Detector */}
-				<AccordionItem value="noisy-neighbors" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<Users className="h-4 w-4" />
-							<span className="font-semibold">Noisy Neighbor Detector</span>
-						</div>
+				<AccordionItem value="noisy-neighbors" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<Users className="h-5 w-5" />}
+							title="Noisy Neighbor Detector"
+							description="Identify workloads causing resource contention"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<NoisyNeighbors />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<NoisyNeighbors />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Over-Limits / Throttling */}
-				<AccordionItem value="over-limits" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<Zap className="h-4 w-4" />
-							<span className="font-semibold">Over-Limits / Throttling</span>
-						</div>
+				<AccordionItem value="over-limits" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<Zap className="h-5 w-5" />}
+							title="Over-Limits / Throttling"
+							description="Catch sustained CPU throttling and imminent OOM"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<OverLimitsThrottling />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<OverLimitsThrottling />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Node Health & Hotspots */}
-				<AccordionItem value="node-health" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<Server className="h-4 w-4" />
-							<span className="font-semibold">Node Health & Hotspots</span>
-						</div>
+				<AccordionItem value="node-health" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<Server className="h-5 w-5" />}
+							title="Node Health & Hotspots"
+							description="Keep the fleet steady and identify problematic nodes"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<NodeHealth />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<NodeHealth />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Pod Lifecycle & Churn */}
-				<AccordionItem value="pod-lifecycle" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<RotateCcw className="h-4 w-4" />
-							<span className="font-semibold">Pod Lifecycle & Churn</span>
-						</div>
+				<AccordionItem value="pod-lifecycle" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<RotateCcw className="h-5 w-5" />}
+							title="Pod Lifecycle & Churn"
+							description="Reveal instability and costly rescheduling patterns"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<PodLifecycle />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<PodLifecycle />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Ephemeral/Storage */}
-				<AccordionItem value="ephemeral-storage" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<HardDrive className="h-4 w-4" />
-							<span className="font-semibold">Ephemeral/Storage</span>
-						</div>
+				<AccordionItem value="ephemeral-storage" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<HardDrive className="h-5 w-5" />}
+							title="Ephemeral/Storage"
+							description="Prevent node eviction and pull failures"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<EphemeralStorage />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<EphemeralStorage />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Network Health */}
-				<AccordionItem value="network-health" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<Network className="h-4 w-4" />
-							<span className="font-semibold">Network Health</span>
-						</div>
+				<AccordionItem value="network-health" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<Network className="h-5 w-5" />}
+							title="Network Health"
+							description="Spot network extremes and performance regressions"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<NetworkHealth />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<NetworkHealth />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 
 				{/* Namespace / Team Views */}
-				<AccordionItem value="namespace-views" className="border rounded-lg">
-					<AccordionTrigger className="px-4 hover:no-underline">
-						<div className="flex items-center gap-3">
-							<FolderTree className="h-4 w-4" />
-							<span className="font-semibold">Namespace / Team Views</span>
-						</div>
+				<AccordionItem value="namespace-views" className="border border-border/60 rounded-xl bg-card/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+					<AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-muted/30 transition-colors duration-200 data-[state=open]:bg-muted/20 data-[state=open]:border-b data-[state=open]:border-border/40 data-[state=open]:hover:bg-muted/30 cursor-pointer">
+						<SectionHeader
+							icon={<FolderTree className="h-5 w-5" />}
+							title="Namespace / Team Views"
+							description="Multi-tenancy accountability and resource allocation"
+						/>
 					</AccordionTrigger>
-					<AccordionContent className="px-4 pb-4">
-						<NamespaceViews />
+					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
+						<div className="border-t border-border/20 pt-6">
+							<NamespaceViews />
+						</div>
 					</AccordionContent>
 				</AccordionItem>
 			</Accordion>

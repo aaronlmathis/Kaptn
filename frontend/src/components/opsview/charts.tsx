@@ -90,6 +90,84 @@ interface ChartActions {
 }
 
 /**
+ * Custom Chart Tooltip Component
+ * Shows color squares, readable labels, and formatted values
+ */
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    value: number;
+    dataKey: string;
+    color: string;
+    payload: ChartDataPoint;
+  }>;
+  label?: string | number;
+  series: ChartSeries[];
+  formatter?: (value: number) => string;
+  unit?: string;
+}
+
+function CustomChartTooltip({ 
+  active, 
+  payload, 
+  label, 
+  series, 
+  formatter, 
+  unit 
+}: CustomTooltipProps) {
+  if (!active || !payload || !payload.length) {
+    return null;
+  }
+
+  const timestamp = Number(label);
+  const formattedTime = formatTimestamp(timestamp);
+
+  return (
+    <div className="bg-background border border-border rounded-lg shadow-lg p-3 max-w-xs">
+      <div className="text-sm font-medium text-foreground mb-2">
+        {formattedTime}
+      </div>
+      <div className="space-y-1">
+        {payload.map((item, index) => {
+          const seriesInfo = series.find(s => s.key === item.dataKey);
+          const seriesName = seriesInfo?.name || item.dataKey;
+          const color = seriesInfo?.color || item.color;
+          
+          let formattedValue = '';
+          if (formatter) {
+            formattedValue = formatter(item.value);
+          } else if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
+            formattedValue = UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS](item.value);
+          } else {
+            formattedValue = item.value.toString();
+          }
+
+          // Add unit if not already included in formatter
+          if (unit && !formattedValue.includes(unit)) {
+            formattedValue += ` ${unit}`;
+          }
+
+          return (
+            <div key={index} className="flex items-center gap-2 text-sm">
+              <div 
+                className="w-3 h-3 rounded-sm flex-shrink-0" 
+                style={{ backgroundColor: color }}
+              />
+              <span className="text-muted-foreground min-w-0 flex-1">
+                {seriesName}:
+              </span>
+              <span className="font-medium text-foreground">
+                {formattedValue}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Convert series data to chart format
  */
 function prepareChartData(series: ChartSeries[]): ChartDataPoint[] {
@@ -381,10 +459,10 @@ export function MetricAreaChart({
           <ChartTooltip
             cursor={false}
             content={
-              <ChartTooltipContent
-                labelFormatter={(value) => formatTimestamp(Number(value))}
-                formatter={(value) => `${valueFormatter(Number(value))}${unit ? ` ${unit}` : ''}`}
-                indicator="dot"
+              <CustomChartTooltip
+                series={series}
+                formatter={valueFormatter}
+                unit={unit}
               />
             }
           />
