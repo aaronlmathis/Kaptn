@@ -1,0 +1,155 @@
+/**
+ * Global metrics subscription manager
+ * Handles deduplication and efficient subscription management for multiple components
+ */
+
+import * as React from 'react';
+import { useLiveSeries, type UseLiveSeriesResult, type LiveDataPoint } from './useLiveSeries';
+
+// Global subscription state
+interface MetricRequest {
+  componentId: string;
+  metrics: string[];
+  res: 'hi' | 'lo';
+  since: string;
+}
+
+class GlobalMetricsManager {
+  private requests: Map<string, MetricRequest> = new Map();
+  private activeSubscription: string[] = [];
+  private liveSeriesRef: UseLiveSeriesResult | null = null;
+  private subscribers: Set<() => void> = new Set();
+
+  setLiveSeriesRef(ref: UseLiveSeriesResult) {
+    this.liveSeriesRef = ref;
+  }
+
+  addRequest(componentId: string, metrics: string[], res: 'hi' | 'lo' = 'lo', since: string = '30m') {
+    this.requests.set(componentId, { componentId, metrics, res, since });
+    this.updateSubscription();
+  }
+
+  removeRequest(componentId: string) {
+    this.requests.delete(componentId);
+    this.updateSubscription();
+  }
+
+  private updateSubscription() {
+    // Collect all unique metrics across all components
+    const allMetrics = new Set<string>();
+    for (const request of this.requests.values()) {
+      request.metrics.forEach(metric => allMetrics.add(metric));
+    }
+
+    const newSubscription = Array.from(allMetrics);
+    
+    // Only update if changed
+    if (this.hasSubscriptionChanged(newSubscription)) {
+      console.log('🔄 Updating global metrics subscription:', {
+        oldCount: this.activeSubscription.length,
+        newCount: newSubscription.length,
+        added: newSubscription.filter(m => !this.activeSubscription.includes(m)),
+        removed: this.activeSubscription.filter(m => !newSubscription.includes(m))
+      });
+
+      this.activeSubscription = newSubscription;
+      
+      if (this.liveSeriesRef && newSubscription.length > 0) {
+        // Unsubscribe from old
+        this.liveSeriesRef.unsubscribe('global-metrics');
+        
+        // Subscribe to new
+        this.liveSeriesRef.subscribe({
+          groupId: 'global-metrics',
+          series: newSubscription,
+          res: 'lo', // Could be made configurable
+          since: '30m'
+        });
+      }
+    }
+
+    // Notify subscribers
+    this.subscribers.forEach(callback => callback());
+  }
+
+  private hasSubscriptionChanged(newSubscription: string[]): boolean {
+    if (newSubscription.length !== this.activeSubscription.length) return true;
+    return !newSubscription.every(m => this.activeSubscription.includes(m));
+  }
+
+  subscribe(callback: () => void) {
+    this.subscribers.add(callback);
+    return () => this.subscribers.delete(callback);
+  }
+
+  getActiveMetrics(): string[] {
+    return [...this.activeSubscription];
+  }
+}
+
+const globalManager = new GlobalMetricsManager();
+
+/**
+ * Hook for components that need metrics
+ */
+export function useGlobalMetrics(
+  componentId: string,
+  metrics: string[],
+  options: {
+    res?: 'hi' | 'lo';
+    since?: string;
+    enabled?: boolean;
+  } = {}
+) {
+  const { res = 'lo', since = '30m', enabled = true } = options;
+  const liveSeries = useLiveSeries();
+  const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+
+  // Set live series reference for manager
+  React.useEffect(() => {
+    globalManager.setLiveSeriesRef(liveSeries);
+  }, [liveSeries]);
+
+  // Subscribe to manager updates
+  React.useEffect(() => {
+    const unsubscribe = globalManager.subscribe(forceUpdate);
+    return unsubscribe;
+  }, []);
+
+  // Register/unregister component metrics
+  const metricsKey = React.useMemo(() => JSON.stringify(metrics), [metrics]);
+  React.useEffect(() => {
+    if (!enabled || metrics.length === 0) return;
+
+    globalManager.addRequest(componentId, metrics, res, since);
+    
+    return () => {
+      globalManager.removeRequest(componentId);
+    };
+  }, [componentId, metricsKey, res, since, enabled, metrics]);
+
+  // Connect to WebSocket if not connected
+  React.useEffect(() => {
+    if (enabled && !liveSeries.isConnected) {
+      liveSeries.connect();
+    }
+  }, [enabled, liveSeries]);
+
+  // Filter data for this component's metrics
+  const componentData = React.useMemo(() => {
+    const filtered: Record<string, LiveDataPoint[]> = {};
+    for (const metric of metrics) {
+      if (liveSeries.seriesData[metric]) {
+        filtered[metric] = liveSeries.seriesData[metric];
+      }
+    }
+    return filtered;
+  }, [liveSeries.seriesData, metrics]);
+
+  return {
+    seriesData: componentData,
+    connectionState: liveSeries.connectionState,
+    isConnected: liveSeries.isConnected,
+    activeMetrics: globalManager.getActiveMetrics(),
+  };
+}

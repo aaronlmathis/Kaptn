@@ -60,51 +60,38 @@ export function useLiveSeries(): UseLiveSeriesResult {
 	// Event listeners setup
 	React.useEffect(() => {
 		const handleConnect = () => {
-			console.log('🔌 useLiveSeries: Connected');
-			console.log('🔌 useLiveSeries: Connection state:', liveSeriesClient.getConnectionState());
+			// console.log('🔌 useLiveSeries: Connected');
+			// console.log('🔌 useLiveSeries: Connection state:', liveSeriesClient.getConnectionState());
 			setConnectionState(liveSeriesClient.getConnectionState());
 		};
 
 		const handleDisconnect = () => {
-			console.log('🔌 useLiveSeries: Disconnected');
-			console.log('🔌 useLiveSeries: Connection state:', liveSeriesClient.getConnectionState());
+			// console.log('🔌 useLiveSeries: Disconnected');
+			// console.log('🔌 useLiveSeries: Connection state:', liveSeriesClient.getConnectionState());
 			setConnectionState(liveSeriesClient.getConnectionState());
 		};
 
 		const handleInit = (data: unknown) => {
 			const message = data as InitMessage;
-			console.log(`📊 useLiveSeries: INIT MESSAGE RECEIVED for group ${message.groupId}`);
-			console.log('📊 useLiveSeries: Full init message:', JSON.stringify(message, null, 2));
-			console.log(`📊 useLiveSeries: Series count: ${Object.keys(message.data.series).length}`);
-
-			// Log each series
-			Object.entries(message.data.series).forEach(([key, points]) => {
-				console.log(`📊 useLiveSeries: Series ${key}: ${points.length} data points`);
-				if (points.length > 0) {
-					console.log(`📊 useLiveSeries: ${key} latest point:`, points[points.length - 1]);
-					console.log(`📊 useLiveSeries: ${key} first point:`, points[0]);
-				}
-			});
+			console.log(`📊 INIT: Group ${message.groupId} - ${Object.keys(message.data.series).length} series received`);
 
 			// Convert server data format to our format
 			const convertedData: Record<string, LiveDataPoint[]> = {};
 			Object.entries(message.data.series).forEach(([key, points]) => {
 				convertedData[key] = points.map(p => ({ t: p.t, v: p.v }));
-				console.log(`📊 useLiveSeries: Converted ${key}: ${convertedData[key].length} points`);
 			});
 
-			console.log('📊 useLiveSeries: Setting series data:', Object.keys(convertedData));
 			setSeriesData(prev => {
 				const newData = { ...prev, ...convertedData };
-				console.log('📊 useLiveSeries: New total series data keys:', Object.keys(newData));
+				console.log(`📊 INIT: Total series keys after merge: ${Object.keys(newData).length}`);
 				return newData;
 			});
 		};
 
 		const handleAppend = (data: unknown) => {
 			const message = data as AppendMessage;
-			console.log(`📈 useLiveSeries: APPEND MESSAGE for ${message.key}`);
-			console.log('📈 useLiveSeries: Append data:', message);
+			// console.log(`📈 useLiveSeries: APPEND MESSAGE for ${message.key}`);
+			// console.log('📈 useLiveSeries: Append data:', message);
 			const { key, point } = message;
 
 			setSeriesData(prev => {
@@ -114,7 +101,7 @@ export function useLiveSeries(): UseLiveSeriesResult {
 				// Keep only last 1000 points to prevent memory issues
 				const trimmed = updated.slice(-1000);
 
-				console.log(`📈 useLiveSeries: Updated ${key}: ${existing.length} -> ${trimmed.length} points, latest value: ${point.v}`);
+				// console.log(`📈 useLiveSeries: Updated ${key}: ${existing.length} -> ${trimmed.length} points, latest value: ${point.v}`);
 
 				return {
 					...prev,
@@ -235,6 +222,7 @@ export function useLiveSeriesSubscription(
 					await liveSeries.connect();
 				}
 
+				console.log(`🚀 SUBSCRIBING: ${groupId} with ${seriesRef.current.length} series`);
 				liveSeries.subscribe({
 					groupId,
 					series: seriesRef.current,
@@ -244,7 +232,7 @@ export function useLiveSeriesSubscription(
 
 				setIsSubscribed(true);
 			} catch (error) {
-				console.error('❌ useLiveSeriesSubscription: Setup failed', error);
+				console.error(`❌ SUBSCRIPTION FAILED: ${groupId}`, error);
 			}
 		};
 
@@ -266,8 +254,16 @@ export function useLiveSeriesSubscription(
 				filtered[key] = liveSeries.seriesData[key];
 			}
 		}
+		
+		// Only log when there's a mismatch
+		if (Object.keys(filtered).length === 0 && seriesRef.current.length > 0) {
+			console.log(`❌ FILTER MISMATCH: ${groupId} - Requested ${seriesRef.current.length} series, got 0`);
+			console.log(`❌ Available: [${Object.keys(liveSeries.seriesData).slice(0, 5).join(', ')}...]`);
+			console.log(`❌ Requested: [${seriesRef.current.slice(0, 5).join(', ')}...]`);
+		}
+		
 		return filtered;
-	}, [liveSeries.seriesData]); // seriesKey not needed since we use seriesRef.current
+	}, [groupId, liveSeries.seriesData]); // seriesKey not needed since we use seriesRef.current
 
 	return {
 		...liveSeries,

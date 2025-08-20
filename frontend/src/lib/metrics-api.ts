@@ -7,7 +7,6 @@
 
 import {
   fetchClusterSeries,
-  openClusterLiveWS,
   type TimeSeriesKey,
   type TimeSeriesPoint,
   type TimeSeriesResponse,
@@ -141,16 +140,41 @@ export async function fetchMetrics(
  */
 export async function fetchEntities(
   scope: MetricScope,
-  _search?: string
+  search?: string
 ): Promise<{ entities: Array<{ id: string; name: string; labels?: Record<string, string> }> }> {
-  // For cluster scope, no entities
+  // For cluster scope, no entities needed
   if (scope === 'cluster') {
     return { entities: [] };
   }
 
-  // For other scopes, return mock data for now
-  // In the future, this would call the appropriate backend endpoints
-  return { entities: [] };
+  let endpoint = '';
+  switch (scope) {
+    case 'node':
+      endpoint = '/timeseries/entities/nodes';
+      break;
+    case 'namespace':
+      endpoint = '/timeseries/entities/namespaces';
+      break;
+    case 'pod':
+      endpoint = '/timeseries/entities/pods';
+      if (search) {
+        endpoint += `?namespace=${encodeURIComponent(search)}`;
+      }
+      break;
+    default:
+      return { entities: [] };
+  }
+
+  try {
+    const response = await fetch(`/api/v1${endpoint}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${scope} entities: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching ${scope} entities:`, error);
+    return { entities: [] };
+  }
 }
 
 /**
@@ -168,7 +192,8 @@ export async function fetchCapabilities(): Promise<{
     return {
       capabilities: response.capabilities
     };
-  } catch (_error) {
+  } catch (error) {
+    console.warn('Failed to fetch capabilities:', error);
     return {
       capabilities: {
         metricsAPI: false,
@@ -181,7 +206,7 @@ export async function fetchCapabilities(): Promise<{
 /**
  * Get available metric keys for a given scope
  */
-export function getMetricsForScope(scope: MetricScope): MetricKey[] {
+export function getMetricsForScope(scope: MetricScope): string[] {
   switch (scope) {
     case 'cluster':
       // Return cluster-level metrics that are supported by the backend
@@ -193,20 +218,93 @@ export function getMetricsForScope(scope: MetricScope): MetricKey[] {
         'cluster.mem.requested.bytes',
         'cluster.net.rx.bps',
         'cluster.net.tx.bps'
-      ] as MetricKey[];
+      ];
 
     case 'node':
+      // Return node metric base keys - actual keys will be built with entity names
+      return [
+        'node.cpu.usage.cores',
+        'node.mem.usage.bytes',
+        'node.net.rx.bps',
+        'node.net.tx.bps',
+        'node.capacity.cpu.cores',
+        'node.capacity.mem.bytes'
+      ];
+
     case 'namespace':
-    case 'workload':
+      // Return namespace metric base keys
+      return [
+        'ns.cpu.used.cores',
+        'ns.mem.used.bytes',
+        'ns.pods.running',
+        'ns.cpu.request.cores',
+        'ns.mem.request.bytes'
+      ];
+
     case 'pod':
+      // Return pod metric base keys
+      return [
+        'pod.cpu.usage.cores',
+        'pod.mem.usage.bytes',
+        'pod.net.rx.bps',
+        'pod.net.tx.bps',
+        'pod.restarts.total'
+      ];
+
+    case 'workload':
     case 'container':
-      // For other scopes, return empty array for now
-      // These would be implemented when backend support is added
+      // Not yet implemented
       return [];
 
     default:
       return [];
   }
+}
+
+/**
+ * Build metric keys for specific entities
+ */
+export function buildMetricKeys(
+  scope: MetricScope,
+  entities: Array<{ id: string; name: string; namespace?: string }>,
+  metricBases: string[]
+): string[] {
+  if (scope === 'cluster') {
+    // Cluster metrics don't need entity names
+    return metricBases;
+  }
+
+  const keys: string[] = [];
+
+  entities.forEach(entity => {
+    metricBases.forEach(metricBase => {
+      let key: string | undefined;
+
+      switch (scope) {
+        case 'node':
+          key = `${metricBase}.${entity.name}`;
+          break;
+        case 'namespace':
+          key = `${metricBase}.${entity.name}`;
+          break;
+        case 'pod':
+          // Pod keys need namespace.podname format
+          if (entity.namespace) {
+            key = `${metricBase}.${entity.namespace}.${entity.name}`;
+          }
+          break;
+        default:
+          // Skip unknown scopes
+          return;
+      }
+
+      if (key) {
+        keys.push(key);
+      }
+    });
+  });
+
+  return keys;
 }
 
 /**
@@ -217,40 +315,114 @@ export function openMetricsWebSocket(
   filters: MetricFilters,
   handlers: MetricsWSHandlers = {}
 ): WebSocket {
-  // For now, only cluster scope is supported
-  if (filters.scope !== 'cluster') {
-    throw new Error(`WebSocket for scope '${filters.scope}' is not yet supported`);
-  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-  // Convert to existing TimeSeriesKey format
-  const timeSeriesKeys = seriesKeys.filter(key =>
-    ['cluster.cpu.used.cores', 'cluster.cpu.capacity.cores', 'cluster.net.rx.bps', 'cluster.net.tx.bps'].includes(key)
-  ) as TimeSeriesKey[];
+  // Use the unified timeseries WebSocket endpoint that supports all scopes
+  const url = `${protocol}//${window.location.host}/api/v1/timeseries/live`;
 
-  // Use existing WebSocket function with adapter handlers
-  return openClusterLiveWS(timeSeriesKeys, {
-    onConnect: handlers.onConnect,
-    onDisconnect: handlers.onDisconnect,
-    onError: handlers.onError,
-    onInit: (data) => {
-      // Adapt to our extended format
-      const adaptedData: MetricsResponse = {
-        ...data,
-        metadata: {
-          resolution: filters.resolution,
-          timespan: '1h',
-          scope: filters.scope,
-        }
-      };
-      handlers.onInit?.(adaptedData);
-    },
-    onAppend: (key, point) => {
-      // Adapt point format
-      const adaptedPoint: MetricPoint = {
-        ...point,
-        entity: filters.entity,
-      };
-      handlers.onAppend?.(key, adaptedPoint);
-    },
+  console.log('🔌 Opening unified timeseries WebSocket:', {
+    url,
+    seriesKeys,
+    scope: filters.scope
   });
+
+  const ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    console.log('✅ Connected to unified timeseries WebSocket');
+    handlers.onConnect?.();
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data);
+
+      switch (message.type) {
+        case 'hello': {
+          console.log('📋 Received capabilities:', message.capabilities);
+
+          // Subscribe to the requested metrics after hello
+          const subscribeMessage = {
+            type: 'subscribe',
+            groupId: `${filters.scope}-metrics-${Date.now()}`,
+            res: filters.resolution,
+            since: '15m', // Default time window
+            series: seriesKeys
+          };
+
+          console.log('📤 Sending subscription:', subscribeMessage);
+          ws.send(JSON.stringify(subscribeMessage));
+          break;
+        }
+
+        case 'ack': {
+          console.log('✅ Subscription acknowledged:', {
+            accepted: message.accepted,
+            rejected: message.rejected
+          });
+
+          if (message.rejected && message.rejected.length > 0) {
+            console.warn('⚠️ Some metrics were rejected:', message.rejected);
+          }
+          break;
+        }
+
+        case 'init': {
+          console.log('📊 Received initial data for:', Object.keys(message.data.series));
+
+          // Adapt to our extended format
+          const adaptedData: MetricsResponse = {
+            ...message.data,
+            metadata: {
+              resolution: filters.resolution,
+              timespan: '15m',
+              scope: filters.scope,
+              entity: filters.entity,
+            }
+          };
+
+          handlers.onInit?.(adaptedData);
+          break;
+        }
+
+        case 'append': {
+          console.log(`📈 New data point for ${message.key}:`, message.point);
+
+          // Convert to our extended format
+          const point: MetricPoint = {
+            ...message.point,
+            entity: message.point.entity?.node || message.point.entity?.namespace || message.point.entity?.pod
+          };
+
+          handlers.onAppend?.(message.key, point);
+          break;
+        }
+
+        case 'error': {
+          console.error('❌ WebSocket error from server:', message.error);
+          handlers.onError?.(new Error(message.error));
+          break;
+        }
+
+        default: {
+          console.warn('⚠️ Unknown message type:', message.type);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to process WebSocket message:', error);
+      handlers.onError?.(error instanceof Error ? error : new Error('Message processing error'));
+    }
+  };
+
+  ws.onerror = (error) => {
+    console.error('❌ WebSocket connection error:', error);
+    handlers.onError?.(new Error('WebSocket connection error'));
+  };
+
+  ws.onclose = (event) => {
+    console.log(`🔌 WebSocket closed: ${event.code} ${event.reason}`);
+    handlers.onDisconnect?.();
+  };
+
+  return ws;
 }

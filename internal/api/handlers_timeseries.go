@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // TimeSeriesResponse represents the API response for time series data
@@ -374,21 +377,25 @@ func (s *Server) handleTimeSeriesLiveWebSocket(w http.ResponseWriter, r *http.Re
 func (s *Server) sendTimeSeriesHello(client *TimeSeriesWSClient) {
 	capabilities := make(map[string]bool)
 	if s.timeSeriesAggregator != nil {
-		capabilities = s.timeSeriesAggregator.GetCapabilities(context.Background())
+		aggregatorCaps := s.timeSeriesAggregator.GetCapabilities(context.Background())
+		// Only copy the aggregator-specific capabilities (metricsAPI, summaryAPI)
+		for key, value := range aggregatorCaps {
+			capabilities[key] = value
+		}
 	}
 
 	// Set capabilities based on what we support
 	capabilities["cluster"] = true
-	capabilities["namespace"] = true // Namespace metrics are now supported
-	capabilities["node"] = false     // Not supported yet
-	capabilities["pod"] = false      // Not supported yet
+	capabilities["namespace"] = true // Namespace metrics are supported
+	capabilities["node"] = true      // Node metrics are supported
+	capabilities["pod"] = true       // Pod metrics are supported
 
 	hello := TimeSeriesHelloMessage{
 		Type:         "hello",
 		Capabilities: capabilities,
 		Limits: TimeSeriesLimits{
-			MaxClients:         200,
-			MaxSeriesPerClient: 2000,
+			MaxClients:         s.config.Timeseries.MaxWSClients,
+			MaxSeriesPerClient: s.config.Timeseries.MaxSeries,
 			MaxRateHz:          10,
 		},
 	}
@@ -417,7 +424,7 @@ func (s *Server) sendTimeSeriesHello(client *TimeSeriesWSClient) {
 				GroupID: "default-cluster",
 				Res:     "hi",
 				Since:   "15m",
-				Series:  []string{"cluster.cpu.used_cores", "cluster.cpu.capacity_cores", "cluster.memory.used_bytes", "cluster.memory.capacity_bytes"},
+				Series:  []string{"cluster.cpu.used.cores", "cluster.cpu.capacity.cores", "cluster.mem.used.bytes", "cluster.mem.capacity.bytes"},
 			}
 
 			// Convert to bytes and process as if it came from the client
@@ -451,7 +458,7 @@ func (s *Server) timeSeriesWSClientReader(client *TimeSeriesWSClient) {
 		s.logger.Info("TimeSeries WebSocket client disconnected", zap.String("clientId", client.ID))
 	}()
 
-	client.Conn.SetReadLimit(512)
+	client.Conn.SetReadLimit(int64(s.config.Timeseries.WSReadLimit))
 	client.Conn.SetReadDeadline(time.Now().Add(300 * time.Second)) // 5 minutes instead of 60 seconds
 	client.Conn.SetPongHandler(func(string) error {
 		client.Conn.SetReadDeadline(time.Now().Add(300 * time.Second)) // 5 minutes instead of 60 seconds
@@ -548,9 +555,37 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 	}
 
 	// Validate series keys and check limits
+	// Use all keys in the store, not just the predefined cluster keys
+	allAvailableKeys := s.timeSeriesStore.Keys()
 	validKeys := make(map[string]bool)
+	for _, key := range allAvailableKeys {
+		validKeys[key] = true
+	}
+
+	// Also allow cluster-level base keys for static validation
 	for _, key := range timeseries.AllSeriesKeys() {
 		validKeys[key] = true
+	}
+
+	// CRITICAL FIX: Also allow node and pod metric patterns
+	// Node metrics follow pattern: {base}.{nodename}
+	nodeMetricBases := timeseries.GetNodeMetricBases()
+	podMetricBases := timeseries.GetPodMetricBases()
+	
+	isValidNodeOrPodMetric := func(key string) bool {
+		// Check node patterns
+		for _, base := range nodeMetricBases {
+			if strings.HasPrefix(key, base+".") && len(key) > len(base)+1 {
+				return true
+			}
+		}
+		// Check pod patterns  
+		for _, base := range podMetricBases {
+			if strings.HasPrefix(key, base+".") && len(key) > len(base)+1 {
+				return true
+			}
+		}
+		return false
 	}
 
 	var accepted []string
@@ -558,7 +593,9 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 
 	newSeriesCount := 0
 	for _, key := range subscribeMsg.Series {
-		if !validKeys[key] {
+		isValid := validKeys[key] || isValidNodeOrPodMetric(key)
+		
+		if !isValid {
 			rejected = append(rejected, TimeSeriesRejectedKey{
 				Key:    key,
 				Reason: "Unknown series key",
@@ -587,8 +624,8 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 	}
 
 	// Check series limit
-	if client.TotalSeriesCount+newSeriesCount > 2000 {
-		s.sendTimeSeriesError(client, "Series limit exceeded. Maximum 2000 series per client")
+	if client.TotalSeriesCount+newSeriesCount > s.config.Timeseries.MaxSeries {
+		s.sendTimeSeriesError(client, fmt.Sprintf("Series limit exceeded. Maximum %d series per client", s.config.Timeseries.MaxSeries))
 		return
 	}
 
@@ -695,8 +732,17 @@ func (s *Server) sendTimeSeriesInitialData(client *TimeSeriesWSClient, groupID s
 	// Get capabilities
 	capabilities := make(map[string]bool)
 	if s.timeSeriesAggregator != nil {
-		capabilities = s.timeSeriesAggregator.GetCapabilities(context.Background())
+		aggregatorCaps := s.timeSeriesAggregator.GetCapabilities(context.Background())
+		// Only copy the aggregator-specific capabilities (metricsAPI, summaryAPI)
+		for key, value := range aggregatorCaps {
+			capabilities[key] = value
+		}
 	}
+	// Set scope-level capabilities based on what we support
+	capabilities["cluster"] = true
+	capabilities["namespace"] = true
+	capabilities["node"] = true
+	capabilities["pod"] = true
 
 	// Send initial data
 	response := TimeSeriesResponse{
@@ -808,8 +854,9 @@ func (s *Server) startTimeSeriesWebSocketBroadcaster() {
 					health.SetWSClientCount(clientCount)
 				}
 
-				// Check each series for new data
-				for _, key := range timeseries.AllSeriesKeys() {
+				// Check each series for new data - use ALL keys in store, not just cluster keys
+				allKeys := s.timeSeriesStore.Keys() // This gets ALL series keys including nodes, pods, namespaces
+				for _, key := range allKeys {
 					series, exists := s.timeSeriesStore.Get(key)
 					if !exists {
 						continue
@@ -832,8 +879,9 @@ func (s *Server) startTimeSeriesWebSocketBroadcaster() {
 
 					// Convert to API format
 					apiPoint := TimeSeriesPoint{
-						T: latestPoint.T.UnixMilli(),
-						V: latestPoint.V,
+						T:      latestPoint.T.UnixMilli(),
+						V:      latestPoint.V,
+						Entity: latestPoint.Entity, // Include entity metadata for nodes/pods/namespaces
 					}
 
 					// Broadcast to new unified WebSocket clients
@@ -951,6 +999,173 @@ func getTotalPoints(seriesData map[string][]TimeSeriesPoint) int {
 	return total
 }
 
+// Entity discovery endpoints for timeseries
+
+// handleGetTimeSeriesNodes returns available nodes for timeseries subscription
+func (s *Server) handleGetTimeSeriesNodes(w http.ResponseWriter, r *http.Request) {
+	// Check if we have access to Kubernetes client
+	if s.kubeClient == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Kubernetes client not available",
+		})
+		return
+	}
+
+	// Get all nodes
+	nodeList, err := s.kubeClient.CoreV1().Nodes().List(r.Context(), metav1.ListOptions{})
+	if err != nil {
+		s.logger.Error("Failed to list nodes for timeseries entities", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Failed to fetch nodes",
+		})
+		return
+	}
+
+	// Convert to entity format
+	entities := make([]map[string]interface{}, 0, len(nodeList.Items))
+	for _, node := range nodeList.Items {
+		entity := map[string]interface{}{
+			"id":     node.Name,
+			"name":   node.Name,
+			"type":   "node",
+			"labels": node.Labels,
+		}
+
+		// Add some useful metadata
+		if len(node.Status.Addresses) > 0 {
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == "InternalIP" {
+					entity["internalIP"] = addr.Address
+					break
+				}
+			}
+		}
+
+		entities = append(entities, entity)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"entities": entities,
+	})
+}
+
+// handleGetTimeSeriesNamespaces returns available namespaces for timeseries subscription
+func (s *Server) handleGetTimeSeriesNamespaces(w http.ResponseWriter, r *http.Request) {
+	// Check if we have access to Kubernetes client
+	if s.kubeClient == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Kubernetes client not available",
+		})
+		return
+	}
+
+	// Get all namespaces
+	namespaceList, err := s.kubeClient.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
+	if err != nil {
+		s.logger.Error("Failed to list namespaces for timeseries entities", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Failed to fetch namespaces",
+		})
+		return
+	}
+
+	// Convert to entity format
+	entities := make([]map[string]interface{}, 0, len(namespaceList.Items))
+	for _, ns := range namespaceList.Items {
+		entity := map[string]interface{}{
+			"id":     ns.Name,
+			"name":   ns.Name,
+			"type":   "namespace",
+			"labels": ns.Labels,
+			"status": string(ns.Status.Phase),
+		}
+		entities = append(entities, entity)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"entities": entities,
+	})
+}
+
+// handleGetTimeSeriesPods returns available pods for timeseries subscription
+func (s *Server) handleGetTimeSeriesPods(w http.ResponseWriter, r *http.Request) {
+	// Check if we have access to Kubernetes client
+	if s.kubeClient == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Kubernetes client not available",
+		})
+		return
+	}
+
+	// Get query parameters for filtering
+	namespaceFilter := r.URL.Query().Get("namespace")
+	limitStr := r.URL.Query().Get("limit")
+
+	// Parse limit (default to 100 to avoid overwhelming responses)
+	limit := 100
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 && parsedLimit <= 1000 {
+			limit = parsedLimit
+		}
+	}
+
+	// Get pods
+	var podList *corev1.PodList
+	var err error
+
+	if namespaceFilter != "" {
+		podList, err = s.kubeClient.CoreV1().Pods(namespaceFilter).List(r.Context(), metav1.ListOptions{
+			Limit: int64(limit),
+		})
+	} else {
+		podList, err = s.kubeClient.CoreV1().Pods("").List(r.Context(), metav1.ListOptions{
+			Limit: int64(limit),
+		})
+	}
+
+	if err != nil {
+		s.logger.Error("Failed to list pods for timeseries entities", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Failed to fetch pods",
+		})
+		return
+	}
+
+	// Convert to entity format
+	entities := make([]map[string]interface{}, 0, len(podList.Items))
+	for _, pod := range podList.Items {
+		entity := map[string]interface{}{
+			"id":        fmt.Sprintf("%s/%s", pod.Namespace, pod.Name),
+			"name":      pod.Name,
+			"namespace": pod.Namespace,
+			"type":      "pod",
+			"labels":    pod.Labels,
+			"status":    string(pod.Status.Phase),
+			"node":      pod.Spec.NodeName,
+		}
+		entities = append(entities, entity)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"entities": entities,
+	})
+}
+
 // handleGetTimeSeriesHealth handles GET /api/v1/timeseries/health
 func (s *Server) handleGetTimeSeriesHealth(w http.ResponseWriter, r *http.Request) {
 	// Check if timeseries store is available
@@ -1012,7 +1227,19 @@ func (s *Server) handleGetTimeSeriesCapabilities(w http.ResponseWriter, r *http.
 		return
 	}
 
-	capabilities := s.timeSeriesAggregator.GetCapabilities(r.Context())
+	capabilities := make(map[string]bool)
+	if s.timeSeriesAggregator != nil {
+		aggregatorCaps := s.timeSeriesAggregator.GetCapabilities(r.Context())
+		// Copy the aggregator-specific capabilities (metricsAPI, summaryAPI)
+		for key, value := range aggregatorCaps {
+			capabilities[key] = value
+		}
+	}
+	// Add scope-level capabilities based on what we support
+	capabilities["cluster"] = true
+	capabilities["namespace"] = true
+	capabilities["node"] = true
+	capabilities["pod"] = true
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1425,7 +1652,7 @@ func (s *Server) handleGetNamespacesTimeSeries(w http.ResponseWriter, r *http.Re
 		for _, metricBase := range requestedMetricBases {
 			if strings.HasPrefix(seriesKey, metricBase+".") {
 				// Extract namespace name from series key
-				_, namespace, ok := timeseries.ParseNodeSeriesKey(seriesKey) // Reuse parser since namespace format is similar
+				_, namespace, ok := timeseries.ParseNamespaceSeriesKey(seriesKey)
 				if !ok {
 					continue
 				}

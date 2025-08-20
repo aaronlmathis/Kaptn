@@ -834,6 +834,11 @@ func (s *Server) setupRoutes() {
 			r.Get("/timeseries/health", s.handleTimeSeriesHealth)
 			r.Get("/timeseries/capabilities", s.handleGetTimeSeriesCapabilities)
 
+			// Entity discovery endpoints for timeseries
+			r.Get("/timeseries/entities/nodes", s.handleGetTimeSeriesNodes)
+			r.Get("/timeseries/entities/namespaces", s.handleGetTimeSeriesNamespaces)
+			r.Get("/timeseries/entities/pods", s.handleGetTimeSeriesPods)
+
 			// New entity-specific endpoints
 			r.Get("/timeseries/nodes", s.handleGetNodesTimeSeries)
 			r.Get("/timeseries/nodes/{nodeName}", s.handleGetNodeTimeSeries)

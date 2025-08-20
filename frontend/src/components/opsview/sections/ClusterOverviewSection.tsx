@@ -193,7 +193,7 @@ function UnschedulablePodsSection() {
 	const [reasonFilter, setReasonFilter] = React.useState<string>("all")
 
 	const handleViewDetails = React.useCallback((pod: UnschedulablePod) => {
-		console.log('View details for pod:', pod.name);
+		// console.log('View details for pod:', pod.name);
 		// TODO: Implement pod detail view
 	}, []);
 
@@ -383,13 +383,13 @@ export default function ClusterOverviewSection() {
 		return data && data.length > 0 ? data[data.length - 1].v : 0;
 	};
 
-	React.useEffect(() => {
-		console.log('🔍 ClusterOverview: Received live data:', liveData);
-		console.log('🔍 ClusterOverview: Available keys:', Object.keys(liveData));
-		Object.entries(liveData).forEach(([key, data]) => {
-			console.log(`🔍 ${key}:`, data.length, 'points, latest:', data.length > 0 ? data[data.length - 1] : 'no data');
-		});
-	}, [liveData]);
+	// React.useEffect(() => {
+	// 	console.log('🔍 ClusterOverview: Received live data:', liveData);
+	// 	console.log('🔍 ClusterOverview: Available keys:', Object.keys(liveData));
+	// 	Object.entries(liveData).forEach(([key, data]) => {
+	// 		console.log(`🔍 ${key}:`, data.length, 'points, latest:', data.length > 0 ? data[data.length - 1] : 'no data');
+	// 	});
+	// }, [liveData]);
 
 	const nodesReady = Math.round(getLatestValue('cluster.nodes.ready'));
 	const nodesTotal = Math.round(getLatestValue('cluster.nodes.count'));

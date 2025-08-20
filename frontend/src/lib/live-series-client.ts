@@ -193,17 +193,17 @@ export class LiveSeriesClient {
 
 			const url = resolveWsUrl();
 
-			console.log(`🔌 LiveSeriesClient: Attempting connection to ${url}`);
-			console.log(`🔌 WebSocket constructor available:`, typeof WebSocket !== 'undefined');
-			console.log(`🔌 Current location:`, {
-				hostname: window.location.hostname,
-				port: window.location.port,
-				protocol: window.location.protocol
-			});
+			// console.log(`🔌 LiveSeriesClient: Attempting connection to ${url}`);
+			// console.log(`🔌 WebSocket constructor available:`, typeof WebSocket !== 'undefined');
+			// console.log(`🔌 Current location:`, {
+			// 	hostname: window.location.hostname,
+			// 	port: window.location.port,
+			// 	protocol: window.location.protocol
+			// });
 
 			this.ws = new WebSocket(url);
 
-			console.log(`🔌 WebSocket created with readyState:`, this.ws.readyState);
+			// console.log(`🔌 WebSocket created with readyState:`, this.ws.readyState);
 
 			this.ws.onopen = () => {
 				console.log('LiveSeriesClient: Connected');
@@ -229,13 +229,13 @@ export class LiveSeriesClient {
 					timestamp: new Date().toISOString()
 				});
 
-				// Check WebSocket ready states
-				console.error('WebSocket Ready States:', {
-					CONNECTING: WebSocket.CONNECTING, // 0
-					OPEN: WebSocket.OPEN,             // 1
-					CLOSING: WebSocket.CLOSING,       // 2
-					CLOSED: WebSocket.CLOSED          // 3
-				});
+				// // Check WebSocket ready states
+				// console.error('WebSocket Ready States:', {
+				// 	CONNECTING: WebSocket.CONNECTING, // 0
+				// 	OPEN: WebSocket.OPEN,             // 1
+				// 	CLOSING: WebSocket.CLOSING,       // 2
+				// 	CLOSED: WebSocket.CLOSED          // 3
+				// });
 
 				this.connectionState.lastError = `WebSocket connection error (state: ${this.ws?.readyState})`;
 				this.emit('error', error);
@@ -247,12 +247,12 @@ export class LiveSeriesClient {
 					code: event.code,
 					reason: event.reason,
 					wasClean: event.wasClean,
-					url: url
+					url: url,
+					timestamp: new Date().toISOString()
 				});
+				console.error('❌ CONNECTION DROPPED! This might be the cause of missing node metrics');
 				this.connectionState.connected = false;
-				this.stopPingInterval();
-
-				// Don't auto-reconnect if explicitly disconnected
+				this.stopPingInterval();				// Don't auto-reconnect if explicitly disconnected
 				if (!this.shouldAutoReconnect) {
 					this.emit('disconnect', null);
 					return;
@@ -294,12 +294,18 @@ export class LiveSeriesClient {
 	subscribe(config: SubscriptionConfig): void {
 		console.log('LiveSeriesClient: Subscribe called', {
 			groupId: config.groupId,
-			series: config.series,
+			series: config.series.length,
 			res: config.res,
 			since: config.since,
 			connected: this.isConnected(),
 			wsReadyState: this.ws?.readyState
 		});
+
+		if (!this.isConnected()) {
+			console.error('LiveSeriesClient: Cannot subscribe - not connected!');
+			this.connectionState.lastError = 'Not connected when trying to subscribe';
+			return;
+		}
 
 		const existingConfig = this.subscriptions.get(config.groupId);
 
@@ -320,18 +326,14 @@ export class LiveSeriesClient {
 		this.subscriptions.set(config.groupId, config);
 
 		// Send subscribe message if connected
-		if (this.isConnected()) {
-			console.log('📤 LiveSeriesClient: Sending subscribe message for group:', config.groupId);
-			this.sendMessage({
-				type: 'subscribe',
-				groupId: config.groupId,
-				res: config.res,
-				since: config.since,
-				series: config.series,
-			});
-		} else {
-			console.log('LiveSeriesClient: Not connected, subscription stored for later');
-		}
+		console.log('LiveSeriesClient: Sending subscribe message for group:', config.groupId);
+		this.sendMessage({
+			type: 'subscribe',
+			groupId: config.groupId,
+			res: config.res,
+			since: config.since,
+			series: config.series,
+		});
 	}
 
 	/**
@@ -424,12 +426,12 @@ export class LiveSeriesClient {
 	// Private methods
 
 	private handleMessage(data: string): void {
-		console.log('🌐 LiveSeriesClient: RAW WebSocket message received:', data);
+		// console.log('🌐 LiveSeriesClient: RAW WebSocket message received:', data);
 
 		try {
 			const message: WSMessage = JSON.parse(data);
-			console.log('🌐 LiveSeriesClient: PARSED WebSocket message:', message);
-			console.log('🌐 LiveSeriesClient: Message type:', message.type);
+			// console.log('🌐 LiveSeriesClient: PARSED WebSocket message:', message);
+			// console.log('🌐 LiveSeriesClient: Message type:', message.type);
 
 			switch (message.type) {
 				case 'hello':
@@ -486,10 +488,16 @@ export class LiveSeriesClient {
 	}
 
 	private handleAck(message: AckMessage): void {
-		console.log(`LiveSeriesClient: Subscription ack for ${message.groupId}`, message);
+		console.log(`LiveSeriesClient: Subscription ack for ${message.groupId}`, {
+			accepted: message.accepted?.length || 0,
+			rejected: message.rejected?.length || 0
+		});
 
 		if (message.rejected && message.rejected.length > 0) {
-			console.warn('LiveSeriesClient: Some series were rejected', message.rejected);
+			console.warn('❌ REJECTED SERIES:', message.rejected);
+			message.rejected.forEach(r => {
+				console.warn(`  - ${r.key}: ${r.reason}`);
+			});
 		}
 
 		this.emit('ack', message);
@@ -519,7 +527,9 @@ export class LiveSeriesClient {
 		if (!this.isConnected()) {
 			console.warn('LiveSeriesClient: Cannot send message - not connected', {
 				wsReadyState: this.ws?.readyState,
-				connectionState: this.connectionState.connected
+				connectionState: this.connectionState.connected,
+				messageType: message.type,
+				groupId: message.groupId
 			});
 			return;
 		}
@@ -527,11 +537,16 @@ export class LiveSeriesClient {
 		try {
 			if (this.ws) {
 				const messageStr = JSON.stringify(message);
-				console.log('LiveSeriesClient: Sending message:', messageStr);
+				console.log('LiveSeriesClient: Sending message:', {
+					type: message.type,
+					groupId: message.groupId,
+					seriesCount: message.series.length
+				});
 				this.ws.send(messageStr);
 			}
 		} catch (error) {
 			console.error('LiveSeriesClient: Failed to send message', error, message);
+			this.connectionState.lastError = `Failed to send message: ${error}`;
 		}
 	}
 

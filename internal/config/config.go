@@ -165,6 +165,7 @@ type TimeseriesConfig struct {
 	MaxSeries          int `yaml:"max_series"`
 	MaxPointsPerSeries int `yaml:"max_points_per_series"`
 	MaxWSClients       int `yaml:"max_ws_clients"`
+	WSReadLimit        int `yaml:"ws_read_limit"`        // WebSocket read buffer limit in bytes
 
 	// Feature flags
 	DisableNetworkIfUnavailable bool `yaml:"disable_network_if_unavailable"`
@@ -282,6 +283,7 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			MaxSeries:                   getEnvInt("KAD_TIMESERIES_MAX_SERIES", 1000),
 			MaxPointsPerSeries:          getEnvInt("KAD_TIMESERIES_MAX_POINTS_PER_SERIES", 10000),
 			MaxWSClients:                getEnvInt("KAD_TIMESERIES_MAX_WS_CLIENTS", 500),
+			WSReadLimit:                 getEnvInt("KAD_TIMESERIES_WS_READ_LIMIT", 4096),
 			DisableNetworkIfUnavailable: getEnvBool("KAD_TIMESERIES_DISABLE_NETWORK_IF_UNAVAILABLE", true),
 		},
 	}

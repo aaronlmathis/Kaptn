@@ -980,13 +980,13 @@ export function MetricCategoricalBarChart({
           />
 
           {showLegend && (
-            <ChartLegend 
+            <ChartLegend
               content={() => (
                 <div className="flex flex-wrap justify-center gap-4 mt-2">
                   {chartData.map((item, index) => (
                     <div key={item.name} className="flex items-center gap-2">
-                      <div 
-                        className="w-3 h-3 rounded-sm" 
+                      <div
+                        className="w-3 h-3 rounded-sm"
                         style={{ backgroundColor: `hsl(var(--chart-${(index % 5) + 1}))` }}
                       />
                       <span className="text-xs text-muted-foreground">{item.name}</span>
@@ -994,8 +994,8 @@ export function MetricCategoricalBarChart({
                   ))}
                 </div>
               )}
-              verticalAlign="bottom" 
-              height={36} 
+              verticalAlign="bottom"
+              height={36}
             />
           )}
 
@@ -1455,13 +1455,13 @@ export function MetricStackedBarChart({
           />
 
           {showLegend && (
-            <ChartLegend 
+            <ChartLegend
               content={() => (
                 <div className="flex flex-wrap justify-center gap-4 mt-2">
                   {dataKeys.map((key, index) => (
                     <div key={key} className="flex items-center gap-2">
-                      <div 
-                        className="w-3 h-3 rounded-sm" 
+                      <div
+                        className="w-3 h-3 rounded-sm"
                         style={{ backgroundColor: colors?.[index] || `hsl(var(--chart-${(index % 5) + 1}))` }}
                       />
                       <span className="text-xs text-muted-foreground">
@@ -1471,8 +1471,8 @@ export function MetricStackedBarChart({
                   ))}
                 </div>
               )}
-              verticalAlign="bottom" 
-              height={36} 
+              verticalAlign="bottom"
+              height={36}
             />
           )}
 
@@ -1543,7 +1543,7 @@ export function MetricScatterChart({
 }) {
   const chartConfig: ChartConfig = React.useMemo(() => {
     const config: ChartConfig = {};
-    
+
     if (colorKey && colors) {
       Object.entries(colors).forEach(([key, color]) => {
         config[key] = {
@@ -1557,7 +1557,7 @@ export function MetricScatterChart({
         color: 'hsl(var(--chart-1))',
       };
     }
-    
+
     return config;
   }, [xKey, colorKey, colors]);
 

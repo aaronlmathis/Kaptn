@@ -25,11 +25,8 @@ import {
 } from "lucide-react";
 
 // Section Imports
-import ClusterOverviewSection from "./sections/ClusterOverviewSection";
 import CapacityHeadroomSection from "./sections/CapacityHeadroomSection";
-import SchedulingPressureSection from "./sections/SchedulingPressureSection";
-import ReliabilitySection from "./sections/ReliabilitySection";
-import LimitRequestsComplianceSection from "./sections/LimitRequestsComplianceSection";
+import ClusterOverviewSection from "./sections/ClusterOverviewSection";
 
 
 interface OpsViewSectionsProps {
@@ -96,24 +93,6 @@ function LimitsCompliance() {
 				<CardContent>
 					<div className="h-64 flex items-center justify-center text-muted-foreground">
 						Compliance metrics and resource governance tables will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function NoisyNeighbors() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Noisy Neighbor Detector</CardTitle>
-					<CardDescription>Identify workloads causing resource contention</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Noisy neighbor detection and impact analysis will be implemented here
 					</div>
 				</CardContent>
 			</Card>
@@ -261,7 +240,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							{/* ⬇️ replaced inline content with extracted component */}
+
 							<ClusterOverviewSection />
 						</div>
 					</AccordionContent>
@@ -296,7 +275,7 @@ export function OpsViewSections({
 
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<SchedulingPressureSection />
+							{/* <SchedulingPressureSection /> */}
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -312,7 +291,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<ReliabilitySection />
+							{/* <ReliabilitySection /> */}
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -328,7 +307,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<LimitRequestsComplianceSection />
+							{/* <LimitRequestsComplianceSection /> */}
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -344,7 +323,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<NoisyNeighbors />
+
 						</div>
 					</AccordionContent>
 				</AccordionItem>

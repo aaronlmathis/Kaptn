@@ -195,6 +195,26 @@ func ParsePodSeriesKey(seriesKey string) (metricBase, namespace, podName string,
 	return metricBase, namespace, podName, true
 }
 
+// ParseNamespaceSeriesKey extracts namespace name from a namespace series key
+func ParseNamespaceSeriesKey(seriesKey string) (metricBase, namespace string, ok bool) {
+	// Find the last dot separator
+	lastDot := -1
+	for i := len(seriesKey) - 1; i >= 0; i-- {
+		if seriesKey[i] == '.' {
+			lastDot = i
+			break
+		}
+	}
+
+	if lastDot == -1 {
+		return "", "", false
+	}
+
+	metricBase = seriesKey[:lastDot]
+	namespace = seriesKey[lastDot+1:]
+	return metricBase, namespace, true
+}
+
 // AllSeriesKeys returns all available series keys (cluster-level only)
 func AllSeriesKeys() []string {
 	return []string{

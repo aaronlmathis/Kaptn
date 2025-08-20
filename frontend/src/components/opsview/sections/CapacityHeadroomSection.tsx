@@ -9,20 +9,11 @@ import { MetricAreaChart, type ChartSeries } from "@/components/opsview/charts";
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable";
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters";
 import { Checkbox } from "@/components/ui/checkbox";
+import { fetchEntities } from "@/lib/metrics-api";
 import {
-	getCoreRowModel,
-	getFacetedRowModel,
-	getFacetedUniqueValues,
-	getFilteredRowModel,
-	getPaginationRowModel,
-	getSortedRowModel,
-	useReactTable,
 	type ColumnDef,
-	type VisibilityState,
-	type SortingState,
-	type ColumnFiltersState,
 } from "@/lib/table";
-import { AlertTriangle, Eye, Copy, Download, Trash } from "lucide-react";
+import { AlertTriangle, Eye, Copy, Download } from "lucide-react";
 import { IconGripVertical } from "@tabler/icons-react";
 
 /**
@@ -90,7 +81,7 @@ function createColumns(): ColumnDef<NodeHeadroomRow>[] {
 		{
 			id: "drag",
 			header: () => null,
-			cell: ({ row }) => (
+			cell: () => (
 				<Button
 					variant="ghost"
 					size="icon"
@@ -167,41 +158,106 @@ function createColumns(): ColumnDef<NodeHeadroomRow>[] {
  * - Table: Nodes by lowest headroom (sortable)
  */
 export default function CapacityHeadroomSection() {
-	const {
-		seriesData: liveData,
-		connectionState,
-		isConnected,
-	} = useLiveSeriesSubscription(
-		"capacity-headroom",
-		[
-			// Cluster-level
+	// Step 1: Discover available nodes
+	const [nodes, setNodes] = React.useState<Array<{ id: string; name: string }>>([]);
+	const [nodesLoading, setNodesLoading] = React.useState(true);
+	const [nodesError, setNodesError] = React.useState<string | null>(null);
+
+	// Fetch nodes on mount
+	React.useEffect(() => {
+		async function loadNodes() {
+			try {
+				setNodesLoading(true);
+				setNodesError(null);
+				const result = await fetchEntities('node');
+				setNodes(result.entities);
+				console.log('CapacityHeadroom - Discovered nodes:', result.entities);
+			} catch (error) {
+				console.error('Failed to load nodes:', error);
+				setNodesError(error instanceof Error ? error.message : 'Failed to load nodes');
+			} finally {
+				setNodesLoading(false);
+			}
+		}
+		loadNodes();
+	}, []);
+
+	// Step 2: Create a SINGLE subscription for ALL metrics (cluster + nodes)
+	const allMetricSeries = React.useMemo(() => {
+		const series: string[] = [];
+		
+		// Always include cluster-level metrics for charts
+		series.push(
 			"cluster.cpu.used.cores",
 			"cluster.cpu.limits.cores",
 			"cluster.mem.used.bytes",
 			"cluster.mem.limits.bytes",
-			"cluster.imagefs.used.bytes",
-			"cluster.imagefs.capacity.bytes",
+			"cluster.mem.capacity.bytes",
+			"cluster.mem.allocatable.bytes",
+			"cluster.fs.image.used.bytes",
+			"cluster.fs.image.capacity.bytes"
+		);
 
-			// Node-level (assumes backend emits these; table will gracefully handle missing)
-			"node.cpu.used.cores",
-			"node.cpu.limits.cores",
-			"node.mem.used.bytes",
-			"node.mem.limits.bytes",
-			"node.imagefs.used.bytes",
-			"node.imagefs.capacity.bytes",
-			// optional: identifier series for nodes if emitted; otherwise we parse from data keys if available
-		],
+		// Add node-level metrics for each discovered node
+		nodes.forEach(node => {
+			console.log(`🔍 Building node metrics for node: "${node.name}" (id: ${node.id})`);
+			const nodeMetrics = [
+				`node.cpu.usage.cores.${node.name}`,
+				`node.capacity.cpu.cores.${node.name}`,
+				`node.mem.usage.bytes.${node.name}`,
+				`node.capacity.mem.bytes.${node.name}`
+			];
+			console.log(`🔍 Node metrics:`, nodeMetrics);
+			series.push(...nodeMetrics);
+		});
+
+		console.log('CapacityHeadroom - Building metric series for', nodes.length, 'nodes');
+		console.log('CapacityHeadroom - All metric series:', series);
+		console.log('CapacityHeadroom - Cluster metrics:', series.filter(s => s.startsWith('cluster.')));
+		console.log('CapacityHeadroom - Node metrics:', series.filter(s => s.startsWith('node.')));
+		return series;
+	}, [nodes]);
+
+	// Single subscription for everything
+	const {
+		seriesData: allData,
+		connectionState,
+		isConnected,
+	} = useLiveSeriesSubscription(
+		"capacity-headroom-all",
+		allMetricSeries,
 		{
 			res: "lo",
 			since: "30m",
-			autoConnect: true,
+			autoConnect: allMetricSeries.length > 0,
 		}
 	);
 
+	// DEBUG: Check what's actually being passed to the subscription
+	React.useEffect(() => {
+		console.log("🔍 SUBSCRIPTION DEBUG:");
+		console.log("- allMetricSeries.length:", allMetricSeries.length);
+		console.log("- allMetricSeries:", allMetricSeries);
+		console.log("- autoConnect:", allMetricSeries.length > 0);
+	}, [allMetricSeries]);
+
+	// DEBUG: Monitor data flow
+	React.useEffect(() => {
+		const dataKeyCount = Object.keys(allData).length;
+		console.log("=== CAPACITY DEBUG ===");
+		console.log("Series requested:", allMetricSeries.length);
+		console.log("Data received:", dataKeyCount);
+		console.log("Connected:", isConnected);
+		if (dataKeyCount === 0 && allMetricSeries.length > 0) {
+			console.log("❌ NO DATA despite", allMetricSeries.length, "series requested");
+		}
+		console.log("=======================");
+	}, [allMetricSeries.length, allData, isConnected]);
+
 	// --- Cluster headroom % time series
 	const cpuHeadroomSeries: ChartSeries[] = React.useMemo(() => {
-		const used = liveData["cluster.cpu.used.cores"];
-		const lim = liveData["cluster.cpu.limits.cores"];
+		const used = allData["cluster.cpu.used.cores"];
+		const lim = allData["cluster.cpu.limits.cores"];
 		const pct = deriveSeries(used, lim, (u, l) => (l > 0 ? ((l - u) / l) * 100 : 0));
 		return [
 			{
@@ -211,12 +267,43 @@ export default function CapacityHeadroomSection() {
 				data: pct,
 			},
 		];
-	}, [liveData]);
+	}, [allData]);
 
 	const memHeadroomSeries: ChartSeries[] = React.useMemo(() => {
-		const used = liveData["cluster.mem.used.bytes"];
-		const lim = liveData["cluster.mem.limits.bytes"];
-		const pct = deriveSeries(used, lim, (u, l) => (l > 0 ? ((l - u) / l) * 100 : 0));
+		// Use the documented memory metrics for cluster-level headroom
+		const used = allData["cluster.mem.used.bytes"];
+		let capacity = allData["cluster.mem.capacity.bytes"];
+
+		// Try allocatable if capacity isn't available
+		if (!capacity?.length || capacity.every(p => p.v === 0)) {
+			capacity = allData["cluster.mem.allocatable.bytes"];
+		}
+
+		// As a last resort, try limits
+		if (!capacity?.length || capacity.every(p => p.v === 0)) {
+			capacity = allData["cluster.mem.limits.bytes"];
+		}
+
+		// Debug memory data
+		console.log("Memory Headroom Debug:");
+		console.log("- used data points:", used?.length || 0, "latest:", used?.[used.length - 1]);
+		console.log("- capacity data points:", capacity?.length || 0, "latest:", capacity?.[capacity.length - 1]);
+		console.log("- all memory keys:", Object.keys(allData).filter(k => k.includes('mem')));
+
+		const pct = deriveSeries(used, capacity, (u, c) => {
+			if (c <= 0) return 0;
+			const headroom = ((c - u) / c) * 100;
+			console.log(`Memory calc: used=${u}, capacity=${c}, headroom=${headroom}%`);
+			// Check for obviously wrong calculations (negative headroom suggests wrong metrics)
+			if (headroom < 0) {
+				console.warn(`Negative memory headroom detected: used=${u}, capacity=${c}. This suggests a metric mismatch.`);
+				return 0;
+			}
+			return Math.max(0, Math.min(100, headroom)); // Cap at 100%
+		});
+
+		console.log("- calculated headroom series length:", pct.length, "sample:", pct.slice(-3));
+
 		return [
 			{
 				key: "cluster.mem.headroom.pct",
@@ -225,11 +312,11 @@ export default function CapacityHeadroomSection() {
 				data: pct,
 			},
 		];
-	}, [liveData]);
+	}, [allData]);
 
 	const imgfsHeadroomSeries: ChartSeries[] = React.useMemo(() => {
-		const used = liveData["cluster.imagefs.used.bytes"];
-		const cap = liveData["cluster.imagefs.capacity.bytes"];
+		const used = allData["cluster.fs.image.used.bytes"];
+		const cap = allData["cluster.fs.image.capacity.bytes"];
 		const pct = deriveSeries(used, cap, (u, c) => (c > 0 ? ((c - u) / c) * 100 : 0));
 		return [
 			{
@@ -239,66 +326,83 @@ export default function CapacityHeadroomSection() {
 				data: pct,
 			},
 		];
-	}, [liveData]);
+	}, [allData]);
 
 	// --- Node table (latest value per node)
-	// NOTE: If your backend emits per-node series with labels (e.g., key includes node),
-	// adapt this extraction to your actual shape. Here we expect flat series keyed as above
-	// with per-node splits accessible via a map like liveData["node.cpu.used.cores:<nodeName>"].
-	// If you don't have that, this will fall back to an empty table (no crash).
+	// Now we use the discovered nodes and their corresponding metrics
 
 	function latest(points?: Point[]): number | undefined {
 		if (!points?.length) return undefined;
 		return points[points.length - 1]?.v;
 	}
 
-	// Heuristic: find node keys by scanning liveData for prefixes like "node.cpu.used.cores:"
-	const nodeNames: string[] = React.useMemo(() => {
-		const names = new Set<string>();
-		Object.keys(liveData as SeriesMap).forEach((k) => {
-			// Accept keys formatted like "node.cpu.used.cores:<nodeName>"
-			const m = k.match(/^node\.(?:cpu|mem|imagefs)\.[\w.]+:(.+)$/);
-			if (m?.[1]) names.add(m[1]);
-		});
-		return Array.from(names).sort();
-	}, [liveData]);
+	// Debug: Let's see what keys we actually receive from the backend
+	React.useEffect(() => {
+		const allKeys = Object.keys(allData as SeriesMap);
+		console.log("CapacityHeadroom - All received keys:", allKeys);
+		console.log("CapacityHeadroom - Node-like keys:", allKeys.filter(k => k.startsWith('node.')));
+		console.log("CapacityHeadroom - Cluster memory keys:", allKeys.filter(k => k.includes('mem')));
+
+		// Check if we have any node metrics at all
+		const nodeKeys = allKeys.filter(k => k.startsWith('node.'));
+		if (nodeKeys.length === 0 && nodes.length > 0) {
+			console.warn("CapacityHeadroom - No node-level metrics received. Backend may not support node scope yet.");
+		}
+	}, [allData, nodes]);
 
 	const tableRows: NodeHeadroomRow[] = React.useMemo(() => {
 		const rows: NodeHeadroomRow[] = [];
 
-		nodeNames.forEach((node) => {
-			// Pull the latest for each needed metric per node, using the "<metric>:<node>" key shape.
-			const nCpuUsed = latest(liveData[`node.cpu.used.cores:${node}`]);
-			const nCpuLim = latest(liveData[`node.cpu.limits.cores:${node}`]);
-			const nMemUsed = latest(liveData[`node.mem.used.bytes:${node}`]);
-			const nMemLim = latest(liveData[`node.mem.limits.bytes:${node}`]);
-			const nImgUsed = latest(liveData[`node.imagefs.used.bytes:${node}`]);
-			const nImgCap = latest(liveData[`node.imagefs.capacity.bytes:${node}`]);
+		// Use discovered nodes instead of parsing keys heuristically
+		nodes.forEach((node) => {
+			// Pull the latest for each needed metric per node
+			// Only use metrics that actually exist based on test_node_subscription_correct.js
+			const nCpuUsed = latest(allData[`node.cpu.usage.cores.${node.name}`]);
+			const nCpuCap = latest(allData[`node.capacity.cpu.cores.${node.name}`]);
+			const nMemUsed = latest(allData[`node.mem.usage.bytes.${node.name}`]);
+			const nMemCap = latest(allData[`node.capacity.mem.bytes.${node.name}`]);
 
-			const cpuPct = nCpuLim && nCpuLim > 0 ? Math.max(0, ((nCpuLim - (nCpuUsed ?? 0)) / nCpuLim) * 100) : 0;
-			const memPct = nMemLim && nMemLim > 0 ? Math.max(0, ((nMemLim - (nMemUsed ?? 0)) / nMemLim) * 100) : 0;
-			const imgPct = nImgCap && nImgCap > 0 ? Math.max(0, ((nImgCap - (nImgUsed ?? 0)) / nImgCap) * 100) : 0;
+			// DEBUG: Output the raw metric values for this node
+			console.log(`=== NODE ${node.name} DEBUG ===`);
+			console.log(`CPU: used=${nCpuUsed}, cap=${nCpuCap}`);
+			console.log(`MEM: used=${nMemUsed}, cap=${nMemCap}`);
+			console.log(`Keys that exist for this node:`, Object.keys(allData).filter(k => k.includes(node.name)));
+			console.log(`Total allData keys:`, Object.keys(allData).length);
+
+			// Calculate headroom percentages using only available metrics
+			// For CPU and Memory: headroom = (capacity - used) / capacity * 100
+			let cpuPct = 0;
+			let memPct = 0; 
+
+			// CPU headroom calculation
+			if (nCpuCap && nCpuCap > 0 && nCpuUsed !== undefined) {
+				cpuPct = Math.max(0, Math.min(100, ((nCpuCap - nCpuUsed) / nCpuCap) * 100));
+			}
+
+			// Memory headroom calculation  
+			if (nMemCap && nMemCap > 0 && nMemUsed !== undefined) {
+				memPct = Math.max(0, Math.min(100, ((nMemCap - nMemUsed) / nMemCap) * 100));
+			}
+
+			console.log(`CALCULATED: CPU=${cpuPct.toFixed(1)}% | MEM=${memPct.toFixed(1)}%`);
+			console.log(`===========================`);
 
 			rows.push({
-				id: node,
-				node,
+				id: node.id,
+				node: node.name,
 				cpuHeadroomPct: cpuPct,
 				memHeadroomPct: memPct,
-				imgfsHeadroomPct: imgPct,
+				imgfsHeadroomPct: 0, // ImageFS metrics not available, set to 0
 			});
 		});
 
-		// If no node split is available from backend yet, provide a tiny mock so the UI isn't empty.
-		if (rows.length === 0) {
-			return [
-				{ id: "mock-1", node: "node-a", cpuHeadroomPct: 42, memHeadroomPct: 61, imgfsHeadroomPct: 75 },
-				{ id: "mock-2", node: "node-b", cpuHeadroomPct: 18, memHeadroomPct: 12, imgfsHeadroomPct: 33 },
-				{ id: "mock-3", node: "node-c", cpuHeadroomPct: 7, memHeadroomPct: 29, imgfsHeadroomPct: 14 },
-			];
-		}
-
-		return rows;
-	}, [liveData, nodeNames]);
+		// Sort by lowest headroom first (taking the minimum of CPU and Memory only)
+		return rows.sort((a, b) => {
+			const aMin = Math.min(a.cpuHeadroomPct, a.memHeadroomPct);
+			const bMin = Math.min(b.cpuHeadroomPct, b.memHeadroomPct);
+			return aMin - bMin;
+		});
+	}, [allData, nodes]);
 
 	// Table state
 	const [globalFilter, setGlobalFilter] = React.useState("");
@@ -355,6 +459,25 @@ export default function CapacityHeadroomSection() {
 				</Alert>
 			)}
 
+			{/* Node Discovery Error */}
+			{nodesError && (
+				<Alert variant="destructive">
+					<AlertTriangle className="h-4 w-4" />
+					<AlertDescription>
+						Failed to discover nodes: {nodesError}
+					</AlertDescription>
+				</Alert>
+			)}
+
+			{/* Loading State */}
+			{nodesLoading && (
+				<Alert>
+					<AlertDescription>
+						Discovering cluster nodes...
+					</AlertDescription>
+				</Alert>
+			)}
+
 			{/* Charts: CPU + Memory + ImageFS headroom % */}
 			<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 				<MetricAreaChart
@@ -370,7 +493,7 @@ export default function CapacityHeadroomSection() {
 				/>
 				<MetricAreaChart
 					title="Memory Headroom %"
-					subtitle="(limits - used) / limits"
+					subtitle="(capacity - used) / capacity"
 					series={memHeadroomSeries}
 					unit="%"
 					formatter={(v) => formatPercent(v)}
@@ -400,6 +523,7 @@ export default function CapacityHeadroomSection() {
 							<h2 className="text-xl font-semibold">Nodes by Lowest Headroom</h2>
 							<p className="text-sm text-muted-foreground mt-1">
 								Sort by CPU, Memory, or ImageFS headroom to find saturation risks
+								{nodes.length > 0 && ` • ${nodes.length} nodes discovered`}
 							</p>
 						</div>
 						<Badge variant={isConnected ? "default" : "secondary"} className="text-xs">
@@ -415,7 +539,7 @@ export default function CapacityHeadroomSection() {
 						enableReorder={true}
 						enableRowSelection={true}
 						className="px-0 [&_tbody_tr]:bg-background/50"
-						getRowId={(row, index) => row.id}
+						getRowId={(row) => row.id}
 						renderFilters={({ table, selectedCount, totalCount }) => (
 							<div className="p-4 space-y-4">
 								<DataTableFilters

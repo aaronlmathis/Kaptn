@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	metricsv1beta1types "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 
 	kubemetrics "github.com/aaronlmathis/kaptn/internal/kube/metrics"
@@ -1244,19 +1245,26 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 		return
 	}
 
-	// For each pod, store basic metrics with proper entity identification
-	podCount := 0
-	for range podMetricsRaw {
-		// Create a synthetic pod entity for placeholder data
-		podEntity := map[string]string{
-			"namespace": "default",
-			"pod":       fmt.Sprintf("pod-%d", podCount),
+	// For each pod, store metrics with real pod names
+	for _, podMetricInterface := range podMetricsRaw {
+		// Type assert to get real pod metrics data
+		podMetric, ok := podMetricInterface.(metricsv1beta1types.PodMetrics)
+		if !ok {
+			a.logger.Debug("Unable to extract pod metrics object, skipping")
+			continue
 		}
 
-		// Generate unique series keys for each pod
+		// Extract real pod information
+		podEntity := map[string]string{
+			"namespace": podMetric.Namespace,
+			"pod":       podMetric.Name,
+		}
+
+		// Generate series keys with real pod names
 		podSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodCPUUsageBase, podEntity["namespace"], podEntity["pod"])
 		podCPUSeries := a.store.Upsert(podSeriesKey)
 		if podCPUSeries != nil {
+			// TODO: Extract actual CPU usage from podMetric instead of using sample value
 			// Sample: 0.1 cores per pod
 			podCPUSeries.Add(timeseries.NewPointWithEntity(now, 0.1, podEntity))
 		}
@@ -1264,6 +1272,7 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 		podMemSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodMemUsageBase, podEntity["namespace"], podEntity["pod"])
 		podMemSeries := a.store.Upsert(podMemSeriesKey)
 		if podMemSeries != nil {
+			// TODO: Extract actual memory usage from podMetric instead of using sample value
 			// Sample: 128MB per pod
 			podMemSeries.Add(timeseries.NewPointWithEntity(now, 128*1024*1024, podEntity))
 		}
@@ -1271,16 +1280,15 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 		podWorkingSetSeriesKey := timeseries.GeneratePodSeriesKey(timeseries.PodMemWorkingSetBase, podEntity["namespace"], podEntity["pod"])
 		podWorkingSetSeries := a.store.Upsert(podWorkingSetSeriesKey)
 		if podWorkingSetSeries != nil {
+			// TODO: Extract actual working set from podMetric instead of using sample value
 			// Sample: 120MB working set per pod
 			podWorkingSetSeries.Add(timeseries.NewPointWithEntity(now, 120*1024*1024, podEntity))
 		}
-
-		podCount++
 	}
 
 	a.logger.Debug("Collected pod metrics",
 		zap.Int("pod_count", len(podMetricsRaw)),
-		zap.String("note", "using sample values - full metrics parsing needed"),
+		zap.String("note", "using real pod names with sample values - full metrics parsing needed"),
 	)
 }
 

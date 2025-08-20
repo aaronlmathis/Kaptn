@@ -46,7 +46,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 
 	// If auth is disabled (none), always allow access
 	if (authMode === 'none') {
-		console.log('🔓 AuthGuard: Auth mode is none, allowing access')
+		//console.log('🔓 AuthGuard: Auth mode is none, allowing access')
 		return <>{children}</>
 	}
 
@@ -54,9 +54,9 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 	if (typeof window !== 'undefined') {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const session = (window as any).__KAPTN_SESSION__
-		console.log('🔍 AuthGuard: Checking window session:', session)
+		//console.log('🔍 AuthGuard: Checking window session:', session)
 		if (session?.authMode === 'none') {
-			console.log('🔓 AuthGuard: Found auth mode none in window session, allowing access')
+			//console.log('🔓 AuthGuard: Found auth mode none in window session, allowing access')
 			return <>{children}</>
 		}
 	}
@@ -68,7 +68,7 @@ export function AuthGuard({ children, fallback }: AuthGuardProps) {
 	if (!isAuthenticated) {
 		// If we reach here and user is not authenticated, show fallback or redirect
 		// This should rarely happen with proper Astro middleware in place
-		console.warn('AuthGuard: User not authenticated - middleware may not be working correctly')
+		//console.warn('AuthGuard: User not authenticated - middleware may not be working correctly')
 
 		if (typeof window !== 'undefined') {
 			// Client-side redirect as fallback
