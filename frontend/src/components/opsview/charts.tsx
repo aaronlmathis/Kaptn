@@ -1,5 +1,5 @@
 /**
- * Reusable Chart Components for Metric Explorer
+ * Reusable Chart Components for OpsView
  * 
  * Provides different chart types (area, bar, radial, radar) with consistent
  * styling, tooltips, and configuration following ShadCN Charts patterns.
@@ -25,6 +25,7 @@ import {
   Radar,
   PolarAngleAxis,
   PolarRadiusAxis,
+  ResponsiveContainer,
   Cell,
 } from "recharts";
 import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart, Info } from "lucide-react";
@@ -40,6 +41,7 @@ import {
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
+
   type ChartConfig,
 } from "@/components/ui/chart";
 import {
@@ -274,7 +276,7 @@ function ChartCard({
   resolutionLabel?: string;
   actions?: ChartActions;
   className?: string;
-  chartType?: 'area' | 'bar' | 'radial' | 'radar';
+  chartType?: 'area' | 'line' | 'bar' | 'radial' | 'radar';
 }) {
   const { icon: ChartIcon } = getChartTypeInfo(chartType);
 
@@ -787,6 +789,10 @@ export function MetricLineChart({
                 stroke={color}
                 strokeWidth={2}
                 dot={false}
+                connectNulls
+                isAnimationActive={false}
+                strokeLinecap="round"
+                strokeDasharray={/limit/i.test(s.name) || /limit/i.test(s.key) ? "4 4" : undefined}
               />
             );
           })}
@@ -807,7 +813,7 @@ export function MetricLineChart({
       resolutionLabel={resolutionLabel}
       actions={actions}
       className={className}
-      chartType="area"
+      chartType="line"
     >
       {content}
     </ChartCard>
@@ -1205,7 +1211,7 @@ export function MetricRadarChart({
   const content = React.useMemo(() => {
     if (isLoading) {
       return (
-        <div className="flex items-center justify-center h-[250px] w-full">
+        <div className="flex items-center justify-center  w-full">
           <div className="flex items-center space-x-2 text-muted-foreground">
             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             <span>Loading chart data...</span>
@@ -1216,7 +1222,7 @@ export function MetricRadarChart({
 
     if (error) {
       return (
-        <div className="flex items-center justify-center h-[250px] w-full">
+        <div className="flex items-center justify-center h-[300px] w-full">
           <div className="text-center space-y-2">
             <div className="text-destructive text-sm font-medium">Error loading data</div>
             <div className="text-xs text-muted-foreground">{error}</div>
@@ -1227,7 +1233,7 @@ export function MetricRadarChart({
 
     if (chartData.length === 0) {
       return (
-        <div className="flex items-center justify-center h-[250px] w-full">
+        <div className="flex items-center justify-center h-[300px] w-full">
           <div className="text-center space-y-2">
             <div className="text-muted-foreground text-sm">{emptyMessage}</div>
           </div>
@@ -1236,32 +1242,39 @@ export function MetricRadarChart({
     }
 
     return (
-      <ChartContainer config={chartConfig} className="h-[250px] w-full">
-        <RadarChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-          <PolarGrid />
-          <PolarAngleAxis dataKey="axis" />
-          <PolarRadiusAxis
-            angle={30}
-            domain={[0, 100]}
-            tickFormatter={valueFormatter}
-            style={{ fontSize: '10px' }}
-          />
-          <Radar
-            dataKey="value"
-            stroke="hsl(var(--chart-1))"
-            fill="hsl(var(--chart-1))"
-            fillOpacity={0.35}
-            strokeWidth={2}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value) => `${valueFormatter(Number(value))}${unit ? ` ${unit}` : ''}`}
-                labelKey="axis"
-              />
-            }
-          />
-        </RadarChart>
+      <ChartContainer config={chartConfig} className="min-h-[350px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <RadarChart
+            data={chartData}
+            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+          >
+            <PolarGrid />
+            <PolarAngleAxis dataKey="axis" tick={{ fontSize: 12 }} />
+            <PolarRadiusAxis
+              angle={30}
+              domain={[0, 100]}
+              tickFormatter={valueFormatter}
+              tick={{ fontSize: 10 }}
+            />
+            <Radar
+              dataKey="value"
+              stroke="hsl(var(--chart-1))"
+              fill="hsl(var(--chart-1))"
+              fillOpacity={0.35}
+              strokeWidth={2}
+            />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  formatter={(value) =>
+                    `${valueFormatter(Number(value))}${unit ? ` ${unit}` : ""}`
+                  }
+                  labelKey="axis"
+                />
+              }
+            />
+          </RadarChart>
+        </ResponsiveContainer>
       </ChartContainer>
     );
   }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, emptyMessage]);

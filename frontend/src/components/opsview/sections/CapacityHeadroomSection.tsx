@@ -171,9 +171,9 @@ export default function CapacityHeadroomSection() {
 				setNodesError(null);
 				const result = await fetchEntities('node');
 				setNodes(result.entities);
-				console.log('CapacityHeadroom - Discovered nodes:', result.entities);
+				//console.log('CapacityHeadroom - Discovered nodes:', result.entities);
 			} catch (error) {
-				console.error('Failed to load nodes:', error);
+				//console.error('Failed to load nodes:', error);
 				setNodesError(error instanceof Error ? error.message : 'Failed to load nodes');
 			} finally {
 				setNodesLoading(false);
@@ -200,21 +200,21 @@ export default function CapacityHeadroomSection() {
 
 		// Add node-level metrics for each discovered node
 		nodes.forEach(node => {
-			console.log(`🔍 Building node metrics for node: "${node.name}" (id: ${node.id})`);
+			//console.log(`🔍 Building node metrics for node: "${node.name}" (id: ${node.id})`);
 			const nodeMetrics = [
 				`node.cpu.usage.cores.${node.name}`,
 				`node.capacity.cpu.cores.${node.name}`,
 				`node.mem.usage.bytes.${node.name}`,
 				`node.capacity.mem.bytes.${node.name}`
 			];
-			console.log(`🔍 Node metrics:`, nodeMetrics);
+			//console.log(`🔍 Node metrics:`, nodeMetrics);
 			series.push(...nodeMetrics);
 		});
 
-		console.log('CapacityHeadroom - Building metric series for', nodes.length, 'nodes');
-		console.log('CapacityHeadroom - All metric series:', series);
-		console.log('CapacityHeadroom - Cluster metrics:', series.filter(s => s.startsWith('cluster.')));
-		console.log('CapacityHeadroom - Node metrics:', series.filter(s => s.startsWith('node.')));
+		//console.log('CapacityHeadroom - Building metric series for', nodes.length, 'nodes');
+		//console.log('CapacityHeadroom - All metric series:', series);
+		//console.log('CapacityHeadroom - Cluster metrics:', series.filter(s => s.startsWith('cluster.')));
+		//console.log('CapacityHeadroom - Node metrics:', series.filter(s => s.startsWith('node.')));
 		return series;
 	}, [nodes]);
 
@@ -234,25 +234,25 @@ export default function CapacityHeadroomSection() {
 	);
 
 	// DEBUG: Check what's actually being passed to the subscription
-	React.useEffect(() => {
-		console.log("🔍 SUBSCRIPTION DEBUG:");
-		console.log("- allMetricSeries.length:", allMetricSeries.length);
-		console.log("- allMetricSeries:", allMetricSeries);
-		console.log("- autoConnect:", allMetricSeries.length > 0);
-	}, [allMetricSeries]);
+	// React.useEffect(() => {
+	// 	////console.log("🔍 SUBSCRIPTION DEBUG:");
+	// 	////console.log("- allMetricSeries.length:", allMetricSeries.length);
+	// 	////console.log("- allMetricSeries:", allMetricSeries);
+	// 	////console.log("- autoConnect:", allMetricSeries.length > 0);
+	// }, [allMetricSeries]);
 
 	// DEBUG: Monitor data flow
-	React.useEffect(() => {
-		const dataKeyCount = Object.keys(allData).length;
-		console.log("=== CAPACITY DEBUG ===");
-		console.log("Series requested:", allMetricSeries.length);
-		console.log("Data received:", dataKeyCount);
-		console.log("Connected:", isConnected);
-		if (dataKeyCount === 0 && allMetricSeries.length > 0) {
-			console.log("❌ NO DATA despite", allMetricSeries.length, "series requested");
-		}
-		console.log("=======================");
-	}, [allMetricSeries.length, allData, isConnected]);
+	// React.useEffect(() => {
+	// 	const dataKeyCount = Object.keys(allData).length;
+	// 	//////console.log("=== CAPACITY DEBUG ===");
+	// 	//////console.log("Series requested:", allMetricSeries.length);
+	// 	////console.log("Data received:", dataKeyCount);
+	// 	////console.log("Connected:", isConnected);
+	// 	if (dataKeyCount === 0 && allMetricSeries.length > 0) {
+	// 		////console.log("❌ NO DATA despite", allMetricSeries.length, "series requested");
+	// 	}
+	// 	//console.log("=======================");
+	// }, [allMetricSeries.length, allData, isConnected]);
 
 	// --- Cluster headroom % time series
 	const cpuHeadroomSeries: ChartSeries[] = React.useMemo(() => {
@@ -285,24 +285,24 @@ export default function CapacityHeadroomSection() {
 		}
 
 		// Debug memory data
-		console.log("Memory Headroom Debug:");
-		console.log("- used data points:", used?.length || 0, "latest:", used?.[used.length - 1]);
-		console.log("- capacity data points:", capacity?.length || 0, "latest:", capacity?.[capacity.length - 1]);
-		console.log("- all memory keys:", Object.keys(allData).filter(k => k.includes('mem')));
+		//console.log("Memory Headroom Debug:");
+		//console.log("- used data points:", used?.length || 0, "latest:", used?.[used.length - 1]);
+		//console.log("- capacity data points:", capacity?.length || 0, "latest:", capacity?.[capacity.length - 1]);
+		//console.log("- all memory keys:", Object.keys(allData).filter(k => k.includes('mem')));
 
 		const pct = deriveSeries(used, capacity, (u, c) => {
 			if (c <= 0) return 0;
 			const headroom = ((c - u) / c) * 100;
-			console.log(`Memory calc: used=${u}, capacity=${c}, headroom=${headroom}%`);
+			//console.log(`Memory calc: used=${u}, capacity=${c}, headroom=${headroom}%`);
 			// Check for obviously wrong calculations (negative headroom suggests wrong metrics)
 			if (headroom < 0) {
-				console.warn(`Negative memory headroom detected: used=${u}, capacity=${c}. This suggests a metric mismatch.`);
+				//console.warn(`Negative memory headroom detected: used=${u}, capacity=${c}. This suggests a metric mismatch.`);
 				return 0;
 			}
 			return Math.max(0, Math.min(100, headroom)); // Cap at 100%
 		});
 
-		console.log("- calculated headroom series length:", pct.length, "sample:", pct.slice(-3));
+		//console.log("- calculated headroom series length:", pct.length, "sample:", pct.slice(-3));
 
 		return [
 			{
@@ -339,14 +339,14 @@ export default function CapacityHeadroomSection() {
 	// Debug: Let's see what keys we actually receive from the backend
 	React.useEffect(() => {
 		const allKeys = Object.keys(allData as SeriesMap);
-		console.log("CapacityHeadroom - All received keys:", allKeys);
-		console.log("CapacityHeadroom - Node-like keys:", allKeys.filter(k => k.startsWith('node.')));
-		console.log("CapacityHeadroom - Cluster memory keys:", allKeys.filter(k => k.includes('mem')));
+		//console.log("CapacityHeadroom - All received keys:", allKeys);
+		//console.log("CapacityHeadroom - Node-like keys:", allKeys.filter(k => k.startsWith('node.')));
+		//console.log("CapacityHeadroom - Cluster memory keys:", allKeys.filter(k => k.includes('mem')));
 
 		// Check if we have any node metrics at all
 		const nodeKeys = allKeys.filter(k => k.startsWith('node.'));
 		if (nodeKeys.length === 0 && nodes.length > 0) {
-			console.warn("CapacityHeadroom - No node-level metrics received. Backend may not support node scope yet.");
+			//console.warn("CapacityHeadroom - No node-level metrics received. Backend may not support node scope yet.");
 		}
 	}, [allData, nodes]);
 
@@ -363,11 +363,11 @@ export default function CapacityHeadroomSection() {
 			const nMemCap = latest(allData[`node.capacity.mem.bytes.${node.name}`]);
 
 			// DEBUG: Output the raw metric values for this node
-			console.log(`=== NODE ${node.name} DEBUG ===`);
-			console.log(`CPU: used=${nCpuUsed}, cap=${nCpuCap}`);
-			console.log(`MEM: used=${nMemUsed}, cap=${nMemCap}`);
-			console.log(`Keys that exist for this node:`, Object.keys(allData).filter(k => k.includes(node.name)));
-			console.log(`Total allData keys:`, Object.keys(allData).length);
+			//console.log(`=== NODE ${node.name} DEBUG ===`);
+			//console.log(`CPU: used=${nCpuUsed}, cap=${nCpuCap}`);
+			//console.log(`MEM: used=${nMemUsed}, cap=${nMemCap}`);
+			//console.log(`Keys that exist for this node:`, Object.keys(allData).filter(k => k.includes(node.name)));
+			//console.log(`Total allData keys:`, Object.keys(allData).length);
 
 			// Calculate headroom percentages using only available metrics
 			// For CPU and Memory: headroom = (capacity - used) / capacity * 100
@@ -384,8 +384,8 @@ export default function CapacityHeadroomSection() {
 				memPct = Math.max(0, Math.min(100, ((nMemCap - nMemUsed) / nMemCap) * 100));
 			}
 
-			console.log(`CALCULATED: CPU=${cpuPct.toFixed(1)}% | MEM=${memPct.toFixed(1)}%`);
-			console.log(`===========================`);
+			//console.log(`CALCULATED: CPU=${cpuPct.toFixed(1)}% | MEM=${memPct.toFixed(1)}%`);
+			//console.log(`===========================`);
 
 			rows.push({
 				id: node.id,
@@ -423,7 +423,7 @@ export default function CapacityHeadroomSection() {
 			label: "View Node Details",
 			icon: <Eye className="size-4" />,
 			action: () => {
-				console.log('Bulk action triggered - this should be handled by the table');
+				//console.log('Bulk action triggered - this should be handled by the table');
 			},
 			requiresSelection: true,
 		},
@@ -432,7 +432,7 @@ export default function CapacityHeadroomSection() {
 			label: "Copy Node Names",
 			icon: <Copy className="size-4" />,
 			action: () => {
-				console.log('Bulk action triggered - this should be handled by the table');
+				//console.log('Bulk action triggered - this should be handled by the table');
 			},
 			requiresSelection: true,
 		},
@@ -441,7 +441,7 @@ export default function CapacityHeadroomSection() {
 			label: "Export Headroom Report",
 			icon: <Download className="size-4" />,
 			action: () => {
-				console.log('Bulk action triggered - this should be handled by the table');
+				//console.log('Bulk action triggered - this should be handled by the table');
 			},
 			requiresSelection: true,
 		},
@@ -557,7 +557,7 @@ export default function CapacityHeadroomSection() {
 									table={table}
 									showColumnToggle={true}
 									onRefresh={() => {
-										console.log("Refresh node headroom data");
+										//console.log("Refresh node headroom data");
 									}}
 									isRefreshing={false}
 								/>
