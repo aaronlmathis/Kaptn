@@ -27,7 +27,9 @@ import {
 // Section Imports
 import CapacityHeadroomSection from "./sections/CapacityHeadroomSection";
 import ClusterOverviewSection from "./sections/ClusterOverviewSection";
-
+import SchedulingPressureSection from "./sections/SchedulingPressureSection";
+import ReliabilitySection from "./sections/ReliabilitySection";
+import LimitRequestsComplianceSection from "./sections/LimitRequestsComplianceSection";
 
 interface OpsViewSectionsProps {
 	filters: Record<string, unknown>;
@@ -275,7 +277,7 @@ export function OpsViewSections({
 
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							{/* <SchedulingPressureSection /> */}
+							<SchedulingPressureSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -291,7 +293,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							{/* <ReliabilitySection /> */}
+							<ReliabilitySection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -307,7 +309,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							{/* <LimitRequestsComplianceSection /> */}
+							<LimitRequestsComplianceSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>

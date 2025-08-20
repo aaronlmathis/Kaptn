@@ -254,14 +254,14 @@ export function useLiveSeriesSubscription(
 				filtered[key] = liveSeries.seriesData[key];
 			}
 		}
-		
+
 		// Only log when there's a mismatch
 		if (Object.keys(filtered).length === 0 && seriesRef.current.length > 0) {
 			console.log(`❌ FILTER MISMATCH: ${groupId} - Requested ${seriesRef.current.length} series, got 0`);
 			console.log(`❌ Available: [${Object.keys(liveSeries.seriesData).slice(0, 5).join(', ')}...]`);
 			console.log(`❌ Requested: [${seriesRef.current.slice(0, 5).join(', ')}...]`);
 		}
-		
+
 		return filtered;
 	}, [groupId, liveSeries.seriesData]); // seriesKey not needed since we use seriesRef.current
 

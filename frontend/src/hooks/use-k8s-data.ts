@@ -574,13 +574,13 @@ export function useOverview(): UseK8sDataResult<OverviewData> {
 		fetchData();
 
 		// Set up real-time WebSocket updates
-		console.log('Setting up WebSocket connection for overview...');
+		//console.log('Setting up WebSocket connection for overview...');
 		wsService.connect('/stream/overview');
 
 		const handleOverviewUpdate = (message: any) => {
-			console.log('Overview update received:', message);
+			//console.log('Overview update received:', message);
 			if (message.type === 'overviewUpdate') {
-				console.log('Setting new overview data:', message.data);
+				//console.log('Setting new overview data:', message.data);
 				setData(message.data);
 			}
 		};

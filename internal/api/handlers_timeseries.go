@@ -354,7 +354,7 @@ func (s *Server) handleTimeSeriesLiveWebSocket(w http.ResponseWriter, r *http.Re
 	client := &TimeSeriesWSClient{
 		ID:               clientID,
 		Conn:             conn,
-		Send:             make(chan []byte, 256),
+		Send:             make(chan []byte, s.config.Timeseries.WSWriteBufferSize),
 		Subscriptions:    make(map[string]TimeSeriesSubscription),
 		LastActivity:     time.Now(),
 		TotalSeriesCount: 0,
@@ -571,7 +571,7 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 	// Node metrics follow pattern: {base}.{nodename}
 	nodeMetricBases := timeseries.GetNodeMetricBases()
 	podMetricBases := timeseries.GetPodMetricBases()
-	
+
 	isValidNodeOrPodMetric := func(key string) bool {
 		// Check node patterns
 		for _, base := range nodeMetricBases {
@@ -579,7 +579,7 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 				return true
 			}
 		}
-		// Check pod patterns  
+		// Check pod patterns
 		for _, base := range podMetricBases {
 			if strings.HasPrefix(key, base+".") && len(key) > len(base)+1 {
 				return true
@@ -594,7 +594,7 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 	newSeriesCount := 0
 	for _, key := range subscribeMsg.Series {
 		isValid := validKeys[key] || isValidNodeOrPodMetric(key)
-		
+
 		if !isValid {
 			rejected = append(rejected, TimeSeriesRejectedKey{
 				Key:    key,

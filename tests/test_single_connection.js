@@ -34,20 +34,20 @@ ws.on('open', () => {
 
 	// Step 2: Subscribe to node metrics on same connection after cluster ack
 	let clusterAckReceived = false;
-	
+
 	ws.on('message', (data) => {
 		try {
 			const message = JSON.parse(data.toString());
-			
+
 			if (message.type === 'ack' && message.groupId === 'capacity-headroom' && !clusterAckReceived) {
 				clusterAckReceived = true;
 				console.log('📥 Cluster ack received, now sending node subscription...');
-				
+
 				setTimeout(() => {
 					const nodeSubscription = {
 						type: 'subscribe',
 						groupId: 'capacity-headroom-nodes',
-						res: 'lo', 
+						res: 'lo',
 						since: '30m',
 						series: [
 							// All 5 nodes (20 series total)
@@ -55,22 +55,22 @@ ws.on('open', () => {
 							'node.capacity.cpu.cores.master-1',
 							'node.mem.usage.bytes.master-1',
 							'node.capacity.mem.bytes.master-1',
-							
+
 							'node.cpu.usage.cores.worker-1',
 							'node.capacity.cpu.cores.worker-1',
 							'node.mem.usage.bytes.worker-1',
 							'node.capacity.mem.bytes.worker-1',
-							
+
 							'node.cpu.usage.cores.worker-2',
 							'node.capacity.cpu.cores.worker-2',
 							'node.mem.usage.bytes.worker-2',
 							'node.capacity.mem.bytes.worker-2',
-							
+
 							'node.cpu.usage.cores.worker-3',
 							'node.capacity.cpu.cores.worker-3',
 							'node.mem.usage.bytes.worker-3',
 							'node.capacity.mem.bytes.worker-3',
-							
+
 							'node.cpu.usage.cores.worker-4',
 							'node.capacity.cpu.cores.worker-4',
 							'node.mem.usage.bytes.worker-4',

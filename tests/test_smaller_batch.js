@@ -22,12 +22,12 @@ ws.on('open', () => {
 				'node.mem.usage.bytes.master-1',
 				'node.capacity.cpu.cores.master-1',
 				'node.capacity.mem.bytes.master-1',
-				
+
 				'node.cpu.usage.cores.worker-1',
 				'node.mem.usage.bytes.worker-1',
 				'node.capacity.cpu.cores.worker-1',
 				'node.capacity.mem.bytes.worker-1',
-				
+
 				'node.cpu.usage.cores.worker-2',
 				'node.mem.usage.bytes.worker-2',
 				'node.capacity.cpu.cores.worker-2',

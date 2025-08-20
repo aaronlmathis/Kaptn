@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import {
 	Popover,

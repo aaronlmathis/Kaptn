@@ -48,7 +48,7 @@ ws1.on('message', (data) => {
 			if (message.rejected?.length > 0) {
 				console.log('  Cluster rejected keys:', message.rejected.map(r => r.key));
 			}
-			
+
 			// After cluster subscription succeeds, try node subscription
 			setTimeout(() => {
 				console.log('\n📊 Step 2: Subscribing to node metrics...');
@@ -87,22 +87,22 @@ function startNodeSubscription() {
 					'node.capacity.cpu.cores.master-1',
 					'node.mem.usage.bytes.master-1',
 					'node.capacity.mem.bytes.master-1',
-					
+
 					'node.cpu.usage.cores.worker-1',
 					'node.capacity.cpu.cores.worker-1',
 					'node.mem.usage.bytes.worker-1',
 					'node.capacity.mem.bytes.worker-1',
-					
+
 					'node.cpu.usage.cores.worker-2',
 					'node.capacity.cpu.cores.worker-2',
 					'node.mem.usage.bytes.worker-2',
 					'node.capacity.mem.bytes.worker-2',
-					
+
 					'node.cpu.usage.cores.worker-3',
 					'node.capacity.cpu.cores.worker-3',
 					'node.mem.usage.bytes.worker-3',
 					'node.capacity.mem.bytes.worker-3',
-					
+
 					'node.cpu.usage.cores.worker-4',
 					'node.capacity.cpu.cores.worker-4',
 					'node.mem.usage.bytes.worker-4',

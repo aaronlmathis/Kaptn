@@ -222,10 +222,9 @@ data:
         name: "kaptn-user-bindings"
 
     kubernetes:
-      mode: "incluster"
-      kubeconfig_path: ""
+      mode: "incluster"        # Production runs in-cluster
       namespace_default: "default"
-      insecure_tls: true
+      insecure_tls: false      # Secure TLS in production
 
     features:
       enable_apply: true
@@ -234,41 +233,54 @@ data:
       enable_prometheus_analytics: true
 
     rate_limits:
-      apply_per_minute: 10
-      actions_per_minute: 20
+      apply_per_minute: 30     # Higher limits for production
+      actions_per_minute: 60
 
     logging:
-      level: "debug"
+      level: "info"
 
     integrations:
       prometheus:
-        url: "http://monitoring-stack-kube-prometheus-prometheus.monitoring.svc:9090"
-        timeout: "5s"
+        url: "http://prometheus-server.monitoring.svc:80"
+        timeout: "10s"
         enabled: true
 
     caching:
-      overview_ttl: "2s"
-      analytics_ttl: "60s"
+      overview_ttl: "5s"       # Slightly higher for production
+      analytics_ttl: "120s"
+      summary_ttl: "60s"
+      search_cache_ttl: "300s"
+      search_cache_max_size: 100000
 
     jobs:
       persistence_enabled: true
-      store_path: "./data/jobs"
-      cleanup_interval: "1h"
-      max_age: "24h"
+      store_path: "/data/jobs"
+      cleanup_interval: "30m"
+      max_age: "7d"           # Keep jobs longer in production
 
+    # OPTIMIZED FOR OPSVIEW SCALE
     timeseries:
       enabled: true
-      window: "60m"
-      tick_interval: "1s"
-      capacity_refresh_interval: "30s"
-      resource_poll_interval: "15s"
-      summary_poll_interval: "30s"
-      state_reconcile_interval: "60s"
-      prune_interval: "30s"
+      window: "4h"            # Longer window for production charts
+      tick_interval: "500ms"  # Slightly slower tick for efficiency
+      capacity_refresh_interval: "15s"
+      resource_poll_interval: "10s"
+      summary_poll_interval: "15s"
+      state_reconcile_interval: "30s"
+      prune_interval: "60s"
+      disable_network_if_unavailable: true
+      
+      # SCALED FOR 20+ OPSVIEW SECTIONS
+      max_series: 1000000              # 1M series (20 sections × 200 metrics × 50 users × 5x safety)
+      max_points_per_series: 10000000  # 10M points per series (scales with available memory)
+      max_ws_clients: 2000             # Support many concurrent dashboard users
+      ws_read_limit: 131072            # 128KB - handles massive subscription messages
+      ws_write_buffer_size: 8192       # 8K message buffer per client (high-frequency updates)
+      
       hi_res:
-        step: "1s"
+        step: "1s"            # Keep 1s for real-time dashboards
       lo_res:
-        step: "5s"
+        step: "10s"           # Increase to 10s for efficiency over longer windows
 ---
 # 9) DEPLOYMENT (initContainer renders /etc/kaptn/config.yaml from template)
 apiVersion: apps/v1

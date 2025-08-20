@@ -34,20 +34,20 @@ ws.on('open', () => {
 
 	// Step 2: Subscribe to ONLY 3 nodes instead of all 5
 	let clusterAckReceived = false;
-	
+
 	ws.on('message', (data) => {
 		try {
 			const message = JSON.parse(data.toString());
-			
+
 			if (message.type === 'ack' && message.groupId === 'capacity-headroom' && !clusterAckReceived) {
 				clusterAckReceived = true;
 				console.log('📥 Cluster ack received, now sending smaller node subscription...');
-				
+
 				setTimeout(() => {
 					const nodeSubscription = {
 						type: 'subscribe',
 						groupId: 'capacity-headroom-nodes',
-						res: 'lo', 
+						res: 'lo',
 						since: '30m',
 						series: [
 							// Only 3 nodes (12 series total)
@@ -55,12 +55,12 @@ ws.on('open', () => {
 							'node.capacity.cpu.cores.master-1',
 							'node.mem.usage.bytes.master-1',
 							'node.capacity.mem.bytes.master-1',
-							
+
 							'node.cpu.usage.cores.worker-1',
 							'node.capacity.cpu.cores.worker-1',
 							'node.mem.usage.bytes.worker-1',
 							'node.capacity.mem.bytes.worker-1',
-							
+
 							'node.cpu.usage.cores.worker-2',
 							'node.capacity.cpu.cores.worker-2',
 							'node.mem.usage.bytes.worker-2',

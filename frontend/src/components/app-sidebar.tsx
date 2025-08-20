@@ -21,7 +21,7 @@ import { Separator } from "./ui/separator";
 import { AppLogo } from "@/components/AppLogo";
 import { useNavigation } from "@/contexts/navigation-context";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/auth-context";
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { isMenuExpanded } = useNavigation();

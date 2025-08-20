@@ -21,21 +21,21 @@ export class WebSocketService {
 		}
 
 		this.isConnecting = true;
-		console.log(`Attempting to connect to WebSocket: ${endpoint}`);
+		//console.log(`Attempting to connect to WebSocket: ${endpoint}`);
 
 
 		const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 		const url = `${protocol}//${window.location.host}/api/v1${endpoint}`;
 
 
-		console.log(`WebSocket URL: ${url}`);
+		//console.log(`WebSocket URL: ${url}`);
 
 		this.ws = new WebSocket(url);
 
 		this.ws.onopen = () => {
 			this.isConnecting = false;
 			this.reconnectAttempts = 0;
-			console.log(`WebSocket connected to ${endpoint}`);
+			//console.log(`WebSocket connected to ${endpoint}`);
 
 			if (token) {
 				this.ws?.send(JSON.stringify({
@@ -49,7 +49,7 @@ export class WebSocketService {
 			try {
 				// Handle multiple JSON messages separated by newlines
 				const messages = event.data.trim().split('\n').filter((line: string) => line.trim());
-				
+
 				for (const messageStr of messages) {
 					try {
 						const message: WebSocketMessage = JSON.parse(messageStr);
@@ -91,9 +91,9 @@ export class WebSocketService {
 	}
 
 	private handleMessage(message: WebSocketMessage) {
-		console.log('WebSocket message received:', message);
+		//console.log('WebSocket message received:', message);
 		const handlers = this.handlers.get(message.type) || [];
-		console.log(`Found ${handlers.length} handlers for message type: ${message.type}`);
+		//console.log(`Found ${handlers.length} handlers for message type: ${message.type}`);
 		handlers.forEach(handler => handler(message));
 	}
 

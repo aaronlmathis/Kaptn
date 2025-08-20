@@ -115,7 +115,23 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useNamespace() {
 	const context = useContext(NamespaceContext)
+	// During static build, context might be undefined - provide a fallback
 	if (context === undefined) {
+		// Check if we're in a build environment (no window object)
+		if (typeof window === 'undefined') {
+			// Return a safe fallback for build time
+			return {
+				selectedNamespace: 'all',
+				namespaces: [],
+				loading: false,
+				error: null,
+				setSelectedNamespace: () => { },
+				refetchNamespaces: async () => { },
+				isHydrated: false,
+			} as NamespaceContextValue
+		}
+
+		// If we're in the browser and context is undefined, that's a real error
 		throw new Error('useNamespace must be used within a NamespaceProvider')
 	}
 	return context

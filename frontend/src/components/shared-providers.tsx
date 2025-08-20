@@ -2,13 +2,14 @@
 
 import * as React from "react"
 import { ThemeProvider } from "@/components/theme-provider"
+import { AuthProvider } from "@/contexts/auth-context"
 import { NavigationProvider } from "@/contexts/navigation-context"
 import { NamespaceProvider } from "@/contexts/namespace-context"
 import { CapabilitiesProvider } from "@/contexts/capabilities-context"
 import { ShellProvider } from "@/contexts/shell-context"
 import { Toaster } from "@/components/ui/sonner"
 import { PodShellManager } from "@/components/PodShellManager"
-import { AuthGuard } from "@/components/AuthGuard"
+// import { AuthGuard } from "@/components/AuthGuard"
 
 interface SharedProvidersProps {
 	children: React.ReactNode
@@ -26,7 +27,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
 export function SharedProviders({ children }: SharedProvidersProps) {
 	return (
 		<ThemeProvider defaultTheme="system" storageKey="k8s-dashboard-theme">
-			<AuthGuard>
+			<AuthProvider>
 				<CapabilitiesProvider>
 					<NavigationProvider>
 						<NamespaceProvider>
@@ -40,7 +41,7 @@ export function SharedProviders({ children }: SharedProvidersProps) {
 						</NamespaceProvider>
 					</NavigationProvider>
 				</CapabilitiesProvider>
-			</AuthGuard>
+			</AuthProvider>
 		</ThemeProvider>
 	)
 }

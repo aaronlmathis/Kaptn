@@ -79,7 +79,7 @@ function isTokenNearExpiry(claims: AccessTokenClaims): boolean {
 // Attempt server-side refresh
 async function attemptRefresh(request: Request): Promise<{ accessToken: string; refreshToken: string } | null> {
 	try {
-		const refreshResponse = await fetch('http://localhost:8080/api/v1/auth/refresh', {
+		const refreshResponse = await fetch('/api/v1/auth/refresh', {
 			method: 'POST',
 			headers: {
 				'Cookie': request.headers.get('Cookie') || '',

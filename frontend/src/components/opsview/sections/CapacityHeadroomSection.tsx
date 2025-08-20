@@ -185,7 +185,7 @@ export default function CapacityHeadroomSection() {
 	// Step 2: Create a SINGLE subscription for ALL metrics (cluster + nodes)
 	const allMetricSeries = React.useMemo(() => {
 		const series: string[] = [];
-		
+
 		// Always include cluster-level metrics for charts
 		series.push(
 			"cluster.cpu.used.cores",
@@ -372,7 +372,7 @@ export default function CapacityHeadroomSection() {
 			// Calculate headroom percentages using only available metrics
 			// For CPU and Memory: headroom = (capacity - used) / capacity * 100
 			let cpuPct = 0;
-			let memPct = 0; 
+			let memPct = 0;
 
 			// CPU headroom calculation
 			if (nCpuCap && nCpuCap > 0 && nCpuUsed !== undefined) {
