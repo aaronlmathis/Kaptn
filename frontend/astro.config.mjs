@@ -25,11 +25,11 @@ export default defineConfig({
       strictPort: true,
 
       // Allow access via your proxy hostname
-      allowedHosts: ["code.deepthought.sh", "localhost", "127.0.0.1"],
+      allowedHosts: ["dev.deepthought.sh", "localhost", "127.0.0.1"],
 
       // Ensure HMR works through HTTPS reverse proxy (code-server/Caddy/etc.)
       hmr: {
-        host: "code.deepthought.sh",
+        host: "dev.deepthought.sh",
         protocol: "wss",     // use "ws" if your dev URL is plain HTTP
         clientPort: 443      // 443 when accessed via HTTPS reverse proxy
       },

@@ -1112,6 +1112,7 @@ func (s *Server) handleGetTimeSeriesPods(w http.ResponseWriter, r *http.Request)
 	// Get query parameters for filtering
 	namespaceFilter := r.URL.Query().Get("namespace")
 	limitStr := r.URL.Query().Get("limit")
+	unschedulableFilter := r.URL.Query().Get("unschedulable") == "1"
 
 	// Parse limit (default to 100 to avoid overwhelming responses)
 	limit := 100
@@ -1148,15 +1149,142 @@ func (s *Server) handleGetTimeSeriesPods(w http.ResponseWriter, r *http.Request)
 	// Convert to entity format
 	entities := make([]map[string]interface{}, 0, len(podList.Items))
 	for _, pod := range podList.Items {
-		entity := map[string]interface{}{
-			"id":        fmt.Sprintf("%s/%s", pod.Namespace, pod.Name),
-			"name":      pod.Name,
-			"namespace": pod.Namespace,
-			"type":      "pod",
-			"labels":    pod.Labels,
-			"status":    string(pod.Status.Phase),
-			"node":      pod.Spec.NodeName,
+		// --- Unschedulable fields ---
+		unschedulable := false
+		var unschedulableReason, unschedulableMessage string
+		var lastTransitionTime time.Time
+
+		if pod.Status.Phase == corev1.PodPending {
+			for _, condition := range pod.Status.Conditions {
+				// We are looking for the specific condition that indicates a scheduling failure.
+				if condition.Type == corev1.PodScheduled && condition.Status == corev1.ConditionFalse && condition.Reason == corev1.PodReasonUnschedulable {
+					unschedulable = true
+					unschedulableReason = condition.Reason // Default to "Unschedulable"
+					unschedulableMessage = condition.Message
+					if !condition.LastTransitionTime.IsZero() {
+						lastTransitionTime = condition.LastTransitionTime.Time
+					}
+
+					// --- Parse a more specific reason from the message ---
+					// The message format is typically "0/X nodes are available: <reasons>."
+					// We can parse the reasons part for common failure predicates.
+					msgLower := strings.ToLower(condition.Message)
+					if strings.Contains(msgLower, "insufficient memory") {
+						unschedulableReason = "InsufficientMemory"
+					} else if strings.Contains(msgLower, "insufficient cpu") {
+						unschedulableReason = "InsufficientCPU"
+					} else if strings.Contains(msgLower, "node(s) didn't match pod's node affinity/selector") {
+						unschedulableReason = "NodeAffinity"
+					} else if strings.Contains(msgLower, "didn't match pod anti-affinity") {
+						unschedulableReason = "PodAntiAffinity"
+					} else if strings.Contains(msgLower, "had untolerated taint") {
+						unschedulableReason = "Taint"
+					} else if strings.Contains(msgLower, "unbound immediate persistentvolumeclaims") {
+						unschedulableReason = "UnboundPVC"
+					} else if strings.Contains(msgLower, "volume node affinity conflict") {
+						unschedulableReason = "VolumeNodeAffinityConflict"
+					} else if strings.Contains(msgLower, "didn't have free ports") {
+						unschedulableReason = "PortConflict"
+					}
+					// If no specific reason is found, it will default to "Unschedulable" from condition.Reason
+					break
+				}
+			}
 		}
+
+		// --- Server-side filtering ---
+		if unschedulableFilter && !unschedulable {
+			continue
+		}
+
+		// --- Owner fields ---
+		var ownerKind, ownerName string
+		if len(pod.OwnerReferences) > 0 {
+			ownerKind = pod.OwnerReferences[0].Kind
+			ownerName = pod.OwnerReferences[0].Name
+		}
+
+		// --- QoS and Priority fields ---
+		qosClass := string(pod.Status.QOSClass)
+		priorityClass := pod.Spec.PriorityClassName
+		var priority *int32
+		if pod.Spec.Priority != nil {
+			priority = pod.Spec.Priority
+		}
+
+		// --- Requests and Limits ---
+		var cpuRequests, memRequests, cpuLimits, memLimits int64
+		for _, container := range pod.Spec.Containers {
+			if reqCPU, ok := container.Resources.Requests[corev1.ResourceCPU]; ok {
+				cpuRequests += reqCPU.MilliValue()
+			}
+			if reqMem, ok := container.Resources.Requests[corev1.ResourceMemory]; ok {
+				memRequests += reqMem.Value()
+			}
+			if limCPU, ok := container.Resources.Limits[corev1.ResourceCPU]; ok {
+				cpuLimits += limCPU.MilliValue()
+			}
+			if limMem, ok := container.Resources.Limits[corev1.ResourceMemory]; ok {
+				memLimits += limMem.Value()
+			}
+		}
+		requests := map[string]interface{}{
+			"cpu":    float64(cpuRequests) / 1000.0, // to cores
+			"memory": memRequests,                   // in bytes
+		}
+		limits := map[string]interface{}{
+			"cpu":    float64(cpuLimits) / 1000.0,
+			"memory": memLimits,
+		}
+
+		// --- Affinity and Tolerations summary ---
+		var affinitySummaryParts []string
+		if pod.Spec.Affinity != nil {
+			if pod.Spec.Affinity.NodeAffinity != nil {
+				affinitySummaryParts = append(affinitySummaryParts, "NodeAffinity")
+			}
+			if pod.Spec.Affinity.PodAffinity != nil {
+				affinitySummaryParts = append(affinitySummaryParts, "PodAffinity")
+			}
+			if pod.Spec.Affinity.PodAntiAffinity != nil {
+				affinitySummaryParts = append(affinitySummaryParts, "PodAntiAffinity")
+			}
+		}
+		affinitySummary := strings.Join(affinitySummaryParts, ", ")
+
+		var tolerationsSummary string
+		if len(pod.Spec.Tolerations) > 0 {
+			tolerationsSummary = fmt.Sprintf("%d tolerations", len(pod.Spec.Tolerations))
+		}
+
+		entity := map[string]interface{}{
+			"id":                   fmt.Sprintf("%s/%s", pod.Namespace, pod.Name),
+			"name":                 pod.Name,
+			"namespace":            pod.Namespace,
+			"type":                 "pod",
+			"status":               string(pod.Status.Phase),
+			"node":                 pod.Spec.NodeName,
+			"creationTimestamp":    pod.CreationTimestamp.Time,
+			"age":                  calculateAge(pod.CreationTimestamp.Time),
+			"unschedulable":        unschedulable,
+			"unschedulableReason":  unschedulableReason,
+			"unschedulableMessage": unschedulableMessage,
+			"ownerKind":            ownerKind,
+			"ownerName":            ownerName,
+			"qosClass":             qosClass,
+			"priorityClass":        priorityClass,
+			"priority":             priority,
+			"requests":             requests,
+			"limits":               limits,
+			"nodeSelector":         pod.Spec.NodeSelector,
+			"affinitySummary":      affinitySummary,
+			"tolerationsSummary":   tolerationsSummary,
+		}
+
+		if !lastTransitionTime.IsZero() {
+			entity["lastTransitionTime"] = lastTransitionTime
+		}
+
 		entities = append(entities, entity)
 	}
 

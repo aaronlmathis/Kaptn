@@ -121,33 +121,34 @@ async function attemptRefresh(request: Request): Promise<{ accessToken: string; 
 // Check auth mode from backend config
 async function getAuthMode(request: Request): Promise<string> {
 	try {
-		console.log('getAuthMode called, request.url:', request.url);
-		const url = new URL(request.url);
-
-		// During build time, Astro uses localhost:4321 which won't have our backend
-		// In this case, we should assume no auth for static generation to avoid redirects
-		if (url.port === '4321') {
-			console.log('Build-time detected (port 4321), defaulting to none auth mode for static generation');
-			return 'none'; // Default to none for static build to avoid redirects
+		// During build, there's no running backend. Default to 'none' to allow static generation.
+		if (import.meta.env.MODE === 'build') {
+			console.log('Build mode detected, defaulting to "none" auth mode for static generation.');
+			return 'none';
 		}
 
-		const configUrl = `${url.protocol}//${url.host}/api/v1/config`;
-		console.log('Fetching config from:', configUrl);
+		// In SSR (dev or prod), we must fetch from the backend API directly.
+		// The Vite proxy in astro.config.mjs is for client-side requests from the browser.
+		// Server-side fetch needs the full internal URL of the backend.
+		const backendUrl = import.meta.env.INTERNAL_API_URL || 'http://localhost:9999';
+		const configUrl = `${backendUrl}/api/v1/config`;
+
+		console.log(`Fetching config from internal URL: ${configUrl}`);
 
 		const response = await fetch(configUrl);
-		console.log('Config response status:', response.status);
 
 		if (!response.ok) {
-			console.log('Config fetch failed, status:', response.status);
+			console.error(`Config fetch failed with status: ${response.status}`);
 			return 'oidc'; // Default to oidc if we can't fetch config
 		}
 
 		const config = await response.json();
-		console.log('Config response:', config);
 		return config.auth?.mode || 'oidc';
 	} catch (error) {
 		console.error('Error fetching auth config:', error);
-		return 'oidc'; // Default to oidc on error
+		// If fetch fails (e.g., backend not running during dev), default to 'oidc' to avoid security bypass.
+		// The 'build' case is handled above.
+		return 'oidc';
 	}
 }
 

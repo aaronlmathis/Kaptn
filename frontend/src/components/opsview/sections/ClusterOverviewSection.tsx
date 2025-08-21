@@ -22,13 +22,19 @@ import {
 	getNodeReadinessBadge,
 } from "@/lib/summary-card-utils";
 import {
-	AlertTriangle,
 	Eye,
 	Copy,
 	Download,
 	Trash,
 } from "lucide-react";
-import { IconGripVertical } from "@tabler/icons-react";
+import {
+	IconGripVertical,
+	IconCpu,
+	IconDatabase,
+	IconNetwork,
+	IconTopologyStar3,
+	IconAlertTriangle,
+} from "@tabler/icons-react";
 
 /* ---------- Types & helpers for Unschedulable Pods ---------- */
 
@@ -45,20 +51,52 @@ interface UnschedulablePod {
 }
 
 function getReasonBadge(reason: string) {
-	switch (reason.toLowerCase()) {
-		case "insufficient cpu":
-		case "insufficient memory":
-			return <Badge variant="destructive" className="text-xs">{reason}</Badge>;
-		case "nodeaffinity":
-		case "node affinity":
-			return <Badge variant="outline" className="text-orange-600 text-xs">{reason}</Badge>;
-		case "no nodes available":
-			return <Badge variant="destructive" className="text-xs">{reason}</Badge>;
-		case "taints":
-		case "taint":
-			return <Badge variant="secondary" className="text-xs">{reason}</Badge>;
+	switch (reason) {
+		case "InsufficientMemory":
+		case "InsufficientCPU":
+			return (
+				<Badge variant="destructive" className="text-xs">
+					<IconCpu className="size-3 mr-1" />
+					{reason}
+				</Badge>
+			);
+		case "NodeAffinity":
+		case "PodAntiAffinity":
+			return (
+				<Badge variant="outline" className="text-purple-600 border-purple-600/50 text-xs">
+					<IconTopologyStar3 className="size-3 mr-1" />
+					{reason}
+				</Badge>
+			);
+		case "Taint":
+			return (
+				<Badge variant="outline" className="text-blue-600 border-blue-600/50 text-xs">
+					<IconAlertTriangle className="size-3 mr-1" />
+					{reason}
+				</Badge>
+			);
+		case "UnboundPVC":
+		case "VolumeNodeAffinityConflict":
+			return (
+				<Badge variant="outline" className="text-yellow-600 border-yellow-600/50 text-xs">
+					<IconDatabase className="size-3 mr-1" />
+					{reason}
+				</Badge>
+			);
+		case "PortConflict":
+			return (
+				<Badge variant="outline" className="text-indigo-600 border-indigo-600/50 text-xs">
+					<IconNetwork className="size-3 mr-1" />
+					{reason}
+				</Badge>
+			);
 		default:
-			return <Badge variant="outline" className="text-xs">{reason}</Badge>;
+			return (
+				<Badge variant="secondary" className="text-xs">
+					<IconAlertTriangle className="size-3 mr-1" />
+					{reason || "Unschedulable"}
+				</Badge>
+			);
 	}
 }
 
@@ -154,48 +192,19 @@ function createUnschedulablePodsColumns(
 	];
 }
 
-/* ---------- Unschedulable Pods Section ---------- */
+/* ---------- Unschedulable Pods Section (LIVE) ---------- */
 
 function UnschedulablePodsSection() {
-	const mockUnschedulablePods: UnschedulablePod[] = React.useMemo(() => [
-		{
-			id: "1",
-			name: "webapp-deploy-5f7d8c9b4-x7k2m",
-			namespace: "production",
-			reason: "Insufficient CPU",
-			message: "0/3 nodes are available: 3 Insufficient cpu.",
-			age: "5m23s",
-			requestedCpu: "2000m",
-			requestedMemory: "4Gi",
-		},
-		{
-			id: "2",
-			name: "redis-cluster-2",
-			namespace: "cache",
-			reason: "NodeAffinity",
-			message: "0/3 nodes are available: 3 node(s) didn't match Pod's node affinity/selector.",
-			age: "12m45s",
-			requestedCpu: "500m",
-			requestedMemory: "2Gi",
-		},
-		{
-			id: "3",
-			name: "ml-training-gpu-pod",
-			namespace: "ml-workloads",
-			reason: "Insufficient Memory",
-			message: "0/3 nodes are available: 3 Insufficient memory.",
-			age: "1h2m",
-			requestedCpu: "4000m",
-			requestedMemory: "16Gi",
-		},
-	], []);
+	const [pods, setPods] = React.useState<UnschedulablePod[]>([]);
+	const [loading, setLoading] = React.useState<boolean>(false);
+	const [error, setError] = React.useState<string | null>(null);
 
-	const [globalFilter, setGlobalFilter] = React.useState("")
-	const [reasonFilter, setReasonFilter] = React.useState<string>("all")
+	const [globalFilter, setGlobalFilter] = React.useState("");
+	const [reasonFilter, setReasonFilter] = React.useState<string>("all");
 
 	const handleViewDetails = React.useCallback((pod: UnschedulablePod) => {
+		// TODO: Implement pod detail view (drawer/modal)
 		// console.log('View details for pod:', pod.name);
-		// TODO: Implement pod detail view
 	}, []);
 
 	const columns = React.useMemo(
@@ -203,16 +212,99 @@ function UnschedulablePodsSection() {
 		[handleViewDetails]
 	);
 
+	const mapEntityToRow = (e: any): UnschedulablePod => ({
+		id: e.id ?? `${e.namespace}/${e.name}`,
+		name: e.name,
+		namespace: e.namespace,
+		reason: e.unschedulableReason || "Other",
+		message: e.unschedulableMessage || "",
+		age: e.age ?? e.creationTimestamp ?? "",
+		requestedCpu: typeof e?.requests?.cpu === "number" ? formatCores(e.requests.cpu) : undefined,
+		requestedMemory: typeof e?.requests?.memory === "number" ? formatBytesIEC(e.requests.memory) : undefined,
+		nodeName: e.node || undefined,
+	});
+
+	const fetchUnschedulable = React.useCallback(async () => {
+		setLoading(true);
+		setError(null);
+		try {
+			// Prefer server-side filter if implemented
+			const res = await fetch("/api/v1/timeseries/entities/pods?unschedulable=1", { credentials: "include" });
+			if (!res.ok) {
+				throw new Error(`HTTP ${res.status}`);
+			}
+			const json = await res.json();
+			const entities = Array.isArray(json?.entities) ? json.entities : [];
+
+			// Fallback to client filtering if server didn’t filter
+			const onlyUnsched = entities.filter((e: any) => e?.unschedulable === true);
+
+			setPods(onlyUnsched.map(mapEntityToRow));
+		} catch (err: any) {
+			// Fallback path: try without param, then client-filter
+			try {
+				const res2 = await fetch("/api/v1/timeseries/entities/pods", { credentials: "include" });
+				if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+				const json2 = await res2.json();
+				const entities2 = Array.isArray(json2?.entities) ? json2.entities : [];
+				const onlyUnsched2 = entities2.filter((e: any) => e?.unschedulable === true);
+				setPods(onlyUnsched2.map(mapEntityToRow));
+			} catch (err2: any) {
+				setError(err2?.message ?? "Failed to load pods");
+			}
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	React.useEffect(() => {
+		let active = true;
+		(async () => {
+			await fetchUnschedulable();
+		})();
+		return () => {
+			active = false;
+		};
+	}, [fetchUnschedulable]);
+
+	// Optional: light polling (comment out if not desired)
+	// React.useEffect(() => {
+	//   const id = setInterval(fetchUnschedulable, 15000);
+	//   return () => clearInterval(id);
+	// }, [fetchUnschedulable]);
+
+	// Build reason filter options from live data
 	const reasonOptions: FilterOption[] = React.useMemo(() => {
-		const reasons = new Set(mockUnschedulablePods.map(pod => pod.reason));
-		return Array.from(reasons).sort().map(reason => ({
-			value: reason,
-			label: reason,
-			badge: getReasonBadge(reason)
-		}));
-	}, [mockUnschedulablePods]);
+		const reasons = new Set<string>();
+		for (const p of pods) {
+			if (p.reason) reasons.add(p.reason);
+		}
+		return Array.from(reasons)
+			.sort((a, b) => a.localeCompare(b))
+			.map((reason) => ({
+				value: reason,
+				label: reason,
+				badge: getReasonBadge(reason),
+			}));
+	}, [pods]);
 
+	// Apply client-side filters (reason + text search)
+	const filteredPods = React.useMemo(() => {
+		const q = globalFilter.trim().toLowerCase();
+		const byReason =
+			reasonFilter === "all" ? pods : pods.filter((p) => p.reason === reasonFilter);
 
+		if (!q) return byReason;
+
+		return byReason.filter((p) => {
+			return (
+				p.name.toLowerCase().includes(q) ||
+				p.namespace.toLowerCase().includes(q) ||
+				p.reason.toLowerCase().includes(q) ||
+				p.message.toLowerCase().includes(q)
+			);
+		});
+	}, [pods, reasonFilter, globalFilter]);
 
 	const podBulkActions: BulkAction[] = React.useMemo(() => [
 		{
@@ -220,7 +312,8 @@ function UnschedulablePodsSection() {
 			label: "View Details",
 			icon: <Eye className="size-4" />,
 			action: () => {
-				console.log('Bulk action triggered - this should be handled by the table');
+				// handled by the table selection consumer in your app
+				// console.log('Bulk: view details');
 			},
 			requiresSelection: true,
 		},
@@ -229,7 +322,7 @@ function UnschedulablePodsSection() {
 			label: "Copy Pod Names",
 			icon: <Copy className="size-4" />,
 			action: () => {
-				console.log('Bulk action triggered - this should be handled by the table');
+				// console.log('Bulk: copy names');
 			},
 			requiresSelection: true,
 		},
@@ -238,7 +331,7 @@ function UnschedulablePodsSection() {
 			label: "Export as YAML",
 			icon: <Download className="size-4" />,
 			action: () => {
-				console.log('Bulk action triggered - this should be handled by the table');
+				// console.log('Bulk: export yaml');
 			},
 			requiresSelection: true,
 		},
@@ -247,7 +340,7 @@ function UnschedulablePodsSection() {
 			label: "Delete Selected Pods",
 			icon: <Trash className="size-4" />,
 			action: () => {
-				console.log('Bulk action triggered - this should be handled by the table');
+				// console.log('Bulk: delete');
 			},
 			variant: "destructive" as const,
 			requiresSelection: true,
@@ -264,15 +357,22 @@ function UnschedulablePodsSection() {
 							Pods that cannot be scheduled on any node
 						</p>
 					</div>
-					<Badge variant="destructive" className="text-xs">
-						{mockUnschedulablePods.length} unschedulable
+					<Badge variant={pods.length > 0 ? "destructive" : "outline"} className="text-xs">
+						{pods.length} unschedulable
 					</Badge>
 				</div>
 			</div>
 
 			<div className="px-4 pb-6">
+				{error && (
+					<Alert variant="destructive" className="mb-3">
+						<AlertTriangle className="h-4 w-4" />
+						<AlertDescription>{String(error)}</AlertDescription>
+					</Alert>
+				)}
+
 				<UniversalDataTable
-					data={mockUnschedulablePods}
+					data={filteredPods}
 					columns={columns}
 					enableReorder={true}
 					enableRowSelection={true}
@@ -293,10 +393,8 @@ function UnschedulablePodsSection() {
 								bulkActionsLabel="Pod Actions"
 								table={table}
 								showColumnToggle={true}
-								onRefresh={() => {
-									console.log('Refresh unschedulable pods data');
-								}}
-								isRefreshing={false}
+								onRefresh={fetchUnschedulable}
+								isRefreshing={loading}
 							/>
 						</div>
 					)}
@@ -383,14 +481,6 @@ export default function ClusterOverviewSection() {
 		const data = liveData[key];
 		return data && data.length > 0 ? data[data.length - 1].v : 0;
 	};
-
-	// React.useEffect(() => {
-	// 	console.log('🔍 ClusterOverview: Received live data:', liveData);
-	// 	console.log('🔍 ClusterOverview: Available keys:', Object.keys(liveData));
-	// 	Object.entries(liveData).forEach(([key, data]) => {
-	// 		console.log(`🔍 ${key}:`, data.length, 'points, latest:', data.length > 0 ? data[data.length - 1] : 'no data');
-	// 	});
-	// }, [liveData]);
 
 	const nodesReady = Math.round(getLatestValue('cluster.nodes.ready'));
 	const nodesTotal = Math.round(getLatestValue('cluster.nodes.count'));

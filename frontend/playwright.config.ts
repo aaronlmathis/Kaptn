@@ -8,14 +8,14 @@ export default defineConfig({
 	workers: process.env.CI ? 1 : undefined,
 	reporter: 'html',
 	use: {
-		baseURL: 'http://localhost:4322',
+		baseURL: 'http://localhost:4321',
 		trace: 'on-first-retry',
 		screenshot: 'only-on-failure',
 	},
 	projects: [
 		{
 			name: 'chromium',
-			use: { ...devices['Desktop Chrome'] },
+			use: { ...devices['Desktop Chrome'] }
 		},
 		{
 			name: 'firefox',
@@ -32,7 +32,7 @@ export default defineConfig({
 	],
 	webServer: {
 		command: 'npm run dev',
-		url: 'http://localhost:4322',
+		url: 'http://localhost:4321',
 		reuseExistingServer: !process.env.CI,
 	},
 })
