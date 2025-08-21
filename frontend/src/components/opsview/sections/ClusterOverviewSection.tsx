@@ -469,13 +469,12 @@ export default function ClusterOverviewSection() {
 			</div>
 
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-				<MetricAreaChart
+				<MetricLineChart
 					title="CPU Usage vs Requests vs Limits"
 					subtitle="Real-time cluster CPU utilization showing used cores against requested and limit allocations. Helps identify under-provisioning (usage near requests) and throttling risks (usage near limits)."
 					series={cpuSeries}
 					unit="cores"
 					formatter={formatCores}
-					stacked={true}
 					scopeLabel="cluster"
 					timespanLabel="15m"
 					resolutionLabel="hi"

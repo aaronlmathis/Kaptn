@@ -30,6 +30,12 @@ import ClusterOverviewSection from "./sections/ClusterOverviewSection";
 import SchedulingPressureSection from "./sections/SchedulingPressureSection";
 import ReliabilitySection from "./sections/ReliabilitySection";
 import LimitRequestsComplianceSection from "./sections/LimitRequestsComplianceSection";
+import OverLimitsThrottlingSection from "./sections/OverLimitsThrottlingSection";
+import NodeHealthHotspotsSection from "./sections/NodeHealthHotspotsSection";
+import PodLifecycleChurnSection from "./sections/PodLifecycleChurnSection";
+import EphemeralStorageSection from "./sections/EphemeralStorageSection";
+import NetworkHealthSection from "./sections/NetworkHealthSection";
+import NamespaceTeamViewsSection from "./sections/Namespaceteamviewssection";
 
 interface OpsViewSectionsProps {
 	filters: Record<string, unknown>;
@@ -341,7 +347,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<OverLimitsThrottling />
+							<OverLimitsThrottlingSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -357,7 +363,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<NodeHealth />
+							<NodeHealthHotspotsSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -373,7 +379,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<PodLifecycle />
+							<PodLifecycleChurnSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -389,7 +395,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<EphemeralStorage />
+							<EphemeralStorageSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -405,7 +411,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<NetworkHealth />
+							<NetworkHealthSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -421,7 +427,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-							<NamespaceViews />
+							<NamespaceTeamViewsSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
