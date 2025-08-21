@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
 import { MetricAreaChart, MetricLineChart, type ChartSeries } from "@/components/opsview/charts";
-
+import { SectionHealthFooter } from "@/components/opsview/SectionHealthFooter";
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable";
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -423,10 +423,12 @@ export default function ClusterOverviewSection() {
 			'cluster.pods.failed',
 			'cluster.cpu.used.cores',
 			'cluster.cpu.requested.cores',
-			'cluster.cpu.limits.cores',
+			'cluster.cpu.allocatable.cores',
 			'cluster.mem.used.bytes',
 			'cluster.mem.requested.bytes',
-			'cluster.mem.limits.bytes'
+
+			'cluster.mem.allocatable.bytes',
+			'cluster.mem.capacity.bytes',
 		],
 		{
 			res: 'lo',
@@ -435,25 +437,26 @@ export default function ClusterOverviewSection() {
 		}
 	);
 
+	// Be sure you're subscribing to 'cluster.cpu.allocatable.cores'
 	const cpuSeries: ChartSeries[] = [
 		{
 			key: 'cluster.cpu.used.cores',
 			name: 'Used',
-			color: '#3b82f6',
-			data: (liveData['cluster.cpu.used.cores'] || []).map(point => [point.t, point.v])
+			color: '#2563eb', // blue
+			data: (liveData['cluster.cpu.used.cores'] || []).map(p => [p.t, p.v]),
+		},
+		{
+			key: 'cluster.cpu.allocatable.cores',
+			name: 'Allocatable',
+			color: '#16a34a', // green
+			data: (liveData['cluster.cpu.allocatable.cores'] || []).map(p => [p.t, p.v]),
 		},
 		{
 			key: 'cluster.cpu.requested.cores',
 			name: 'Requested',
-			color: '#f59e0b',
-			data: (liveData['cluster.cpu.requested.cores'] || []).map(point => [point.t, point.v])
+			color: '#f59e0b', // orange
+			data: (liveData['cluster.cpu.requested.cores'] || []).map(p => [p.t, p.v]),
 		},
-		{
-			key: 'cluster.cpu.limits.cores',
-			name: 'Limits',
-			color: '#ef4444',
-			data: (liveData['cluster.cpu.limits.cores'] || []).map(point => [point.t, point.v])
-		}
 	];
 
 	const memorySeries: ChartSeries[] = [
@@ -461,20 +464,27 @@ export default function ClusterOverviewSection() {
 			key: 'cluster.mem.used.bytes',
 			name: 'Used',
 			color: '#06b6d4',
-			data: (liveData['cluster.mem.used.bytes'] || []).map(point => [point.t, point.v])
+			data: (liveData['cluster.mem.used.bytes'] || []).map(p => [p.t, p.v]),
+		},
+		{
+			key: 'cluster.mem.allocatable.bytes',
+			name: 'Allocatable',
+			color: '#10b981',
+			data: (liveData['cluster.mem.allocatable.bytes'] || []).map(p => [p.t, p.v]),
 		},
 		{
 			key: 'cluster.mem.requested.bytes',
 			name: 'Requested',
 			color: '#8b5cf6',
-			data: (liveData['cluster.mem.requested.bytes'] || []).map(point => [point.t, point.v])
+			data: (liveData['cluster.mem.requested.bytes'] || []).map(p => [p.t, p.v]),
 		},
+
 		{
-			key: 'cluster.mem.limits.bytes',
-			name: 'Limits',
-			color: '#ec4899',
-			data: (liveData['cluster.mem.limits.bytes'] || []).map(point => [point.t, point.v])
-		}
+			key: 'cluster.mem.capacity.bytes',
+			name: 'Capacity',
+			color: '#22c55e', // lighter/darker than Allocatable
+			data: (liveData['cluster.mem.capacity.bytes'] || []).map(p => [p.t, p.v]),
+		},
 	];
 
 	const getLatestValue = (key: string): number => {
@@ -527,6 +537,64 @@ export default function ClusterOverviewSection() {
 		];
 	}, [nodesReady, nodesTotal, podsRunning, podsPending, podsFailed, podsUnschedulable]);
 
+	const latest = (arr: { t: number; v: number }[] | undefined) =>
+		(arr && arr.length ? arr[arr.length - 1].v : 0);
+
+	const toneForPct = (p: number): "ok" | "warn" | "crit" => {
+		if (p >= 0.9) return "crit";
+		if (p >= 0.75) return "warn";
+		return "ok";
+	};
+
+	// --- CPU footer data ---
+	const cpuUsed = latest(liveData['cluster.cpu.used.cores']);
+	const cpuAlloc = Math.max(1e-9, latest(liveData['cluster.cpu.allocatable.cores'])); // avoid /0
+	const cpuReq = latest(liveData['cluster.cpu.requested.cores']);
+
+	const cpuUsedPct = cpuUsed / cpuAlloc;
+	const cpuReqPct = cpuReq / cpuAlloc;
+
+	const cpuTone = toneForPct(cpuUsedPct);
+	const cpuSummary =
+		`CPU ${(cpuUsedPct * 100).toFixed(0)}% utilized (${cpuUsed.toFixed(1)} / ${cpuAlloc.toFixed(1)} cores).` +
+		(cpuReq > cpuAlloc ? ` Requests exceed allocatable (${cpuReq.toFixed(1)} > ${cpuAlloc.toFixed(1)}).` : '');
+
+	const cpuFooter = (
+		<SectionHealthFooter
+			tone={cpuTone}
+			summary={cpuSummary}
+			usedPct={cpuUsedPct}
+			ratioPills={[
+				{ label: "Requested/Alloc", value: `${(cpuReqPct * 100).toFixed(0)}%`, tone: cpuReqPct > 1 ? "warn" : "info", title: "Commitment posture" },
+				{ label: "Used/Requested", value: cpuReq > 0 ? `${(cpuUsed / cpuReq * 100).toFixed(0)}%` : "—", title: "Headroom vs requested" },
+			]}
+		/>
+	);
+
+	// --- Memory footer data ---
+	const memUsed = latest(liveData['cluster.mem.used.bytes']);
+	const memAlloc = Math.max(1e-9, latest(liveData['cluster.mem.allocatable.bytes']));
+	const memReq = latest(liveData['cluster.mem.requested.bytes']);
+
+	const memUsedPct = memUsed / memAlloc;
+	const memReqPct = memReq / memAlloc;
+
+	const memTone = toneForPct(memUsedPct);
+	const memSummary =
+		`Memory ${(memUsedPct * 100).toFixed(0)}% utilized (${formatBytesIEC(memUsed)} / ${formatBytesIEC(memAlloc)}).` +
+		(memReq > memAlloc ? ` Requests exceed allocatable (${formatBytesIEC(memReq)} > ${formatBytesIEC(memAlloc)}).` : '');
+
+	const memFooter = (
+		<SectionHealthFooter
+			tone={memTone}
+			summary={memSummary}
+			usedPct={memUsedPct}
+			ratioPills={[
+				{ label: "Requested/Alloc", value: `${(memReqPct * 100).toFixed(0)}%`, tone: memReqPct > 1 ? "warn" : "info", title: "Commitment posture" },
+				{ label: "Used/Requested", value: memReq > 0 ? `${(memUsed / memReq * 100).toFixed(0)}%` : "—", title: "Headroom vs requested" },
+			]}
+		/>
+	);
 	return (
 		<div className="space-y-6">
 			{connectionState.lastError && (
@@ -567,19 +635,20 @@ export default function ClusterOverviewSection() {
 					formatter={formatCores}
 					scopeLabel="cluster"
 					timespanLabel="15m"
-					resolutionLabel="hi"
+					resolutionLabel="lo"
+					footerExtra={cpuFooter}
 				/>
 
-				<MetricAreaChart
+				<MetricLineChart
 					title="Memory Usage vs Requests vs Limits"
 					subtitle="Real-time cluster memory utilization showing used memory against requested and limit allocations. Helps identify under-provisioning (usage near requests) and OOM risks (usage near limits)."
 					series={memorySeries}
 					unit="bytes"
 					formatter={formatBytesIEC}
-					stacked={true}
 					scopeLabel="cluster"
 					timespanLabel="15m"
-					resolutionLabel="hi"
+					resolutionLabel="lo"
+					footerExtra={memFooter}
 				/>
 			</div>
 

@@ -16,39 +16,11 @@ export function SiteHeader() {
           orientation="vertical"
           className="mr-2 data-[orientation=vertical]:h-4"
         />
-        {/* <Breadcrumb>
-          <BreadcrumbList>
-            {isHydrated ? (
-              breadcrumbs.map((item, index) => (
-                <div key={index} className="flex items-center">
-                  {index > 0 && (
-                    <BreadcrumbSeparator className="hidden md:block" />
-                  )}
-                  <BreadcrumbItem className={index === 0 ? "hidden md:block" : ""}>
-                    {index === breadcrumbs.length - 1 ? (
-                      <BreadcrumbPage>{item.title}</BreadcrumbPage>
-                    ) : item.url ? (
-                      <BreadcrumbLink href={item.url}>
-                        {item.title}
-                      </BreadcrumbLink>
-                    ) : (
-                      <span className="text-muted-foreground">{item.title}</span>
-                    )}
-                  </BreadcrumbItem>
-                </div>
-              ))
-            ) : (
-              // Render placeholder breadcrumb to prevent layout shift
-              <BreadcrumbItem className="opacity-0">
-                <BreadcrumbPage>Loading...</BreadcrumbPage>
-              </BreadcrumbItem>
-            )}
-          </BreadcrumbList>
-        </Breadcrumb> */}
+
         <div className="ml-auto flex items-center gap-2">
           <SiteSearch />
           {/* <SessionDebugPopover /> */}
-          <Button variant="default" size="sm" className="flex items-center gap-2" asChild>
+          <Button variant="ghost" size="sm" className="flex items-center gap-2" asChild>
             <a href="/apply">
               <IconCloudUpload className="h-4 w-4" />
               <span className="hidden sm:inline">Apply Config</span>

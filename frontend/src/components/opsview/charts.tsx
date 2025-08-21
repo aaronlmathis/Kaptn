@@ -28,7 +28,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart, Info } from "lucide-react";
+import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart, Info, LineChart as LineChartIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -98,6 +98,7 @@ interface BaseChartProps {
   scopeLabel?: string;
   timespanLabel?: string;
   resolutionLabel?: string;
+  footerExtra?: React.ReactNode;
 }
 
 // Chart action handlers
@@ -151,32 +152,19 @@ function CustomChartTooltip({
           const seriesName = seriesInfo?.name || item.dataKey;
           const color = seriesInfo?.color || item.color;
 
-          let formattedValue = '';
-          if (formatter) {
-            formattedValue = formatter(item.value);
-          } else if (unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]) {
-            formattedValue = UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS](item.value);
-          } else {
-            formattedValue = item.value.toString();
-          }
 
-          // Add unit if not already included in formatter
-          if (unit && !formattedValue.includes(unit)) {
-            formattedValue += ` ${unit}`;
-          }
+          // choose ONE source of truth
+          const formattedValue = formatter
+            ? formatter(item.value)
+            : unit && UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS]
+              ? UNIT_FORMATTERS[unit as keyof typeof UNIT_FORMATTERS](item.value)
+              : String(item.value);
 
           return (
             <div key={index} className="flex items-center gap-2 text-sm">
-              <div
-                className="w-3 h-3 rounded-sm flex-shrink-0"
-                style={{ backgroundColor: color }}
-              />
-              <span className="text-muted-foreground min-w-0 flex-1">
-                {seriesName}:
-              </span>
-              <span className="font-medium text-foreground">
-                {formattedValue}
-              </span>
+              <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
+              <span className="text-muted-foreground min-w-0 flex-1">{seriesName}:</span>
+              <span className="font-medium text-foreground">{formattedValue}</span>
             </div>
           );
         })}
@@ -233,7 +221,7 @@ function generateChartConfig(series: ChartSeries[]): ChartConfig {
 /**
  * Get chart type icon and label
  */
-function getChartTypeInfo(type: 'area' | 'bar' | 'radial' | 'radar') {
+function getChartTypeInfo(type: 'area' | 'bar' | 'radial' | 'radar' | 'line') {
   switch (type) {
     case 'area':
       return { icon: Activity, label: 'Area Chart' };
@@ -243,13 +231,15 @@ function getChartTypeInfo(type: 'area' | 'bar' | 'radial' | 'radar') {
       return { icon: PieChart, label: 'Radial Chart' };
     case 'radar':
       return { icon: PieChart, label: 'Radar Chart' };
+    case 'line':
+      return { icon: LineChartIcon, label: 'Line Chart' }
     default:
       return { icon: Activity, label: 'Chart' };
   }
 }
 
 /**
- * Chart Card Wrapper
+ * Chart Card Wrapper (with footerExtra)
  */
 function ChartCard({
   title,
@@ -264,6 +254,7 @@ function ChartCard({
   actions,
   className,
   chartType = 'area',
+  footerExtra, 
 }: {
   title: string;
   subtitle?: string;
@@ -277,6 +268,7 @@ function ChartCard({
   actions?: ChartActions;
   className?: string;
   chartType?: 'area' | 'line' | 'bar' | 'radial' | 'radar';
+  footerExtra?: React.ReactNode; 
 }) {
   const { icon: ChartIcon } = getChartTypeInfo(chartType);
 
@@ -346,20 +338,24 @@ function ChartCard({
           </Tooltip>
         )}
 
-        {(insight || badges || scopeLabel || timespanLabel) && (
+        {(footerExtra || insight || badges || scopeLabel || timespanLabel || resolutionLabel) && (
           <CardFooter className="flex-col items-start gap-2 text-sm px-3 pt-2 pb-3">
+            {/* NEW: custom footer block (e.g., SectionHealthFooter) */}
+            {footerExtra}
+
             {(insight || badges) && (
               <div className="flex items-center gap-2 font-medium">
                 {insight}
                 {badges && <div className="flex gap-1">{badges}</div>}
               </div>
             )}
+
             {(scopeLabel || timespanLabel || resolutionLabel) && (
-              <div className="text-muted-foreground">
-                Showing {scopeLabel ? `${scopeLabel} ` : ''}
-                {timespanLabel ? `for ${timespanLabel} ` : ''}
-                {resolutionLabel ? `at ${resolutionLabel}` : ''}
-              </div>
+<div className="text-[11px] text-right text-muted-foreground italic opacity-60">
+  {scopeLabel && <span>{scopeLabel}</span>}
+  {timespanLabel && <span> · {timespanLabel}</span>}
+  {resolutionLabel && <span> · {resolutionLabel}</span>}
+</div>
             )}
           </CardFooter>
         )}
@@ -367,6 +363,7 @@ function ChartCard({
     </div>
   );
 }
+
 
 /**
  * Area Chart Component
@@ -389,6 +386,7 @@ export function MetricAreaChart({
   timespanLabel,
   resolutionLabel,
   stacked = false,
+  footerExtra,
   ...actions
 }: BaseChartProps & ChartActions & { stacked?: boolean }) {
   const chartData = React.useMemo(() => prepareChartData(series), [series]);
@@ -521,6 +519,7 @@ export function MetricAreaChart({
       actions={actions}
       className={className}
       chartType="area"
+      footerExtra={footerExtra}
     >
       {content}
     </ChartCard>
@@ -548,6 +547,7 @@ export function MetricBarChart({
   timespanLabel,
   resolutionLabel,
   layout = "horizontal",
+  footerExtra,
   ...actions
 }: BaseChartProps & ChartActions & { layout?: "horizontal" | "vertical" }) {
   // For bar charts, we typically want aggregated data, not time series
@@ -636,7 +636,7 @@ export function MetricBarChart({
           <ChartTooltip
             content={
               <ChartTooltipContent
-                formatter={(value) => `${valueFormatter(Number(value))}${unit ? ` ${unit}` : ''}`}
+                formatter={(value) => valueFormatter(Number(value))}
                 labelKey="name"
               />
             }
@@ -665,6 +665,7 @@ export function MetricBarChart({
       actions={actions}
       className={className}
       chartType="bar"
+      footerExtra={footerExtra}
     >
       {content}
     </ChartCard>
@@ -691,6 +692,7 @@ export function MetricLineChart({
   scopeLabel,
   timespanLabel,
   resolutionLabel,
+  footerExtra,
   ...actions
 }: BaseChartProps & ChartActions) {
   const chartData = React.useMemo(() => prepareChartData(series), [series]);
@@ -792,7 +794,7 @@ export function MetricLineChart({
                 connectNulls
                 isAnimationActive={false}
                 strokeLinecap="round"
-                strokeDasharray={/limit/i.test(s.name) || /limit/i.test(s.key) ? "4 4" : undefined}
+                strokeDasharray={/limit|requested/i.test(s.name) || /limit|requested/i.test(s.key) ? "4 4" : undefined}
               />
             );
           })}
@@ -814,6 +816,7 @@ export function MetricLineChart({
       actions={actions}
       className={className}
       chartType="line"
+      footerExtra={footerExtra}
     >
       {content}
     </ChartCard>
@@ -842,6 +845,7 @@ export function MetricCategoricalBarChart({
   timespanLabel,
   resolutionLabel,
   layout = "vertical",
+  footerExtra,
   ...actions
 }: Omit<BaseChartProps, 'series'> & ChartActions & {
   data: CategoricalDataPoint[];
@@ -1031,6 +1035,7 @@ export function MetricCategoricalBarChart({
       actions={actions}
       className={className}
       chartType="bar"
+      footerExtra={footerExtra}
     >
       {content}
     </ChartCard>
@@ -1057,6 +1062,7 @@ export function MetricRadialChart({
   scopeLabel,
   timespanLabel,
   resolutionLabel,
+  footerExtra,
   ...actions
 }: BaseChartProps & ChartActions) {
   const chartData = React.useMemo(() => {
@@ -1123,7 +1129,7 @@ export function MetricRadialChart({
           <ChartTooltip
             content={
               <ChartTooltipContent
-                formatter={(value) => `${valueFormatter(Number(value))}${unit ? ` ${unit}` : ''}`}
+                formatter={(value) => valueFormatter(Number(value))}
                 labelKey="name"
               />
             }
@@ -1146,6 +1152,7 @@ export function MetricRadialChart({
       actions={actions}
       className={className}
       chartType="radial"
+      footerExtra={footerExtra}
     >
       {content}
     </ChartCard>
@@ -1171,6 +1178,7 @@ export function MetricRadarChart({
   scopeLabel,
   timespanLabel,
   resolutionLabel,
+  footerExtra,
   ...actions
 }: BaseChartProps & ChartActions) {
   // For radar charts, we transform series data into radar format
@@ -1266,9 +1274,7 @@ export function MetricRadarChart({
             <ChartTooltip
               content={
                 <ChartTooltipContent
-                  formatter={(value) =>
-                    `${valueFormatter(Number(value))}${unit ? ` ${unit}` : ""}`
-                  }
+                  formatter={(value) => valueFormatter(Number(value))}
                   labelKey="axis"
                 />
               }
@@ -1292,6 +1298,7 @@ export function MetricRadarChart({
       actions={actions}
       className={className}
       chartType="radar"
+      footerExtra={footerExtra}
     >
       {content}
     </ChartCard>
@@ -1322,6 +1329,7 @@ export function MetricStackedBarChart({
   resolutionLabel,
   layout = "vertical",
   colors,
+  footerExtra,
   ...actions
 }: Omit<BaseChartProps, 'series'> & ChartActions & {
   data: Record<string, any>[];
@@ -1516,6 +1524,7 @@ export function MetricStackedBarChart({
       actions={actions}
       className={className}
       chartType="bar"
+      footerExtra={footerExtra}
     >
       {content}
     </ChartCard>
@@ -1546,6 +1555,7 @@ export function MetricScatterChart({
   timespanLabel,
   resolutionLabel,
   colors,
+  footerExtra,
   ...actions
 }: Omit<BaseChartProps, 'series'> & ChartActions & {
   data: Record<string, any>[];
@@ -1709,6 +1719,7 @@ export function MetricScatterChart({
       actions={actions}
       className={className}
       chartType="area"
+      footerExtra={footerExtra}
     >
       {content}
     </ChartCard>
