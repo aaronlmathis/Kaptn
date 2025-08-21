@@ -120,35 +120,37 @@ async function attemptRefresh(request: Request): Promise<{ accessToken: string; 
 
 // Check auth mode from backend config
 async function getAuthMode(request: Request): Promise<string> {
-	try {
-		// During build, there's no running backend. Default to 'none' to allow static generation.
-		if (import.meta.env.MODE === 'build') {
-			console.log('Build mode detected, defaulting to "none" auth mode for static generation.');
-			return 'none';
-		}
+	// 1. Check for a build-time override environment variable.
+	// This is the fastest and most explicit way to control build behavior.
+	// Set this variable when running `astro build` without a backend.
+	// e.g., `KBAM=none npm run build`
+	if (import.meta.env.KAPTN_BUILD_AUTH_MODE) {
+		console.log(`🛡️ Middleware: Using build-time auth mode override: ${import.meta.env.KAPTN_BUILD_AUTH_MODE}`);
+		return import.meta.env.KAPTN_BUILD_AUTH_MODE;
+	}
 
-		// In SSR (dev or prod), we must fetch from the backend API directly.
-		// The Vite proxy in astro.config.mjs is for client-side requests from the browser.
-		// Server-side fetch needs the full internal URL of the backend.
+	// 2. If no override, attempt to fetch from the running backend.
+	// This is for `npm run dev` or production SSR deployments.
+	try {
 		const backendUrl = import.meta.env.INTERNAL_API_URL || 'http://localhost:9999';
 		const configUrl = `${backendUrl}/api/v1/config`;
 
 		console.log(`Fetching config from internal URL: ${configUrl}`);
 
-		const response = await fetch(configUrl);
+		// Add a short timeout to prevent long waits during builds if the server is unresponsive.
+		const response = await fetch(configUrl, { signal: AbortSignal.timeout(2000) });
 
 		if (!response.ok) {
-			console.error(`Config fetch failed with status: ${response.status}`);
-			return 'oidc'; // Default to oidc if we can't fetch config
+			console.error(`Config fetch failed with status: ${response.status}. Defaulting to secure 'oidc' mode.`);
+			return 'oidc';
 		}
 
 		const config = await response.json();
 		return config.auth?.mode || 'oidc';
 	} catch (error) {
-		console.error('Error fetching auth config:', error);
-		// If fetch fails (e.g., backend not running during dev), default to 'oidc' to avoid security bypass.
-		// The 'build' case is handled above.
-		return 'oidc';
+		// 3. If fetch fails, it's likely `astro build` without a running backend.
+		console.warn('Could not connect to backend to fetch auth config. This is expected during `astro build`. Defaulting to "none" auth mode.');
+		return 'none';
 	}
 }
 

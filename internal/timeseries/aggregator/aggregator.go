@@ -26,9 +26,11 @@ type hostSnap struct {
 	CPUUsedCores float64 // Current CPU usage in cores
 
 	// Network counters (monotonic)
-	LastRx uint64    // Last received bytes
-	LastTx uint64    // Last transmitted bytes
-	LastTs time.Time // Timestamp of last measurement
+	LastRx        uint64    // Last received bytes
+	LastTx        uint64    // Last transmitted bytes
+	LastRxPackets uint64    // Last received packets
+	LastTxPackets uint64    // Last transmitted packets
+	LastTs        time.Time // Timestamp of last measurement
 }
 
 // Aggregator maintains cluster-level time series by aggregating node-level metrics
@@ -203,10 +205,12 @@ func (a *Aggregator) tick(ctx context.Context) {
 	}
 
 	// Gate expensive resource metrics collection
+	// These metrics are typically available from Kubelet /metrics/resource or /stats/summary
 	if shouldCollectResource {
 		a.collectCPUMetrics(ctx, now)
-		a.collectMemoryMetrics(ctx, now)
-		a.collectResourceRequests(ctx, now)
+		a.collectMemoryUsageMetrics(ctx, now)
+		a.collectNodeResourceCapacityMetrics(ctx, now) // Collects CPU, Mem, Pods capacity/allocatable
+		a.collectResourceRequests(ctx, now)            // Cluster-wide requests
 		a.collectResourceLimits(ctx, now)
 		a.collectPodResourceMetrics(ctx, now)
 		a.collectPodRestartMetrics(ctx, now)
@@ -223,11 +227,10 @@ func (a *Aggregator) tick(ctx context.Context) {
 
 	// Gate expensive network/summary metrics collection
 	if shouldCollectSummary {
-		a.collectNetworkMetrics(ctx, now)
+		a.collectNetworkMetrics(ctx, now) // Includes PPS calculation now
+		a.collectNodeFilesystemMetrics(ctx, now)
 		a.collectNodeDetailedMetrics(ctx, now)
 		a.collectBasicNodeMetrics(ctx, now)
-		a.collectNodePodCounts(ctx, now)
-		a.collectNodePacketStats(ctx, now)
 		a.collectBasicPodNetworkMetrics(ctx, now)
 		a.mu.Lock()
 		a.lastSummaryPoll = now
@@ -236,6 +239,7 @@ func (a *Aggregator) tick(ctx context.Context) {
 
 	// Gate state reconciliation (pod/node counts)
 	if shouldReconcileState {
+		a.collectNodeConditionMetrics(ctx, now) // Collects node ready/pressure conditions
 		a.collectStateMetrics(ctx, now)
 		a.mu.Lock()
 		a.lastStateRecon = now
@@ -278,6 +282,61 @@ func (a *Aggregator) refreshNodeCapacities(ctx context.Context, now time.Time) {
 
 	a.logger.Debug("Refreshed node capacities",
 		zap.Int("nodeCount", len(nodeCapacities)),
+	)
+}
+
+// collectMemoryUsageMetrics collects and aggregates memory usage metrics from the Metrics API
+func (a *Aggregator) collectMemoryUsageMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		// Using "resource" as the collector name to group with CPU
+		metrics.RecordCollectorScrape("resource_memory", time.Since(start), hasError)
+	}()
+
+	if !a.apiMetricsAdapter.HasMetricsAPI(ctx) {
+		a.logger.Debug("Metrics API not available, skipping memory usage metrics")
+		return
+	}
+
+	// Get individual node usage for node-level metrics.
+	// This assumes APIMetricsAdapter has a ListNodeMemoryUsage method similar to ListNodeCPUUsage.
+	nodeUsageMap, err := a.apiMetricsAdapter.ListNodeMemoryUsage(ctx)
+	if err != nil {
+		hasError = true
+		a.logger.Warn("Failed to collect node memory usage", zap.Error(err))
+		return
+	}
+
+	var totalUsage float64
+
+	// Store individual node usage metrics
+	for nodeName, usage := range nodeUsageMap {
+		nodeEntity := map[string]string{"node": nodeName}
+		totalUsage += usage
+
+		// Store node.mem.usage.bytes
+		nodeUsageSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeMemUsageBase, nodeName))
+		if nodeUsageSeries != nil {
+			nodeUsageSeries.Add(timeseries.NewPointWithEntity(now, usage, nodeEntity))
+		}
+
+		// Store node.mem.working_set.bytes. For metrics-server, this is often the same value as usage.
+		nodeWorkingSetSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeMemWorkingSetBase, nodeName))
+		if nodeWorkingSetSeries != nil {
+			nodeWorkingSetSeries.Add(timeseries.NewPointWithEntity(now, usage, nodeEntity))
+		}
+	}
+
+	// Store cluster total usage, which is required for the headroom chart
+	usageSeries := a.store.Upsert(timeseries.ClusterMemUsedBytes)
+	if usageSeries != nil {
+		usageSeries.Add(timeseries.Point{T: now, V: totalUsage})
+	}
+
+	a.logger.Debug("Collected memory usage metrics",
+		zap.Float64("total_usage_gb", totalUsage/(1024*1024*1024)),
+		zap.Int("nodes", len(nodeUsageMap)),
 	)
 }
 
@@ -348,7 +407,7 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 }
 
 // collectNetworkMetrics collects and aggregates network metrics
-func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
+func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) { // Renamed from collectNetworkMetrics
 	start := time.Now()
 	var hasError bool
 	defer func() {
@@ -367,6 +426,7 @@ func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
 	}
 
 	networkStats, err := a.summaryAdapter.ListNodeNetworkStats(ctx)
+
 	if err != nil {
 		hasError = true
 		a.logger.Warn("Failed to collect network stats", zap.Error(err))
@@ -379,13 +439,16 @@ func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
 	defer a.mu.Unlock()
 
 	for _, stat := range networkStats {
+		nodeEntity := map[string]string{"node": stat.NodeName}
 		snap, exists := a.hostSnapshots[stat.NodeName]
 		if !exists {
 			// Initialize new snapshot
 			snap = &hostSnap{
-				LastRx: stat.RxBytes,
-				LastTx: stat.TxBytes,
-				LastTs: now,
+				LastRx:        stat.RxBytes,
+				LastTx:        stat.TxBytes,
+				LastRxPackets: stat.RxPackets,
+				LastTxPackets: stat.TxPackets,
+				LastTs:        now,
 			}
 			a.hostSnapshots[stat.NodeName] = snap
 			continue
@@ -396,14 +459,39 @@ func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
 			dt := now.Sub(snap.LastTs).Seconds()
 			if dt > 0 {
 				// Handle counter resets (new value less than old value)
+				// Calculate BPS
 				if stat.RxBytes >= snap.LastRx {
 					rxRate := float64(stat.RxBytes-snap.LastRx) / dt
 					totalRxRate += rxRate
+					nodeRxSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetRxBase, stat.NodeName))
+					if nodeRxSeries != nil {
+						nodeRxSeries.Add(timeseries.NewPointWithEntity(now, rxRate, nodeEntity))
+					}
 				}
 
 				if stat.TxBytes >= snap.LastTx {
 					txRate := float64(stat.TxBytes-snap.LastTx) / dt
 					totalTxRate += txRate
+					nodeTxSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetTxBase, stat.NodeName))
+					if nodeTxSeries != nil {
+						nodeTxSeries.Add(timeseries.NewPointWithEntity(now, txRate, nodeEntity))
+					}
+				}
+
+				// Calculate PPS (packets per second)
+				if stat.RxPackets >= snap.LastRxPackets {
+					nodeRxPps := float64(stat.RxPackets-snap.LastRxPackets) / dt
+					ppsSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetRxPpsBase, stat.NodeName))
+					if ppsSeries != nil {
+						ppsSeries.Add(timeseries.NewPointWithEntity(now, nodeRxPps, nodeEntity))
+					}
+				}
+				if stat.TxPackets >= snap.LastTxPackets {
+					nodeTxPps := float64(stat.TxPackets-snap.LastTxPackets) / dt
+					ppsSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetTxPpsBase, stat.NodeName))
+					if ppsSeries != nil {
+						ppsSeries.Add(timeseries.NewPointWithEntity(now, nodeTxPps, nodeEntity))
+					}
 				}
 			}
 		}
@@ -411,6 +499,8 @@ func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
 		// Update snapshot
 		snap.LastRx = stat.RxBytes
 		snap.LastTx = stat.TxBytes
+		snap.LastRxPackets = stat.RxPackets
+		snap.LastTxPackets = stat.TxPackets
 		snap.LastTs = now
 	}
 
@@ -464,7 +554,7 @@ func (a *Aggregator) pruneLoop(ctx context.Context) {
 }
 
 // collectMemoryMetrics collects both cluster and node-level memory metrics
-func (a *Aggregator) collectMemoryMetrics(ctx context.Context, now time.Time) {
+func (a *Aggregator) collectNodeResourceCapacityMetrics(ctx context.Context, now time.Time) {
 	// Get node list for both capacity and individual node metrics
 	nodeList, err := a.nodesAdapter.ListNodes(ctx)
 	if err != nil {
@@ -473,7 +563,7 @@ func (a *Aggregator) collectMemoryMetrics(ctx context.Context, now time.Time) {
 	}
 
 	var totalMemoryCapacity float64
-
+	var totalCPUCapacity float64
 	// Collect individual node capacity metrics
 	for _, node := range nodeList {
 		nodeEntity := map[string]string{"node": node.Name}
@@ -491,15 +581,26 @@ func (a *Aggregator) collectMemoryMetrics(ctx context.Context, now time.Time) {
 			nodeAllocSeries.Add(timeseries.NewPointWithEntity(now, node.MemoryBytes, nodeEntity))
 		}
 
+		// Collect CPU capacity at node level
+		totalCPUCapacity += node.CPUCores
 		// Also collect CPU capacity at node level
 		nodeCapCPUSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeCapacityCPUBase, node.Name))
 		if nodeCapCPUSeries != nil {
 			nodeCapCPUSeries.Add(timeseries.NewPointWithEntity(now, node.CPUCores, nodeEntity))
 		}
-
 		nodeAllocCPUSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeAllocatableCPUBase, node.Name))
 		if nodeAllocCPUSeries != nil {
 			nodeAllocCPUSeries.Add(timeseries.NewPointWithEntity(now, node.CPUCores, nodeEntity))
+		}
+
+		// Collect Pods capacity at node level
+		nodePodsCapacitySeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeCapacityPodsBase, node.Name))
+		if nodePodsCapacitySeries != nil {
+			nodePodsCapacitySeries.Add(timeseries.NewPointWithEntity(now, float64(node.Pods), nodeEntity))
+		}
+		nodePodsAllocatableSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeAllocatablePodsBase, node.Name))
+		if nodePodsAllocatableSeries != nil {
+			nodePodsAllocatableSeries.Add(timeseries.NewPointWithEntity(now, float64(node.AllocatablePods), nodeEntity))
 		}
 	}
 
@@ -516,27 +617,178 @@ func (a *Aggregator) collectMemoryMetrics(ctx context.Context, now time.Time) {
 			capacitySeries.Add(timeseries.Point{T: now, V: totalMemoryCapacity})
 		}
 	}
-
-	// Collect memory usage if Metrics API is available
-	if a.apiMetricsAdapter.HasMetricsAPI(ctx) {
-		// For now, use simple placeholder - will implement proper memory collection later
-		totalUsage := totalMemoryCapacity * 0.7 // Placeholder: assume 70% usage
-
-		// Store cluster total usage
-		usageSeries := a.store.Upsert(timeseries.ClusterMemUsedBytes)
-		if usageSeries != nil {
-			usageSeries.Add(timeseries.Point{T: now, V: totalUsage})
+	// Store cluster CPU capacity
+	if totalCPUCapacity > 0 {
+		capacitySeries := a.store.Upsert(timeseries.ClusterCPUCapacityCores)
+		if capacitySeries != nil {
+			capacitySeries.Add(timeseries.Point{T: now, V: totalCPUCapacity})
 		}
-
-		a.logger.Debug("Collected placeholder memory usage metrics",
-			zap.Float64("usageGB", totalUsage/(1024*1024*1024)),
-			zap.String("note", "placeholder - real collection needed"),
-		)
+		allocatableSeries := a.store.Upsert(timeseries.ClusterCPUAllocatableCores)
+		if allocatableSeries != nil {
+			allocatableSeries.Add(timeseries.Point{T: now, V: totalCPUCapacity})
+		}
 	}
 
-	a.logger.Debug("Collected memory metrics",
+	a.logger.Debug("Collected node resource capacity metrics",
 		zap.Float64("cluster_allocatable_gb", totalMemoryCapacity/(1024*1024*1024)),
 		zap.Int("node_count", len(nodeList)))
+}
+
+// collectNodeConditionMetrics collects node condition metrics (ready, pressure)
+func (a *Aggregator) collectNodeConditionMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("node_conditions", time.Since(start), hasError)
+	}()
+
+	nodeList, err := a.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		hasError = true
+		a.logger.Error("Failed to list nodes for condition metrics", zap.Error(err))
+		return
+	}
+
+	for _, node := range nodeList.Items {
+		nodeEntity := map[string]string{"node": node.Name}
+
+		// Node Ready condition
+		readyStatus := 0.0
+		for _, condition := range node.Status.Conditions {
+			if condition.Type == corev1.NodeReady && condition.Status == corev1.ConditionTrue {
+				readyStatus = 1.0
+				break
+			}
+		}
+		readySeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeConditionReadyBase, node.Name))
+		if readySeries != nil {
+			readySeries.Add(timeseries.NewPointWithEntity(now, readyStatus, nodeEntity))
+		}
+
+		// Node Disk Pressure
+		diskPressure := 0.0
+		for _, condition := range node.Status.Conditions {
+			if condition.Type == corev1.NodeDiskPressure && condition.Status == corev1.ConditionTrue {
+				diskPressure = 1.0
+				break
+			}
+		}
+		diskPressureSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeConditionDiskPressureBase, node.Name))
+		if diskPressureSeries != nil {
+			diskPressureSeries.Add(timeseries.NewPointWithEntity(now, diskPressure, nodeEntity))
+		}
+
+		// Node Memory Pressure
+		memPressure := 0.0
+		for _, condition := range node.Status.Conditions {
+			if condition.Type == corev1.NodeMemoryPressure && condition.Status == corev1.ConditionTrue {
+				memPressure = 1.0
+				break
+			}
+		}
+		memPressureSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeConditionMemoryPressureBase, node.Name))
+		if memPressureSeries != nil {
+			memPressureSeries.Add(timeseries.NewPointWithEntity(now, memPressure, nodeEntity))
+		}
+
+		// Node PID Pressure
+		pidPressure := 0.0
+		for _, condition := range node.Status.Conditions {
+			if condition.Type == corev1.NodePIDPressure && condition.Status == corev1.ConditionTrue {
+				pidPressure = 1.0
+				break
+			}
+		}
+		pidPressureSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeConditionPIDPressureBase, node.Name))
+		if pidPressureSeries != nil {
+			pidPressureSeries.Add(timeseries.NewPointWithEntity(now, pidPressure, nodeEntity))
+		}
+	}
+
+	a.logger.Debug("Collected node condition metrics",
+		zap.Int("node_count", len(nodeList.Items)),
+	)
+}
+
+// collectNodeFilesystemMetrics collects node filesystem and image filesystem metrics
+func (a *Aggregator) collectNodeFilesystemMetrics(ctx context.Context, now time.Time) {
+	start := time.Now()
+	var hasError bool
+	defer func() {
+		metrics.RecordCollectorScrape("node_filesystem", time.Since(start), hasError)
+	}()
+
+	if !a.summaryAdapter.HasSummaryAPI(ctx) {
+		a.logger.Debug("Summary API not available, skipping node filesystem metrics")
+		return
+	}
+
+	// NOTE: This assumes kubemetrics.SummaryStatsAdapter has a method ListNodeFilesystemStats
+	// that returns a slice of a struct containing:
+	// NodeName, FsCapacityBytes, FsAvailableBytes, FsInodesTotal, FsInodesFree,
+	// ImageFsCapacityBytes, ImageFsAvailableBytes, ImageFsInodesTotal, ImageFsInodesFree.
+	fsStats, err := a.summaryAdapter.ListNodeFilesystemStats(ctx) // Assumed new method
+	if err != nil {
+		hasError = true
+		a.logger.Warn("Failed to collect node filesystem stats", zap.Error(err))
+		return
+	}
+
+	for _, stat := range fsStats {
+		nodeEntity := map[string]string{"node": stat.NodeName}
+
+		// Root Filesystem Metrics
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsCapacityBase, stat.NodeName), now, float64(stat.FsCapacityBytes), nodeEntity)
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsAvailableBase, stat.NodeName), now, float64(stat.FsAvailableBytes), nodeEntity)
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsInodesTotalBase, stat.NodeName), now, float64(stat.FsInodesTotal), nodeEntity)
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsInodesFreeBase, stat.NodeName), now, float64(stat.FsInodesFree), nodeEntity)
+
+		// Calculate used bytes and percent for rootfs
+		fsUsedBytes := stat.FsCapacityBytes - stat.FsAvailableBytes
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsUsedBase, stat.NodeName), now, float64(fsUsedBytes), nodeEntity)
+		if stat.FsCapacityBytes > 0 {
+			fsUsedPercent := (float64(fsUsedBytes) / float64(stat.FsCapacityBytes)) * 100
+			a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsUsedPercentBase, stat.NodeName), now, fsUsedPercent, nodeEntity)
+		}
+		// Calculate inodes used percent for rootfs
+		fsInodesUsed := stat.FsInodesTotal - stat.FsInodesFree
+		if stat.FsInodesTotal > 0 {
+			fsInodesUsedPercent := (float64(fsInodesUsed) / float64(stat.FsInodesTotal)) * 100
+			a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsInodesUsedPercentBase, stat.NodeName), now, fsInodesUsedPercent, nodeEntity)
+		}
+
+		// Image Filesystem Metrics
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsCapacityBase, stat.NodeName), now, float64(stat.ImageFsCapacityBytes), nodeEntity)
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsAvailableBase, stat.NodeName), now, float64(stat.ImageFsAvailableBytes), nodeEntity)
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsInodesTotalBase, stat.NodeName), now, float64(stat.ImageFsInodesTotal), nodeEntity)
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsInodesFreeBase, stat.NodeName), now, float64(stat.ImageFsInodesFree), nodeEntity)
+
+		// Calculate used bytes and percent for imagefs
+		imageFsUsedBytes := stat.ImageFsCapacityBytes - stat.ImageFsAvailableBytes
+		a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsUsedBase, stat.NodeName), now, float64(imageFsUsedBytes), nodeEntity)
+		if stat.ImageFsCapacityBytes > 0 {
+			imageFsUsedPercent := (float64(imageFsUsedBytes) / float64(stat.ImageFsCapacityBytes)) * 100
+			a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsUsedPercentBase, stat.NodeName), now, imageFsUsedPercent, nodeEntity)
+		}
+		// Calculate inodes used percent for imagefs
+		imageFsInodesUsed := stat.ImageFsInodesTotal - stat.ImageFsInodesFree
+		if stat.ImageFsInodesTotal > 0 {
+			imageFsInodesUsedPercent := (float64(imageFsInodesUsed) / float64(stat.ImageFsInodesTotal)) * 100
+			a.storeMetric(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsInodesUsedPercentBase, stat.NodeName), now, imageFsInodesUsedPercent, nodeEntity)
+		}
+	}
+
+	a.logger.Debug("Collected node filesystem metrics",
+		zap.Int("node_count", len(fsStats)),
+	)
+}
+
+// storeMetric is a helper to store a metric point
+func (a *Aggregator) storeMetric(key string, t time.Time, v float64, entity map[string]string) {
+	series := a.store.Upsert(key)
+	if series != nil {
+		series.Add(timeseries.NewPointWithEntity(t, v, entity))
+	}
 }
 
 // collectStateMetrics collects cluster state metrics (pod counts, node counts)
@@ -1376,33 +1628,6 @@ func (a *Aggregator) collectNodeDetailedMetrics(ctx context.Context, now time.Ti
 		return
 	}
 
-	// Collect individual node memory usage if Metrics API is available
-	if a.apiMetricsAdapter.HasMetricsAPI(ctx) {
-		nodeUsageMap, err := a.apiMetricsAdapter.ListNodeCPUUsage(ctx)
-		if err == nil {
-			for _, node := range nodeList {
-				if _, exists := nodeUsageMap[node.Name]; exists {
-					nodeEntity := map[string]string{"node": node.Name}
-
-					// Store individual node memory usage (using placeholder calculations)
-					nodeMemSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeMemUsageBase, node.Name))
-					if nodeMemSeries != nil {
-						// Placeholder: 70% of capacity
-						placeholderMemUsage := node.MemoryBytes * 0.7
-						nodeMemSeries.Add(timeseries.NewPointWithEntity(now, placeholderMemUsage, nodeEntity))
-					}
-
-					nodeWorkingSetSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeMemWorkingSetBase, node.Name))
-					if nodeWorkingSetSeries != nil {
-						// Placeholder: 65% of capacity
-						placeholderWorkingSet := node.MemoryBytes * 0.65
-						nodeWorkingSetSeries.Add(timeseries.NewPointWithEntity(now, placeholderWorkingSet, nodeEntity))
-					}
-				}
-			}
-		}
-	}
-
 	// Collect per-node network rates if Summary API is available
 	if a.summaryAdapter.HasSummaryAPI(ctx) {
 		networkStats, err := a.summaryAdapter.ListNodeNetworkStats(ctx)
@@ -1464,80 +1689,17 @@ func (a *Aggregator) collectBasicNodeMetrics(ctx context.Context, now time.Time)
 	for _, node := range nodeList {
 		nodeEntity := map[string]string{"node": node.Name}
 
-		// Add placeholder filesystem usage metrics (normally from Summary API)
-		nodeFilesystemSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsUsedBase, node.Name))
-		if nodeFilesystemSeries != nil {
-			// Placeholder: 30% of node capacity as filesystem usage
-			placeholderFsUsage := node.MemoryBytes * 0.3 // Using memory as a proxy for disk
-			nodeFilesystemSeries.Add(timeseries.NewPointWithEntity(now, placeholderFsUsage, nodeEntity))
-		}
-
-		nodeFilesystemPercentSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsUsedPercentBase, node.Name))
-		if nodeFilesystemPercentSeries != nil {
-			// Placeholder: 30% filesystem usage
-			nodeFilesystemPercentSeries.Add(timeseries.NewPointWithEntity(now, 30.0, nodeEntity))
-		}
-
-		nodeImageFsSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsUsedBase, node.Name))
-		if nodeImageFsSeries != nil {
-			// Placeholder: 10% of memory capacity as image filesystem usage
-			placeholderImageFsUsage := node.MemoryBytes * 0.1
-			nodeImageFsSeries.Add(timeseries.NewPointWithEntity(now, placeholderImageFsUsage, nodeEntity))
-		}
-
-		// New: Image filesystem capacity
-		nodeImageFsCapacitySeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsCapacityBase, node.Name))
-		var imageFsCapacity float64
-		if nodeImageFsCapacitySeries != nil {
-			// Placeholder: 50GB image filesystem capacity per node
-			imageFsCapacity = float64(50 * 1024 * 1024 * 1024) // 50GB
-			nodeImageFsCapacitySeries.Add(timeseries.NewPointWithEntity(now, imageFsCapacity, nodeEntity))
-		}
-
-		// New: Image filesystem used percentage
-		nodeImageFsPercentSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeImageFsUsedPercentBase, node.Name))
-		if nodeImageFsPercentSeries != nil {
-			// Calculate percentage: (used / capacity) * 100
-			imageFsUsed := node.MemoryBytes * 0.1 // Same placeholder as above
-			if imageFsCapacity > 0 {
-				percentUsed := (imageFsUsed / imageFsCapacity) * 100
-				nodeImageFsPercentSeries.Add(timeseries.NewPointWithEntity(now, percentUsed, nodeEntity))
-			} else {
-				// Fallback placeholder
-				nodeImageFsPercentSeries.Add(timeseries.NewPointWithEntity(now, 20.0, nodeEntity))
-			}
-		}
-
-		// New: Inode usage percentage
-		nodeInodesPercentSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeFsInodesUsedPercentBase, node.Name))
-		if nodeInodesPercentSeries != nil {
-			// Placeholder: 15% inode usage
-			nodeInodesPercentSeries.Add(timeseries.NewPointWithEntity(now, 15.0, nodeEntity))
-		}
-
+		// Node Process Count (placeholder as no direct K8s API for this)
 		nodeProcessSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeProcessCountBase, node.Name))
 		if nodeProcessSeries != nil {
 			// Placeholder: 200 processes per node
 			nodeProcessSeries.Add(timeseries.NewPointWithEntity(now, 200, nodeEntity))
 		}
-
-		// Add the missing node network metrics you actually need!
-		nodeNetRxSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetRxBase, node.Name))
-		if nodeNetRxSeries != nil {
-			// Placeholder: 10MB/s receive rate per node
-			nodeNetRxSeries.Add(timeseries.NewPointWithEntity(now, 10*1024*1024, nodeEntity))
-		}
-
-		nodeNetTxSeries := a.store.Upsert(timeseries.GenerateNodeSeriesKey(timeseries.NodeNetTxBase, node.Name))
-		if nodeNetTxSeries != nil {
-			// Placeholder: 5MB/s transmit rate per node
-			nodeNetTxSeries.Add(timeseries.NewPointWithEntity(now, 5*1024*1024, nodeEntity))
-		}
 	}
 
 	a.logger.Debug("Collected basic node metrics",
 		zap.Int("node_count", len(nodeList)),
-		zap.String("note", "using placeholder values - Summary API needed for real data"),
+		zap.String("note", "only process count is collected here, other metrics moved to dedicated functions"),
 	)
 }
 

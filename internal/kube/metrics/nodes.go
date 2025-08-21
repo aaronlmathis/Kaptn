@@ -12,9 +12,11 @@ import (
 
 // NodeCapacity represents a node's resource capacity
 type NodeCapacity struct {
-	Name        string  `json:"name"`
-	CPUCores    float64 `json:"cpuCores"`
-	MemoryBytes float64 `json:"memoryBytes"`
+	Name          string  `json:"name"`
+	CPUCores      float64 `json:"cpuCores"`
+	MemoryBytes   float64 `json:"memoryBytes"`
+	Pods          int     `json:"pods"`          // Total pods capacity
+	AllocatablePods int     `json:"allocatablePods"` // Allocatable pods
 }
 
 // NodesAdapter provides node information and capacity data
@@ -45,6 +47,12 @@ func (na *NodesAdapter) ListNodes(ctx context.Context) ([]NodeCapacity, error) {
 		cpuQuantity := node.Status.Capacity[corev1.ResourceCPU]
 		cpuCores := float64(cpuQuantity.MilliValue()) / 1000.0 // Convert millicores to cores
 
+		podsQuantity := node.Status.Capacity[corev1.ResourcePods]
+		podsCapacity := int(podsQuantity.Value())
+
+		allocatablePodsQuantity := node.Status.Allocatable[corev1.ResourcePods]
+		allocatablePods := int(allocatablePodsQuantity.Value())
+
 		memoryQuantity := node.Status.Capacity[corev1.ResourceMemory]
 		memoryBytes := float64(memoryQuantity.Value()) // Memory in bytes
 
@@ -52,6 +60,8 @@ func (na *NodesAdapter) ListNodes(ctx context.Context) ([]NodeCapacity, error) {
 			Name:        node.Name,
 			CPUCores:    cpuCores,
 			MemoryBytes: memoryBytes,
+			Pods:        podsCapacity,
+			AllocatablePods: allocatablePods,
 		}
 
 		nodeCapacities = append(nodeCapacities, nodeCapacity)

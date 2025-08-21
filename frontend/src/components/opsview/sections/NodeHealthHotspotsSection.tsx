@@ -39,6 +39,10 @@ type HotspotRow = {
 	rxPps: number;       // node.net.rx.pps
 	txPps: number;       // node.net.tx.pps
 	pods: number;        // node.pods.count
+	podDensity: number;  // pods / allocatable.pods * 100
+	diskPressure: number; // 0 or 1
+	memPressure: number;  // 0 or 1
+	pidPressure: number;  // 0 or 1
 };
 
 const NODE_LIMIT = 200;
@@ -118,6 +122,10 @@ export default function NodeHealthHotspotsSection() {
 		"node.fs.inodes.used.percent",
 		"node.process.count",
 		"node.pods.count",
+		"node.allocatable.pods",
+		"node.condition.disk_pressure",
+		"node.condition.memory_pressure",
+		"node.condition.pid_pressure",
 	], []);
 
 	const nodeKeys = React.useMemo(() => {
@@ -180,9 +188,14 @@ export default function NodeHealthHotspotsSection() {
 			const txPps = latest(live[`node.net.tx.pps.${n.name}`]) ?? 0;
 
 			const pods = Math.round(latest(live[`node.pods.count.${n.name}`]) ?? 0);
+			const allocatablePods = latest(live[`node.allocatable.pods.${n.name}`]) ?? 0;
+			const diskPressure = latest(live[`node.condition.disk_pressure.${n.name}`]) ?? 0;
+			const memPressure = latest(live[`node.condition.memory_pressure.${n.name}`]) ?? 0;
+			const pidPressure = latest(live[`node.condition.pid_pressure.${n.name}`]) ?? 0;
 
 			const cpuPct = cpuA > 0 ? (cpuU / cpuA) * 100 : 0;
 			const memPct = memA > 0 ? (memU / memA) * 100 : 0;
+			const podDensity = allocatablePods > 0 ? (pods / allocatablePods) * 100 : 0;
 
 			return {
 				id: n.name,
@@ -195,6 +208,10 @@ export default function NodeHealthHotspotsSection() {
 				rxPps,
 				txPps,
 				pods,
+				podDensity,
+				diskPressure,
+				memPressure,
+				pidPressure,
 			};
 		});
 	}, [nodes, live]);
@@ -217,6 +234,7 @@ export default function NodeHealthHotspotsSection() {
 		rxPps: percentile(hotspotRows.map(r => r.rxPps)),
 		txPps: percentile(hotspotRows.map(r => r.txPps)),
 		pods: percentile(hotspotRows.map(r => r.pods)),
+		podDensity: percentile(hotspotRows.map(r => r.podDensity)),
 	}), [hotspotRows]);
 
 	const columns = React.useMemo<ColumnDef<HotspotRow>[]>(() => [
@@ -313,6 +331,43 @@ export default function NodeHealthHotspotsSection() {
 				return <span className={hot ? "font-semibold text-red-600" : ""}>{v}</span>;
 			},
 			sortingFn: (a, b) => a.original.pods - b.original.pods,
+		},
+		{
+			accessorKey: "podDensity",
+			header: "Pod Density",
+			cell: ({ row }) => {
+				const v = row.original.podDensity;
+				const hot = v >= thresholds.podDensity;
+				return <span className={hot ? "font-semibold text-red-600" : ""}>{formatPct0(v)}</span>;
+			},
+			sortingFn: (a, b) => a.original.podDensity - b.original.podDensity,
+		},
+		{
+			accessorKey: "diskPressure",
+			header: "Disk Pressure",
+			cell: ({ row }) => {
+				const v = row.original.diskPressure;
+				return v > 0 ? <Badge variant="destructive">Active</Badge> : <Badge variant="outline">OK</Badge>;
+			},
+			sortingFn: (a, b) => a.original.diskPressure - b.original.diskPressure,
+		},
+		{
+			accessorKey: "memPressure",
+			header: "Mem Pressure",
+			cell: ({ row }) => {
+				const v = row.original.memPressure;
+				return v > 0 ? <Badge variant="destructive">Active</Badge> : <Badge variant="outline">OK</Badge>;
+			},
+			sortingFn: (a, b) => a.original.memPressure - b.original.memPressure,
+		},
+		{
+			accessorKey: "pidPressure",
+			header: "PID Pressure",
+			cell: ({ row }) => {
+				const v = row.original.pidPressure;
+				return v > 0 ? <Badge variant="destructive">Active</Badge> : <Badge variant="outline">OK</Badge>;
+			},
+			sortingFn: (a, b) => a.original.pidPressure - b.original.pidPressure,
 		},
 	], [thresholds]);
 

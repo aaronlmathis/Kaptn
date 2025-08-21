@@ -120,6 +120,45 @@ func (ama *APIMetricsAdapter) ListNodeCPUUsage(ctx context.Context) (map[string]
 	return usage, nil
 }
 
+// ListNodeMemoryUsage returns memory usage for all nodes in bytes.
+// Returns empty map if Metrics API is not available.
+func (ama *APIMetricsAdapter) ListNodeMemoryUsage(ctx context.Context) (map[string]float64, error) {
+	if !ama.HasMetricsAPI(ctx) {
+		ama.logger.Debug("Metrics API not available, returning empty memory usage data")
+		return make(map[string]float64), nil
+	}
+
+	if ama.metricsClient == nil {
+		return nil, fmt.Errorf("metrics client is nil but HasMetricsAPI returned true")
+	}
+
+	nodeMetrics, err := ama.metricsClient.NodeMetricses().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		ama.logger.Error("Failed to list node metrics for memory usage", zap.Error(err))
+		return nil, fmt.Errorf("failed to list node metrics for memory: %w", err)
+	}
+
+	usage := make(map[string]float64)
+
+	for _, nodeMetric := range nodeMetrics.Items {
+		// Get memory usage in bytes
+		memoryBytes := nodeMetric.Usage.Memory().Value()
+		usage[nodeMetric.Name] = float64(memoryBytes)
+
+		ama.logger.Debug("Node memory usage collected",
+			zap.String("node", nodeMetric.Name),
+			zap.Float64("memoryGiB", float64(memoryBytes)/(1024*1024*1024)),
+			zap.Int64("memoryBytes", memoryBytes),
+		)
+	}
+
+	ama.logger.Debug("Collected memory usage for all nodes",
+		zap.Int("nodeCount", len(usage)),
+	)
+
+	return usage, nil
+}
+
 // GetTotalClusterCPUUsage returns the sum of CPU usage across all nodes in cores
 func (ama *APIMetricsAdapter) GetTotalClusterCPUUsage(ctx context.Context) (float64, error) {
 	nodeUsage, err := ama.ListNodeCPUUsage(ctx)

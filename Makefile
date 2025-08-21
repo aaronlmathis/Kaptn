@@ -77,7 +77,7 @@ test-watch: ## Run frontend tests in watch mode
 
 frontend: ## Build frontend
 	@echo "Building frontend..."
-	@cd frontend && npm ci && npm run build
+	@cd frontend && npm ci && KAPTN_BUILD_AUTH_MODE=none npm run build
 	@echo "Frontend built successfully"
 
 build: frontend ## Build backend binary (embeds frontend)

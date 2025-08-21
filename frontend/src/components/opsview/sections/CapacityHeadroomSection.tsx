@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
-import { MetricAreaChart, type ChartSeries } from "@/components/opsview/charts";
+import { MetricLineChart, type ChartSeries } from "@/components/opsview/charts";
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable";
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,7 +15,6 @@ import {
 } from "@/lib/table";
 import { AlertTriangle, Eye, Copy, Download } from "lucide-react";
 import { IconGripVertical } from "@tabler/icons-react";
-
 /**
  * Formatting helpers
  */
@@ -208,7 +207,8 @@ export default function CapacityHeadroomSection() {
 				`node.capacity.mem.bytes.${node.name}`,
 				`node.fs.used.percent.${node.name}`,
 				`node.fs.used.bytes.${node.name}`,
-				`node.imagefs.used.bytes.${node.name}`
+				`node.imagefs.used.bytes.${node.name}`,
+				`node.imagefs.used.percent.${node.name}`
 			];
 			//console.log(`🔍 Node metrics:`, nodeMetrics);
 			series.push(...nodeMetrics);
@@ -364,6 +364,7 @@ export default function CapacityHeadroomSection() {
 			const nCpuCap = latest(allData[`node.capacity.cpu.cores.${node.name}`]);
 			const nMemUsed = latest(allData[`node.mem.usage.bytes.${node.name}`]);
 			const nMemCap = latest(allData[`node.capacity.mem.bytes.${node.name}`]);
+			const nImgfsUsedPct = latest(allData[`node.imagefs.used.percent.${node.name}`]);
 
 			// DEBUG: Output the raw metric values for this node
 			//console.log(`=== NODE ${node.name} DEBUG ===`);
@@ -376,6 +377,7 @@ export default function CapacityHeadroomSection() {
 			// For CPU and Memory: headroom = (capacity - used) / capacity * 100
 			let cpuPct = 0;
 			let memPct = 0;
+			let imgfsPct = 0;
 
 			// CPU headroom calculation
 			if (nCpuCap && nCpuCap > 0 && nCpuUsed !== undefined) {
@@ -387,6 +389,11 @@ export default function CapacityHeadroomSection() {
 				memPct = Math.max(0, Math.min(100, ((nMemCap - nMemUsed) / nMemCap) * 100));
 			}
 
+			// ImageFS headroom calculation
+			if (nImgfsUsedPct !== undefined) {
+				imgfsPct = Math.max(0, Math.min(100, 100 - nImgfsUsedPct));
+			}
+
 			//console.log(`CALCULATED: CPU=${cpuPct.toFixed(1)}% | MEM=${memPct.toFixed(1)}%`);
 			//console.log(`===========================`);
 
@@ -395,7 +402,7 @@ export default function CapacityHeadroomSection() {
 				node: node.name,
 				cpuHeadroomPct: cpuPct,
 				memHeadroomPct: memPct,
-				imgfsHeadroomPct: 0, // ImageFS metrics not available, set to 0
+				imgfsHeadroomPct: imgfsPct,
 			});
 		});
 
@@ -483,35 +490,32 @@ export default function CapacityHeadroomSection() {
 
 			{/* Charts: CPU + Memory + ImageFS headroom % */}
 			<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-				<MetricAreaChart
+				<MetricLineChart
 					title="CPU Headroom %"
 					subtitle="(limits - used) / limits"
 					series={cpuHeadroomSeries}
 					unit="%"
 					formatter={(v) => formatPercent(v)}
-					stacked={false}
 					scopeLabel="cluster"
 					timespanLabel="30m"
 					resolutionLabel="hi"
 				/>
-				<MetricAreaChart
+				<MetricLineChart
 					title="Memory Headroom %"
 					subtitle="(capacity - used) / capacity"
 					series={memHeadroomSeries}
 					unit="%"
 					formatter={(v) => formatPercent(v)}
-					stacked={false}
 					scopeLabel="cluster"
 					timespanLabel="30m"
 					resolutionLabel="hi"
 				/>
-				<MetricAreaChart
+				<MetricLineChart
 					title="ImageFS Headroom %"
 					subtitle="(capacity - used) / capacity"
 					series={imgfsHeadroomSeries}
 					unit="%"
 					formatter={(v) => formatPercent(v)}
-					stacked={false}
 					scopeLabel="cluster"
 					timespanLabel="30m"
 					resolutionLabel="hi"

@@ -17,26 +17,66 @@ import (
 // NetworkStats represents network statistics for a node
 type NetworkStats struct {
 	NodeName  string    `json:"nodeName"`
-	RxBytes   uint64    `json:"rxBytes"`
-	TxBytes   uint64    `json:"txBytes"`
+	RxBytes   uint64    `json:"rxBytes"`   // Total received bytes
+	TxBytes   uint64    `json:"txBytes"`   // Total transmitted bytes
+	RxPackets uint64    `json:"rxPackets"` // Total received packets
+	TxPackets uint64    `json:"txPackets"` // Total transmitted packets
 	Timestamp time.Time `json:"timestamp"`
+}
+
+// FilesystemStats represents filesystem statistics for a node
+type FilesystemStats struct {
+	NodeName            string    `json:"nodeName"`
+	FsCapacityBytes     uint64    `json:"fsCapacityBytes"`
+	FsAvailableBytes    uint64    `json:"fsAvailableBytes"`
+	FsUsedBytes         uint64    `json:"fsUsedBytes"` // Derived if not directly available
+	FsInodesTotal       uint64    `json:"fsInodesTotal"`
+	FsInodesFree        uint64    `json:"fsInodesFree"`
+	FsInodesUsed        uint64    `json:"fsInodesUsed"` // Derived if not directly available
+	ImageFsCapacityBytes uint64    `json:"imageFsCapacityBytes"`
+	ImageFsAvailableBytes uint64    `json:"imageFsAvailableBytes"`
+	ImageFsUsedBytes    uint64    `json:"imageFsUsedBytes"` // Derived if not directly available
+	ImageFsInodesTotal  uint64    `json:"imageFsInodesTotal"`
+	ImageFsInodesFree   uint64    `json:"imageFsInodesFree"`
+	ImageFsInodesUsed   uint64    `json:"imageFsInodesUsed"` // Derived if not directly available
+	Timestamp           time.Time `json:"timestamp"`
+}
+
+// InterfaceStats represents network statistics for a single network interface
+type InterfaceStats struct {
+	Name      string `json:"name"`
+	RxBytes   uint64 `json:"rxBytes"`
+	RxErrors  uint64 `json:"rxErrors"`
+	TxBytes   uint64 `json:"txBytes"`
+	TxErrors  uint64 `json:"txErrors"`
+	RxPackets uint64 `json:"rxPackets"`
+	TxPackets uint64 `json:"txPackets"`
 }
 
 // SummaryStatsResponse represents the kubelet summary stats response
 type SummaryStatsResponse struct {
 	Node struct {
 		Network struct {
-			RxBytes uint64 `json:"rxBytes"`
-			TxBytes uint64 `json:"txBytes"`
+			RxBytes    uint64           `json:"rxBytes"`
+			TxBytes    uint64           `json:"txBytes"`
+			RxPackets  uint64           `json:"rxPackets"`
+			TxPackets  uint64           `json:"txPackets"`
+			Interfaces []InterfaceStats `json:"interfaces"` // Per-interface stats
 		} `json:"network"`
 		Fs struct {
 			UsedBytes     uint64 `json:"usedBytes"`
 			CapacityBytes uint64 `json:"capacityBytes"`
+			AvailableBytes uint64 `json:"availableBytes"`
+			Inodes        uint64 `json:"inodes"`      // Total inodes
+			InodesFree    uint64 `json:"inodesFree"`  // Free inodes
 		} `json:"fs"`
 		Runtime struct {
 			ImageFs struct {
 				UsedBytes     uint64 `json:"usedBytes"`
 				CapacityBytes uint64 `json:"capacityBytes"`
+				AvailableBytes uint64 `json:"availableBytes"`
+				Inodes        uint64 `json:"inodes"`      // Total inodes
+				InodesFree    uint64 `json:"inodesFree"`  // Free inodes
 			} `json:"imageFs"`
 		} `json:"runtime"`
 		Memory struct {
@@ -158,10 +198,43 @@ func (ssa *SummaryStatsAdapter) ListNodeNetworkStats(ctx context.Context) ([]Net
 			continue
 		}
 
+		var rxBytes, txBytes, rxPackets, txPackets uint64
+
+		// Kubelet can return network stats aggregated at the node level or
+		// as a list of interfaces. We prioritize the list of interfaces if present.
+		if len(summaryStats.Node.Network.Interfaces) > 0 {
+			// Sum byte and packet counts from all interfaces.
+			for _, iface := range summaryStats.Node.Network.Interfaces {
+				rxBytes += iface.RxBytes
+				txBytes += iface.TxBytes
+				rxPackets += iface.RxPackets
+				txPackets += iface.TxPackets
+			}
+			// If packet counts were not found on interfaces (sum is 0),
+			// check for a node-level aggregate. This handles cases where Kubelet
+			// provides per-interface byte counts but only node-level packet counts.
+			if rxPackets == 0 && summaryStats.Node.Network.RxPackets > 0 {
+				ssa.logger.Debug("Falling back to node-level rxPackets", zap.String("node", nodeName))
+				rxPackets = summaryStats.Node.Network.RxPackets
+			}
+			if txPackets == 0 && summaryStats.Node.Network.TxPackets > 0 {
+				ssa.logger.Debug("Falling back to node-level txPackets", zap.String("node", nodeName))
+				txPackets = summaryStats.Node.Network.TxPackets
+			}
+		} else {
+			// Fallback to top-level stats if interfaces array is empty.
+			rxBytes = summaryStats.Node.Network.RxBytes
+			txBytes = summaryStats.Node.Network.TxBytes
+			rxPackets = summaryStats.Node.Network.RxPackets
+			txPackets = summaryStats.Node.Network.TxPackets
+		}
+
 		nodeStats := NetworkStats{
 			NodeName:  nodeName,
-			RxBytes:   summaryStats.Node.Network.RxBytes,
-			TxBytes:   summaryStats.Node.Network.TxBytes,
+			RxBytes:   rxBytes,
+			TxBytes:   txBytes,
+			RxPackets: rxPackets,
+			TxPackets: txPackets,
 			Timestamp: timestamp,
 		}
 
@@ -170,7 +243,9 @@ func (ssa *SummaryStatsAdapter) ListNodeNetworkStats(ctx context.Context) ([]Net
 		ssa.logger.Debug("Node network stats collected",
 			zap.String("node", nodeName),
 			zap.Uint64("rxBytes", nodeStats.RxBytes),
+			zap.Uint64("rxPackets", nodeStats.RxPackets),
 			zap.Uint64("txBytes", nodeStats.TxBytes),
+			zap.Uint64("txPackets", nodeStats.TxPackets),
 		)
 	}
 
@@ -189,27 +264,79 @@ func (ssa *SummaryStatsAdapter) GetClusterNetworkStats(ctx context.Context) (Net
 		return NetworkStats{}, err
 	}
 
-	var totalRxBytes, totalTxBytes uint64
+	var totalRxBytes, totalTxBytes, totalRxPackets, totalTxPackets uint64
 	timestamp := time.Now()
 
 	for _, stats := range nodeStats {
 		totalRxBytes += stats.RxBytes
 		totalTxBytes += stats.TxBytes
+		totalRxPackets += stats.RxPackets
+		totalTxPackets += stats.TxPackets
 	}
 
 	clusterStats := NetworkStats{
 		NodeName:  "cluster", // Special identifier for cluster-wide stats
 		RxBytes:   totalRxBytes,
 		TxBytes:   totalTxBytes,
+		RxPackets: totalRxPackets,
+		TxPackets: totalTxPackets,
 		Timestamp: timestamp,
 	}
 
 	ssa.logger.Debug("Cluster network stats calculated",
 		zap.Uint64("totalRxBytes", totalRxBytes),
 		zap.Uint64("totalTxBytes", totalTxBytes),
+		zap.Uint64("totalRxPackets", totalRxPackets),
+		zap.Uint64("totalTxPackets", totalTxPackets),
 	)
 
 	return clusterStats, nil
+}
+
+// ListNodeFilesystemStats returns filesystem statistics for all nodes
+// Returns empty slice if Summary API is not available
+func (ssa *SummaryStatsAdapter) ListNodeFilesystemStats(ctx context.Context) ([]FilesystemStats, error) {
+	nodes, err := ssa.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		ssa.logger.Error("Failed to list nodes for filesystem stats", zap.Error(err))
+		return nil, fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	stats := make([]FilesystemStats, 0, len(nodes.Items))
+	timestamp := time.Now()
+
+	for _, node := range nodes.Items {
+		nodeName := node.Name
+		summaryStats, err := ssa.getNodeSummaryStats(ctx, nodeName)
+		if err != nil {
+			ssa.logger.Warn("Failed to get summary stats for node (filesystem)",
+				zap.String("node", nodeName),
+				zap.Error(err))
+			continue
+		}
+
+		fsStats := FilesystemStats{
+			NodeName:            nodeName,
+			FsCapacityBytes:     summaryStats.Node.Fs.CapacityBytes,
+			FsAvailableBytes:    summaryStats.Node.Fs.AvailableBytes,
+			FsUsedBytes:         summaryStats.Node.Fs.UsedBytes,
+			FsInodesTotal:       summaryStats.Node.Fs.Inodes,
+			FsInodesFree:        summaryStats.Node.Fs.InodesFree,
+			ImageFsCapacityBytes: summaryStats.Node.Runtime.ImageFs.CapacityBytes,
+			ImageFsAvailableBytes: summaryStats.Node.Runtime.ImageFs.AvailableBytes,
+			ImageFsUsedBytes:    summaryStats.Node.Runtime.ImageFs.UsedBytes,
+			ImageFsInodesTotal:  summaryStats.Node.Runtime.ImageFs.Inodes,
+			ImageFsInodesFree:   summaryStats.Node.Runtime.ImageFs.InodesFree,
+			Timestamp:           timestamp,
+		}
+		stats = append(stats, fsStats)
+	}
+
+	ssa.logger.Debug("Collected filesystem stats for nodes",
+		zap.Int("nodeCount", len(stats)),
+	)
+
+	return stats, nil
 }
 
 // getNodeSummaryStats fetches summary statistics from a specific node's kubelet

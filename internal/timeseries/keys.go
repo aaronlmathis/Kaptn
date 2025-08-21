@@ -56,25 +56,40 @@ const (
 	NodeAllocatableCPUBase = "node.allocatable.cpu.cores"
 	NodeAllocatableMemBase = "node.allocatable.mem.bytes"
 
-	// New node-level metrics
-	NodePodsCountBase           = "node.pods.count"
-	NodeImageFsCapacityBase     = "node.imagefs.capacity.bytes"
-	NodeImageFsUsedPercentBase  = "node.imagefs.used.percent"
-	NodeFsInodesUsedPercentBase = "node.fs.inodes.used.percent"
-	NodeNetRxPpsBase            = "node.net.rx.pps" // packets per second
-	NodeNetTxPpsBase            = "node.net.tx.pps" // packets per second
+	NodeFsCapacityBase         = "node.fs.capacity.bytes"
+	NodeFsAvailableBase        = "node.fs.available.bytes"
+	NodeFsInodesTotalBase      = "node.fs.inodes.total"
+	NodeFsInodesFreeBase       = "node.fs.inodes.free"
+	NodeImageFsCapacityBase    = "node.imagefs.capacity.bytes"
+	NodeImageFsAvailableBase   = "node.imagefs.available.bytes"
+	NodeImageFsInodesTotalBase = "node.imagefs.inodes.total"
+	NodeImageFsInodesFreeBase  = "node.imagefs.inodes.free"
+
+	NodeCapacityPodsBase    = "node.capacity.pods"
+	NodeAllocatablePodsBase = "node.allocatable.pods"
+
+	NodeConditionReadyBase = "node.condition.ready"
+
+	NodePodsCountBase = "node.pods.count"
+
+	NodeImageFsUsedPercentBase       = "node.imagefs.used.percent"
+	NodeImageFsInodesUsedPercentBase = "node.imagefs.inodes.used.percent"
+	NodeFsInodesUsedPercentBase      = "node.fs.inodes.used.percent"
+	NodeNetRxPpsBase                 = "node.net.rx.pps" // packets per second
+	NodeNetTxPpsBase                 = "node.net.tx.pps" // packets per second
+	NodeConditionDiskPressureBase    = "node.condition.disk_pressure"
+	NodeConditionMemoryPressureBase  = "node.condition.memory_pressure"
+	NodeConditionPIDPressureBase     = "node.condition.pid_pressure"
 )
 
 // Pod-level metric base keys (will be combined with namespace and pod names)
 const (
-	PodCPUUsageBase      = "pod.cpu.usage.cores"
-	PodMemUsageBase      = "pod.mem.usage.bytes"
-	PodMemWorkingSetBase = "pod.mem.working_set.bytes"
-	PodNetRxBase         = "pod.net.rx.bps"
-	PodNetTxBase         = "pod.net.tx.bps"
-	PodEphemeralUsedBase = "pod.ephemeral.used.bytes"
-
-	// New pod-level metrics for requests/limits
+	PodCPUUsageBase         = "pod.cpu.usage.cores"
+	PodMemUsageBase         = "pod.mem.usage.bytes"
+	PodMemWorkingSetBase    = "pod.mem.working_set.bytes"
+	PodNetRxBase            = "pod.net.rx.bps"
+	PodNetTxBase            = "pod.net.tx.bps"
+	PodEphemeralUsedBase    = "pod.ephemeral.used.bytes"
 	PodCPURequestBase       = "pod.cpu.request.cores"
 	PodCPULimitBase         = "pod.cpu.limit.cores"
 	PodMemRequestBase       = "pod.mem.request.bytes"
@@ -273,13 +288,30 @@ func GetNodeMetricBases() []string {
 		NodeCapacityMemBase,
 		NodeAllocatableCPUBase,
 		NodeAllocatableMemBase,
+		// New node-level filesystem metrics
+		NodeFsCapacityBase,
+		NodeFsAvailableBase,
+		NodeFsInodesTotalBase,
+		NodeFsInodesFreeBase,
+		NodeImageFsCapacityBase,
+		NodeImageFsAvailableBase,
+		NodeImageFsInodesTotalBase,
+		NodeImageFsInodesFreeBase,
+		// New node-level pod capacity metrics
+		NodeCapacityPodsBase,
+		NodeAllocatablePodsBase,
 		// New node metrics
 		NodePodsCountBase,
-		NodeImageFsCapacityBase,
 		NodeImageFsUsedPercentBase,
+		NodeImageFsInodesUsedPercentBase,
 		NodeFsInodesUsedPercentBase,
 		NodeNetRxPpsBase,
 		NodeNetTxPpsBase,
+		// New node-level condition metrics
+		NodeConditionReadyBase,
+		NodeConditionDiskPressureBase,
+		NodeConditionMemoryPressureBase,
+		NodeConditionPIDPressureBase,
 	}
 }
 
