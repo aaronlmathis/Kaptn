@@ -351,11 +351,11 @@ function ChartCard({
             )}
 
             {(scopeLabel || timespanLabel || resolutionLabel) && (
-<div className="text-[11px] text-right text-muted-foreground italic opacity-60">
-  {scopeLabel && <span>{scopeLabel}</span>}
-  {timespanLabel && <span> · {timespanLabel}</span>}
-  {resolutionLabel && <span> · {resolutionLabel}</span>}
-</div>
+              <div className="text-[11px] text-right text-muted-foreground italic opacity-60">
+                {scopeLabel && <span>{scopeLabel}</span>}
+                {timespanLabel && <span> · {timespanLabel}</span>}
+                {resolutionLabel && <span> · {resolutionLabel}</span>}
+              </div>
             )}
           </CardFooter>
         )}

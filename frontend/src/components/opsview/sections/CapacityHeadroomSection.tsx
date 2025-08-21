@@ -205,7 +205,10 @@ export default function CapacityHeadroomSection() {
 				`node.cpu.usage.cores.${node.name}`,
 				`node.capacity.cpu.cores.${node.name}`,
 				`node.mem.usage.bytes.${node.name}`,
-				`node.capacity.mem.bytes.${node.name}`
+				`node.capacity.mem.bytes.${node.name}`,
+				`node.fs.used.percent.${node.name}`,
+				`node.fs.used.bytes.${node.name}`,
+				`node.imagefs.used.bytes.${node.name}`
 			];
 			//console.log(`🔍 Node metrics:`, nodeMetrics);
 			series.push(...nodeMetrics);
