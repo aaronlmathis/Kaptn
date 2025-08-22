@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { IconPlus, IconTrash, IconLayoutColumns, IconChevronDown, IconRefresh, IconDotsVertical } from "@tabler/icons-react"
+import { IconPlus, IconTrash, IconLayoutColumns, IconChevronDown, IconDotsVertical } from "@tabler/icons-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -86,10 +86,6 @@ export interface DataTableFiltersProps {
 	}
 	showColumnToggle?: boolean
 
-	// Refresh functionality
-	onRefresh?: () => void
-	isRefreshing?: boolean
-
 	// Additional custom filters (slot for extra controls)
 	children?: React.ReactNode
 
@@ -116,8 +112,6 @@ export function DataTableFilters({
 	createIcon = <IconPlus className="size-4" />,
 	table,
 	showColumnToggle = true,
-	onRefresh,
-	isRefreshing = false,
 	children,
 	className = "",
 }: DataTableFiltersProps) {
@@ -138,9 +132,9 @@ export function DataTableFilters({
 	return (
 		<div className={`space-y-3 ${className}`}>
 			{/* All controls in a single responsive row */}
-			<div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+			<div className="flex flex-wrap flex-col md:flex-row items-start md:items-center justify-between gap-3">
 				{/* Left side: Search and filters */}
-				<div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto min-w-0">
+				<div className="flex flex-wrap flex-col sm:flex-row items-start sm:items-center gap-2 w-full md:w-auto min-w-0">
 					{/* Search Input */}
 					<div className="w-full sm:w-auto flex-shrink-0">
 						<Input
@@ -307,20 +301,6 @@ export function DataTableFilters({
 										})}
 								</DropdownMenuContent>
 							</DropdownMenu>
-						)}
-
-						{/* Refresh Button */}
-						{onRefresh && (
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={onRefresh}
-								disabled={isRefreshing}
-								className="gap-1.5 flex-shrink-0"
-							>
-								<IconRefresh className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
-								<span className="hidden lg:inline">Refresh</span>
-							</Button>
 						)}
 					</div>
 				</div>

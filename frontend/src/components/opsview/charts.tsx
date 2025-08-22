@@ -25,7 +25,6 @@ import {
   Radar,
   PolarAngleAxis,
   PolarRadiusAxis,
-  ResponsiveContainer,
   Cell,
 } from "recharts";
 import { MoreVertical, Download, Copy, Eye, BarChart3, Activity, PieChart, Info, LineChart as LineChartIcon } from "lucide-react";
@@ -254,7 +253,7 @@ function ChartCard({
   actions,
   className,
   chartType = 'area',
-  footerExtra, 
+  footerExtra,
 }: {
   title: string;
   subtitle?: string;
@@ -268,7 +267,7 @@ function ChartCard({
   actions?: ChartActions;
   className?: string;
   chartType?: 'area' | 'line' | 'bar' | 'radial' | 'radar';
-  footerExtra?: React.ReactNode; 
+  footerExtra?: React.ReactNode;
 }) {
   const { icon: ChartIcon } = getChartTypeInfo(chartType);
 
@@ -1219,7 +1218,7 @@ export function MetricRadarChart({
   const content = React.useMemo(() => {
     if (isLoading) {
       return (
-        <div className="flex items-center justify-center  w-full">
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="flex items-center space-x-2 text-muted-foreground">
             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             <span>Loading chart data...</span>
@@ -1230,7 +1229,7 @@ export function MetricRadarChart({
 
     if (error) {
       return (
-        <div className="flex items-center justify-center h-[300px] w-full">
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="text-center space-y-2">
             <div className="text-destructive text-sm font-medium">Error loading data</div>
             <div className="text-xs text-muted-foreground">{error}</div>
@@ -1241,7 +1240,7 @@ export function MetricRadarChart({
 
     if (chartData.length === 0) {
       return (
-        <div className="flex items-center justify-center h-[300px] w-full">
+        <div className="flex items-center justify-center h-[250px] w-full">
           <div className="text-center space-y-2">
             <div className="text-muted-foreground text-sm">{emptyMessage}</div>
           </div>
@@ -1250,37 +1249,47 @@ export function MetricRadarChart({
     }
 
     return (
-      <ChartContainer config={chartConfig} className="min-h-[350px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart
-            data={chartData}
-            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-          >
-            <PolarGrid />
-            <PolarAngleAxis dataKey="axis" tick={{ fontSize: 12 }} />
-            <PolarRadiusAxis
-              angle={30}
-              domain={[0, 100]}
-              tickFormatter={valueFormatter}
-              tick={{ fontSize: 10 }}
-            />
-            <Radar
-              dataKey="value"
-              stroke="hsl(var(--chart-1))"
-              fill="hsl(var(--chart-1))"
-              fillOpacity={0.35}
-              strokeWidth={2}
-            />
-            <ChartTooltip
-              content={
-                <ChartTooltipContent
-                  formatter={(value) => valueFormatter(Number(value))}
-                  labelKey="axis"
-                />
-              }
-            />
-          </RadarChart>
-        </ResponsiveContainer>
+      <ChartContainer config={chartConfig} className="mx-auto aspect-square max-h-[250px]">
+        <RadarChart data={chartData}>
+          <PolarGrid />
+          <PolarAngleAxis dataKey="axis" tick={{ fontSize: 12 }} />
+          <PolarRadiusAxis
+            angle={30}
+            domain={[0, 100]}
+            tickFormatter={valueFormatter}
+            tick={{ fontSize: 10 }}
+          />
+          <Radar
+            dataKey="value"
+            stroke="hsl(var(--chart-1))"
+            fill="hsl(var(--chart-1))"
+            fillOpacity={0.35}
+            strokeWidth={2}
+          />
+          <ChartTooltip
+            cursor={false}
+            content={({ active, payload }) => {
+              if (!active || !payload || !payload.length) return null;
+
+              const data = payload[0];
+              if (!data) return null;
+
+              const axisName = data.payload.axis;
+              const value = data.value;
+              const color = data.stroke || data.fill || "hsl(var(--chart-1))";
+
+              return (
+                <div className="bg-background border border-border rounded-lg shadow-lg p-3 max-w-xs">
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
+                    <span className="text-muted-foreground min-w-0 flex-1">{axisName}:</span>
+                    <span className="font-medium text-foreground">{valueFormatter(Number(value))}</span>
+                  </div>
+                </div>
+              );
+            }}
+          />
+        </RadarChart>
       </ChartContainer>
     );
   }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, emptyMessage]);

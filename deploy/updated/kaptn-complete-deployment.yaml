@@ -271,7 +271,7 @@ data:
       disable_network_if_unavailable: true
       
       # SCALED FOR 20+ OPSVIEW SECTIONS
-      max_series: 1000000              # 1M series (20 sections × 200 metrics × 50 users × 5x safety)
+      max_series: 1000000              # 1M series (20 sections 200 metrics  50 users  5x safety)
       max_points_per_series: 10000000  # 10M points per series (scales with available memory)
       max_ws_clients: 2000             # Support many concurrent dashboard users
       ws_read_limit: 131072            # 128KB - handles massive subscription messages

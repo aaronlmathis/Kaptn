@@ -7,6 +7,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
 import { MetricLineChart, type ChartSeries } from "@/components/opsview/charts";
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable";
+import { SectionHealthFooter } from "@/components/opsview/SectionHealthFooter";
+import { formatCores, formatBytesIEC } from "@/lib/metric-utils";
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters";
 import { Checkbox } from "@/components/ui/checkbox";
 import { fetchEntities } from "@/lib/metrics-api";
@@ -24,12 +26,25 @@ function formatPercent(v: number): string {
 	return `${pct.toFixed(0)}%`;
 }
 
+const toneForHeadroom = (p: number): "ok" | "warn" | "crit" => {
+	if (p <= 10) return "crit";
+	if (p <= 25) return "warn";
+	return "ok";
+};
+
 function headroomBadge(pct: number) {
 	const pctInt = Math.round(pct);
-	if (pctInt <= 5) return <Badge variant="destructive" className="text-xs">{formatPercent(pct)}</Badge>;
-	if (pctInt <= 15) return <Badge variant="outline" className="text-orange-600 text-xs">{formatPercent(pct)}</Badge>;
-	if (pctInt <= 30) return <Badge variant="secondary" className="text-xs">{formatPercent(pct)}</Badge>;
-	return <Badge variant="default" className="text-xs">{formatPercent(pct)}</Badge>;
+	if (pctInt <= 10) { // Critical
+		return <Badge variant="outline" className="text-xs text-red-500 border-red-500/60">{formatPercent(pct)}</Badge>;
+	}
+	if (pctInt <= 25) { // Warning
+		return <Badge variant="outline" className="text-xs text-orange-500 border-orange-500/60">{formatPercent(pct)}</Badge>;
+	}
+	if (pctInt <= 50) { // OK
+		return <Badge variant="outline" className="text-xs text-blue-500 border-blue-500/60">{formatPercent(pct)}</Badge>;
+	}
+	// Healthy
+	return <Badge variant="outline" className="text-xs text-green-600 border-green-600/60">{formatPercent(pct)}</Badge>;
 }
 
 /**
@@ -45,18 +60,25 @@ type SeriesMap = Record<string, Point[]>;
  * Utility to map two series (A, B) by timestamp (assuming aligned sampling) and compute fn(A,B) → series
  */
 function deriveSeries(
-	a: Point[] | undefined,
-	b: Point[] | undefined,
+	seriesA: Point[] | undefined,
+	seriesB: Point[] | undefined,
 	derive: (a: number, b: number) => number
 ): [number, number][] {
-	if (!a?.length || !b?.length) return [];
-	const len = Math.min(a.length, b.length);
+	if (!seriesA?.length || !seriesB?.length) return [];
+
+	const mapB = new Map<number, number>();
+	for (const p of seriesB) {
+		if (p.t && Number.isFinite(p.v)) {
+			mapB.set(p.t, p.v);
+		}
+	}
+
 	const out: [number, number][] = [];
-	for (let i = 0; i < len; i++) {
-		const t = a[i].t ?? b[i].t;
-		const av = a[i].v ?? 0;
-		const bv = b[i].v ?? 0;
-		out.push([t, derive(av, bv)]);
+	for (const pA of seriesA) {
+		if (pA.t && Number.isFinite(pA.v) && mapB.has(pA.t)) {
+			const valB = mapB.get(pA.t)!;
+			out.push([pA.t, derive(pA.v, valB)]);
+		}
 	}
 	return out;
 }
@@ -189,10 +211,13 @@ export default function CapacityHeadroomSection() {
 		series.push(
 			"cluster.cpu.used.cores",
 			"cluster.cpu.limits.cores",
+			"cluster.cpu.allocatable.cores",
+			"cluster.cpu.requested.cores",
 			"cluster.mem.used.bytes",
 			"cluster.mem.limits.bytes",
 			"cluster.mem.capacity.bytes",
 			"cluster.mem.allocatable.bytes",
+			"cluster.mem.requested.bytes",
 			"cluster.fs.image.used.bytes",
 			"cluster.fs.image.capacity.bytes"
 		);
@@ -202,9 +227,9 @@ export default function CapacityHeadroomSection() {
 			//console.log(`🔍 Building node metrics for node: "${node.name}" (id: ${node.id})`);
 			const nodeMetrics = [
 				`node.cpu.usage.cores.${node.name}`,
-				`node.capacity.cpu.cores.${node.name}`,
+				`node.allocatable.cpu.cores.${node.name}`,
 				`node.mem.usage.bytes.${node.name}`,
-				`node.capacity.mem.bytes.${node.name}`,
+				`node.allocatable.mem.bytes.${node.name}`,
 				`node.fs.used.percent.${node.name}`,
 				`node.fs.used.bytes.${node.name}`,
 				`node.imagefs.used.bytes.${node.name}`,
@@ -260,8 +285,8 @@ export default function CapacityHeadroomSection() {
 	// --- Cluster headroom % time series
 	const cpuHeadroomSeries: ChartSeries[] = React.useMemo(() => {
 		const used = allData["cluster.cpu.used.cores"];
-		const lim = allData["cluster.cpu.limits.cores"];
-		const pct = deriveSeries(used, lim, (u, l) => (l > 0 ? ((l - u) / l) * 100 : 0));
+		const alloc = allData["cluster.cpu.allocatable.cores"];
+		const pct = deriveSeries(used, alloc, (u, a) => (a > 0 ? ((a - u) / a) * 100 : 0));
 		return [
 			{
 				key: "cluster.cpu.headroom.pct",
@@ -273,39 +298,9 @@ export default function CapacityHeadroomSection() {
 	}, [allData]);
 
 	const memHeadroomSeries: ChartSeries[] = React.useMemo(() => {
-		// Use the documented memory metrics for cluster-level headroom
 		const used = allData["cluster.mem.used.bytes"];
-		let capacity = allData["cluster.mem.capacity.bytes"];
-
-		// Try allocatable if capacity isn't available
-		if (!capacity?.length || capacity.every(p => p.v === 0)) {
-			capacity = allData["cluster.mem.allocatable.bytes"];
-		}
-
-		// As a last resort, try limits
-		if (!capacity?.length || capacity.every(p => p.v === 0)) {
-			capacity = allData["cluster.mem.limits.bytes"];
-		}
-
-		// Debug memory data
-		//console.log("Memory Headroom Debug:");
-		//console.log("- used data points:", used?.length || 0, "latest:", used?.[used.length - 1]);
-		//console.log("- capacity data points:", capacity?.length || 0, "latest:", capacity?.[capacity.length - 1]);
-		//console.log("- all memory keys:", Object.keys(allData).filter(k => k.includes('mem')));
-
-		const pct = deriveSeries(used, capacity, (u, c) => {
-			if (c <= 0) return 0;
-			const headroom = ((c - u) / c) * 100;
-			//console.log(`Memory calc: used=${u}, capacity=${c}, headroom=${headroom}%`);
-			// Check for obviously wrong calculations (negative headroom suggests wrong metrics)
-			if (headroom < 0) {
-				//console.warn(`Negative memory headroom detected: used=${u}, capacity=${c}. This suggests a metric mismatch.`);
-				return 0;
-			}
-			return Math.max(0, Math.min(100, headroom)); // Cap at 100%
-		});
-
-		//console.log("- calculated headroom series length:", pct.length, "sample:", pct.slice(-3));
+		const alloc = allData["cluster.mem.allocatable.bytes"];
+		const pct = deriveSeries(used, alloc, (u, a) => (a > 0 ? ((a - u) / a) * 100 : 0));
 
 		return [
 			{
@@ -329,6 +324,85 @@ export default function CapacityHeadroomSection() {
 				data: pct,
 			},
 		];
+	}, [allData]);
+
+	// --- Footer data calculations ---
+	const { cpuFooter, memFooter, imgfsFooter } = React.useMemo(() => {
+		// CPU footer
+		const cpuUsed = latest(allData["cluster.cpu.used.cores"]) ?? 0;
+		const cpuAlloc = latest(allData["cluster.cpu.allocatable.cores"]) ?? 0;
+		const cpuReq = latest(allData["cluster.cpu.requested.cores"]) ?? 0;
+
+		const cpuHeadroom = Math.max(0, cpuAlloc - cpuUsed);
+		const cpuHeadroomPct = cpuAlloc > 0 ? (cpuHeadroom / cpuAlloc) * 100 : 100;
+		const cpuUsedRatio = cpuAlloc > 0 ? (cpuUsed / cpuAlloc) : 0;
+		const cpuReqRatio = cpuAlloc > 0 ? (cpuReq / cpuAlloc) : 0;
+		const cpuReqDisplay = cpuReqRatio > 5 ? `${cpuReqRatio.toFixed(1)}x` : `${(cpuReqRatio * 100).toFixed(0)}%`;
+
+		const cpuTone = toneForHeadroom(cpuHeadroomPct);
+		const cpuSummary = `CPU has ${formatPercent(cpuHeadroomPct)} headroom (${formatCores(cpuHeadroom)} available).`;
+
+		const cpuFooter = (
+			<SectionHealthFooter
+				tone={cpuTone}
+				summary={cpuSummary}
+				usedPct={cpuUsedRatio}
+				ratioPills={[
+					{ label: "Used/Allocatable", value: `${(cpuUsedRatio * 100).toFixed(0)}%`, tone: toneForHeadroom(100 - cpuUsedRatio * 100) === 'crit' ? 'crit' : 'info' },
+					{ label: "Req/Allocatable", value: cpuReqDisplay, tone: cpuReqRatio > 1 ? "warn" : "info", title: "Commitment vs Allocatable" },
+				]}
+			/>
+		);
+
+		// Memory footer
+		const memUsed = latest(allData["cluster.mem.used.bytes"]) ?? 0;
+		const memAlloc = latest(allData["cluster.mem.allocatable.bytes"]) ?? 0;
+		const memReq = latest(allData["cluster.mem.requested.bytes"]) ?? 0;
+
+		const memHeadroom = Math.max(0, memAlloc - memUsed);
+		const memHeadroomPct = memAlloc > 0 ? (memHeadroom / memAlloc) * 100 : 100;
+		const memUsedRatio = memAlloc > 0 ? (memUsed / memAlloc) : 0;
+		const memReqRatio = memAlloc > 0 ? (memReq / memAlloc) : 0;
+		const memReqDisplay = memReqRatio > 5 ? `${memReqRatio.toFixed(1)}x` : `${(memReqRatio * 100).toFixed(0)}%`;
+
+		const memTone = toneForHeadroom(memHeadroomPct);
+		const memSummary = `Memory has ${formatPercent(memHeadroomPct)} headroom (${formatBytesIEC(memHeadroom)} available).`;
+
+		const memFooter = (
+			<SectionHealthFooter
+				tone={memTone}
+				summary={memSummary}
+				usedPct={memUsedRatio}
+				ratioPills={[
+					{ label: "Used/Allocatable", value: `${(memUsedRatio * 100).toFixed(0)}%`, tone: toneForHeadroom(100 - memUsedRatio * 100) === 'crit' ? 'crit' : 'info' },
+					{ label: "Req/Allocatable", value: memReqDisplay, tone: memReqRatio > 1 ? "warn" : "info", title: "Commitment vs Allocatable" },
+				]}
+			/>
+		);
+
+		// ImageFS footer
+		const imgfsUsed = latest(allData["cluster.fs.image.used.bytes"]) ?? 0;
+		const imgfsCap = latest(allData["cluster.fs.image.capacity.bytes"]) ?? 0;
+
+		const imgfsHeadroom = Math.max(0, imgfsCap - imgfsUsed);
+		const imgfsHeadroomPct = imgfsCap > 0 ? (imgfsHeadroom / imgfsCap) * 100 : 100;
+		const imgfsUsedPct = imgfsCap > 0 ? (imgfsUsed / imgfsCap) : 0;
+
+		const imgfsTone = toneForHeadroom(imgfsHeadroomPct);
+		const imgfsSummary = `ImageFS has ${formatPercent(imgfsHeadroomPct)} headroom (${formatBytesIEC(imgfsHeadroom)} available).`;
+
+		const imgfsFooter = (
+			<SectionHealthFooter
+				tone={imgfsTone}
+				summary={imgfsSummary}
+				usedPct={imgfsUsedPct}
+				ratioPills={[
+					{ label: "Used/Capacity", value: `${(imgfsUsedPct * 100).toFixed(0)}%`, tone: toneForHeadroom(100 - imgfsUsedPct * 100) === 'crit' ? 'crit' : 'info' },
+				]}
+			/>
+		);
+
+		return { cpuFooter, memFooter, imgfsFooter };
 	}, [allData]);
 
 	// --- Node table (latest value per node)
@@ -361,9 +435,9 @@ export default function CapacityHeadroomSection() {
 			// Pull the latest for each needed metric per node
 			// Only use metrics that actually exist based on test_node_subscription_correct.js
 			const nCpuUsed = latest(allData[`node.cpu.usage.cores.${node.name}`]);
-			const nCpuCap = latest(allData[`node.capacity.cpu.cores.${node.name}`]);
+			const nCpuAlloc = latest(allData[`node.allocatable.cpu.cores.${node.name}`]);
 			const nMemUsed = latest(allData[`node.mem.usage.bytes.${node.name}`]);
-			const nMemCap = latest(allData[`node.capacity.mem.bytes.${node.name}`]);
+			const nMemAlloc = latest(allData[`node.allocatable.mem.bytes.${node.name}`]);
 			const nImgfsUsedPct = latest(allData[`node.imagefs.used.percent.${node.name}`]);
 
 			// DEBUG: Output the raw metric values for this node
@@ -380,13 +454,13 @@ export default function CapacityHeadroomSection() {
 			let imgfsPct = 0;
 
 			// CPU headroom calculation
-			if (nCpuCap && nCpuCap > 0 && nCpuUsed !== undefined) {
-				cpuPct = Math.max(0, Math.min(100, ((nCpuCap - nCpuUsed) / nCpuCap) * 100));
+			if (nCpuAlloc && nCpuAlloc > 0 && nCpuUsed !== undefined) {
+				cpuPct = Math.max(0, Math.min(100, ((nCpuAlloc - nCpuUsed) / nCpuAlloc) * 100));
 			}
 
 			// Memory headroom calculation  
-			if (nMemCap && nMemCap > 0 && nMemUsed !== undefined) {
-				memPct = Math.max(0, Math.min(100, ((nMemCap - nMemUsed) / nMemCap) * 100));
+			if (nMemAlloc && nMemAlloc > 0 && nMemUsed !== undefined) {
+				memPct = Math.max(0, Math.min(100, ((nMemAlloc - nMemUsed) / nMemAlloc) * 100));
 			}
 
 			// ImageFS headroom calculation
@@ -492,23 +566,25 @@ export default function CapacityHeadroomSection() {
 			<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 				<MetricLineChart
 					title="CPU Headroom %"
-					subtitle="(limits - used) / limits"
+					subtitle="(allocatable - used) / allocatable"
 					series={cpuHeadroomSeries}
 					unit="%"
 					formatter={(v) => formatPercent(v)}
 					scopeLabel="cluster"
 					timespanLabel="30m"
 					resolutionLabel="hi"
+					footerExtra={cpuFooter}
 				/>
 				<MetricLineChart
 					title="Memory Headroom %"
-					subtitle="(capacity - used) / capacity"
+					subtitle="(allocatable - used) / allocatable"
 					series={memHeadroomSeries}
 					unit="%"
 					formatter={(v) => formatPercent(v)}
 					scopeLabel="cluster"
 					timespanLabel="30m"
 					resolutionLabel="hi"
+					footerExtra={memFooter}
 				/>
 				<MetricLineChart
 					title="ImageFS Headroom %"
@@ -519,6 +595,7 @@ export default function CapacityHeadroomSection() {
 					scopeLabel="cluster"
 					timespanLabel="30m"
 					resolutionLabel="hi"
+					footerExtra={imgfsFooter}
 				/>
 			</div>
 
@@ -563,10 +640,6 @@ export default function CapacityHeadroomSection() {
 									bulkActionsLabel="Node Actions"
 									table={table}
 									showColumnToggle={true}
-									onRefresh={() => {
-										//console.log("Refresh node headroom data");
-									}}
-									isRefreshing={false}
 								/>
 							</div>
 						)}

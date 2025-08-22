@@ -575,8 +575,7 @@ export default function ReliabilitySection() {
 					title="Pod Restart Distribution by Namespace"
 					subtitle="Distribution of pod restart counts by namespace over the last hour. Helps identify which teams or applications are experiencing the most instability."
 					data={namespaceRestartData}
-					unit="restarts"
-					formatter={formatCount}
+					formatter={(v) => `${formatCount(v)} restarts`}
 					layout="horizontal"
 					showLegend={true}
 					scopeLabel="cluster"

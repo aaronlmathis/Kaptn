@@ -7,10 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
-import { MetricAreaChart, MetricCategoricalBarChart, MetricRadarChart, type ChartSeries, type CategoricalDataPoint } from "@/components/opsview/charts";
+import { SectionHealthFooter } from "@/components/opsview/SectionHealthFooter";
+import { MetricLineChart, MetricCategoricalBarChart, MetricRadarChart, type ChartSeries, type CategoricalDataPoint } from "@/components/opsview/charts";
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards";
 import { getResourceIcon } from "@/lib/summary-card-utils";
-
 type Point = { t: number; v: number };
 type SeriesMap = Record<string, Point[]>;
 const latest = (pts?: Point[]) => (pts?.length ? pts[pts.length - 1]?.v || 0 : 0);
@@ -19,6 +19,14 @@ function pct(n: number, d: number) {
 	if (!d || !isFinite(n) || !isFinite(d)) return 0;
 	return Math.max(0, Math.min(100, (n / d) * 100));
 }
+
+type PodEntity = {
+	id: string;
+	name: string;
+	namespace: string;
+	unschedulable?: boolean;
+	unschedulableReason?: string;
+};
 
 export default function SchedulingPressureSection() {
 	const {
@@ -31,12 +39,7 @@ export default function SchedulingPressureSection() {
 		[
 			// Pending pods
 			"cluster.pods.pending",
-
-			// Optional reason splits
-			"cluster.pods.pending.by_reason:Insufficient CPU",
-			"cluster.pods.pending.by_reason:Insufficient Memory",
-			"cluster.pods.pending.by_reason:Affinity",
-			"cluster.pods.pending.by_reason:Taints",
+			"cluster.pods.running",
 
 			// Node count
 			"cluster.nodes.count",
@@ -55,36 +58,54 @@ export default function SchedulingPressureSection() {
 		return [{ key: "cluster.pods.pending", name: "Pods Pending", color: "#f59e0b", data }];
 	}, [liveData]);
 
-	/** --- Pending by reason (bar, latest snapshot) --- */
-	const pendingReasonsData: CategoricalDataPoint[] = React.useMemo(() => {
-		const pick = (key: string) => latest(liveData[key]);
+	const [pendingPodsByReason, setPendingPodsByReason] = React.useState<CategoricalDataPoint[]>([]);
+	const [loadingReasons, setLoadingReasons] = React.useState(true);
+	const [reasonsError, setReasonsError] = React.useState<string | null>(null);
 
-		const reasons = [
-			{ name: "Insufficient CPU", value: pick("cluster.pods.pending.by_reason:Insufficient CPU") || 0 },
-			{ name: "Insufficient Memory", value: pick("cluster.pods.pending.by_reason:Insufficient Memory") || 0 },
-			{ name: "Affinity", value: pick("cluster.pods.pending.by_reason:Affinity") || 0 },
-			{ name: "Taints", value: pick("cluster.pods.pending.by_reason:Taints") || 0 },
-		];
+	const fetchPendingPodReasons = React.useCallback(async () => {
+		setLoadingReasons(true);
+		setReasonsError(null);
+		try {
+			const res = await fetch("/api/v1/timeseries/entities/pods?unschedulable=1");
+			if (!res.ok) {
+				throw new Error(`Failed to fetch pending pods: ${res.statusText}`);
+			}
+			const data = await res.json();
+			const pods: PodEntity[] = data.entities || [];
 
-		// If no real data, use mock data
-		if (reasons.every((r) => r.value === 0)) {
-			return [
-				{ name: "Insufficient CPU", value: 8 },
-				{ name: "Insufficient Memory", value: 5 },
-				{ name: "Affinity", value: 2 },
-				{ name: "Taints", value: 1 },
-			];
+			const reasonCounts: Record<string, number> = {};
+			for (const pod of pods) {
+				if (pod.unschedulable && pod.unschedulableReason) {
+					reasonCounts[pod.unschedulableReason] = (reasonCounts[pod.unschedulableReason] || 0) + 1;
+				}
+			}
+
+			const chartData: CategoricalDataPoint[] = Object.entries(reasonCounts)
+				.map(([name, value]) => ({ name, value }))
+				.sort((a, b) => b.value - a.value);
+
+			setPendingPodsByReason(chartData);
+		} catch (err) {
+			setReasonsError(err instanceof Error ? err.message : "An unknown error occurred");
+		} finally {
+			setLoadingReasons(false);
 		}
+	}, []);
 
-		// Don't filter out zero values - show all categories for context
-		return reasons;
-	}, [liveData]);
+	React.useEffect(() => {
+		fetchPendingPodReasons();
+		const intervalId = setInterval(fetchPendingPodReasons, 30000); // Poll every 30s
+		return () => clearInterval(intervalId);
+	}, [fetchPendingPodReasons]);
+
+	/** --- Pending by reason (bar, latest snapshot) --- */
+	const pendingReasonsData = pendingPodsByReason;
 
 	/** --- Node pressure profile (radar) --- */
 	const nodeNames: string[] = React.useMemo(() => {
 		const names = new Set<string>();
 		Object.keys(liveData as SeriesMap).forEach((k) => {
-			const m = k.match(/^node\.conditions\.(memory_pressure|disk_pressure|pid_pressure):(.+)$/);
+			const m = k.match(/^node\.conditions\.(memory_pressure|disk_pressure|pid_pressure)\.(.+)$/);
 			if (m?.[2]) names.add(m[2]);
 		});
 		return Array.from(names).sort();
@@ -96,13 +117,14 @@ export default function SchedulingPressureSection() {
 		const countActive = (kind: "memory_pressure" | "disk_pressure" | "pid_pressure") => {
 			let active = 0;
 			nodeNames.forEach((n) => {
-				const v = latest(liveData[`node.conditions.${kind}:${n}`]);
+				const v = latest(liveData[`node.conditions.${kind}.${n}`]);
 				if (v && v > 0) active++;
 			});
 			return pct(active, nodeNames.length || nodesTotal || 0);
 		};
 
 		if (nodeNames.length === 0) {
+			// Mock data for radar chart if no nodes are discovered yet
 			return { memory: 12, disk: 6, pid: 3 };
 		}
 		return {
@@ -115,26 +137,82 @@ export default function SchedulingPressureSection() {
 	const radarSeries: ChartSeries[] = React.useMemo(() => {
 		const timestamp = Date.now(); // Current timestamp for radar data
 		return [
-			{
-				key: "memory",
-				name: "Memory",
-				color: "hsl(var(--chart-1))",
-				data: [[timestamp, Math.round(pressurePct.memory)]]
-			},
-			{
-				key: "disk",
-				name: "Disk",
-				color: "hsl(var(--chart-2))",
-				data: [[timestamp, Math.round(pressurePct.disk)]]
-			},
-			{
-				key: "pid",
-				name: "PID",
-				color: "hsl(var(--chart-3))",
-				data: [[timestamp, Math.round(pressurePct.pid)]]
-			},
+			{ key: "memory", name: "Memory", color: "hsl(var(--chart-1))", data: [[timestamp, Math.round(pressurePct.memory)]] },
+			{ key: "disk", name: "Disk", color: "hsl(var(--chart-2))", data: [[timestamp, Math.round(pressurePct.disk)]] },
+			{ key: "pid", name: "PID", color: "hsl(var(--chart-3))", data: [[timestamp, Math.round(pressurePct.pid)]] },
 		];
 	}, [pressurePct]);
+
+	/** --- Health Footers --- */
+	const { pendingFooter, reasonsFooter, pressureFooter } = React.useMemo(() => {
+		// --- Pending Pods Footer ---
+		const pendingNow = Math.round(latest(liveData["cluster.pods.pending"]));
+		const runningNow = Math.round(latest(liveData["cluster.pods.running"]));
+
+		const toneForPending = (p: number): "ok" | "warn" | "crit" => {
+			if (p > 20) return "crit";
+			if (p > 5) return "warn";
+			return "ok";
+		};
+
+		const pendingTone = toneForPending(pendingNow);
+		const pendingSummary = pendingNow > 0
+			? `${pendingNow} pods are awaiting scheduling.`
+			: "No pods are currently pending scheduling.";
+
+		const pendingFooter = (
+			<SectionHealthFooter
+				tone={pendingTone}
+				summary={pendingSummary}
+				ratioPills={[
+					{
+						label: "Pending/Running",
+						value: runningNow > 0 ? `${(pendingNow / runningNow * 100).toFixed(0)}%` : (pendingNow > 0 ? "∞" : "0%"),
+						title: "Ratio of pending to running pods"
+					}
+				]}
+			/>
+		);
+
+		// --- Pending by Reason Footer ---
+		const totalPendingByReason = pendingReasonsData.reduce((sum, item) => sum + item.value, 0);
+		const topReason = pendingReasonsData.length > 0 ? pendingReasonsData[0] : null;
+
+		const reasonTone = toneForPending(totalPendingByReason);
+		const reasonSummary = topReason
+			? `Top reason: ${topReason.name} (${topReason.value} pods).`
+			: "No unschedulable pods found.";
+
+		const reasonPills = pendingReasonsData.slice(0, 3).map(reason => ({
+			label: reason.name,
+			value: String(reason.value),
+			tone: "info" as const
+		}));
+
+		const reasonsFooter = <SectionHealthFooter tone={reasonTone} summary={reasonSummary} ratioPills={reasonPills} />;
+
+		// --- Node Pressure Footer ---
+		const pressures = [
+			{ name: "Memory", value: pressurePct.memory },
+			{ name: "Disk", value: pressurePct.disk },
+			{ name: "PID", value: pressurePct.pid },
+		];
+		const maxPressureItem = pressures.reduce((max, p) => p.value > max.value ? p : max, pressures[0] || { value: 0 });
+
+		const toneForPressure = (p: number): "ok" | "warn" | "crit" => {
+			if (p >= 25) return "crit";
+			if (p >= 10) return "warn";
+			return "ok";
+		};
+		const pressureTone = toneForPressure(maxPressureItem.value);
+		const pressureSummary = maxPressureItem.value >= 10
+			? `${maxPressureItem.name} pressure is elevated on ${maxPressureItem.value.toFixed(0)}% of nodes.`
+			: "Node pressure conditions appear stable."
+		const pressurePills = pressures.map(p => ({ label: `${p.name} Pressure`, value: `${p.value.toFixed(0)}%`, tone: toneForPressure(p.value) }));
+		const pressureFooter = <SectionHealthFooter tone={pressureTone} summary={pressureSummary} ratioPills={pressurePills} />;
+
+		return { pendingFooter, reasonsFooter, pressureFooter };
+	}, [liveData, pendingReasonsData, pressurePct]);
 
 	/** --- SummaryCards (Cluster KPIs) --- */
 	const pendingNow = Math.round(latest(liveData["cluster.pods.pending"]));
@@ -198,6 +276,13 @@ export default function SchedulingPressureSection() {
 				</Alert>
 			)}
 
+			{reasonsError && (
+				<Alert variant="destructive" className="my-4">
+					<AlertTriangle className="h-4 w-4" />
+					<AlertDescription>Could not load pending pod reasons: {reasonsError}</AlertDescription>
+				</Alert>
+			)}
+
 			{/* Summary cards (match ClusterOverview styling) */}
 			<SummaryCards
 				cards={summaryData}
@@ -208,19 +293,19 @@ export default function SchedulingPressureSection() {
 				noPadding={true}
 			/>
 
-			{/* Charts: MAX 2 PER ROW */}
-			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+			{/* Charts: 3 per row on large screens */}
+			<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 				{/* Pending over time */}
-				<MetricAreaChart
+				<MetricLineChart
 					title="Pending Pods (30m)"
 					subtitle="Active scheduling backlog over time showing pods waiting for resources or placement"
 					series={pendingSeries}
 					unit="pods"
 					formatter={(v) => `${Math.round(v)}`}
-					stacked={false}
 					scopeLabel="cluster"
 					timespanLabel="30m"
 					resolutionLabel="hi"
+					footerExtra={pendingFooter}
 				/>
 
 				{/* Pending by Reason (bar) */}
@@ -228,13 +313,15 @@ export default function SchedulingPressureSection() {
 					title="Pending Pods by Reason"
 					subtitle="Latest snapshot of pending pods categorized by scheduling reason. Shows which constraints are preventing pod scheduling."
 					data={pendingReasonsData}
-					unit="pods"
-					formatter={(v: number) => `${Math.round(v)}`}
+					formatter={(v: number) => `${Math.round(v)} pods`}
 					layout="horizontal"
 					showLegend={true}
 					scopeLabel="cluster"
 					timespanLabel="latest"
 					resolutionLabel="snapshot"
+					loading={loadingReasons}
+					emptyMessage="No unschedulable pods found."
+					footerExtra={reasonsFooter}
 				/>
 
 				{/* Node Pressure Radar (wraps to next row) */}
@@ -243,10 +330,11 @@ export default function SchedulingPressureSection() {
 					subtitle="Percentage of nodes with each pressure condition active. Shows memory, disk, and PID pressure distribution across the cluster."
 					series={radarSeries}
 					unit="%"
-					formatter={(v) => `${Math.round(v)}`}
+					formatter={(v) => `${Math.round(v)}%`}
 					scopeLabel="cluster"
 					timespanLabel="current"
 					resolutionLabel="node-level"
+					footerExtra={pressureFooter}
 				/>
 			</div>
 

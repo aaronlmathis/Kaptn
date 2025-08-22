@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
-import { MetricAreaChart, MetricLineChart, type ChartSeries } from "@/components/opsview/charts";
+import { MetricLineChart, type ChartSeries } from "@/components/opsview/charts";
 import { SectionHealthFooter } from "@/components/opsview/SectionHealthFooter";
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable";
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters";
@@ -55,7 +55,7 @@ function getReasonBadge(reason: string) {
 		case "InsufficientMemory":
 		case "InsufficientCPU":
 			return (
-				<Badge variant="destructive" className="text-xs">
+				<Badge variant="outline" className="text-red-500 border-red-500/60 text-xs">
 					<IconCpu className="size-3 mr-1" />
 					{reason}
 				</Badge>
@@ -92,7 +92,7 @@ function getReasonBadge(reason: string) {
 			);
 		default:
 			return (
-				<Badge variant="secondary" className="text-xs">
+				<Badge variant="outline" className="text-xs">
 					<IconAlertTriangle className="size-3 mr-1" />
 					{reason || "Unschedulable"}
 				</Badge>
@@ -357,7 +357,7 @@ function UnschedulablePodsSection() {
 							Pods that cannot be scheduled on any node
 						</p>
 					</div>
-					<Badge variant={pods.length > 0 ? "destructive" : "outline"} className="text-xs">
+					<Badge variant="outline" className={`text-xs ${pods.length > 0 ? "text-red-500 border-red-500/60" : ""}`}>
 						{pods.length} unschedulable
 					</Badge>
 				</div>
@@ -393,8 +393,6 @@ function UnschedulablePodsSection() {
 								bulkActionsLabel="Pod Actions"
 								table={table}
 								showColumnToggle={true}
-								onRefresh={fetchUnschedulable}
-								isRefreshing={loading}
 							/>
 						</div>
 					)}
@@ -537,8 +535,8 @@ export default function ClusterOverviewSection() {
 		];
 	}, [nodesReady, nodesTotal, podsRunning, podsPending, podsFailed, podsUnschedulable]);
 
-	const latest = (arr: { t: number; v: number }[] | undefined) =>
-		(arr && arr.length ? arr[arr.length - 1].v : 0);
+	const latest = (arr?: Array<{ t: number; v: number }>) =>
+		(arr?.length ? arr[arr.length - 1]?.v || 0 : 0);
 
 	const toneForPct = (p: number): "ok" | "warn" | "crit" => {
 		if (p >= 0.9) return "crit";
@@ -551,22 +549,23 @@ export default function ClusterOverviewSection() {
 	const cpuAlloc = Math.max(1e-9, latest(liveData['cluster.cpu.allocatable.cores'])); // avoid /0
 	const cpuReq = latest(liveData['cluster.cpu.requested.cores']);
 
-	const cpuUsedPct = cpuUsed / cpuAlloc;
-	const cpuReqPct = cpuReq / cpuAlloc;
+	const cpuUsedRatio = cpuUsed / cpuAlloc;
+	const cpuReqRatio = cpuReq / cpuAlloc;
+	const cpuReqDisplay = cpuReqRatio > 5 ? `${cpuReqRatio.toFixed(1)}x` : `${(cpuReqRatio * 100).toFixed(0)}%`;
 
-	const cpuTone = toneForPct(cpuUsedPct);
+	const cpuTone = toneForPct(cpuUsedRatio);
 	const cpuSummary =
-		`CPU ${(cpuUsedPct * 100).toFixed(0)}% utilized (${cpuUsed.toFixed(1)} / ${cpuAlloc.toFixed(1)} cores).` +
+		`CPU ${(cpuUsedRatio * 100).toFixed(0)}% utilized (${cpuUsed.toFixed(1)} / ${cpuAlloc.toFixed(1)} cores).` +
 		(cpuReq > cpuAlloc ? ` Requests exceed allocatable (${cpuReq.toFixed(1)} > ${cpuAlloc.toFixed(1)}).` : '');
 
 	const cpuFooter = (
 		<SectionHealthFooter
 			tone={cpuTone}
 			summary={cpuSummary}
-			usedPct={cpuUsedPct}
+			usedPct={cpuUsedRatio}
 			ratioPills={[
-				{ label: "Requested/Alloc", value: `${(cpuReqPct * 100).toFixed(0)}%`, tone: cpuReqPct > 1 ? "warn" : "info", title: "Commitment posture" },
-				{ label: "Used/Requested", value: cpuReq > 0 ? `${(cpuUsed / cpuReq * 100).toFixed(0)}%` : "—", title: "Headroom vs requested" },
+				{ label: "Requested/Alloc", value: cpuReqDisplay, tone: cpuReqRatio > 1 ? "warn" : "info", title: "Commitment posture" },
+				{ label: "Used/Requested", value: cpuReq > 0 ? `${((cpuUsed / cpuReq) * 100).toFixed(0)}%` : "—", title: "Headroom vs requested" },
 			]}
 		/>
 	);
@@ -576,22 +575,23 @@ export default function ClusterOverviewSection() {
 	const memAlloc = Math.max(1e-9, latest(liveData['cluster.mem.allocatable.bytes']));
 	const memReq = latest(liveData['cluster.mem.requested.bytes']);
 
-	const memUsedPct = memUsed / memAlloc;
-	const memReqPct = memReq / memAlloc;
+	const memUsedRatio = memUsed / memAlloc;
+	const memReqRatio = memReq / memAlloc;
+	const memReqDisplay = memReqRatio > 5 ? `${memReqRatio.toFixed(1)}x` : `${(memReqRatio * 100).toFixed(0)}%`;
 
-	const memTone = toneForPct(memUsedPct);
+	const memTone = toneForPct(memUsedRatio);
 	const memSummary =
-		`Memory ${(memUsedPct * 100).toFixed(0)}% utilized (${formatBytesIEC(memUsed)} / ${formatBytesIEC(memAlloc)}).` +
+		`Memory ${(memUsedRatio * 100).toFixed(0)}% utilized (${formatBytesIEC(memUsed)} / ${formatBytesIEC(memAlloc)}).` +
 		(memReq > memAlloc ? ` Requests exceed allocatable (${formatBytesIEC(memReq)} > ${formatBytesIEC(memAlloc)}).` : '');
 
 	const memFooter = (
 		<SectionHealthFooter
 			tone={memTone}
 			summary={memSummary}
-			usedPct={memUsedPct}
+			usedPct={memUsedRatio}
 			ratioPills={[
-				{ label: "Requested/Alloc", value: `${(memReqPct * 100).toFixed(0)}%`, tone: memReqPct > 1 ? "warn" : "info", title: "Commitment posture" },
-				{ label: "Used/Requested", value: memReq > 0 ? `${(memUsed / memReq * 100).toFixed(0)}%` : "—", title: "Headroom vs requested" },
+				{ label: "Requested/Alloc", value: memReqDisplay, tone: memReqRatio > 1 ? "warn" : "info", title: "Commitment posture" },
+				{ label: "Used/Requested", value: memReq > 0 ? `${((memUsed / memReq) * 100).toFixed(0)}%` : "—", title: "Headroom vs requested" },
 			]}
 		/>
 	);
