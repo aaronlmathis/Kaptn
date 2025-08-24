@@ -5,8 +5,6 @@ import { SharedProviders } from "@/components/shared-providers"
 import { PodsDataTable } from "@/components/data_tables/PodsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { usePodsWithWebSocket } from "@/hooks/usePodsWithWebSocket"
-import { RouteGuard } from "@/components/authz/RouteGuard"
-import { POD_VIEW_CAPABILITIES } from "@/lib/authz-helpers"
 import {
 	getPodStatusBadge,
 	getPodPhaseBadge,
@@ -150,12 +148,7 @@ function PodsContent() {
 export function PodsPageContainer() {
 	return (
 		<SharedProviders>
-			<RouteGuard
-				requiredCapabilities={POD_VIEW_CAPABILITIES}
-				requireAll={false} // User needs either get OR list permission
-			>
-				<PodsContent />
-			</RouteGuard>
+			<PodsContent />
 		</SharedProviders>
 	)
 }

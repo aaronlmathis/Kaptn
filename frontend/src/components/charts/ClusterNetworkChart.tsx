@@ -56,6 +56,10 @@ export function ClusterNetworkChart({
 
   // Transform data for chart display
   const chartSeries: ChartSeries[] = React.useMemo(() => {
+    if (!rawSeries || !Array.isArray(rawSeries)) {
+      return [];
+    }
+
     const rxSeries = rawSeries.find(s => s.key === 'cluster.net.rx.bps');
     const txSeries = rawSeries.find(s => s.key === 'cluster.net.tx.bps');
 

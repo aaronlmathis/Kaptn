@@ -5,7 +5,7 @@
  * for cluster-level metrics like CPU usage, CPU capacity, and network traffic.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   fetchClusterSeries,
   openClusterLiveWS,
@@ -14,7 +14,6 @@ import {
   getTimeWindow,
   type TimeSeriesKey,
   type TimeSeriesPoint,
-  type TimeSeriesResponse,
   type Resolution
 } from '@/lib/api/timeseries';
 
@@ -68,10 +67,34 @@ export interface UseClusterTimeseriesResult {
 
 // Default series display configuration
 const SERIES_CONFIG: Record<TimeSeriesKey, { name: string; color?: string }> = {
-  'cluster.cpu.used.cores': { name: 'CPU Used', color: '#3b82f6' },
-  'cluster.cpu.capacity.cores': { name: 'CPU Capacity', color: '#10b981' },
-  'cluster.net.rx.bps': { name: 'Network RX', color: '#8b5cf6' },
-  'cluster.net.tx.bps': { name: 'Network TX', color: '#f59e0b' }
+  'cluster.cpu.used.cores': {
+    name: 'CPU Used',
+    color: '#ff6b6b'
+  },
+  'cluster.cpu.capacity.cores': {
+    name: 'CPU Capacity',
+    color: '#4ecdc4'
+  },
+  'cluster.net.rx.bps': {
+    name: 'Network RX',
+    color: '#45b7d1'
+  },
+  'cluster.net.tx.bps': {
+    name: 'Network TX',
+    color: '#f39c12'
+  },
+  'cluster.mem.used.bytes': {
+    name: 'Memory Used',
+    color: '#9b59b6'
+  },
+  'cluster.mem.allocatable.bytes': {
+    name: 'Memory Allocatable',
+    color: '#2ecc71'
+  },
+  'cluster.mem.requested.bytes': {
+    name: 'Memory Requested',
+    color: '#e74c3c'
+  }
 };
 
 /**
@@ -286,14 +309,20 @@ export function useClusterTimeseries(
   }, [fetchInitialData, log]);
 
   // Format data for chart consumption
-  const series: ChartSeries[] = seriesKeys
-    .filter(key => rawData[key] && rawData[key].length > 0)
-    .map(key => ({
-      name: SERIES_CONFIG[key]?.name || key,
-      key,
-      data: formatSeriesForChart(rawData[key]),
-      color: SERIES_CONFIG[key]?.color
-    }));
+  const series: ChartSeries[] = React.useMemo(() => {
+    if (!seriesKeys || !Array.isArray(seriesKeys)) {
+      return [];
+    }
+    
+    return seriesKeys
+      .filter(key => rawData[key] && rawData[key].length > 0)
+      .map(key => ({
+        name: SERIES_CONFIG[key]?.name || key,
+        key,
+        data: formatSeriesForChart(rawData[key]),
+        color: SERIES_CONFIG[key]?.color
+      }));
+  }, [seriesKeys, rawData]);
 
   // Initialize on mount
   useEffect(() => {

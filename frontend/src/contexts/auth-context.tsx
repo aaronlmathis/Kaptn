@@ -3,11 +3,6 @@
 import * as React from 'react'
 import { useState, useEffect, useContext, createContext } from 'react'
 
-// Global singleton state to prevent multiple initializations
-let authInitialized = false;
-let globalAuthState: AuthState | null = null;
-let globalSetters: Set<React.Dispatch<React.SetStateAction<AuthState>>> = new Set();
-
 interface User {
 	id: string
 	email: string
@@ -58,7 +53,7 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
-// Helper function to get injected session data
+// Helper function to get injected session data (client-side only)
 function getInjectedSession(): InjectedSession | null {
 	if (typeof window === 'undefined') return null
 
@@ -74,46 +69,14 @@ function getInjectedSession(): InjectedSession | null {
 	return null
 }
 
-// Global function to update all auth state instances
-function updateGlobalAuthState(newState: AuthState | ((prev: AuthState) => AuthState)) {
-	const currentState = globalAuthState || {
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+	const [authState, setAuthState] = useState<AuthState>(() => ({
 		isAuthenticated: false,
 		isLoading: true,
 		user: null,
 		error: null,
 		authMode: null,
-	};
-	const updatedState = typeof newState === 'function' ? newState(currentState) : newState;
-	globalAuthState = updatedState;
-
-	// Update all provider instances
-	globalSetters.forEach(setter => {
-		setter(updatedState);
-	});
-}
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-	const [authState, setAuthState] = useState<AuthState>(() => {
-		// If we already have global state, use it
-		if (globalAuthState) {
-			return globalAuthState;
-		}
-		return {
-			isAuthenticated: false,
-			isLoading: true,
-			user: null,
-			error: null,
-			authMode: null,
-		};
-	});
-
-	// Register this setter with the global collection
-	React.useEffect(() => {
-		globalSetters.add(setAuthState);
-		return () => {
-			globalSetters.delete(setAuthState);
-		};
-	}, []);
+	}));
 
 	// Enhanced fetch with automatic retry on 401
 	const fetchWithAuth = async (url: string, options: FetchOptions = {}): Promise<Response> => {
@@ -168,14 +131,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	}
 
 	const initializeAuth = async () => {
-		// Prevent multiple initializations
-		if (authInitialized) {
-			console.log('🔄 Auth already initialized, skipping...')
-			return;
-		}
-
-		authInitialized = true;
-
 		try {
 			console.log('🔄 Initializing auth...')
 
@@ -184,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 			if (injectedSession) {
 				console.log('✅ Using injected session data, authMode:', injectedSession.authMode)
-				const newState = {
+				setAuthState({
 					isAuthenticated: injectedSession.isAuthenticated,
 					isLoading: false,
 					user: injectedSession.isAuthenticated ? {
@@ -195,8 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					} : null,
 					error: null,
 					authMode: injectedSession.authMode,
-				};
-				updateGlobalAuthState(newState);
+				});
 				return
 			}
 
@@ -204,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			await checkAuthStatus()
 		} catch (error) {
 			console.error('❌ Auth initialization error:', error)
-			updateGlobalAuthState({
+			setAuthState({
 				isAuthenticated: false,
 				isLoading: false,
 				user: null,
@@ -227,7 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 			if (authMode === 'none') {
 				console.log('🔓 Auth mode is none, setting dev user')
-				updateGlobalAuthState({
+				setAuthState({
 					isAuthenticated: true,
 					isLoading: false,
 					user: {
@@ -261,7 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 				console.log('🔍 Safe user object created:', safeUser)
 
-				updateGlobalAuthState({
+				setAuthState({
 					isAuthenticated: true,
 					isLoading: false,
 					user: safeUser,
@@ -269,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					authMode,
 				});
 			} else if (response.status === 401) {
-				updateGlobalAuthState({
+				setAuthState({
 					isAuthenticated: false,
 					isLoading: false,
 					user: null,
@@ -281,7 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			}
 		} catch (error) {
 			console.error('Auth check error:', error)
-			updateGlobalAuthState({
+			setAuthState({
 				isAuthenticated: false,
 				isLoading: false,
 				user: null,
@@ -319,7 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				await checkAuthStatus()
 				return true
 			} else {
-				updateGlobalAuthState(prev => ({
+				setAuthState(prev => ({
 					...prev,
 					isAuthenticated: false,
 					user: null,
@@ -328,7 +282,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			}
 		} catch (error) {
 			console.error('Manual refresh failed:', error)
-			updateGlobalAuthState(prev => ({
+			setAuthState(prev => ({
 				...prev,
 				isAuthenticated: false,
 				user: null,
@@ -337,9 +291,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		}
 	}
 
-	// Initialize auth ONCE when first provider mounts
+	// Initialize auth only on the client side
 	useEffect(() => {
-		initializeAuth()
+		// Only run on client side
+		if (typeof window !== 'undefined') {
+			initializeAuth()
+		}
 	}, []) // eslint-disable-line react-hooks/exhaustive-deps
 
 	const contextValue: AuthContextValue = {
@@ -364,7 +321,7 @@ export function useAuth() {
 
 	if (context === undefined) {
 		if (typeof window === 'undefined') {
-			// Build-time fallback
+			// Build-time fallback for SSR
 			return {
 				isAuthenticated: false,
 				isLoading: true,

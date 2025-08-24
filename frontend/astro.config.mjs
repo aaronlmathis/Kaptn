@@ -8,6 +8,9 @@ import react from "@astrojs/react";
 export default defineConfig({
   integrations: [react()],
 
+  // Enable SSR mode for authentication
+  output: "server",
+
   // Bind Astro dev (helpful when running behind code-server / proxy)
   server: {
     host: true,       // 0.0.0.0
