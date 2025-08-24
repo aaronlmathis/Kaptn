@@ -1,8 +1,9 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { k8sService } from '@/lib/k8s-service'
 import { type Namespace } from '@/lib/k8s-cluster'
+import { useHydratedLocalStorageString, useHydratedLocalStorage } from '@/hooks/useHydratedStorage'
 
 // Cache configuration
 const NAMESPACE_CACHE_KEY = 'cachedNamespaces'
@@ -25,67 +26,39 @@ interface NamespaceProviderProps {
 }
 
 export function NamespaceProvider({ children }: NamespaceProviderProps) {
-	const [selectedNamespace, setSelectedNamespaceState] = useState<string>('all')
+	// Use hydration-safe localStorage hooks
+	const [selectedNamespace, setSelectedNamespaceState, isNamespaceHydrated] = useHydratedLocalStorageString('selectedNamespace', 'all')
+	const [cachedData, _setCachedData, isCacheHydrated] = useHydratedLocalStorage<{namespaces: Namespace[], timestamp: number} | null>(
+		NAMESPACE_CACHE_KEY, 
+		null,
+		JSON.parse,
+		JSON.stringify
+	)
+	
 	const [namespaces, setNamespaces] = useState<Namespace[]>([])
-	const [loading, setLoading] = useState(false) // Start with false - only show loading when actually fetching
+	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
-	const [isHydrated, setIsHydrated] = useState(false)
+	const isHydrated = isNamespaceHydrated && isCacheHydrated
 
-	// Load client-side state after hydration
-	useEffect(() => {
-		if (typeof window !== 'undefined') {
-			// Load selected namespace
-			const savedNamespace = localStorage.getItem('selectedNamespace')
-			if (savedNamespace) {
-				setSelectedNamespaceState(savedNamespace)
-			}
-
-			// Load cached namespaces
-			try {
-				const cachedData = localStorage.getItem(NAMESPACE_CACHE_KEY)
-				if (cachedData) {
-					const { namespaces: cachedNamespaces, timestamp } = JSON.parse(cachedData)
-					const now = Date.now()
-
-					// If cache is still valid, use it immediately
-					if (now - timestamp < NAMESPACE_CACHE_TTL) {
-						setNamespaces(cachedNamespaces)
-						setIsHydrated(true)
-						return // Exit early - no need to fetch
-					}
-				}
-			} catch (error) {
-				console.warn('Failed to parse cached namespaces:', error)
-			}
-
-			setIsHydrated(true)
-			// If we reach here, cache is expired or doesn't exist, so fetch
-			fetchNamespaces()
-		}
-	}, [])
-
-	// Wrapper to persist selected namespace to localStorage
-	const setSelectedNamespace = (namespace: string) => {
-		setSelectedNamespaceState(namespace)
-		if (typeof window !== 'undefined') {
-			localStorage.setItem('selectedNamespace', namespace)
-		}
-	}
-
-	const fetchNamespaces = async () => {
+	const fetchNamespaces = useCallback(async () => {
 		try {
 			setLoading(true)
 			setError(null)
 			const data = await k8sService.getNamespaces()
 			setNamespaces(data)
 
-			// Cache the namespaces with timestamp
-			if (typeof window !== 'undefined') {
+			// Cache the namespaces with timestamp using hydrated storage
+			if (isHydrated) {
 				const cacheData = {
 					namespaces: data,
 					timestamp: Date.now()
 				}
-				localStorage.setItem(NAMESPACE_CACHE_KEY, JSON.stringify(cacheData))
+				// Update through the hydrated storage hook (we'll need to expose this)
+				try {
+					localStorage.setItem(NAMESPACE_CACHE_KEY, JSON.stringify(cacheData))
+				} catch (error) {
+					console.warn('Failed to cache namespaces:', error)
+				}
 			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch namespaces')
@@ -93,6 +66,28 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
 		} finally {
 			setLoading(false)
 		}
+	}, [isHydrated])
+
+	// Load cached namespaces after hydration
+	useEffect(() => {
+		if (isHydrated && cachedData) {
+			const now = Date.now()
+			// If cache is still valid, use it immediately
+			if (now - cachedData.timestamp < NAMESPACE_CACHE_TTL) {
+				setNamespaces(cachedData.namespaces)
+				return // Exit early - no need to fetch
+			}
+		}
+		
+		// Cache is expired, doesn't exist, or not hydrated yet - fetch
+		if (isHydrated) {
+			fetchNamespaces()
+		}
+	}, [isHydrated, cachedData, fetchNamespaces])
+
+	// Wrapper to persist selected namespace
+	const setSelectedNamespace = (namespace: string) => {
+		setSelectedNamespaceState(namespace)
 	}
 
 	const contextValue: NamespaceContextValue = {

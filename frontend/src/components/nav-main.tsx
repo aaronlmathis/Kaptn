@@ -49,14 +49,23 @@ export function NavMain({ items }: { items: Item[] }) {
 
 function LeafItem({ item }: { item: Item }) {
   const { currentPath, isHydrated } = useNavigation();
-  const isActive =
-    isHydrated &&
-    ((item.url === "/" && (currentPath === "/" || currentPath === "/dashboard")) ||
-      (item.url !== "/" && item.url !== "#" && currentPath.startsWith(item.url)));
+
+  // Always start with inactive state to prevent hydration mismatches
+  const [isActive, setIsActive] = React.useState(false);
+
+  // Calculate active state after hydration
+  React.useEffect(() => {
+    if (!isHydrated) return;
+
+    const active = (item.url === "/" && (currentPath === "/" || currentPath === "/dashboard")) ||
+      (item.url !== "/" && item.url !== "#" && currentPath.startsWith(item.url));
+
+    setIsActive(active);
+  }, [isHydrated, currentPath, item.url]);
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton tooltip={item.title} isActive={!!isActive} asChild>
+      <SidebarMenuButton tooltip={item.title} isActive={isHydrated ? isActive : false} asChild>
         <a href={item.url}>
           {item.icon && <item.icon />}
           <span>{item.title}</span>
@@ -75,67 +84,93 @@ function NavGroupItem({ item }: { item: Item }) {
     setMenuExpanded,
   } = useNavigation();
 
-  // PRE-HYDRATION: do NOT infer open from route (prevents first-paint flip)
-  // Initial open = saved preference (if any), else closed.
-  const stored = hasMenuState(item.title) ? isMenuExpanded(item.title) : false;
+  // Always start with false to ensure SSR/client consistency
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const [childActive, setChildActive] = React.useState(false);
 
-  // After hydration, if no saved preference, auto-open when a child is active.
-  const childActive =
-    isHydrated &&
-    (item.items ?? []).some((s) => {
+  // Calculate if any child is active after hydration
+  React.useEffect(() => {
+    if (!isHydrated) return;
+
+    const active = (item.items ?? []).some((s) => {
       if (s.url === "/" && (currentPath === "/" || currentPath === "/dashboard")) return true;
       return s.url !== "/" && s.url !== "#" && currentPath.startsWith(s.url);
     });
 
+    setChildActive(active);
+  }, [isHydrated, currentPath, item.items]);
+
+  // Initialize open state after hydration to prevent SSR mismatch
   React.useEffect(() => {
     if (!isHydrated) return;
-    // Auto-expand when a child is active, but only if no menu state exists yet
-    // This respects the single-expanded-section rule
-    if (!hasMenuState(item.title) && childActive) {
-      setMenuExpanded(item.title, true);
-    }
-  }, [isHydrated, childActive, hasMenuState, item.title, setMenuExpanded]);
 
-  const open = stored;
+    if (hasMenuState(item.title)) {
+      // Use saved preference
+      setInternalOpen(isMenuExpanded(item.title));
+    } else if (childActive) {
+      // Auto-expand when a child is active (only if no saved state)
+      setMenuExpanded(item.title, true);
+      setInternalOpen(true);
+    }
+  }, [isHydrated, childActive, hasMenuState, isMenuExpanded, item.title, setMenuExpanded]);
+
+  const open = internalOpen;
 
   return (
     <Collapsible
       asChild
-      open={open}
-      onOpenChange={(nextOpen) => setMenuExpanded(item.title, nextOpen)}
+      open={isHydrated ? open : false} // Always false during SSR
+      onOpenChange={(nextOpen) => {
+        if (!isHydrated) return; // Prevent state changes during SSR
+        setInternalOpen(nextOpen);
+        setMenuExpanded(item.title, nextOpen);
+      }}
       className="group/collapsible"
+      suppressHydrationWarning={true} // Suppress hydration warnings for this component
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.title} isActive={childActive}>
+          <SidebarMenuButton tooltip={item.title} isActive={isHydrated ? childActive : false}>
             {item.icon && <item.icon />}
             <span>{item.title}</span>
             <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
-        <CollapsibleContent>
+        <CollapsibleContent suppressHydrationWarning={true}>
           <SidebarMenuSub>
             {(item.items ?? []).map((subItem) => {
-              const subIsActive =
-                isHydrated &&
-                ((subItem.url === "/" &&
-                  (currentPath === "/" || currentPath === "/dashboard")) ||
-                  (subItem.url !== "/" &&
-                    subItem.url !== "#" &&
-                    currentPath.startsWith(subItem.url)));
               return (
-                <SidebarMenuSubItem key={subItem.title}>
-                  <SidebarMenuSubButton asChild isActive={!!subIsActive}>
-                    <a href={subItem.url}>
-                      <span>{subItem.title}</span>
-                    </a>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
+                <SubMenuItem key={subItem.title} subItem={subItem} />
               );
             })}
           </SidebarMenuSub>
         </CollapsibleContent>
       </SidebarMenuItem>
     </Collapsible>
+  );
+}
+
+function SubMenuItem({ subItem }: { subItem: { title: string; url: string; isActive?: boolean } }) {
+  const { currentPath, isHydrated } = useNavigation();
+  const [isActive, setIsActive] = React.useState(false);
+
+  // Calculate active state after hydration
+  React.useEffect(() => {
+    if (!isHydrated) return;
+
+    const active = (subItem.url === "/" && (currentPath === "/" || currentPath === "/dashboard")) ||
+      (subItem.url !== "/" && subItem.url !== "#" && currentPath.startsWith(subItem.url));
+
+    setIsActive(active);
+  }, [isHydrated, currentPath, subItem.url]);
+
+  return (
+    <SidebarMenuSubItem>
+      <SidebarMenuSubButton asChild isActive={isHydrated ? isActive : false}>
+        <a href={subItem.url}>
+          <span>{subItem.title}</span>
+        </a>
+      </SidebarMenuSubButton>
+    </SidebarMenuSubItem>
   );
 }

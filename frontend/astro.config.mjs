@@ -6,6 +6,8 @@ import react from "@astrojs/react";
 
 // https://astro.build/config
 export default defineConfig({
+  // Static site generation (default)
+  // output: "static", // This is the default, no need to specify
   integrations: [react()],
 
   // Bind Astro dev (helpful when running behind code-server / proxy)

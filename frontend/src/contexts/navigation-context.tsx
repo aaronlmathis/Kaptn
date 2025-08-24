@@ -6,7 +6,6 @@ import {
 	useContext,
 	useMemo,
 	useState,
-	useLayoutEffect,
 	useEffect,
 	type ReactNode,
 } from "react";
@@ -51,6 +50,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 			} catch {
 				// Ignore localStorage errors
 			}
+			// Set hydrated after attempting to load state
+			setIsHydrated(true);
 		}
 	}, []);
 
@@ -95,13 +96,16 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 	const hasMenuState = (menuTitle: string) =>
 		Object.prototype.hasOwnProperty.call(expandedMenus, menuTitle);
 
-	// Allow transitions *after* a frame so layout is fully stable
-	useLayoutEffect(() => {
-		requestAnimationFrame(() => {
-			document.documentElement.classList.remove("no-transitions");
-			setIsHydrated(true);
-		});
-	}, []);
+	// Allow transitions *after* hydration is complete
+	useEffect(() => {
+		if (isHydrated) {
+			// Use a small delay to ensure DOM is fully ready
+			const timeoutId = setTimeout(() => {
+				document.documentElement.classList.remove("no-transitions");
+			}, 100);
+			return () => clearTimeout(timeoutId);
+		}
+	}, [isHydrated]);
 
 	// Track path changes (so active route highlighting works)
 	useEffect(() => {
