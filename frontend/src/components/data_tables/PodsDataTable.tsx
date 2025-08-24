@@ -40,6 +40,8 @@ import {
 	IconFileText,
 	IconInfoCircle,
 } from "@tabler/icons-react"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 import {
 	flexRender,
@@ -157,6 +159,7 @@ function getStatusBadge(status: string) {
 // Column definitions for pods table
 const createColumns = (
 	onViewDetails: (pod: z.infer<typeof podSchema>) => void,
+	clusterId: string,
 	onExecShell?: (pod: z.infer<typeof podSchema>) => void
 ): ColumnDef<z.infer<typeof podSchema>>[] => [
 		{
@@ -276,45 +279,103 @@ const createColumns = (
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							onClick={() => onExecShell?.(row.original)}
-							disabled={!onExecShell}
-						>
-							<IconTerminal className="size-4 mr-2" />
-							Exec Shell
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
+						<IfAllowed
+							feature="pods.get"
+							cluster={clusterId}
 							namespace={row.original.namespace}
-							resourceKind="Pod"
+							resourceName={row.original.name}
 						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
+							<DropdownMenuItem
+								onClick={() => onViewDetails(row.original)}
 							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart
-						</DropdownMenuItem>
+								<IconEye className="size-4 mr-2" />
+								View Details
+							</DropdownMenuItem>
+						</IfAllowed>
+
+						<IfAllowed
+							feature="pods.exec"
+							cluster={clusterId}
+							namespace={row.original.namespace}
+							resourceName={row.original.name}
+							fallback={
+								<DropdownMenuItem disabled>
+									<IconTerminal className="size-4 mr-2" />
+									Exec Shell
+								</DropdownMenuItem>
+							}
+						>
+							<DropdownMenuItem
+								onClick={() => onExecShell?.(row.original)}
+								disabled={!onExecShell}
+							>
+								<IconTerminal className="size-4 mr-2" />
+								Exec Shell
+							</DropdownMenuItem>
+						</IfAllowed>
+
+						<IfAllowed
+							feature="pods.update"
+							cluster={clusterId}
+							namespace={row.original.namespace}
+							resourceName={row.original.name}
+						>
+							<ResourceYamlEditor
+								resourceName={row.original.name}
+								namespace={row.original.namespace}
+								resourceKind="Pod"
+							>
+								<button
+									className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+									style={{
+										background: 'transparent',
+										border: 'none',
+										textAlign: 'left'
+									}}
+								>
+									<IconEdit className="size-4" />
+									Edit YAML
+								</button>
+							</ResourceYamlEditor>
+						</IfAllowed>
+
+						<IfAllowed
+							feature="pods.patch"
+							cluster={clusterId}
+							namespace={row.original.namespace}
+							resourceName={row.original.name}
+							fallback={
+								<DropdownMenuItem disabled>
+									<IconRefresh className="size-4 mr-2" />
+									Restart
+								</DropdownMenuItem>
+							}
+						>
+							<DropdownMenuItem>
+								<IconRefresh className="size-4 mr-2" />
+								Restart
+							</DropdownMenuItem>
+						</IfAllowed>
+
 						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
+
+						<IfAllowed
+							feature="pods.delete"
+							cluster={clusterId}
+							namespace={row.original.namespace}
+							resourceName={row.original.name}
+							fallback={
+								<DropdownMenuItem disabled className="text-muted-foreground">
+									<IconTrash className="size-4 mr-2" />
+									Delete
+								</DropdownMenuItem>
+							}
+						>
+							<DropdownMenuItem className="text-red-600">
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -357,6 +418,7 @@ export function PodsDataTable() {
 	const { data: pods, loading, error, refetch, isConnected } = usePodsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 	const { openShell } = useShell()
+	const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -380,8 +442,8 @@ export function PodsDataTable() {
 
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleExecShell),
-		[handleViewDetails, handleExecShell]
+		() => createColumns(handleViewDetails, clusterId, handleExecShell),
+		[handleViewDetails, clusterId, handleExecShell]
 	)
 
 	// Filter options for pod statuses

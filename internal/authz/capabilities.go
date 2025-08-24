@@ -20,6 +20,7 @@ var Registry = map[string]CapabilityCheck{
 	"pods.list":        {Group: "", Resource: "pods", Verb: "list", Namespaced: true},
 	"pods.watch":       {Group: "", Resource: "pods", Verb: "watch", Namespaced: true},
 	"pods.create":      {Group: "", Resource: "pods", Verb: "create", Namespaced: true},
+	"pods.update":      {Group: "", Resource: "pods", Verb: "update", Namespaced: true},
 	"pods.patch":       {Group: "", Resource: "pods", Verb: "patch", Namespaced: true},
 
 	// Deployment operations
@@ -27,6 +28,7 @@ var Registry = map[string]CapabilityCheck{
 	"deployments.delete":  {Group: "apps", Resource: "deployments", Verb: "delete", Namespaced: true},
 	"deployments.get":     {Group: "apps", Resource: "deployments", Verb: "get", Namespaced: true},
 	"deployments.list":    {Group: "apps", Resource: "deployments", Verb: "list", Namespaced: true},
+	"deployments.watch":   {Group: "apps", Resource: "deployments", Verb: "watch", Namespaced: true},
 	"deployments.create":  {Group: "apps", Resource: "deployments", Verb: "create", Namespaced: true},
 	"deployments.update":  {Group: "apps", Resource: "deployments", Verb: "update", Namespaced: true},
 	"deployments.patch":   {Group: "apps", Resource: "deployments", Verb: "patch", Namespaced: true},
@@ -37,6 +39,8 @@ var Registry = map[string]CapabilityCheck{
 	"configmaps.get":    {Group: "", Resource: "configmaps", Verb: "get", Namespaced: true},
 	"configmaps.list":   {Group: "", Resource: "configmaps", Verb: "list", Namespaced: true},
 	"configmaps.create": {Group: "", Resource: "configmaps", Verb: "create", Namespaced: true},
+	"configmaps.watch":  {Group: "", Resource: "configmaps", Verb: "watch", Namespaced: true},
+	"configmaps.patch":  {Group: "", Resource: "configmaps", Verb: "patch", Namespaced: true},
 
 	// Secret operations
 	"secrets.read":   {Group: "", Resource: "secrets", Verb: "get", Namespaced: true},
@@ -44,6 +48,8 @@ var Registry = map[string]CapabilityCheck{
 	"secrets.create": {Group: "", Resource: "secrets", Verb: "create", Namespaced: true},
 	"secrets.update": {Group: "", Resource: "secrets", Verb: "update", Namespaced: true},
 	"secrets.delete": {Group: "", Resource: "secrets", Verb: "delete", Namespaced: true},
+	"secrets.watch":  {Group: "", Resource: "secrets", Verb: "watch", Namespaced: true},
+	"secrets.patch":  {Group: "", Resource: "secrets", Verb: "patch", Namespaced: true},
 
 	// Service operations
 	"services.get":    {Group: "", Resource: "services", Verb: "get", Namespaced: true},
@@ -51,6 +57,8 @@ var Registry = map[string]CapabilityCheck{
 	"services.create": {Group: "", Resource: "services", Verb: "create", Namespaced: true},
 	"services.update": {Group: "", Resource: "services", Verb: "update", Namespaced: true},
 	"services.delete": {Group: "", Resource: "services", Verb: "delete", Namespaced: true},
+	"services.watch":  {Group: "", Resource: "services", Verb: "watch", Namespaced: true},
+	"services.patch":  {Group: "", Resource: "services", Verb: "patch", Namespaced: true},
 
 	// StatefulSet operations
 	"statefulsets.get":    {Group: "apps", Resource: "statefulsets", Verb: "get", Namespaced: true},
@@ -59,6 +67,7 @@ var Registry = map[string]CapabilityCheck{
 	"statefulsets.update": {Group: "apps", Resource: "statefulsets", Verb: "update", Namespaced: true},
 	"statefulsets.delete": {Group: "apps", Resource: "statefulsets", Verb: "delete", Namespaced: true},
 	"statefulsets.patch":  {Group: "apps", Resource: "statefulsets", Verb: "patch", Namespaced: true},
+	"statefulsets.watch":  {Group: "apps", Resource: "statefulsets", Verb: "watch", Namespaced: true},
 
 	// DaemonSet operations
 	"daemonsets.get":    {Group: "apps", Resource: "daemonsets", Verb: "get", Namespaced: true},
@@ -67,6 +76,7 @@ var Registry = map[string]CapabilityCheck{
 	"daemonsets.update": {Group: "apps", Resource: "daemonsets", Verb: "update", Namespaced: true},
 	"daemonsets.delete": {Group: "apps", Resource: "daemonsets", Verb: "delete", Namespaced: true},
 	"daemonsets.patch":  {Group: "apps", Resource: "daemonsets", Verb: "patch", Namespaced: true},
+	"daemonsets.watch":  {Group: "apps", Resource: "daemonsets", Verb: "watch", Namespaced: true},
 
 	// ReplicaSet operations
 	"replicasets.get":    {Group: "apps", Resource: "replicasets", Verb: "get", Namespaced: true},
@@ -75,6 +85,7 @@ var Registry = map[string]CapabilityCheck{
 	"replicasets.update": {Group: "apps", Resource: "replicasets", Verb: "update", Namespaced: true},
 	"replicasets.delete": {Group: "apps", Resource: "replicasets", Verb: "delete", Namespaced: true},
 	"replicasets.patch":  {Group: "apps", Resource: "replicasets", Verb: "patch", Namespaced: true},
+	"replicasets.watch":  {Group: "apps", Resource: "replicasets", Verb: "watch", Namespaced: true},
 
 	// Job operations
 	"jobs.get":    {Group: "batch", Resource: "jobs", Verb: "get", Namespaced: true},
@@ -82,6 +93,8 @@ var Registry = map[string]CapabilityCheck{
 	"jobs.create": {Group: "batch", Resource: "jobs", Verb: "create", Namespaced: true},
 	"jobs.update": {Group: "batch", Resource: "jobs", Verb: "update", Namespaced: true},
 	"jobs.delete": {Group: "batch", Resource: "jobs", Verb: "delete", Namespaced: true},
+	"jobs.patch":  {Group: "batch", Resource: "jobs", Verb: "patch", Namespaced: true},
+	"jobs.watch":  {Group: "batch", Resource: "jobs", Verb: "watch", Namespaced: true},
 
 	// CronJob operations
 	"cronjobs.get":    {Group: "batch", Resource: "cronjobs", Verb: "get", Namespaced: true},
@@ -89,6 +102,8 @@ var Registry = map[string]CapabilityCheck{
 	"cronjobs.create": {Group: "batch", Resource: "cronjobs", Verb: "create", Namespaced: true},
 	"cronjobs.update": {Group: "batch", Resource: "cronjobs", Verb: "update", Namespaced: true},
 	"cronjobs.delete": {Group: "batch", Resource: "cronjobs", Verb: "delete", Namespaced: true},
+	"cronjobs.patch":  {Group: "batch", Resource: "cronjobs", Verb: "patch", Namespaced: true},
+	"cronjobs.watch":  {Group: "batch", Resource: "cronjobs", Verb: "watch", Namespaced: true},
 
 	// Namespace operations
 	"namespaces.get":    {Group: "", Resource: "namespaces", Verb: "get", Namespaced: false},
@@ -96,6 +111,8 @@ var Registry = map[string]CapabilityCheck{
 	"namespaces.create": {Group: "", Resource: "namespaces", Verb: "create", Namespaced: false},
 	"namespaces.update": {Group: "", Resource: "namespaces", Verb: "update", Namespaced: false},
 	"namespaces.delete": {Group: "", Resource: "namespaces", Verb: "delete", Namespaced: false},
+	"namespaces.patch":  {Group: "", Resource: "namespaces", Verb: "patch", Namespaced: false},
+	"namespaces.watch":  {Group: "", Resource: "namespaces", Verb: "watch", Namespaced: false},
 
 	// Node operations (cluster-scoped)
 	"nodes.get":    {Group: "", Resource: "nodes", Verb: "get", Namespaced: false},
@@ -127,8 +144,10 @@ var Registry = map[string]CapabilityCheck{
 	"clusterrolebindings.delete": {Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings", Verb: "delete", Namespaced: false},
 
 	// Event operations
-	"events.get":  {Group: "", Resource: "events", Verb: "get", Namespaced: true},
-	"events.list": {Group: "", Resource: "events", Verb: "list", Namespaced: true},
+	"events.get":    {Group: "", Resource: "events", Verb: "get", Namespaced: true},
+	"events.list":   {Group: "", Resource: "events", Verb: "list", Namespaced: true},
+	"events.watch":  {Group: "", Resource: "events", Verb: "watch", Namespaced: true},
+	"events.create": {Group: "", Resource: "events", Verb: "create", Namespaced: true},
 
 	// Persistent Volume operations
 	"persistentvolumes.get":         {Group: "", Resource: "persistentvolumes", Verb: "get", Namespaced: false},
@@ -136,11 +155,15 @@ var Registry = map[string]CapabilityCheck{
 	"persistentvolumes.create":      {Group: "", Resource: "persistentvolumes", Verb: "create", Namespaced: false},
 	"persistentvolumes.update":      {Group: "", Resource: "persistentvolumes", Verb: "update", Namespaced: false},
 	"persistentvolumes.delete":      {Group: "", Resource: "persistentvolumes", Verb: "delete", Namespaced: false},
+	"persistentvolumes.patch":       {Group: "", Resource: "persistentvolumes", Verb: "patch", Namespaced: false},
+	"persistentvolumes.watch":       {Group: "", Resource: "persistentvolumes", Verb: "watch", Namespaced: false},
 	"persistentvolumeclaims.get":    {Group: "", Resource: "persistentvolumeclaims", Verb: "get", Namespaced: true},
 	"persistentvolumeclaims.list":   {Group: "", Resource: "persistentvolumeclaims", Verb: "list", Namespaced: true},
 	"persistentvolumeclaims.create": {Group: "", Resource: "persistentvolumeclaims", Verb: "create", Namespaced: true},
 	"persistentvolumeclaims.update": {Group: "", Resource: "persistentvolumeclaims", Verb: "update", Namespaced: true},
 	"persistentvolumeclaims.delete": {Group: "", Resource: "persistentvolumeclaims", Verb: "delete", Namespaced: true},
+	"persistentvolumeclaims.patch":  {Group: "", Resource: "persistentvolumeclaims", Verb: "patch", Namespaced: true},
+	"persistentvolumeclaims.watch":  {Group: "", Resource: "persistentvolumeclaims", Verb: "watch", Namespaced: true},
 
 	// Storage operations
 	"storageclasses.get":    {Group: "storage.k8s.io", Resource: "storageclasses", Verb: "get", Namespaced: false},
@@ -148,6 +171,8 @@ var Registry = map[string]CapabilityCheck{
 	"storageclasses.create": {Group: "storage.k8s.io", Resource: "storageclasses", Verb: "create", Namespaced: false},
 	"storageclasses.update": {Group: "storage.k8s.io", Resource: "storageclasses", Verb: "update", Namespaced: false},
 	"storageclasses.delete": {Group: "storage.k8s.io", Resource: "storageclasses", Verb: "delete", Namespaced: false},
+	"storageclasses.patch":  {Group: "storage.k8s.io", Resource: "storageclasses", Verb: "patch", Namespaced: false},
+	"storageclasses.watch":  {Group: "storage.k8s.io", Resource: "storageclasses", Verb: "watch", Namespaced: false},
 
 	// Ingress operations
 	"ingresses.get":    {Group: "networking.k8s.io", Resource: "ingresses", Verb: "get", Namespaced: true},
@@ -155,6 +180,8 @@ var Registry = map[string]CapabilityCheck{
 	"ingresses.create": {Group: "networking.k8s.io", Resource: "ingresses", Verb: "create", Namespaced: true},
 	"ingresses.update": {Group: "networking.k8s.io", Resource: "ingresses", Verb: "update", Namespaced: true},
 	"ingresses.delete": {Group: "networking.k8s.io", Resource: "ingresses", Verb: "delete", Namespaced: true},
+	"ingresses.patch":  {Group: "networking.k8s.io", Resource: "ingresses", Verb: "patch", Namespaced: true},
+	"ingresses.watch":  {Group: "networking.k8s.io", Resource: "ingresses", Verb: "watch", Namespaced: true},
 
 	// NetworkPolicy operations
 	"networkpolicies.get":    {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "get", Namespaced: true},
@@ -162,6 +189,8 @@ var Registry = map[string]CapabilityCheck{
 	"networkpolicies.create": {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "create", Namespaced: true},
 	"networkpolicies.update": {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "update", Namespaced: true},
 	"networkpolicies.delete": {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "delete", Namespaced: true},
+	"networkpolicies.patch":  {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "patch", Namespaced: true},
+	"networkpolicies.watch":  {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "watch", Namespaced: true},
 }
 
 // GetCapabilityCheck returns the CapabilityCheck for a given capability key
