@@ -9,6 +9,7 @@ import (
 
 	"github.com/aaronlmathis/kaptn/internal/analytics"
 	"github.com/aaronlmathis/kaptn/internal/auth"
+	"github.com/aaronlmathis/kaptn/internal/authz"
 	"github.com/aaronlmathis/kaptn/internal/cache"
 	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/k8s"
@@ -63,6 +64,7 @@ type Server struct {
 	timeSeriesStore      *timeseries.MemStore
 	timeSeriesAggregator *aggregator.Aggregator
 	timeSeriesWSManager  *TimeSeriesWSManager
+	capabilityService    *authz.CapabilityService
 }
 
 // NewServer creates a new API server
@@ -136,6 +138,10 @@ func (s *Server) initKubernetesClient() error {
 	impersonatedFactory := k8s.NewImpersonatedClientFactory(s.logger, factory.RESTConfig())
 	s.impersonationMgr = k8s.NewImpersonationManager(impersonatedFactory, s.logger)
 	s.logger.Info("Impersonation manager initialized")
+
+	// Initialize capability service
+	s.capabilityService = authz.NewCapabilityService(s.logger, 30*time.Second)
+	s.logger.Info("Capability service initialized")
 
 	// Initialize apply service
 	s.applyService = actions.NewApplyService(
@@ -820,6 +826,11 @@ func (s *Server) setupRoutes() {
 			if s.config.Security.AuthMode != "none" {
 				r.Use(s.authMiddleware.RequireAuth)
 			}
+
+			// Authorization capability endpoints (Phase 1)
+			r.Post("/authz/capabilities", s.handleAuthzCapabilities)
+			r.Get("/authz/capabilities/registry", s.handleAuthzCapabilitiesRegistry)
+			r.Get("/authz/capabilities/stats", s.handleAuthzCapabilitiesStats)
 
 			// Capabilities endpoint
 			r.Get("/capabilities", s.handleGetCapabilities)

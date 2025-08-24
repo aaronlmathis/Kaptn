@@ -455,6 +455,24 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get security context for authorization check
+	secCtx, err := s.getSecurityContext(r)
+	if err != nil {
+		s.logger.Error("Failed to get security context for secret deletion", zap.Error(err))
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	// Check delete permission for secrets using SSAR
+	if err := s.checkResourcePermission(r.Context(), secCtx, "delete", "secrets", namespace, name); err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, secCtx.User)
+		} else {
+			http.Error(w, "Permission check failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
 	deleteOptions := metav1.DeleteOptions{}
 	if gracePeriodStr != "" {
 		if gracePeriod, err := strconv.ParseInt(gracePeriodStr, 10, 64); err == nil {
@@ -463,9 +481,9 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete the secret
-	err := s.resourceManager.DeleteSecret(r.Context(), namespace, name, deleteOptions)
-	if err != nil {
-		if errors.IsNotFound(err) {
+	deleteErr := s.resourceManager.DeleteSecret(r.Context(), namespace, name, deleteOptions)
+	if deleteErr != nil {
+		if errors.IsNotFound(deleteErr) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Secret not found"})
@@ -475,12 +493,21 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to delete secret",
 			zap.String("namespace", namespace),
 			zap.String("name", name),
-			zap.Error(err))
+			zap.String("user", secCtx.User.Email),
+			zap.Error(deleteErr))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]string{"error": deleteErr.Error()})
 		return
 	}
+
+	// Log successful deletion for audit
+	s.logger.Info("Secret deleted successfully",
+		zap.String("user", secCtx.User.Email),
+		zap.String("user_sub", secCtx.User.Sub),
+		zap.Strings("user_groups", secCtx.User.Groups),
+		zap.String("namespace", namespace),
+		zap.String("name", name))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
