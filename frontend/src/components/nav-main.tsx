@@ -116,39 +116,27 @@ function NavGroupItem({ item }: { item: Item }) {
 
   const open = internalOpen;
 
-  // If not hydrated yet, render a simple non-collapsible version to prevent hydration mismatch
-  if (!isHydrated) {
-    return (
-      <SidebarMenuItem>
-        <SidebarMenuButton tooltip={item.title} isActive={childActive}>
-          {item.icon && <item.icon />}
-          <span>{item.title}</span>
-          <ChevronRight className="ml-auto transition-transform duration-200" />
-        </SidebarMenuButton>
-        {/* Don't render children during SSR to prevent hydration issues */}
-      </SidebarMenuItem>
-    );
-  }
-
   return (
     <Collapsible
       asChild
-      open={open}
+      open={isHydrated ? open : false} // Always false during SSR
       onOpenChange={(nextOpen) => {
+        if (!isHydrated) return; // Prevent state changes during SSR
         setInternalOpen(nextOpen);
         setMenuExpanded(item.title, nextOpen);
       }}
       className="group/collapsible"
+      suppressHydrationWarning={true} // Suppress hydration warnings for this component
     >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.title} isActive={childActive}>
+          <SidebarMenuButton tooltip={item.title} isActive={isHydrated ? childActive : false}>
             {item.icon && <item.icon />}
             <span>{item.title}</span>
             <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
-        <CollapsibleContent>
+        <CollapsibleContent suppressHydrationWarning={true}>
           <SidebarMenuSub>
             {(item.items ?? []).map((subItem) => {
               return (
