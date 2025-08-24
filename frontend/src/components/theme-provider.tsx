@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react"
+import * as React from "react"
 
 type Theme = "dark" | "light" | "system"
 
@@ -18,7 +18,7 @@ const initialState: ThemeProviderState = {
 	setTheme: () => null,
 }
 
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
+const ThemeProviderContext = React.createContext<ThemeProviderState>(initialState)
 
 export function ThemeProvider({
 	children,
@@ -26,25 +26,25 @@ export function ThemeProvider({
 	storageKey = "k8s-dashboard-theme",
 	...props
 }: ThemeProviderProps) {
-	const [theme, setTheme] = useState<Theme>(() => {
-		// Check if we're in the browser before accessing localStorage
-		if (typeof window !== "undefined") {
-			return (localStorage.getItem(storageKey) as Theme) || defaultTheme
-		}
-		return defaultTheme
-	})
+	// Always start with default theme for SSR consistency
+	const [theme, setTheme] = React.useState<Theme>(defaultTheme)
+	const [isHydrated, setIsHydrated] = React.useState(false)
 
-	// Hydrate theme from localStorage after mount
-	useEffect(() => {
+	// Hydrate theme from localStorage after mount to prevent SSR mismatch
+	React.useEffect(() => {
 		if (typeof window !== "undefined") {
 			const storedTheme = localStorage.getItem(storageKey) as Theme
-			if (storedTheme && storedTheme !== theme) {
+			if (storedTheme) {
 				setTheme(storedTheme)
 			}
+			setIsHydrated(true)
 		}
 	}, [storageKey])
 
-	useEffect(() => {
+	React.useEffect(() => {
+		// Only apply theme changes after hydration to prevent conflicts
+		if (!isHydrated) return
+
 		const root = window.document.documentElement
 
 		// Don't remove classes if they're already correct to prevent flash
@@ -78,7 +78,7 @@ export function ThemeProvider({
 			mediaQuery.addEventListener("change", handleChange)
 			return () => mediaQuery.removeEventListener("change", handleChange)
 		}
-	}, [theme])
+	}, [theme, isHydrated])
 
 	const value = {
 		theme,
@@ -98,7 +98,7 @@ export function ThemeProvider({
 }
 
 export const useTheme = () => {
-	const context = useContext(ThemeProviderContext)
+	const context = React.useContext(ThemeProviderContext)
 
 	if (context === undefined)
 		throw new Error("useTheme must be used within a ThemeProvider")

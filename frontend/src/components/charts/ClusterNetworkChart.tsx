@@ -42,7 +42,7 @@ export function ClusterNetworkChart({
   className
 }: ClusterNetworkChartProps) {
   const {
-    series: rawSeries,
+    rawData,
     capabilities,
     connectionState,
   } = useClusterTimeseries([
@@ -56,35 +56,36 @@ export function ClusterNetworkChart({
 
   // Transform data for chart display
   const chartSeries: ChartSeries[] = React.useMemo(() => {
-    if (!rawSeries || !Array.isArray(rawSeries)) {
+    // Ensure rawData is properly initialized
+    if (!rawData || typeof rawData !== 'object') {
       return [];
     }
 
-    const rxSeries = rawSeries.find(s => s.key === 'cluster.net.rx.bps');
-    const txSeries = rawSeries.find(s => s.key === 'cluster.net.tx.bps');
+    const rxData = rawData['cluster.net.rx.bps'];
+    const txData = rawData['cluster.net.tx.bps'];
 
     const result: ChartSeries[] = [];
 
-    if (rxSeries) {
+    if (rxData && Array.isArray(rxData) && rxData.length > 0) {
       result.push({
         key: 'rx',
         name: 'Network RX',
         color: '#10b981', // Green for RX
-        data: rxSeries.data
+        data: rxData.map(point => [point.t, point.v] as [number, number])
       });
     }
 
-    if (txSeries) {
+    if (txData && Array.isArray(txData) && txData.length > 0) {
       result.push({
         key: 'tx',
         name: 'Network TX',
         color: '#f59e0b', // Orange for TX
-        data: txSeries.data
+        data: txData.map(point => [point.t, point.v] as [number, number])
       });
     }
 
     return result;
-  }, [rawSeries]);
+  }, [rawData]);
 
   // Generate capability badges
   const capabilityBadges = React.useMemo(() => {
@@ -115,7 +116,7 @@ export function ClusterNetworkChart({
       isLoading={connectionState.isLoading}
       error={connectionState.error?.message}
       emptyMessage={
-        !capabilities?.summaryAPI 
+        !capabilities?.summaryAPI
           ? "Summary API not available - network data requires kubelet summary endpoint access"
           : "No network data available"
       }

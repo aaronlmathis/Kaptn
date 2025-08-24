@@ -43,7 +43,7 @@ export function ClusterCPUChart({
   className
 }: ClusterCPUChartProps) {
   const {
-    series: rawSeries,
+    rawData,
     capabilities,
     connectionState,
   } = useClusterTimeseries([
@@ -57,31 +57,36 @@ export function ClusterCPUChart({
 
   // Transform data for chart display
   const chartSeries: ChartSeries[] = React.useMemo(() => {
-    const usedSeries = rawSeries.find(s => s.key === 'cluster.cpu.used.cores');
-    const capacitySeries = rawSeries.find(s => s.key === 'cluster.cpu.capacity.cores');
+    // Ensure rawData is properly initialized
+    if (!rawData || typeof rawData !== 'object') {
+      return [];
+    }
+
+    const usedData = rawData['cluster.cpu.used.cores'];
+    const capacityData = rawData['cluster.cpu.capacity.cores'];
 
     const result: ChartSeries[] = [];
 
-    if (capacitySeries) {
+    if (capacityData && Array.isArray(capacityData) && capacityData.length > 0) {
       result.push({
         key: 'capacity',
         name: 'CPU Capacity',
         color: '#e5e7eb', // Light gray for capacity background
-        data: capacitySeries.data
+        data: capacityData.map(point => [point.t, point.v] as [number, number])
       });
     }
 
-    if (usedSeries) {
+    if (usedData && Array.isArray(usedData) && usedData.length > 0) {
       result.push({
         key: 'used',
         name: 'CPU Used',
         color: '#3b82f6', // Blue for used CPU
-        data: usedSeries.data
+        data: usedData.map(point => [point.t, point.v] as [number, number])
       });
     }
 
     return result;
-  }, [rawSeries]);
+  }, [rawData]);
 
   // Generate capability badges
   const capabilityBadges = React.useMemo(() => {
@@ -112,7 +117,7 @@ export function ClusterCPUChart({
       isLoading={connectionState.isLoading}
       error={connectionState.error?.message}
       emptyMessage={
-        !capabilities?.metricsAPI 
+        !capabilities?.metricsAPI
           ? "Metrics API not available - install metrics-server to view CPU data"
           : "No CPU data available"
       }

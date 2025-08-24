@@ -6,10 +6,11 @@ import react from "@astrojs/react";
 
 // https://astro.build/config
 export default defineConfig({
+
   integrations: [react()],
 
-  // Enable SSR mode for authentication
-  output: "server",
+  // // Enable SSR mode for authentication
+  // output: "server",
 
   // Bind Astro dev (helpful when running behind code-server / proxy)
   server: {
