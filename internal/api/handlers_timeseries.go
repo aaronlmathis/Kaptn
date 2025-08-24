@@ -571,8 +571,9 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 	// Node metrics follow pattern: {base}.{nodename}
 	nodeMetricBases := timeseries.GetNodeMetricBases()
 	podMetricBases := timeseries.GetPodMetricBases()
+	nsMetricBases := timeseries.GetNamespaceMetricBases()
 
-	isValidNodeOrPodMetric := func(key string) bool {
+	isValidEntityMetric := func(key string) bool {
 		// Check node patterns
 		for _, base := range nodeMetricBases {
 			if strings.HasPrefix(key, base+".") && len(key) > len(base)+1 {
@@ -585,6 +586,12 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 				return true
 			}
 		}
+		// Check namespace patterns
+		for _, base := range nsMetricBases {
+			if strings.HasPrefix(key, base+".") && len(key) > len(base)+1 {
+				return true
+			}
+		}
 		return false
 	}
 
@@ -593,7 +600,7 @@ func (s *Server) handleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 
 	newSeriesCount := 0
 	for _, key := range subscribeMsg.Series {
-		isValid := validKeys[key] || isValidNodeOrPodMetric(key)
+		isValid := validKeys[key] || isValidEntityMetric(key)
 
 		if !isValid {
 			rejected = append(rejected, TimeSeriesRejectedKey{

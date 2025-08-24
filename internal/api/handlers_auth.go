@@ -163,6 +163,11 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 			if userInfoUser.Email != "" {
 				user.Email = userInfoUser.Email
 			}
+			// Also merge groups if they are present in userinfo and not in ID token
+			if len(userInfoUser.Groups) > 0 && len(user.Groups) == 0 {
+				s.logger.Info("Updating user groups from userinfo endpoint")
+				user.Groups = userInfoUser.Groups
+			}
 			s.logger.Info("Final user profile after merging",
 				zap.String("id", user.ID),
 				zap.String("email", user.Email),
@@ -744,23 +749,28 @@ func (s *Server) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Not authenticated", http.StatusUnauthorized)
 		return
 	}
-
-	// Check if user has admin role (basic authorization check)
-	hasAdminRole := false
-	for _, group := range currentUser.Groups {
-		if strings.Contains(strings.ToLower(group), "admin") {
-			hasAdminRole = true
-			break
+	// Get security context for permission checking
+	secCtx, err := s.getSecurityContext(r)
+	if err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, currentUser)
+		} else {
+			http.Error(w, "Security context error", http.StatusInternalServerError)
 		}
-	}
-
-	if !hasAdminRole {
-		s.logAuthEvent(r, currentUser.ID, "revoke_sessions_denied", "Insufficient permissions", nil)
-		http.Error(w, "Insufficient permissions", http.StatusForbidden)
 		return
 	}
 
-	// Parse request body
+	// To revoke sessions, user must have permission to manage Kaptn's auth configuration.
+	// We check if they can 'update' the user bindings ConfigMap as a proxy for this admin permission.
+	if err := s.checkResourcePermission(r.Context(), secCtx, "update", "configmaps", s.config.Bindings.ConfigMap.Namespace, s.config.Bindings.ConfigMap.Name); err != nil {
+		if secErr, ok := err.(*SecurityError); ok {
+			s.writeSecurityError(w, secErr, currentUser)
+		} else {
+			http.Error(w, "Permission check failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
 	var requestBody struct {
 		UserID string `json:"user_id"`
 	}

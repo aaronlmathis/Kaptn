@@ -325,23 +325,7 @@ export default function NamespaceTeamViewsSection() {
 	/* ----------------------------------- UI ----------------------------------- */
 
 	return (
-		<div className="border rounded-lg bg-card">
-			<div className="p-4 border-b">
-				<div className="flex items-center justify-between">
-					<div>
-						<h2 className="text-xl font-semibold">Namespace / Team Views</h2>
-						<p className="text-sm text-muted-foreground mt-1">
-							Roll up metrics by namespace with drill-down.
-						</p>
-					</div>
-					{isConnected && (
-						<div className="flex items-center gap-1.5 text-xs text-green-600">
-							<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-							Live Data
-						</div>
-					)}
-				</div>
-			</div>
+		<>
 
 			{(connectionState.lastError || discError) && (
 				<div className="px-4 pt-4">
@@ -445,6 +429,6 @@ export default function NamespaceTeamViewsSection() {
 					CPU shown in cores; Memory in bytes. Restart rate and Ephemeral % use latest values per pod.
 				</p>
 			</div>
-		</div>
+		</>
 	);
 }

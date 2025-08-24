@@ -409,3 +409,4 @@ config-deploy.yaml
 internal_deploy/
 *.pem
 config.production.yaml
+config.auth.yaml

@@ -311,23 +311,7 @@ export default function EphemeralStorageSection() {
 	/* ----------------------------------- UI ----------------------------------- */
 
 	return (
-		<div className="border rounded-lg bg-card">
-			<div className="p-4 border-b">
-				<div className="flex items-center justify-between">
-					<div>
-						<h2 className="text-xl font-semibold">Ephemeral / Storage</h2>
-						<p className="text-sm text-muted-foreground mt-1">
-							Prevent eviction due to disk pressure and log growth.
-						</p>
-					</div>
-					{isConnected && (
-						<div className="flex items-center gap-1.5 text-xs text-green-600">
-							<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-							Live Data
-						</div>
-					)}
-				</div>
-			</div>
+		<>
 
 			{(connectionState.lastError || discError) && (
 				<div className="px-4 pt-4">
@@ -402,6 +386,6 @@ export default function EphemeralStorageSection() {
 					Watch for log growth and layer bloat. High ImageFS usage at cluster or node level can cause disk pressure and pod evictions.
 				</p>
 			</div>
-		</div>
+		</>
 	);
 }

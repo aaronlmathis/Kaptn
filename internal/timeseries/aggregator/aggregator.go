@@ -33,6 +33,11 @@ type hostSnap struct {
 	LastTs        time.Time // Timestamp of last measurement
 }
 
+type nsRestartState struct {
+	lastTotal int64
+	lastTime  time.Time
+}
+
 // Aggregator maintains cluster-level time series by aggregating node-level metrics
 type Aggregator struct {
 	logger     *zap.Logger
@@ -57,6 +62,7 @@ type Aggregator struct {
 	// New: restart tracking for rate calculation
 	lastRestartsTotal int64
 	lastRestartsTime  time.Time
+	nsRestartsState   map[string]*nsRestartState
 
 	// Configuration
 	config                  Config
@@ -119,6 +125,7 @@ func NewAggregator(
 		capacityRefreshInterval: config.CapacityRefreshInterval,
 		stopCh:                  make(chan struct{}),
 		done:                    make(chan struct{}),
+		nsRestartsState:         make(map[string]*nsRestartState),
 
 		// Initialize adapters
 		nodesAdapter:      kubemetrics.NewNodesAdapter(logger, kubeClient),
@@ -1064,33 +1071,7 @@ func (a *Aggregator) collectClusterRestartMetrics(ctx context.Context, now time.
 	// Calculate 1-hour restart count using sliding window
 	restarts1hSeries := a.store.Upsert(timeseries.ClusterPodsRestarts1h)
 	if restarts1hSeries != nil && restartsTotalSeries != nil {
-		// Get restart counter value from 1 hour ago (or oldest available data)
-		oneHourAgo := now.Add(-1 * time.Hour)
-
-		// Get the current total and the total from as far back as we have data
-		currentTotal := float64(totalRestarts)
-		var totalOneHourAgo float64 = currentTotal // Default to current if no historical data
-
-		// Get historical data points
-		if recentPoints := restartsTotalSeries.GetSince(oneHourAgo, timeseries.Hi); len(recentPoints) > 0 {
-			// Use the oldest available point (might be less than 1 hour old)
-			totalOneHourAgo = recentPoints[0].V
-		} else {
-			// If no historical data in hi-res, try low-res
-			if recentPoints := restartsTotalSeries.GetSince(oneHourAgo, timeseries.Lo); len(recentPoints) > 0 {
-				totalOneHourAgo = recentPoints[0].V
-			} else {
-				// No historical data available, use 0 as baseline
-				totalOneHourAgo = 0
-			}
-		}
-
-		// Calculate restarts in the last hour
-		restarts1h := currentTotal - totalOneHourAgo
-		if restarts1h < 0 {
-			restarts1h = 0 // Handle counter resets
-		}
-
+		restarts1h := calculateRestartsInWindow(restartsTotalSeries, float64(totalRestarts), time.Hour)
 		restarts1hSeries.Add(timeseries.Point{T: now, V: restarts1h})
 	}
 
@@ -1338,6 +1319,9 @@ func (a *Aggregator) collectNamespaceMetrics(ctx context.Context, now time.Time)
 	}()
 
 	// Get all pods to aggregate by namespace
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	pods, err := a.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		hasError = true
@@ -1463,10 +1447,41 @@ func (a *Aggregator) collectNamespaceMetrics(ctx context.Context, now time.Time)
 			runningPodsSeries.Add(timeseries.NewPointWithEntity(now, float64(data.runningPods), nsEntity))
 		}
 
-		// Calculate restart rate (placeholder for now)
+		// --- Restart Metrics ---
+		// Store total restarts for this namespace
+		restartsTotalSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespacePodsRestartsTotalBase, namespace))
+		if restartsTotalSeries != nil {
+			restartsTotalSeries.Add(timeseries.NewPointWithEntity(now, float64(data.totalRestarts), nsEntity))
+		}
+
+		// Calculate restart rate (restarts/sec)
+		var restartRate float64
+		state, exists := a.nsRestartsState[namespace]
+		if exists && !state.lastTime.IsZero() {
+			deltaRestarts := data.totalRestarts - state.lastTotal
+			deltaTime := now.Sub(state.lastTime).Seconds()
+			if deltaTime > 0 && deltaRestarts >= 0 { // handle counter resets gracefully
+				restartRate = float64(deltaRestarts) / deltaTime
+			}
+		}
+		// Update state for next calculation
+		if !exists {
+			state = &nsRestartState{}
+			a.nsRestartsState[namespace] = state
+		}
+		state.lastTotal = data.totalRestarts
+		state.lastTime = now
+
 		restartsRateSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespacePodsRestartsRateBase, namespace))
 		if restartsRateSeries != nil {
-			restartsRateSeries.Add(timeseries.NewPointWithEntity(now, 0.0, nsEntity)) // TODO: implement rate calculation
+			restartsRateSeries.Add(timeseries.NewPointWithEntity(now, restartRate, nsEntity))
+		}
+
+		// Calculate restarts in the last hour
+		restarts1h := calculateRestartsInWindow(restartsTotalSeries, float64(data.totalRestarts), time.Hour)
+		restarts1hSeries := a.store.Upsert(timeseries.GenerateNamespaceSeriesKey(timeseries.NamespacePodsRestarts1hBase, namespace))
+		if restarts1hSeries != nil {
+			restarts1hSeries.Add(timeseries.NewPointWithEntity(now, restarts1h, nsEntity))
 		}
 	}
 
@@ -1474,6 +1489,30 @@ func (a *Aggregator) collectNamespaceMetrics(ctx context.Context, now time.Time)
 		zap.Int("total_namespaces", len(namespaceData)),
 		zap.Bool("has_usage_metrics", podUsageMap != nil),
 	)
+}
+
+// calculateRestartsInWindow calculates the number of restarts in a given time window
+// by looking at the historical total restart count.
+func calculateRestartsInWindow(series *timeseries.Series, currentTotal float64, window time.Duration) float64 {
+	if series == nil {
+		return 0
+	}
+
+	windowAgo := time.Now().Add(-window)
+	var totalAtWindowStart float64 = -1
+
+	// Find the oldest point within the window to get the starting count
+	if recentPoints := series.GetSince(windowAgo, timeseries.Hi); len(recentPoints) > 0 {
+		totalAtWindowStart = recentPoints[0].V
+	} else if recentPoints := series.GetSince(windowAgo, timeseries.Lo); len(recentPoints) > 0 {
+		totalAtWindowStart = recentPoints[0].V
+	}
+
+	if totalAtWindowStart == -1 || currentTotal < totalAtWindowStart {
+		return 0 // No historical data or counter reset
+	}
+
+	return currentTotal - totalAtWindowStart
 }
 
 // collectPodMetrics collects basic pod-level metrics

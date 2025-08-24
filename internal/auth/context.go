@@ -55,17 +55,44 @@ func (u *User) HasRole(role string) bool {
 	return false
 }
 
+// HasPerm checks if the user has a specific abstract permission (e.g., "write", "admin").
+// These permissions are derived from the user's groups and stored in the session token.
+func (u *User) HasPerm(perm string) bool {
+	if u.Claims == nil {
+		return false
+	}
+
+	// The perms claim is stored as []string in the token
+	if perms, ok := u.Claims["perms"].([]string); ok {
+		for _, p := range perms {
+			if p == perm {
+				return true
+			}
+		}
+	}
+
+	// Handle the case where JSON unmarshaling might convert it to []interface{}
+	if perms, ok := u.Claims["perms"].([]interface{}); ok {
+		for _, p := range perms {
+			if pStr, ok := p.(string); ok && pStr == perm {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // IsAdmin checks if the user has admin privileges
 func (u *User) IsAdmin() bool {
-	return u.HasRole("admin") || u.HasRole("cluster-admin") || u.HasRole("cluster-admins") || u.HasRole("cluster-admins-group") || u.HasRole("kad-admin") || u.HasRole("kaptn-admins") || u.HasRole("kaptn-admins-group")
+	return u.HasPerm("admin")
 }
 
 // CanWrite checks if the user can perform write operations
 func (u *User) CanWrite() bool {
-	return u.IsAdmin() || u.HasRole("editor") || u.HasRole("kad-editor")
+	return u.HasPerm("write")
 }
 
 // CanRead checks if the user can perform read operations
 func (u *User) CanRead() bool {
-	return u.CanWrite() || u.HasRole("viewer") || u.HasRole("kad-viewer")
+	return u.HasPerm("read")
 }

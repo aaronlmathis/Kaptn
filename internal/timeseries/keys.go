@@ -109,6 +109,8 @@ const (
 	NamespaceMemLimitBase         = "ns.mem.limit.bytes"
 	NamespacePodsRunningBase      = "ns.pods.running"
 	NamespacePodsRestartsRateBase = "ns.pods.restarts.rate"
+	NamespacePodsRestartsTotalBase = "ns.pods.restarts.total"
+	NamespacePodsRestarts1hBase    = "ns.pods.restarts.1h"
 )
 
 // Container-level metric base keys (will be combined with namespace, pod, and container names)
@@ -269,6 +271,8 @@ func AllSeriesKeys() []string {
 		NamespaceMemLimitBase,
 		NamespacePodsRunningBase,
 		NamespacePodsRestartsRateBase,
+		NamespacePodsRestartsTotalBase,
+		NamespacePodsRestarts1hBase,
 	}
 }
 

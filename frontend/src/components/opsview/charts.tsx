@@ -39,7 +39,6 @@ import {
   ChartTooltip,
   ChartTooltipContent,
   ChartLegend,
-  ChartLegendContent,
 
   type ChartConfig,
 } from "@/components/ui/chart";
@@ -484,7 +483,22 @@ export function MetricAreaChart({
             }
           />
 
-          <ChartLegend content={<ChartLegendContent />} verticalAlign="bottom" height={36} />
+          <ChartLegend
+            content={() => (
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
+                {series.map((s, index) => {
+                  const color = s.color || getChartColor(s.key, index);
+                  return (
+                    <div key={s.key} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                      <span className="text-xs text-muted-foreground">{s.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            verticalAlign="bottom"
+          />
 
           {series.map((s, index) => {
             const color = s.color || getChartColor(s.key, index);
@@ -778,7 +792,22 @@ export function MetricLineChart({
             }
           />
 
-          <ChartLegend content={<ChartLegendContent />} verticalAlign="bottom" height={36} />
+          <ChartLegend
+            content={() => (
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
+                {series.map((s, index) => {
+                  const color = s.color || getChartColor(s.key, index);
+                  return (
+                    <div key={s.key} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                      <span className="text-xs text-muted-foreground">{s.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            verticalAlign="bottom"
+          />
 
           {series.map((s, index) => {
             const color = s.color || getChartColor(s.key, index);
@@ -991,7 +1020,7 @@ export function MetricCategoricalBarChart({
           {showLegend && (
             <ChartLegend
               content={() => (
-                <div className="flex flex-wrap justify-center gap-4 mt-2">
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
                   {chartData.map((item, index) => (
                     <div key={item.name} className="flex items-center gap-2">
                       <div
@@ -1004,7 +1033,6 @@ export function MetricCategoricalBarChart({
                 </div>
               )}
               verticalAlign="bottom"
-              height={36}
             />
           )}
 
@@ -1487,7 +1515,7 @@ export function MetricStackedBarChart({
           {showLegend && (
             <ChartLegend
               content={() => (
-                <div className="flex flex-wrap justify-center gap-4 mt-2">
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
                   {dataKeys.map((key, index) => (
                     <div key={key} className="flex items-center gap-2">
                       <div
@@ -1502,7 +1530,6 @@ export function MetricStackedBarChart({
                 </div>
               )}
               verticalAlign="bottom"
-              height={36}
             />
           )}
 

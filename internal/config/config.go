@@ -186,107 +186,107 @@ func LoadFromFile(configPath string) (*Config, error) {
 func loadWithDefaults(configPath string) (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Addr:         getEnv("KAD_SERVER_ADDR", "0.0.0.0:8080"),
-			BasePath:     getEnv("KAD_BASE_PATH", "/"),
-			CookieSecret: getEnv("KAD_COOKIE_SECRET", ""), // Required in production
-			SessionTTL:   getEnv("KAD_SESSION_TTL", "12h"),
+			Addr:         getEnv("KAPTN_SERVER_ADDR", "0.0.0.0:8080"),
+			BasePath:     getEnv("KAPTN_BASE_PATH", "/"),
+			CookieSecret: getEnv("KAPTN_COOKIE_SECRET", ""), // Required in production
+			SessionTTL:   getEnv("KAPTN_SESSION_TTL", "12h"),
 			CORS: CORSConfig{
 				AllowOrigins: []string{"*"},
 				AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			},
 		},
 		Security: SecurityConfig{
-			AuthMode:       getEnv("KAD_AUTH_MODE", "oidc"),
-			UsernameFormat: getEnv("KAD_USERNAME_FORMAT", "oidc:{sub}"), // prefer sub over email
+			AuthMode:       getEnv("KAPTN_AUTH_MODE", "oidc"),
+			UsernameFormat: getEnv("KAPTN_USERNAME_FORMAT", "oidc:{sub}"), // prefer sub over email
 			OIDC: OIDCConfig{
-				Issuer:       getEnv("KAD_OIDC_ISSUER", ""),
-				ClientID:     getEnv("KAD_OIDC_CLIENT_ID", ""),
-				ClientSecret: getEnv("KAD_OIDC_CLIENT_SECRET", ""),
-				RedirectURL:  getEnv("KAD_OIDC_REDIRECT_URL", ""),
-				Audience:     getEnv("KAD_OIDC_AUDIENCE", ""),
-				Scopes:       getEnvStringSlice("KAD_OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
+				Issuer:       getEnv("KAPTN_OIDC_ISSUER", ""),
+				ClientID:     getEnv("KAPTN_OIDC_CLIENT_ID", ""),
+				ClientSecret: getEnv("KAPTN_OIDC_CLIENT_SECRET", ""),
+				RedirectURL:  getEnv("KAPTN_OIDC_REDIRECT_URL", ""),
+				Audience:     getEnv("KAPTN_OIDC_AUDIENCE", ""),
+				Scopes:       getEnvStringSlice("KAPTN_OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
 			},
 			TLS: TLSConfig{
-				Enabled:  getEnvBool("KAD_TLS_ENABLED", false),
-				CertFile: getEnv("KAD_TLS_CERT_FILE", ""),
-				KeyFile:  getEnv("KAD_TLS_KEY_FILE", ""),
+				Enabled:  getEnvBool("KAPTN_TLS_ENABLED", false),
+				CertFile: getEnv("KAPTN_TLS_CERT_FILE", ""),
+				KeyFile:  getEnv("KAPTN_TLS_KEY_FILE", ""),
 			},
 		},
 		Authz: AuthzConfig{
-			Mode:                  getEnv("KAD_AUTHZ_MODE", "idp_groups"),                       // idp_groups | user_bindings
-			GroupsPrefixAllowlist: getEnvStringSlice("KAD_GROUPS_PREFIX_ALLOWLIST", []string{}), // e.g. ["kaptn-","oncall-"]
-			DefaultGroups:         getEnvStringSlice("KAD_DEFAULT_GROUPS", []string{}),          // e.g. ["kaptn-viewers"] or empty for deny
+			Mode:                  getEnv("KAPTN_AUTHZ_MODE", "idp_groups"),                       // idp_groups | user_bindings
+			GroupsPrefixAllowlist: getEnvStringSlice("KAPTN_GROUPS_PREFIX_ALLOWLIST", []string{}), // e.g. ["kaptn-","oncall-"]
+			DefaultGroups:         getEnvStringSlice("KAPTN_DEFAULT_GROUPS", []string{}),          // e.g. ["kaptn-viewers"] or empty for deny
 		},
 		Bindings: BindingsConfig{
-			Source: getEnv("KAD_BINDINGS_SOURCE", "configmap"), // configmap | sqlite
+			Source: getEnv("KAPTN_BINDINGS_SOURCE", "configmap"), // configmap | sqlite
 			ConfigMap: ConfigMapBinding{
-				Namespace: getEnv("KAD_BINDINGS_CONFIGMAP_NAMESPACE", "kaptn"),
-				Name:      getEnv("KAD_BINDINGS_CONFIGMAP_NAME", "kaptn-authz"),
+				Namespace: getEnv("KAPTN_BINDINGS_CONFIGMAP_NAMESPACE", "kaptn"),
+				Name:      getEnv("KAPTN_BINDINGS_CONFIGMAP_NAME", "kaptn-authz"),
 			},
 			SQLite: SQLiteBinding{
-				DSN: getEnv("KAD_BINDINGS_SQLITE_DSN", "file:/data/kaptn.db?_fk=1"),
+				DSN: getEnv("KAPTN_BINDINGS_SQLITE_DSN", "file:/data/kaptn.db?_fk=1"),
 			},
 		},
 		Kubernetes: KubernetesConfig{
-			Mode:             getEnv("KAD_KUBE_MODE", "kubeconfig"),
+			Mode:             getEnv("KAPTN_KUBE_MODE", "kubeconfig"),
 			KubeconfigPath:   getEnv("KUBECONFIG", ""),
-			NamespaceDefault: getEnv("KAD_NAMESPACE_DEFAULT", "default"),
-			InsecureTLS:      getEnvBool("KAD_KUBE_INSECURE_TLS", false),
+			NamespaceDefault: getEnv("KAPTN_NAMESPACE_DEFAULT", "default"),
+			InsecureTLS:      getEnvBool("KAPTN_KUBE_INSECURE_TLS", false),
 		},
 		Features: FeaturesConfig{
-			EnableApply:               getEnvBool("KAD_ENABLE_APPLY", true),
-			EnableNodeActions:         getEnvBool("KAD_ENABLE_NODE_ACTIONS", true),
-			EnableOverview:            getEnvBool("KAD_ENABLE_OVERVIEW", true),
-			EnablePrometheusAnalytics: getEnvBool("KAD_ENABLE_PROMETHEUS_ANALYTICS", true),
+			EnableApply:               getEnvBool("KAPTN_ENABLE_APPLY", true),
+			EnableNodeActions:         getEnvBool("KAPTN_ENABLE_NODE_ACTIONS", true),
+			EnableOverview:            getEnvBool("KAPTN_ENABLE_OVERVIEW", true),
+			EnablePrometheusAnalytics: getEnvBool("KAPTN_ENABLE_PROMETHEUS_ANALYTICS", true),
 		},
 		RateLimits: RateLimitsConfig{
-			ApplyPerMinute:   getEnvInt("KAD_APPLY_PER_MINUTE", 10),
-			ActionsPerMinute: getEnvInt("KAD_ACTIONS_PER_MINUTE", 20),
+			ApplyPerMinute:   getEnvInt("KAPTN_APPLY_PER_MINUTE", 10),
+			ActionsPerMinute: getEnvInt("KAPTN_ACTIONS_PER_MINUTE", 20),
 		},
 		Logging: LoggingConfig{
 			Level: getEnv("LOG_LEVEL", "info"),
 		},
 		Integrations: IntegrationsConfig{
 			Prometheus: PrometheusConfig{
-				URL:     getEnv("KAD_PROMETHEUS_URL", "http://prometheus.monitoring.svc:9090"),
-				Timeout: getEnv("KAD_PROMETHEUS_TIMEOUT", "5s"),
-				Enabled: getEnvBool("KAD_PROMETHEUS_ENABLED", true),
+				URL:     getEnv("KAPTN_PROMETHEUS_URL", "http://prometheus.monitoring.svc:9090"),
+				Timeout: getEnv("KAPTN_PROMETHEUS_TIMEOUT", "5s"),
+				Enabled: getEnvBool("KAPTN_PROMETHEUS_ENABLED", true),
 			},
 		},
 		Caching: CachingConfig{
-			OverviewTTL:    getEnv("KAD_OVERVIEW_TTL", "2s"),
-			AnalyticsTTL:   getEnv("KAD_ANALYTICS_TTL", "60s"),
-			SummaryTTL:     getEnv("KAD_SUMMARY_TTL", "30s"),
-			SearchCacheTTL: getEnv("KAD_SEARCH_CACHE_TTL", "30s"),
-			SearchMaxSize:  getEnvInt("KAD_SEARCH_MAX_SIZE", 10000),
+			OverviewTTL:    getEnv("KAPTN_OVERVIEW_TTL", "2s"),
+			AnalyticsTTL:   getEnv("KAPTN_ANALYTICS_TTL", "60s"),
+			SummaryTTL:     getEnv("KAPTN_SUMMARY_TTL", "30s"),
+			SearchCacheTTL: getEnv("KAPTN_SEARCH_CACHE_TTL", "30s"),
+			SearchMaxSize:  getEnvInt("KAPTN_SEARCH_MAX_SIZE", 10000),
 		},
 		Jobs: JobsConfig{
-			PersistenceEnabled: getEnvBool("KAD_JOBS_PERSISTENCE_ENABLED", true),
-			StorePath:          getEnv("KAD_JOBS_STORE_PATH", "./data/jobs"),
-			CleanupInterval:    getEnv("KAD_JOBS_CLEANUP_INTERVAL", "1h"),
-			MaxAge:             getEnv("KAD_JOBS_MAX_AGE", "24h"),
+			PersistenceEnabled: getEnvBool("KAPTN_JOBS_PERSISTENCE_ENABLED", true),
+			StorePath:          getEnv("KAPTN_JOBS_STORE_PATH", "./data/jobs"),
+			CleanupInterval:    getEnv("KAPTN_JOBS_CLEANUP_INTERVAL", "1h"),
+			MaxAge:             getEnv("KAPTN_JOBS_MAX_AGE", "24h"),
 		},
 		Timeseries: TimeseriesConfig{
-			Enabled:                 getEnvBool("KAD_TIMESERIES_ENABLED", true),
-			Window:                  getEnv("KAD_TIMESERIES_WINDOW", "60m"),
-			TickInterval:            getEnv("KAD_TIMESERIES_TICK_INTERVAL", "1s"),
-			CapacityRefreshInterval: getEnv("KAD_TIMESERIES_CAPACITY_REFRESH_INTERVAL", "30s"),
+			Enabled:                 getEnvBool("KAPTN_TIMESERIES_ENABLED", true),
+			Window:                  getEnv("KAPTN_TIMESERIES_WINDOW", "60m"),
+			TickInterval:            getEnv("KAPTN_TIMESERIES_TICK_INTERVAL", "1s"),
+			CapacityRefreshInterval: getEnv("KAPTN_TIMESERIES_CAPACITY_REFRESH_INTERVAL", "30s"),
 			HiRes: struct {
 				Step string `yaml:"step"`
 			}{
-				Step: getEnv("KAD_TIMESERIES_HI_RES_STEP", "1s"),
+				Step: getEnv("KAPTN_TIMESERIES_HI_RES_STEP", "1s"),
 			},
 			LoRes: struct {
 				Step string `yaml:"step"`
 			}{
-				Step: getEnv("KAD_TIMESERIES_LO_RES_STEP", "5s"),
+				Step: getEnv("KAPTN_TIMESERIES_LO_RES_STEP", "5s"),
 			},
-			MaxSeries:                   getEnvInt("KAD_TIMESERIES_MAX_SERIES", 1000),
-			MaxPointsPerSeries:          getEnvInt("KAD_TIMESERIES_MAX_POINTS_PER_SERIES", 10000),
-			MaxWSClients:                getEnvInt("KAD_TIMESERIES_MAX_WS_CLIENTS", 500),
-			WSReadLimit:                 getEnvInt("KAD_TIMESERIES_WS_READ_LIMIT", 4096),
-			WSWriteBufferSize:           getEnvInt("KAD_TIMESERIES_WS_WRITE_BUFFER_SIZE", 1024),
-			DisableNetworkIfUnavailable: getEnvBool("KAD_TIMESERIES_DISABLE_NETWORK_IF_UNAVAILABLE", true),
+			MaxSeries:                   getEnvInt("KAPTN_TIMESERIES_MAX_SERIES", 1000),
+			MaxPointsPerSeries:          getEnvInt("KAPTN_TIMESERIES_MAX_POINTS_PER_SERIES", 10000),
+			MaxWSClients:                getEnvInt("KAPTN_TIMESERIES_MAX_WS_CLIENTS", 500),
+			WSReadLimit:                 getEnvInt("KAPTN_TIMESERIES_WS_READ_LIMIT", 4096),
+			WSWriteBufferSize:           getEnvInt("KAPTN_TIMESERIES_WS_WRITE_BUFFER_SIZE", 1024),
+			DisableNetworkIfUnavailable: getEnvBool("KAPTN_TIMESERIES_DISABLE_NETWORK_IF_UNAVAILABLE", true),
 		},
 	}
 
@@ -370,31 +370,31 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	result := *fileConfig
 
 	// Override with environment values if they are not defaults
-	if envValue := os.Getenv("KAD_SERVER_ADDR"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_SERVER_ADDR"); envValue != "" {
 		result.Server.Addr = envValue
 	}
-	if envValue := os.Getenv("KAD_BASE_PATH"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_BASE_PATH"); envValue != "" {
 		result.Server.BasePath = envValue
 	}
-	if envValue := os.Getenv("KAD_COOKIE_SECRET"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_COOKIE_SECRET"); envValue != "" {
 		result.Server.CookieSecret = envValue
 	}
-	if envValue := os.Getenv("KAD_SESSION_TTL"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_SESSION_TTL"); envValue != "" {
 		result.Server.SessionTTL = envValue
 	}
-	if envValue := os.Getenv("KAD_AUTH_MODE"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_AUTH_MODE"); envValue != "" {
 		result.Security.AuthMode = envValue
 	}
-	if envValue := os.Getenv("KAD_USERNAME_FORMAT"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_USERNAME_FORMAT"); envValue != "" {
 		result.Security.UsernameFormat = envValue
 	}
-	if envValue := os.Getenv("KAD_KUBE_MODE"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_KUBE_MODE"); envValue != "" {
 		result.Kubernetes.Mode = envValue
 	}
 	if envValue := os.Getenv("KUBECONFIG"); envValue != "" {
 		result.Kubernetes.KubeconfigPath = envValue
 	}
-	if envValue := os.Getenv("KAD_NAMESPACE_DEFAULT"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_NAMESPACE_DEFAULT"); envValue != "" {
 		result.Kubernetes.NamespaceDefault = envValue
 	}
 	if envValue := os.Getenv("LOG_LEVEL"); envValue != "" {
@@ -405,57 +405,57 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	}
 
 	// Handle boolean environment variables
-	if envValue := os.Getenv("KAD_ENABLE_APPLY"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_ENABLE_APPLY"); envValue != "" {
 		if parsed, err := strconv.ParseBool(envValue); err == nil {
 			result.Features.EnableApply = parsed
 		}
 	}
-	if envValue := os.Getenv("KAD_ENABLE_NODE_ACTIONS"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_ENABLE_NODE_ACTIONS"); envValue != "" {
 		if parsed, err := strconv.ParseBool(envValue); err == nil {
 			result.Features.EnableNodeActions = parsed
 		}
 	}
-	if envValue := os.Getenv("KAD_ENABLE_OVERVIEW"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_ENABLE_OVERVIEW"); envValue != "" {
 		if parsed, err := strconv.ParseBool(envValue); err == nil {
 			result.Features.EnableOverview = parsed
 		}
 	}
-	if envValue := os.Getenv("KAD_ENABLE_PROMETHEUS_ANALYTICS"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_ENABLE_PROMETHEUS_ANALYTICS"); envValue != "" {
 		if parsed, err := strconv.ParseBool(envValue); err == nil {
 			result.Features.EnablePrometheusAnalytics = parsed
 		}
 	}
 
 	// Handle Prometheus configuration
-	if envValue := os.Getenv("KAD_PROMETHEUS_URL"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_PROMETHEUS_URL"); envValue != "" {
 		result.Integrations.Prometheus.URL = envValue
 	}
-	if envValue := os.Getenv("KAD_PROMETHEUS_TIMEOUT"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_PROMETHEUS_TIMEOUT"); envValue != "" {
 		result.Integrations.Prometheus.Timeout = envValue
 	}
-	if envValue := os.Getenv("KAD_PROMETHEUS_ENABLED"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_PROMETHEUS_ENABLED"); envValue != "" {
 		if parsed, err := strconv.ParseBool(envValue); err == nil {
 			result.Integrations.Prometheus.Enabled = parsed
 		}
 	}
 
 	// Handle OIDC configuration
-	if envValue := os.Getenv("KAD_OIDC_ISSUER"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_OIDC_ISSUER"); envValue != "" {
 		result.Security.OIDC.Issuer = envValue
 	}
-	if envValue := os.Getenv("KAD_OIDC_CLIENT_ID"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_OIDC_CLIENT_ID"); envValue != "" {
 		result.Security.OIDC.ClientID = envValue
 	}
-	if envValue := os.Getenv("KAD_OIDC_CLIENT_SECRET"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_OIDC_CLIENT_SECRET"); envValue != "" {
 		result.Security.OIDC.ClientSecret = envValue
 	}
-	if envValue := os.Getenv("KAD_OIDC_REDIRECT_URL"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_OIDC_REDIRECT_URL"); envValue != "" {
 		result.Security.OIDC.RedirectURL = envValue
 	}
-	if envValue := os.Getenv("KAD_OIDC_AUDIENCE"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_OIDC_AUDIENCE"); envValue != "" {
 		result.Security.OIDC.Audience = envValue
 	}
-	if envValue := os.Getenv("KAD_OIDC_SCOPES"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_OIDC_SCOPES"); envValue != "" {
 		parts := strings.Split(envValue, ",")
 		var scopes []string
 		for _, part := range parts {
@@ -468,10 +468,10 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	}
 
 	// Handle Authz configuration
-	if envValue := os.Getenv("KAD_AUTHZ_MODE"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_AUTHZ_MODE"); envValue != "" {
 		result.Authz.Mode = envValue
 	}
-	if envValue := os.Getenv("KAD_GROUPS_PREFIX_ALLOWLIST"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_GROUPS_PREFIX_ALLOWLIST"); envValue != "" {
 		parts := strings.Split(envValue, ",")
 		var prefixes []string
 		for _, part := range parts {
@@ -482,7 +482,7 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 		}
 		result.Authz.GroupsPrefixAllowlist = prefixes
 	}
-	if envValue := os.Getenv("KAD_DEFAULT_GROUPS"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_DEFAULT_GROUPS"); envValue != "" {
 		parts := strings.Split(envValue, ",")
 		var groups []string
 		for _, part := range parts {
@@ -495,16 +495,16 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	}
 
 	// Handle Bindings configuration
-	if envValue := os.Getenv("KAD_BINDINGS_SOURCE"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_BINDINGS_SOURCE"); envValue != "" {
 		result.Bindings.Source = envValue
 	}
-	if envValue := os.Getenv("KAD_BINDINGS_CONFIGMAP_NAMESPACE"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_BINDINGS_CONFIGMAP_NAMESPACE"); envValue != "" {
 		result.Bindings.ConfigMap.Namespace = envValue
 	}
-	if envValue := os.Getenv("KAD_BINDINGS_CONFIGMAP_NAME"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_BINDINGS_CONFIGMAP_NAME"); envValue != "" {
 		result.Bindings.ConfigMap.Name = envValue
 	}
-	if envValue := os.Getenv("KAD_BINDINGS_SQLITE_DSN"); envValue != "" {
+	if envValue := os.Getenv("KAPTN_BINDINGS_SQLITE_DSN"); envValue != "" {
 		result.Bindings.SQLite.DSN = envValue
 	}
 

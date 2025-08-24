@@ -253,23 +253,7 @@ export default function PodLifecycleChurnSection() {
 	/* ---------------------------------- UI ---------------------------------- */
 
 	return (
-		<div className="border rounded-lg bg-card">
-			<div className="p-4 border-b">
-				<div className="flex items-center justify-between">
-					<div>
-						<h2 className="text-xl font-semibold">Pod Lifecycle & Churn</h2>
-						<p className="text-sm text-muted-foreground mt-1">
-							Reveal instability: rapid creations, terminations, and restarts.
-						</p>
-					</div>
-					{isConnected && (
-						<div className="flex items-center gap-1.5 text-xs text-green-600">
-							<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-							Live Data
-						</div>
-					)}
-				</div>
-			</div>
+		<>
 
 			{(connectionState.lastError || nsError) && (
 				<div className="px-4 pt-4">
@@ -335,6 +319,6 @@ export default function PodLifecycleChurnSection() {
 					Restart rate is the latest reported value per namespace.
 				</p>
 			</div>
-		</div>
+		</>
 	);
 }

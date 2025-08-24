@@ -549,8 +549,8 @@ func (tm *TokenManager) ClearAuthCookies(w http.ResponseWriter) {
 		Value:    "",
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/api/v1/auth/refresh",
 		MaxAge:   -1,
 	}
 
@@ -618,28 +618,35 @@ func (tm *TokenManager) getIPSubnet(r *http.Request) string {
 
 // extractRolesAndPerms extracts roles and permissions from user groups
 func (tm *TokenManager) extractRolesAndPerms(groups []string) ([]string, []string) {
-	var roles, perms []string
+	// Roles are the original groups from the IdP, used for Kubernetes RBAC impersonation.
+	// They should not be transformed.
+	roles := groups
+
+	// Perms are abstract permissions for UI gating, derived from the Kaptn group names.
+	// This centralizes the mapping of groups to UI-level capabilities.
+	permSet := make(map[string]bool)
+	permSet["read"] = true // All authenticated users can read.
 
 	for _, group := range groups {
-		// Simple mapping - in production this would be more sophisticated
-		switch {
-		case strings.Contains(group, "admin"):
-			roles = append(roles, "admin")
-			perms = append(perms, "read", "write", "delete", "admin")
-		case strings.Contains(group, "editor"):
-			roles = append(roles, "editor")
-			perms = append(perms, "read", "write")
-		case strings.Contains(group, "viewer"):
-			roles = append(roles, "viewer")
-			perms = append(perms, "read")
-		default:
-			roles = append(roles, "user")
-			perms = append(perms, "read")
+		switch group {
+		case "kaptn-super-admins", "kaptn-admins", "cluster-admins", "kaptn-admins-group", "cluster-admins-group":
+			permSet["admin"] = true
+			permSet["write"] = true
+			permSet["delete"] = true
+		case "kaptn-developers", "kaptn-developers-group":
+			permSet["write"] = true
+		case "kaptn-viewers", "kaptn-viewers-group":
+			// "read" is already granted.
 		}
 	}
 
+	// Convert set to slice
+	var perms []string
+	for p := range permSet {
+		perms = append(perms, p)
+	}
+
 	// Remove duplicates
-	roles = removeDuplicates(roles)
 	perms = removeDuplicates(perms)
 
 	return roles, perms

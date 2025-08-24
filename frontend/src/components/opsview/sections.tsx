@@ -7,7 +7,7 @@ import {
 	AccordionItem,
 	AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
 	RefreshCw,
@@ -36,6 +36,7 @@ import PodLifecycleChurnSection from "./sections/PodLifecycleChurnSection";
 import EphemeralStorageSection from "./sections/EphemeralStorageSection";
 import NetworkHealthSection from "./sections/NetworkHealthSection";
 import NamespaceTeamViewsSection from "./sections/Namespaceteamviewssection";
+import NoisyNeighborDetectionSection from "./sections/NoisyNeighborDetectorSection";
 
 interface OpsViewSectionsProps {
 	filters: Record<string, unknown>;
@@ -88,133 +89,6 @@ function SectionHeader({
 	);
 }
 
-/* ---------- Placeholder sections (remaining) ---------- */
-
-function LimitsCompliance() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Limits/Requests Compliance</CardTitle>
-					<CardDescription>Enforce good SRE hygiene and resource governance</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Compliance metrics and resource governance tables will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function OverLimitsThrottling() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Over-Limits / Throttling</CardTitle>
-					<CardDescription>Catch sustained CPU throttling and imminent OOM</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Over-limits detection and throttling analysis will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function NodeHealth() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Node Health & Hotspots</CardTitle>
-					<CardDescription>Keep the fleet steady and identify problematic nodes</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Node health metrics and hotspot analysis will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function PodLifecycle() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Pod Lifecycle & Churn</CardTitle>
-					<CardDescription>Reveal instability and costly rescheduling patterns</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Pod lifecycle metrics and churn analysis will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function EphemeralStorage() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Ephemeral/Storage</CardTitle>
-					<CardDescription>Prevent node eviction and pull failures</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Storage metrics and ephemeral usage analysis will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function NetworkHealth() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Network Health</CardTitle>
-					<CardDescription>Spot network extremes and performance regressions</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Network health metrics and traffic analysis will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
-
-function NamespaceViews() {
-	return (
-		<div className="space-y-4">
-			<Card>
-				<CardHeader>
-					<CardTitle>Namespace / Team Views</CardTitle>
-					<CardDescription>Multi-tenancy accountability and resource allocation</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="h-64 flex items-center justify-center text-muted-foreground">
-						Namespace-scoped metrics and team resource usage will be implemented here
-					</div>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
 
 /* ---------- Main exported component ---------- */
 
@@ -331,7 +205,7 @@ export function OpsViewSections({
 					</AccordionTrigger>
 					<AccordionContent className="px-6 pb-6 pt-2 bg-background/50">
 						<div className="border-t border-border/20 pt-6">
-
+							<NoisyNeighborDetectionSection />
 						</div>
 					</AccordionContent>
 				</AccordionItem>

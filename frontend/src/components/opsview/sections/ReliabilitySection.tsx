@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards";
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries";
+import { SectionHealthFooter } from "@/components/opsview/SectionHealthFooter";
 import { MetricLineChart, MetricCategoricalBarChart, type ChartSeries } from "@/components/opsview/charts";
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable";
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters";
@@ -38,6 +39,11 @@ import {
 	Activity,
 } from "lucide-react";
 
+type NamespaceEntity = {
+	id: string;
+	name: string;
+};
+
 /* ---------- Types & helpers for Unstable Pods ---------- */
 
 interface UnstablePod {
@@ -53,6 +59,14 @@ interface UnstablePod {
 	isCrashLoopSuspect: boolean;
 	isOOMSuspect: boolean;
 	age: string;
+}
+
+async function discoverNamespaces(): Promise<NamespaceEntity[]> {
+	// Limit to 500, should be enough for most clusters
+	const res = await fetch(`/api/v1/timeseries/entities/namespaces?limit=500`);
+	if (!res.ok) return [];
+	const { entities } = await res.json();
+	return (entities ?? []).map((e: any) => ({ id: e.name, name: e.name })) as NamespaceEntity[];
 }
 
 function getUnstablePodBadge(pod: UnstablePod) {
@@ -428,29 +442,53 @@ function UnstablePodsSection() {
 /* ---------- Main Reliability Section ---------- */
 
 export default function ReliabilitySection() {
+	const [namespaces, setNamespaces] = React.useState<NamespaceEntity[]>([]);
+	const [loading, setLoading] = React.useState(true);
+	const [error, setError] = React.useState<string | null>(null);
+
+	React.useEffect(() => {
+		let mounted = true;
+		setLoading(true);
+		setError(null);
+		discoverNamespaces()
+			.then(list => { if (mounted) setNamespaces(list); })
+			.catch(err => { if (mounted) setError(String(err)); })
+			.finally(() => { if (mounted) setLoading(false); });
+		return () => { mounted = false; };
+	}, []);
+
+	const seriesKeys = React.useMemo(() => {
+		const keys = [
+			'cluster.pods.restarts.1h',
+			'cluster.pods.restarts.rate',
+			'cluster.pods.failed',
+			'cluster.pods.succeeded'
+		];
+		for (const ns of namespaces) {
+			// Subscribe to the per-namespace restart rate
+			keys.push(`ns.pods.restarts.rate.${ns.name}`);
+		}
+		return keys;
+	}, [namespaces]);
+
 	const {
 		seriesData: liveData,
 		isConnected: wsConnected,
 		connectionState,
 	} = useLiveSeriesSubscription(
 		'reliability-metrics',
-		[
-			'cluster.pods.restarts.1h',
-			'cluster.pods.restarts.rate',
-			'cluster.pods.failed',
-			'cluster.pods.succeeded'
-		],
+		seriesKeys,
 		{
 			res: 'lo',
 			since: '60m', // 1 hour for restart analysis
-			autoConnect: true,
+			autoConnect: seriesKeys.length > 4, // Don't connect until namespaces are loaded
 		}
 	);
 
-	const getLatestValue = (key: string): number => {
+	const getLatestValue = React.useCallback((key: string): number => {
 		const data = liveData[key];
 		return data && data.length > 0 ? data[data.length - 1].v : 0;
-	};
+	}, [liveData]);
 
 	// Extract latest values from live data
 	const restartsLastHour = Math.round(getLatestValue('cluster.pods.restarts.1h'));
@@ -458,15 +496,15 @@ export default function ReliabilitySection() {
 	const podsFailed = Math.round(getLatestValue('cluster.pods.failed'));
 	const podsSucceeded = Math.round(getLatestValue('cluster.pods.succeeded'));
 
-	// Mock namespace-based data for restart rate distribution
-	const namespaceRestartData = React.useMemo(() => [
-		{ name: "production", value: 8 },
-		{ name: "staging", value: 3 },
-		{ name: "ml-workloads", value: 12 },
-		{ name: "backend", value: 5 },
-		{ name: "cache", value: 2 },
-		{ name: "monitoring", value: 1 },
-	], []);
+	const namespaceRestartData = React.useMemo(() => {
+		return namespaces.map(ns => {
+			const restartRatePerSec = getLatestValue(`ns.pods.restarts.rate.${ns.name}`);
+			// Convert to restarts/min for better readability
+			return { name: ns.name, value: restartRatePerSec * 60 };
+		})
+			.filter(item => item.value > 0.01) // Only show namespaces with a non-trivial restart rate
+			.sort((a, b) => b.value - a.value);
+	}, [namespaces, getLatestValue]);
 
 	React.useEffect(() => {
 		console.log('🔧 Reliability: Received live data:', liveData);
@@ -528,13 +566,59 @@ export default function ReliabilitySection() {
 		}
 	];
 
+	const { restartRateFooter, restartDistFooter } = React.useMemo(() => {
+		const toneForRate = (rate: number): "ok" | "warn" | "crit" => {
+			if (rate > 1) return "crit"; // >1 restart/min is high
+			if (rate > 0.2) return "warn";
+			return "ok";
+		};
+
+		const restartRateTone = toneForRate(restartRate);
+		const restartRateSummary = restartRate > 0.1
+			? `Cluster is experiencing ${restartRate.toFixed(2)} restarts/min.`
+			: "Cluster restart rate is stable.";
+
+		const restartRateFooter = (
+			<SectionHealthFooter
+				tone={restartRateTone}
+				summary={restartRateSummary}
+				ratioPills={[
+					{ label: "Restarts (1h)", value: formatCount(restartsLastHour), tone: restartsLastHour > 20 ? "warn" : "info" },
+					{ label: "Failed Pods", value: formatCount(podsFailed), tone: podsFailed > 5 ? "warn" : "info" },
+				]}
+			/>
+		);
+
+		const topNamespace = namespaceRestartData.length > 0 ? namespaceRestartData[0] : null;
+		const toneForDist = (ratePerMin: number): "ok" | "warn" | "crit" => {
+			if (ratePerMin > 0.5) return "crit"; // >0.5 restarts/min is high for a single namespace
+			if (ratePerMin > 0.1) return "warn";
+			return "ok";
+		};
+
+		const distTone = topNamespace ? toneForDist(topNamespace.value) : "ok";
+		const distSummary = topNamespace
+			? `Top offender: ${topNamespace.name} with ${topNamespace.value.toFixed(2)} restarts/min.`
+			: "No significant restart activity by namespace.";
+
+		const distPills = namespaceRestartData.slice(0, 3).map(ns => ({
+			label: ns.name,
+			value: ns.value.toFixed(2),
+			tone: toneForDist(ns.value)
+		}));
+
+		const restartDistFooter = <SectionHealthFooter tone={distTone} summary={distSummary} ratioPills={distPills} />;
+
+		return { restartRateFooter, restartDistFooter };
+	}, [restartRate, restartsLastHour, podsFailed, namespaceRestartData]);
+
 	return (
 		<div className="space-y-6">
-			{connectionState.lastError && (
+			{(connectionState.lastError || error) && (
 				<Alert variant="destructive">
 					<AlertTriangle className="h-4 w-4" />
 					<AlertDescription>
-						WebSocket error: {connectionState.lastError}
+						{error ? `Namespace discovery failed: ${error}` : `WebSocket error: ${connectionState.lastError}`}
 					</AlertDescription>
 				</Alert>
 			)}
@@ -552,7 +636,7 @@ export default function ReliabilitySection() {
 				<SummaryCards
 					cards={summaryData}
 					columns={4}
-					loading={false}
+					loading={loading}
 					error={connectionState.lastError}
 					lastUpdated={null}
 					noPadding={true}
@@ -569,18 +653,22 @@ export default function ReliabilitySection() {
 					scopeLabel="cluster"
 					timespanLabel="60m"
 					resolutionLabel="lo"
+					footerExtra={restartRateFooter}
 				/>
 
 				<MetricCategoricalBarChart
-					title="Pod Restart Distribution by Namespace"
-					subtitle="Distribution of pod restart counts by namespace over the last hour. Helps identify which teams or applications are experiencing the most instability."
+					title="Pod Restart Rate by Namespace"
+					subtitle="Current restart rate (restarts/min) by namespace. Helps identify which teams or applications are experiencing the most instability."
 					data={namespaceRestartData}
-					formatter={(v) => `${formatCount(v)} restarts`}
+					formatter={(v) => `${v.toFixed(2)}/min`}
 					layout="horizontal"
 					showLegend={true}
 					scopeLabel="cluster"
 					timespanLabel="60m"
 					resolutionLabel="lo"
+					loading={loading}
+					emptyMessage="No restarting pods found in the last hour."
+					footerExtra={restartDistFooter}
 				/>
 			</div>
 

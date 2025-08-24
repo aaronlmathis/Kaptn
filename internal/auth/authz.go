@@ -96,7 +96,7 @@ func (a *AuthzResolver) formatUsername(userInfo *User, format string) string {
 	username = strings.ReplaceAll(username, "{name}", userInfo.Name)
 
 	// Handle nested claims if needed
-	if strings.Contains(format, "{") {
+	if strings.Contains(username, "{") {
 		a.logger.Warn("Unknown placeholder in username format",
 			zap.String("format", format),
 			zap.String("result", username))

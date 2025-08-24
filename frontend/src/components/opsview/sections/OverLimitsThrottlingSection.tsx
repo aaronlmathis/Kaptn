@@ -158,7 +158,14 @@ export default function OverLimitsThrottlingSection(props: { namespace?: string 
 				cpuOver.length > 0
 					? `${Math.min(cpuOver.length, 3)} sample offender(s): ${cpuOver.slice(0, 3).map(o => `${o.namespace}/${o.pod}`).join(", ")}`
 					: "No pods currently exceeding CPU limits",
-			badge: <Badge variant={cpuOver.length ? "destructive" : "outline"}>{cpuOver.length ? "Action Needed" : "OK"}</Badge>,
+			badge: (
+				<Badge
+					variant="outline"
+					className={cpuOver.length ? "text-red-500 border-red-500/60" : ""}
+				>
+					{cpuOver.length ? "Action Needed" : "OK"}
+				</Badge>
+			),
 			footer: "Computed as usage.cores > limit.cores (when limit exists). Consider lowering workload or raising limit.",
 		},
 		{
@@ -168,7 +175,14 @@ export default function OverLimitsThrottlingSection(props: { namespace?: string 
 				memNear.length > 0
 					? `${Math.min(memNear.length, 3)} sample offender(s): ${memNear.slice(0, 3).map(o => `${o.namespace}/${o.pod}`).join(", ")}`
 					: "No pods near memory limits",
-			badge: <Badge variant={memNear.length ? "destructive" : "outline"}>{memNear.length ? "> 90% of limit" : "OK"}</Badge>,
+			badge: (
+				<Badge
+					variant="outline"
+					className={memNear.length ? "text-orange-500 border-orange-500/60" : ""}
+				>
+					{memNear.length ? "> 90% of limit" : "OK"}
+				</Badge>
+			),
 			footer: "Computed as working_set.bytes / mem.limit.bytes > 0.9 (when limit exists). Watch for OOM risk.",
 		},
 	];
@@ -242,23 +256,8 @@ export default function OverLimitsThrottlingSection(props: { namespace?: string 
 	}, [memTimestamps, pods, live]);
 
 	return (
-		<div className="border rounded-lg bg-card">
-			<div className="p-4 border-b">
-				<div className="flex items-center justify-between">
-					<div>
-						<h2 className="text-xl font-semibold">Over-Limits / Throttling</h2>
-						<p className="text-sm text-muted-foreground mt-1">
-							Catch workloads hitting ceilings. CPU over-limit and memory near-limit signals derived per pod.
-						</p>
-					</div>
-					{isConnected && (
-						<div className="flex items-center gap-1.5 text-xs text-green-600">
-							<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-							Live Data
-						</div>
-					)}
-				</div>
-			</div>
+		<>
+
 
 			{(connectionState.lastError || podError) && (
 				<div className="px-4 pt-4">
@@ -351,6 +350,6 @@ export default function OverLimitsThrottlingSection(props: { namespace?: string 
 					</a>
 				</div>
 			</div>
-		</div>
+		</>
 	);
 }
