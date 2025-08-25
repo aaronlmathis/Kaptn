@@ -119,25 +119,18 @@ async function attemptRefresh(request: Request): Promise<{ accessToken: string; 
 }
 
 // Check auth mode from backend config
-async function getAuthMode(request: Request): Promise<string> {
+async function getAuthMode(_request: Request): Promise<string> {
 	// 1. Check for a build-time override environment variable.
-	// This is the fastest and most explicit way to control build behavior.
-	// Set this variable when running `astro build` without a backend.
-	// e.g., `KBAM=none npm run build`
 	if (import.meta.env.KAPTN_BUILD_AUTH_MODE) {
 		console.log(`🛡️ Middleware: Using build-time auth mode override: ${import.meta.env.KAPTN_BUILD_AUTH_MODE}`);
 		return import.meta.env.KAPTN_BUILD_AUTH_MODE;
 	}
 
 	// 2. If no override, attempt to fetch from the running backend.
-	// This is for `npm run dev` or production SSR deployments.
 	try {
 		const backendUrl = import.meta.env.INTERNAL_API_URL || 'http://localhost:9999';
 		const configUrl = `${backendUrl}/api/v1/config`;
 
-		console.log(`Fetching config from internal URL: ${configUrl}`);
-
-		// Add a short timeout to prevent long waits during builds if the server is unresponsive.
 		const response = await fetch(configUrl, { signal: AbortSignal.timeout(2000) });
 
 		if (!response.ok) {
@@ -147,11 +140,26 @@ async function getAuthMode(request: Request): Promise<string> {
 
 		const config = await response.json();
 		return config.auth?.mode || 'oidc';
-	} catch (error) {
-		// 3. If fetch fails, it's likely `astro build` without a running backend.
-		console.warn('Could not connect to backend to fetch auth config. This is expected during `astro build`. Defaulting to "none" auth mode.');
+	} catch (_error) {
+		console.warn('Could not connect to backend to fetch auth config. Defaulting to "none" auth mode for build.');
 		return 'none';
 	}
+}
+
+// Create session injection script
+function createSessionScript(authMode: string, user: User | null, isAuthenticated: boolean) {
+	const sessionData = {
+		authMode,
+		isAuthenticated,
+		id: user?.id,
+		email: user?.email,
+		name: user?.name,
+		picture: user?.picture,
+		roles: user?.roles,
+		perms: user?.perms,
+	};
+
+	return `<script>window.__KAPTN_SESSION__ = ${JSON.stringify(sessionData)};</script>`;
 }
 
 // Main middleware function
@@ -168,105 +176,84 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 	}
 
 	// Check auth mode first
-	console.log('🛡️ Middleware: Checking auth mode for', url.pathname);
 	const authMode = await getAuthMode(request);
 	console.log('🛡️ Middleware: Auth mode result:', authMode);
 
+	let user: User | null = null;
+	let isAuthenticated = false;
+
 	if (authMode === 'none') {
-		console.log('🛡️ Middleware: Auth mode is none, bypassing authentication for', url.pathname);
-		// Auth disabled - set mock user and continue
-		locals.user = {
+		console.log('🛡️ Middleware: Auth mode is none, setting dev user');
+		user = {
 			id: 'dev-user',
 			email: 'dev@localhost',
 			name: 'Development User',
 			roles: ['admin'],
 			perms: ['read', 'write', 'delete', 'admin'],
 		};
-		locals.isAuthenticated = true;
+		isAuthenticated = true;
 		locals.trace_id = 'dev-trace-' + Date.now();
-		console.log('🛡️ Middleware: Set dev user, calling next()');
-		const result = await next();
-		console.log('🛡️ Middleware: next() completed for', url.pathname);
-		return result;
-	}
+	} else {
+		// Extract access token from cookies
+		const cookies = request.headers.get('Cookie') || '';
+		const accessTokenMatch = cookies.match(/kaptn-access-token=([^;]+)/);
+		const accessToken = accessTokenMatch ? accessTokenMatch[1] : '';
 
-	console.log('Auth mode is not none, proceeding with authentication');
+		if (!accessToken) {
+			console.log('No access token found, redirecting to login');
+			return new Response(null, {
+				status: 302,
+				headers: { Location: '/login' },
+			});
+		}
 
-	// Extract access token from cookies
-	const cookies = request.headers.get('Cookie') || '';
-	const accessTokenMatch = cookies.match(/kaptn-access-token=([^;]+)/);
-	const accessToken = accessTokenMatch ? accessTokenMatch[1] : '';
+		// Verify access token
+		const claims = await verifyAccessToken(accessToken);
+		if (!claims) {
+			console.log('Invalid access token, redirecting to login');
+			return new Response(null, {
+				status: 302,
+				headers: { Location: '/login' },
+			});
+		}
 
-	if (!accessToken) {
-		// No access token - redirect to login
-		console.log('No access token found, redirecting to login');
-		return new Response(null, {
-			status: 302,
-			headers: {
-				Location: '/login',
-			},
-		});
-	}
+		user = createUserSnapshot(claims);
+		isAuthenticated = true;
+		locals.trace_id = claims.trace_id;
 
-	// Verify access token
-	const claims = await verifyAccessToken(accessToken);
-	if (!claims) {
-		// Invalid token - try refresh or redirect to login
-		console.log('Invalid access token, attempting refresh');
-
-		const refreshResult = await attemptRefresh(request);
-		if (refreshResult) {
-			// Successful refresh - create new response with updated cookies
-			const response = await next();
-
-			// Set new cookies in response
-			response.headers.set('Set-Cookie',
-				`kaptn-access-token=${refreshResult.accessToken}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900`);
-			response.headers.append('Set-Cookie',
-				`kaptn-refresh-token=${refreshResult.refreshToken}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`);
-
-			// Re-verify the new token and set user context
-			const newClaims = await verifyAccessToken(refreshResult.accessToken);
-			if (newClaims) {
-				locals.user = createUserSnapshot(newClaims);
-				locals.isAuthenticated = true;
-				locals.trace_id = newClaims.trace_id;
+		// Check if token is near expiry and attempt proactive refresh
+		if (isTokenNearExpiry(claims)) {
+			console.log('Token is near expiry, attempting proactive refresh...');
+			const refreshResult = await attemptRefresh(request);
+			if (refreshResult) {
+				console.log('Proactive refresh successful');
+			} else {
+				console.log('Proactive refresh failed, but continuing with current token');
 			}
-
-			return response;
 		}
+	}
 
-		// Refresh failed - redirect to login
-		console.log('Token refresh failed, redirecting to login');
-		return new Response(null, {
-			status: 302,
-			headers: {
-				Location: '/login',
-			},
+	// Set locals for server-side use
+	locals.user = user;
+	locals.isAuthenticated = isAuthenticated;
+
+	// Get the response
+	const response = await next();
+
+	// Inject session data into HTML responses
+	if (response.headers.get('content-type')?.includes('text/html')) {
+		const html = await response.text();
+		const sessionScript = createSessionScript(authMode, user, isAuthenticated);
+
+		// Inject script before closing head tag
+		const modifiedHtml = html.replace('</head>', `${sessionScript}</head>`);
+
+		return new Response(modifiedHtml, {
+			status: response.status,
+			statusText: response.statusText,
+			headers: response.headers,
 		});
 	}
 
-	// Valid token - set user context
-	locals.user = createUserSnapshot(claims);
-	locals.isAuthenticated = true;
-	locals.trace_id = claims.trace_id;
-
-	// Check if token is near expiry and attempt proactive refresh
-	if (isTokenNearExpiry(claims)) {
-		console.log('Token near expiry, attempting proactive refresh');
-		const refreshResult = await attemptRefresh(request);
-		if (refreshResult) {
-			// Update response with new cookies
-			const response = await next();
-
-			response.headers.set('Set-Cookie',
-				`kaptn-access-token=${refreshResult.accessToken}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=900`);
-			response.headers.append('Set-Cookie',
-				`kaptn-refresh-token=${refreshResult.refreshToken}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`);
-
-			return response;
-		}
-	}
-
-	return next();
+	return response;
 };

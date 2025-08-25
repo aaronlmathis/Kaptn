@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useAuthzCapability } from "@/hooks/useAuthzCapabilities";
+import { useAuthzCapability } from "@/hooks/useAuthzCapabilitiesSimple";
 import type { CapabilityKey } from "@/lib/authz";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";

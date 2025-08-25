@@ -1,95 +1,202 @@
 "use client"
 
-import * as React from "react";
+import * as React from "react"
+import { useAuth } from "./auth-context"
+import type { CapabilityKey } from "@/lib/authz"
 
-const { useEffect, useState } = React;
-
-// Types for capabilities
-export interface IstioCapabilities {
-	installed: boolean;
-	used: boolean;
-	crds: string[];
-	counts: {
-		virtualservices: number;
-		gateways: number;
-	};
+interface CapabilitiesState {
+	capabilities: Record<string, boolean>
+	isLoading: boolean
+	error: string | null
+	lastFetched: number | null
 }
 
-export interface Capabilities {
-	istio: IstioCapabilities;
+interface CapabilitiesContextValue extends CapabilitiesState {
+	refetch: () => Promise<void>
+	isAllowed: (capability: CapabilityKey) => boolean
+	hasAnyCapability: (capabilities: CapabilityKey[]) => boolean
+	hasAllCapabilities: (capabilities: CapabilityKey[]) => boolean
 }
 
-export interface CapabilitiesContextType {
-	capabilities: Capabilities | null;
-	isLoading: boolean;
-	error: string | null;
-	refresh: () => Promise<void>;
+export type { CapabilitiesContextValue }
+
+const CapabilitiesContext = React.createContext<CapabilitiesContextValue | undefined>(undefined)
+
+export { CapabilitiesContext }
+
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+const DEFAULT_CAPABILITIES = {
+	'pods.list': true,
+	'pods.get': true,
+	'pods.create': true,
+	'pods.update': true,
+	'pods.delete': true,
+	'deployments.list': true,
+	'deployments.get': true,
+	'deployments.create': true,
+	'deployments.update': true,
+	'deployments.delete': true,
+	'services.list': true,
+	'services.get': true,
+	'services.create': true,
+	'services.update': true,
+	'services.delete': true,
+	'namespaces.list': true,
+	'namespaces.get': true,
+	'events.list': true,
+	'logs.get': true,
+	'exec.create': true,
 }
-
-const CapabilitiesContext = React.createContext<CapabilitiesContextType | undefined>(undefined);
-
-export { CapabilitiesContext };
-
-// Default capabilities state
-const defaultCapabilities: Capabilities = {
-	istio: {
-		installed: false,
-		used: false,
-		crds: [],
-		counts: {
-			virtualservices: 0,
-			gateways: 0,
-		},
-	},
-};
 
 export function CapabilitiesProvider({ children }: { children: React.ReactNode }) {
-	const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
-	const [isLoading, setIsLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+	const { isAuthenticated, authMode, fetchWithAuth } = useAuth()
 
-	const fetchCapabilities = async (): Promise<void> => {
+	const [state, setState] = React.useState<CapabilitiesState>({
+		capabilities: typeof window === 'undefined' ? DEFAULT_CAPABILITIES : {},
+		isLoading: typeof window === 'undefined' ? false : false,
+		error: null,
+		lastFetched: typeof window === 'undefined' ? Date.now() : null,
+	})
+
+	const fetchCapabilities = React.useCallback(async () => {
+		// Skip API calls during SSR/build time
+		if (typeof window === 'undefined') {
+			return
+		}
+
+		// Skip if not authenticated or auth disabled
+		if (!isAuthenticated) {
+			setState({
+				capabilities: {},
+				isLoading: false,
+				error: null,
+				lastFetched: Date.now(),
+			})
+			return
+		}
+
+		// For auth mode 'none', grant all capabilities
+		if (authMode === 'none') {
+			setState({
+				capabilities: DEFAULT_CAPABILITIES,
+				isLoading: false,
+				error: null,
+				lastFetched: Date.now(),
+			})
+			return
+		}
+
+		setState(prev => ({ ...prev, isLoading: true, error: null }))
+
 		try {
-			setIsLoading(true);
-			setError(null);
+			// Create request body matching backend CapabilityRequest structure
+			const requestBody = {
+				cluster: "default", // For now, use default cluster
+				features: [
+					'pods.list',
+					'pods.get',
+					'pods.create',
+					'pods.update',
+					'pods.delete',
+					'deployments.list',
+					'deployments.get',
+					'deployments.create',
+					'deployments.update',
+					'deployments.delete',
+					'services.list',
+					'services.get',
+					'services.create',
+					'services.update',
+					'services.delete',
+					'namespaces.list',
+					'namespaces.get',
+					'events.list',
+					'events.get',
+					'pods.logs',
+					'pods.exec',
+				]
+			}
 
-			const response = await fetch("/api/v1/capabilities");
+			console.log('🔍 Fetching capabilities with request:', requestBody)
+
+			const response = await fetchWithAuth('/api/v1/authz/capabilities', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(requestBody),
+			})
+
+			console.log('🔍 Capabilities response status:', response.status, response.statusText)
 
 			if (!response.ok) {
-				throw new Error(`Failed to fetch capabilities: ${response.statusText}`);
+				const errorText = await response.text()
+				console.error('🔍 Capabilities error response:', errorText)
+				throw new Error(`Failed to fetch capabilities: ${response.statusText} - ${errorText}`)
 			}
 
-			const result = await response.json();
+			const data = await response.json()
+			console.log('🔍 Capabilities response data:', data)
 
-			if (result.status === "success" && result.data) {
-				setCapabilities(result.data);
-			} else {
-				throw new Error(result.error || "Failed to fetch capabilities");
-			}
-		} catch (err) {
-			console.error("Error fetching capabilities:", err);
-			setError(err instanceof Error ? err.message : "Unknown error");
-			// Set default capabilities on error to prevent crashes
-			setCapabilities(defaultCapabilities);
-		} finally {
-			setIsLoading(false);
+			setState({
+				capabilities: data.caps || {},
+				isLoading: false,
+				error: null,
+				lastFetched: Date.now(),
+			})
+		} catch (error) {
+			console.error('🔍 Failed to fetch capabilities:', error)
+			setState(prev => ({
+				...prev,
+				isLoading: false,
+				error: error instanceof Error ? error.message : 'Failed to fetch capabilities',
+			}))
 		}
-	};
+	}, [isAuthenticated, authMode, fetchWithAuth])
 
-	useEffect(() => {
-		fetchCapabilities();
-	}, []);
+	// Fetch capabilities on mount and when auth state changes
+	React.useEffect(() => {
+		fetchCapabilities()
+	}, [fetchCapabilities])
 
-	const value: CapabilitiesContextType = {
-		capabilities,
-		isLoading,
-		error,
-		refresh: fetchCapabilities,
-	};
+	// Auto-refresh capabilities periodically
+	React.useEffect(() => {
+		if (!isAuthenticated || authMode === 'none') return
+
+		const interval = setInterval(() => {
+			const now = Date.now()
+			if (state.lastFetched && (now - state.lastFetched) > CACHE_DURATION) {
+				fetchCapabilities()
+			}
+		}, 60_000) // Check every minute
+
+		return () => clearInterval(interval)
+	}, [isAuthenticated, authMode, state.lastFetched, fetchCapabilities])
+
+	const isAllowed = React.useCallback((capability: CapabilityKey): boolean => {
+		return state.capabilities[capability] === true
+	}, [state.capabilities])
+
+	const hasAnyCapability = React.useCallback((capabilities: CapabilityKey[]): boolean => {
+		return capabilities.some(capability => isAllowed(capability))
+	}, [isAllowed])
+
+	const hasAllCapabilities = React.useCallback((capabilities: CapabilityKey[]): boolean => {
+		return capabilities.every(capability => isAllowed(capability))
+	}, [isAllowed])
+
+	const contextValue: CapabilitiesContextValue = {
+		...state,
+		refetch: fetchCapabilities,
+		isAllowed,
+		hasAnyCapability,
+		hasAllCapabilities,
+	}
 
 	return (
-		<CapabilitiesContext.Provider value={value}>
+		<CapabilitiesContext.Provider value={contextValue}>
 			{children}
 		</CapabilitiesContext.Provider>
-	);
+	)
 }

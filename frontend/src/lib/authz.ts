@@ -1,6 +1,10 @@
 // Authorization types and utilities for frontend capability checking
 
 export type CapabilityKey =
+  // Dashboard capabilities
+  | "dashboard.view"
+
+  // Pod capabilities  
   | "pods.delete"
   | "pods.logs"
   | "pods.exec"
@@ -10,6 +14,8 @@ export type CapabilityKey =
   | "pods.create"
   | "pods.update"
   | "pods.patch"
+
+  // Deployment capabilities
   | "deployments.restart"
   | "deployments.delete"
   | "deployments.get"
@@ -17,32 +23,46 @@ export type CapabilityKey =
   | "deployments.create"
   | "deployments.update"
   | "deployments.patch"
+
+  // Service capabilities
   | "services.delete"
   | "services.get"
   | "services.list"
   | "services.create"
   | "services.update"
   | "services.patch"
+
+  // ConfigMap capabilities
   | "configmaps.edit"
   | "configmaps.delete"
   | "configmaps.get"
   | "configmaps.list"
   | "configmaps.create"
   | "configmaps.update"
+
+  // Secret capabilities
   | "secrets.read"
   | "secrets.delete"
   | "secrets.get"
   | "secrets.list"
   | "secrets.create"
   | "secrets.update"
+
+  // Namespace capabilities
   | "namespaces.get"
   | "namespaces.list"
   | "namespaces.create"
   | "namespaces.delete"
+
+  // Node capabilities
   | "nodes.get"
   | "nodes.list"
+
+  // Event capabilities
   | "events.get"
   | "events.list"
+
+  // Other workload capabilities
   | "replicasets.get"
   | "replicasets.list"
   | "replicasets.delete"
@@ -59,6 +79,8 @@ export type CapabilityKey =
   | "cronjobs.get"
   | "cronjobs.list"
   | "cronjobs.delete"
+
+  // Storage capabilities
   | "persistentvolumes.get"
   | "persistentvolumes.list"
   | "persistentvolumes.delete"
@@ -67,6 +89,8 @@ export type CapabilityKey =
   | "persistentvolumeclaims.delete"
   | "storageclass.get"
   | "storageclass.list"
+
+  // RBAC capabilities
   | "roles.get"
   | "roles.list"
   | "roles.create"

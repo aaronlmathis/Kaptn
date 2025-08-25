@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { SharedProviders } from "@/components/shared-providers"
+import { RouteGuard } from "@/components/authz"
 import { PodsDataTable } from "@/components/data_tables/PodsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { usePodsWithWebSocket } from "@/hooks/usePodsWithWebSocket"
@@ -55,9 +56,7 @@ function PodsContent() {
 
 		// Count pods by status/phase
 		const runningPods = pods.filter(p => p.status === 'Running').length
-		const pendingPods = pods.filter(p => p.status === 'Pending').length
 		const failedPods = pods.filter(p => p.status === 'Failed').length
-		const succeededPods = pods.filter(p => p.status === 'Succeeded').length
 
 		// Count ready pods by parsing the ready field (e.g., "1/1", "0/1")
 		const readyStats = pods.reduce((acc, pod) => {
@@ -148,7 +147,12 @@ function PodsContent() {
 export function PodsPageContainer() {
 	return (
 		<SharedProviders>
-			<PodsContent />
+			<RouteGuard
+				requiredCapabilities={['pods.list']}
+				requireAll={false}
+			>
+				<PodsContent />
+			</RouteGuard>
 		</SharedProviders>
 	)
 }

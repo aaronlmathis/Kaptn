@@ -13,12 +13,6 @@ interface User {
 	perms?: string[]
 }
 
-interface AuthConfig {
-	auth: {
-		mode: 'none' | 'header' | 'oidc'
-	}
-}
-
 interface AuthState {
 	isAuthenticated: boolean
 	isLoading: boolean
@@ -39,6 +33,8 @@ interface InjectedSession {
 	email?: string
 	name?: string
 	picture?: string
+	roles?: string[]
+	perms?: string[]
 	isAuthenticated: boolean
 	authMode: 'none' | 'header' | 'oidc'
 }
@@ -146,7 +142,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 						id: injectedSession.id || '',
 						email: injectedSession.email || '',
 						name: injectedSession.name,
-						picture: injectedSession.picture
+						picture: injectedSession.picture,
+						roles: injectedSession.roles || [],
+						perms: injectedSession.perms || [],
 					} : null,
 					error: null,
 					authMode: injectedSession.authMode,
@@ -154,91 +152,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				return
 			}
 
-			console.log('[WARNING] No injected session data found, falling back to API calls')
-			await checkAuthStatus()
-		} catch (error) {
-			console.error('[ERROR] Auth initialization error:', error)
+			console.log('[WARNING] No injected session data found - this should not happen in production')
 			setAuthState({
 				isAuthenticated: false,
 				isLoading: false,
 				user: null,
-				error: error instanceof Error ? error.message : 'Unknown error',
+				error: 'No session data available',
 				authMode: null,
 			});
-		}
-	}
-
-	const checkAuthStatus = async () => {
-		try {
-			const configResponse = await fetchWithAuth('/api/v1/config')
-
-			if (!configResponse.ok) {
-				throw new Error(`Config fetch failed: ${configResponse.statusText}`)
-			}
-
-			const config: AuthConfig = await configResponse.json()
-			const authMode = config.auth.mode
-
-			if (authMode === 'none') {
-				console.log('Auth mode is none, setting dev user')
-				setAuthState({
-					isAuthenticated: true,
-					isLoading: false,
-					user: {
-						id: 'dev-user',
-						email: 'dev@localhost',
-						name: 'Development User',
-						picture: 'https://via.placeholder.com/150',
-						groups: ['kaptn-super-admins'],
-						roles: ['admin'],
-						perms: ['read', 'write', 'delete', 'admin'],
-					},
-					error: null,
-					authMode,
-				});
-				return
-			}
-
-			const response = await fetchWithAuth('/api/v1/auth/me')
-
-			if (response.ok) {
-				const data = await response.json()
-				const user = data.user || data
-
-				console.log('Raw user data from backend:', user)
-
-				const safeUser: User = {
-					id: user.id || user.sub,
-					email: user.email,
-					name: user.name,
-					picture: user.picture,
-					groups: user.groups || [],
-					roles: user.roles || user.groups || [],
-					perms: user.perms || [],
-				}
-
-				console.log('Safe user object created:', safeUser)
-
-				setAuthState({
-					isAuthenticated: true,
-					isLoading: false,
-					user: safeUser,
-					error: null,
-					authMode,
-				});
-			} else if (response.status === 401) {
-				setAuthState({
-					isAuthenticated: false,
-					isLoading: false,
-					user: null,
-					error: null,
-					authMode,
-				});
-			} else {
-				throw new Error(`Auth check failed: ${response.statusText}`)
-			}
 		} catch (error) {
-			console.error('Auth check error:', error)
+			console.error('[ERROR] Auth initialization error:', error)
 			setAuthState({
 				isAuthenticated: false,
 				isLoading: false,
@@ -274,7 +197,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			})
 
 			if (refreshResponse.ok) {
-				await checkAuthStatus()
+				// Reload page to get new injected session data
+				window.location.reload()
 				return true
 			} else {
 				setAuthState(prev => ({
@@ -295,20 +219,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		}
 	}
 
+	const refetchAuth = async () => {
+		// For injected session mode, we need to reload the page
+		// to get fresh session data from the middleware
+		window.location.reload()
+	}
+
 	// Initialize auth only on the client side
 	useEffect(() => {
-		// Only run on client side
 		if (typeof window !== 'undefined') {
 			initializeAuth()
 		}
-	}, []) // eslint-disable-line react-hooks/exhaustive-deps
+	}, [])
 
 	const contextValue: AuthContextValue = {
 		...authState,
 		login,
 		logout,
 		refresh: refreshAuth,
-		refetch: checkAuthStatus,
+		refetch: refetchAuth,
 		fetchWithAuth,
 	}
 
@@ -327,11 +256,17 @@ export function useAuth() {
 		if (typeof window === 'undefined') {
 			// Build-time fallback for SSR
 			return {
-				isAuthenticated: false,
-				isLoading: true,
-				user: null,
+				isAuthenticated: true, // Assume authenticated during build
+				isLoading: false,
+				user: {
+					id: 'dev-user',
+					email: 'dev@localhost',
+					name: 'Development User',
+					roles: ['admin'],
+					perms: ['read', 'write', 'delete', 'admin'],
+				},
 				error: null,
-				authMode: null,
+				authMode: 'none',
 				login: () => { },
 				logout: async () => { },
 				refresh: async () => false,
