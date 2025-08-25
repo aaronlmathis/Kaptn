@@ -12,16 +12,20 @@ type CapabilityCheck struct {
 // Registry maps capability keys to their corresponding Kubernetes RBAC checks
 var Registry = map[string]CapabilityCheck{
 	// Pod operations
-	"pods.delete":      {Group: "", Resource: "pods", Verb: "delete", Namespaced: true},
-	"pods.logs":        {Group: "", Resource: "pods", Subresource: "log", Verb: "get", Namespaced: true},
-	"pods.exec":        {Group: "", Resource: "pods", Subresource: "exec", Verb: "create", Namespaced: true},
-	"pods.portforward": {Group: "", Resource: "pods", Subresource: "portforward", Verb: "create", Namespaced: true},
-	"pods.get":         {Group: "", Resource: "pods", Verb: "get", Namespaced: true},
-	"pods.list":        {Group: "", Resource: "pods", Verb: "list", Namespaced: true},
-	"pods.watch":       {Group: "", Resource: "pods", Verb: "watch", Namespaced: true},
-	"pods.create":      {Group: "", Resource: "pods", Verb: "create", Namespaced: true},
-	"pods.update":      {Group: "", Resource: "pods", Verb: "update", Namespaced: true},
-	"pods.patch":       {Group: "", Resource: "pods", Verb: "patch", Namespaced: true},
+	"pods.delete":              {Group: "", Resource: "pods", Verb: "delete", Namespaced: true},
+	"pods.logs":                {Group: "", Resource: "pods", Subresource: "log", Verb: "get", Namespaced: true},
+	"pods.exec":                {Group: "", Resource: "pods", Subresource: "exec", Verb: "create", Namespaced: true},
+	"pods.portforward":         {Group: "", Resource: "pods", Subresource: "portforward", Verb: "create", Namespaced: true},
+	"pods.get":                 {Group: "", Resource: "pods", Verb: "get", Namespaced: true},
+	"pods.list":                {Group: "", Resource: "pods", Verb: "list", Namespaced: true},
+	"pods.watch":               {Group: "", Resource: "pods", Verb: "watch", Namespaced: true},
+	"pods.create":              {Group: "", Resource: "pods", Verb: "create", Namespaced: true},
+	"pods.update":              {Group: "", Resource: "pods", Verb: "update", Namespaced: true},
+	"pods.patch":               {Group: "", Resource: "pods", Verb: "patch", Namespaced: true},
+	"pods.attach":              {Group: "", Resource: "pods", Subresource: "attach", Verb: "create", Namespaced: true},              // kubectl attach
+	"pods.eviction":            {Group: "", Resource: "pods", Subresource: "eviction", Verb: "create", Namespaced: true},            // eviction API
+	"pods.ephemeralcontainers": {Group: "", Resource: "pods", Subresource: "ephemeralcontainers", Verb: "update", Namespaced: true}, // kubectl debug (ephemeral containers)
+	"pods.deletecollection":    {Group: "", Resource: "pods", Verb: "deletecollection", Namespaced: true},
 
 	// Deployment operations
 	"deployments.restart": {Group: "apps", Resource: "deployments", Verb: "patch", Namespaced: true},
@@ -115,11 +119,12 @@ var Registry = map[string]CapabilityCheck{
 	"namespaces.watch":  {Group: "", Resource: "namespaces", Verb: "watch", Namespaced: false},
 
 	// Node operations (cluster-scoped)
-	"nodes.get":    {Group: "", Resource: "nodes", Verb: "get", Namespaced: false},
-	"nodes.list":   {Group: "", Resource: "nodes", Verb: "list", Namespaced: false},
-	"nodes.update": {Group: "", Resource: "nodes", Verb: "update", Namespaced: false},
-	"nodes.patch":  {Group: "", Resource: "nodes", Verb: "patch", Namespaced: false},
-	"nodes.shell":  {Group: "", Resource: "nodes", Subresource: "proxy", Verb: "create", Namespaced: false},
+	"nodes.get":       {Group: "", Resource: "nodes", Verb: "get", Namespaced: false},
+	"nodes.list":      {Group: "", Resource: "nodes", Verb: "list", Namespaced: false},
+	"nodes.update":    {Group: "", Resource: "nodes", Verb: "update", Namespaced: false},
+	"nodes.patch":     {Group: "", Resource: "nodes", Verb: "patch", Namespaced: false},
+	"nodes.shell":     {Group: "", Resource: "nodes", Subresource: "proxy", Verb: "create", Namespaced: false},
+	"nodes.proxy.get": {Group: "", Resource: "nodes", Subresource: "proxy", Verb: "get", Namespaced: false},
 
 	// RBAC operations
 	"roles.get":                  {Group: "rbac.authorization.k8s.io", Resource: "roles", Verb: "get", Namespaced: true},
@@ -191,6 +196,245 @@ var Registry = map[string]CapabilityCheck{
 	"networkpolicies.delete": {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "delete", Namespaced: true},
 	"networkpolicies.patch":  {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "patch", Namespaced: true},
 	"networkpolicies.watch":  {Group: "networking.k8s.io", Resource: "networkpolicies", Verb: "watch", Namespaced: true},
+
+	// ---- Scale subresource (get/update/patch) for scalable resources ----
+	"deployments.scale.get":    {Group: "apps", Resource: "deployments", Subresource: "scale", Verb: "get", Namespaced: true},
+	"deployments.scale.update": {Group: "apps", Resource: "deployments", Subresource: "scale", Verb: "update", Namespaced: true},
+	"deployments.scale.patch":  {Group: "apps", Resource: "deployments", Subresource: "scale", Verb: "patch", Namespaced: true},
+
+	"statefulsets.scale.get":    {Group: "apps", Resource: "statefulsets", Subresource: "scale", Verb: "get", Namespaced: true},
+	"statefulsets.scale.update": {Group: "apps", Resource: "statefulsets", Subresource: "scale", Verb: "update", Namespaced: true},
+	"statefulsets.scale.patch":  {Group: "apps", Resource: "statefulsets", Subresource: "scale", Verb: "patch", Namespaced: true},
+
+	"replicasets.scale.get":    {Group: "apps", Resource: "replicasets", Subresource: "scale", Verb: "get", Namespaced: true},
+	"replicasets.scale.update": {Group: "apps", Resource: "replicasets", Subresource: "scale", Verb: "update", Namespaced: true},
+	"replicasets.scale.patch":  {Group: "apps", Resource: "replicasets", Subresource: "scale", Verb: "patch", Namespaced: true},
+
+	"replicationcontrollers.get":          {Group: "", Resource: "replicationcontrollers", Verb: "get", Namespaced: true},
+	"replicationcontrollers.list":         {Group: "", Resource: "replicationcontrollers", Verb: "list", Namespaced: true},
+	"replicationcontrollers.create":       {Group: "", Resource: "replicationcontrollers", Verb: "create", Namespaced: true},
+	"replicationcontrollers.update":       {Group: "", Resource: "replicationcontrollers", Verb: "update", Namespaced: true},
+	"replicationcontrollers.delete":       {Group: "", Resource: "replicationcontrollers", Verb: "delete", Namespaced: true},
+	"replicationcontrollers.patch":        {Group: "", Resource: "replicationcontrollers", Verb: "patch", Namespaced: true},
+	"replicationcontrollers.watch":        {Group: "", Resource: "replicationcontrollers", Verb: "watch", Namespaced: true},
+	"replicationcontrollers.scale.get":    {Group: "", Resource: "replicationcontrollers", Subresource: "scale", Verb: "get", Namespaced: true},
+	"replicationcontrollers.scale.update": {Group: "", Resource: "replicationcontrollers", Subresource: "scale", Verb: "update", Namespaced: true},
+	"replicationcontrollers.scale.patch":  {Group: "", Resource: "replicationcontrollers", Subresource: "scale", Verb: "patch", Namespaced: true},
+
+	// HPAs
+	"horizontalpodautoscalers.get":    {Group: "autoscaling", Resource: "horizontalpodautoscalers", Verb: "get", Namespaced: true},
+	"horizontalpodautoscalers.list":   {Group: "autoscaling", Resource: "horizontalpodautoscalers", Verb: "list", Namespaced: true},
+	"horizontalpodautoscalers.watch":  {Group: "autoscaling", Resource: "horizontalpodautoscalers", Verb: "watch", Namespaced: true},
+	"horizontalpodautoscalers.create": {Group: "autoscaling", Resource: "horizontalpodautoscalers", Verb: "create", Namespaced: true},
+	"horizontalpodautoscalers.update": {Group: "autoscaling", Resource: "horizontalpodautoscalers", Verb: "update", Namespaced: true},
+	"horizontalpodautoscalers.patch":  {Group: "autoscaling", Resource: "horizontalpodautoscalers", Verb: "patch", Namespaced: true},
+	"horizontalpodautoscalers.delete": {Group: "autoscaling", Resource: "horizontalpodautoscalers", Verb: "delete", Namespaced: true},
+
+	// ControllerRevisions
+	"controllerrevisions.get":    {Group: "apps", Resource: "controllerrevisions", Verb: "get", Namespaced: true},
+	"controllerrevisions.list":   {Group: "apps", Resource: "controllerrevisions", Verb: "list", Namespaced: true},
+	"controllerrevisions.watch":  {Group: "apps", Resource: "controllerrevisions", Verb: "watch", Namespaced: true},
+	"controllerrevisions.create": {Group: "apps", Resource: "controllerrevisions", Verb: "create", Namespaced: true},
+	"controllerrevisions.update": {Group: "apps", Resource: "controllerrevisions", Verb: "update", Namespaced: true},
+	"controllerrevisions.patch":  {Group: "apps", Resource: "controllerrevisions", Verb: "patch", Namespaced: true},
+	"controllerrevisions.delete": {Group: "apps", Resource: "controllerrevisions", Verb: "delete", Namespaced: true},
+
+	// PodTemplates
+	"podtemplates.get":    {Group: "", Resource: "podtemplates", Verb: "get", Namespaced: true},
+	"podtemplates.list":   {Group: "", Resource: "podtemplates", Verb: "list", Namespaced: true},
+	"podtemplates.watch":  {Group: "", Resource: "podtemplates", Verb: "watch", Namespaced: true},
+	"podtemplates.create": {Group: "", Resource: "podtemplates", Verb: "create", Namespaced: true},
+	"podtemplates.update": {Group: "", Resource: "podtemplates", Verb: "update", Namespaced: true},
+	"podtemplates.patch":  {Group: "", Resource: "podtemplates", Verb: "patch", Namespaced: true},
+	"podtemplates.delete": {Group: "", Resource: "podtemplates", Verb: "delete", Namespaced: true},
+	// Bindings
+	"bindings.create": {Group: "", Resource: "bindings", Verb: "create", Namespaced: true},
+
+	// Proxy subresources
+	"pods.proxy.get":        {Group: "", Resource: "pods", Subresource: "proxy", Verb: "get", Namespaced: true},
+	"pods.proxy.create":     {Group: "", Resource: "pods", Subresource: "proxy", Verb: "create", Namespaced: true},
+	"services.proxy.get":    {Group: "", Resource: "services", Subresource: "proxy", Verb: "get", Namespaced: true},
+	"services.proxy.create": {Group: "", Resource: "services", Subresource: "proxy", Verb: "create", Namespaced: true},
+
+	// Namespace finalize
+	"namespaces.finalize.update": {Group: "", Resource: "namespaces", Subresource: "finalize", Verb: "update", Namespaced: false},
+
+	// RuntimeClass full CRUD
+	"runtimeclasses.create": {Group: "node.k8s.io", Resource: "runtimeclasses", Verb: "create", Namespaced: false},
+	"runtimeclasses.update": {Group: "node.k8s.io", Resource: "runtimeclasses", Verb: "update", Namespaced: false},
+	"runtimeclasses.patch":  {Group: "node.k8s.io", Resource: "runtimeclasses", Verb: "patch", Namespaced: false},
+	"runtimeclasses.delete": {Group: "node.k8s.io", Resource: "runtimeclasses", Verb: "delete", Namespaced: false},
+
+	// Endpoints create/delete
+	"endpoints.create": {Group: "", Resource: "endpoints", Verb: "create", Namespaced: true},
+	"endpoints.delete": {Group: "", Resource: "endpoints", Verb: "delete", Namespaced: true},
+
+	// SelfSubjectReview (whoami)
+	"selfsubjectreviews.create": {Group: "authentication.k8s.io", Resource: "selfsubjectreviews", Verb: "create", Namespaced: false},
+
+	// Dynamic Resource Allocation
+	"resourceclaims.*":         {Group: "resource.k8s.io", Resource: "resourceclaims", Verb: "list", Namespaced: true},         // + get/watch/create/update/patch/delete
+	"resourceclaimtemplates.*": {Group: "resource.k8s.io", Resource: "resourceclaimtemplates", Verb: "list", Namespaced: true}, // + get/watch/create/update/patch/delete
+	"resourceclasses.*":        {Group: "resource.k8s.io", Resource: "resourceclasses", Verb: "list", Namespaced: false},       // + get/watch/create/update/patch/delete
+
+	// ---- Services & discovery ----
+	"endpoints.get":    {Group: "", Resource: "endpoints", Verb: "get", Namespaced: true},
+	"endpoints.list":   {Group: "", Resource: "endpoints", Verb: "list", Namespaced: true},
+	"endpoints.watch":  {Group: "", Resource: "endpoints", Verb: "watch", Namespaced: true},
+	"endpoints.update": {Group: "", Resource: "endpoints", Verb: "update", Namespaced: true},
+	"endpoints.patch":  {Group: "", Resource: "endpoints", Verb: "patch", Namespaced: true},
+
+	"endpointslices.get":    {Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "get", Namespaced: true},
+	"endpointslices.list":   {Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "list", Namespaced: true},
+	"endpointslices.watch":  {Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "watch", Namespaced: true},
+	"endpointslices.create": {Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "create", Namespaced: true},
+	"endpointslices.update": {Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "update", Namespaced: true},
+	"endpointslices.delete": {Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "delete", Namespaced: true},
+	"endpointslices.patch":  {Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "patch", Namespaced: true},
+
+	// ---- Accounts & quotas ----
+	"serviceaccounts.get":    {Group: "", Resource: "serviceaccounts", Verb: "get", Namespaced: true},
+	"serviceaccounts.list":   {Group: "", Resource: "serviceaccounts", Verb: "list", Namespaced: true},
+	"serviceaccounts.create": {Group: "", Resource: "serviceaccounts", Verb: "create", Namespaced: true},
+	"serviceaccounts.update": {Group: "", Resource: "serviceaccounts", Verb: "update", Namespaced: true},
+	"serviceaccounts.delete": {Group: "", Resource: "serviceaccounts", Verb: "delete", Namespaced: true},
+	"serviceaccounts.patch":  {Group: "", Resource: "serviceaccounts", Verb: "patch", Namespaced: true},
+	// TokenRequest subresource (for projected/bound tokens)
+	"serviceaccounts.token": {Group: "", Resource: "serviceaccounts", Subresource: "token", Verb: "create", Namespaced: true},
+
+	"resourcequotas.get":    {Group: "", Resource: "resourcequotas", Verb: "get", Namespaced: true},
+	"resourcequotas.list":   {Group: "", Resource: "resourcequotas", Verb: "list", Namespaced: true},
+	"resourcequotas.create": {Group: "", Resource: "resourcequotas", Verb: "create", Namespaced: true},
+	"resourcequotas.update": {Group: "", Resource: "resourcequotas", Verb: "update", Namespaced: true},
+	"resourcequotas.delete": {Group: "", Resource: "resourcequotas", Verb: "delete", Namespaced: true},
+	"resourcequotas.patch":  {Group: "", Resource: "resourcequotas", Verb: "patch", Namespaced: true},
+	"resourcequotas.watch":  {Group: "", Resource: "resourcequotas", Verb: "watch", Namespaced: true},
+
+	"limitranges.get":   {Group: "", Resource: "limitranges", Verb: "get", Namespaced: true},
+	"limitranges.list":  {Group: "", Resource: "limitranges", Verb: "list", Namespaced: true},
+	"limitranges.watch": {Group: "", Resource: "limitranges", Verb: "watch", Namespaced: true},
+
+	// ---- Ingress classes ----
+	"ingressclasses.get":    {Group: "networking.k8s.io", Resource: "ingressclasses", Verb: "get", Namespaced: false},
+	"ingressclasses.list":   {Group: "networking.k8s.io", Resource: "ingressclasses", Verb: "list", Namespaced: false},
+	"ingressclasses.watch":  {Group: "networking.k8s.io", Resource: "ingressclasses", Verb: "watch", Namespaced: false},
+	"ingressclasses.create": {Group: "networking.k8s.io", Resource: "ingressclasses", Verb: "create", Namespaced: false},
+	"ingressclasses.update": {Group: "networking.k8s.io", Resource: "ingressclasses", Verb: "update", Namespaced: false},
+	"ingressclasses.delete": {Group: "networking.k8s.io", Resource: "ingressclasses", Verb: "delete", Namespaced: false},
+	"ingressclasses.patch":  {Group: "networking.k8s.io", Resource: "ingressclasses", Verb: "patch", Namespaced: false},
+
+	// ---- Coordination / Scheduling / Node classes ----
+	"leases.get":    {Group: "coordination.k8s.io", Resource: "leases", Verb: "get", Namespaced: true},
+	"leases.list":   {Group: "coordination.k8s.io", Resource: "leases", Verb: "list", Namespaced: true},
+	"leases.create": {Group: "coordination.k8s.io", Resource: "leases", Verb: "create", Namespaced: true},
+	"leases.update": {Group: "coordination.k8s.io", Resource: "leases", Verb: "update", Namespaced: true},
+	"leases.delete": {Group: "coordination.k8s.io", Resource: "leases", Verb: "delete", Namespaced: true},
+	"leases.patch":  {Group: "coordination.k8s.io", Resource: "leases", Verb: "patch", Namespaced: true},
+	"leases.watch":  {Group: "coordination.k8s.io", Resource: "leases", Verb: "watch", Namespaced: true},
+
+	"priorityclasses.get":    {Group: "scheduling.k8s.io", Resource: "priorityclasses", Verb: "get", Namespaced: false},
+	"priorityclasses.list":   {Group: "scheduling.k8s.io", Resource: "priorityclasses", Verb: "list", Namespaced: false},
+	"priorityclasses.watch":  {Group: "scheduling.k8s.io", Resource: "priorityclasses", Verb: "watch", Namespaced: false},
+	"priorityclasses.create": {Group: "scheduling.k8s.io", Resource: "priorityclasses", Verb: "create", Namespaced: false},
+	"priorityclasses.update": {Group: "scheduling.k8s.io", Resource: "priorityclasses", Verb: "update", Namespaced: false},
+	"priorityclasses.delete": {Group: "scheduling.k8s.io", Resource: "priorityclasses", Verb: "delete", Namespaced: false},
+	"priorityclasses.patch":  {Group: "scheduling.k8s.io", Resource: "priorityclasses", Verb: "patch", Namespaced: false},
+
+	"runtimeclasses.get":   {Group: "node.k8s.io", Resource: "runtimeclasses", Verb: "get", Namespaced: false},
+	"runtimeclasses.list":  {Group: "node.k8s.io", Resource: "runtimeclasses", Verb: "list", Namespaced: false},
+	"runtimeclasses.watch": {Group: "node.k8s.io", Resource: "runtimeclasses", Verb: "watch", Namespaced: false},
+
+	// ---- Admission / API registration / CRDs ----
+	"mutatingwebhookconfigurations.get":    {Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "get", Namespaced: false},
+	"mutatingwebhookconfigurations.list":   {Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "list", Namespaced: false},
+	"mutatingwebhookconfigurations.watch":  {Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "watch", Namespaced: false},
+	"mutatingwebhookconfigurations.create": {Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "create", Namespaced: false},
+	"mutatingwebhookconfigurations.update": {Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "update", Namespaced: false},
+	"mutatingwebhookconfigurations.delete": {Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "delete", Namespaced: false},
+	"mutatingwebhookconfigurations.patch":  {Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "patch", Namespaced: false},
+
+	"validatingwebhookconfigurations.get":    {Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "get", Namespaced: false},
+	"validatingwebhookconfigurations.list":   {Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "list", Namespaced: false},
+	"validatingwebhookconfigurations.watch":  {Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "watch", Namespaced: false},
+	"validatingwebhookconfigurations.create": {Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "create", Namespaced: false},
+	"validatingwebhookconfigurations.update": {Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "update", Namespaced: false},
+	"validatingwebhookconfigurations.delete": {Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "delete", Namespaced: false},
+	"validatingwebhookconfigurations.patch":  {Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "patch", Namespaced: false},
+
+	"validatingadmissionpolicies.*":       {Group: "admissionregistration.k8s.io", Resource: "validatingadmissionpolicies", Verb: "list", Namespaced: false},       // + get/watch/create/update/delete/patch as needed
+	"validatingadmissionpolicybindings.*": {Group: "admissionregistration.k8s.io", Resource: "validatingadmissionpolicybindings", Verb: "list", Namespaced: false}, // + get/watch/create/update/delete/patch
+
+	"customresourcedefinitions.get":    {Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "get", Namespaced: false},
+	"customresourcedefinitions.list":   {Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "list", Namespaced: false},
+	"customresourcedefinitions.watch":  {Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "watch", Namespaced: false},
+	"customresourcedefinitions.create": {Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "create", Namespaced: false},
+	"customresourcedefinitions.update": {Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "update", Namespaced: false},
+	"customresourcedefinitions.delete": {Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "delete", Namespaced: false},
+	"customresourcedefinitions.patch":  {Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "patch", Namespaced: false},
+
+	"apiservices.get":    {Group: "apiregistration.k8s.io", Resource: "apiservices", Verb: "get", Namespaced: false},
+	"apiservices.list":   {Group: "apiregistration.k8s.io", Resource: "apiservices", Verb: "list", Namespaced: false},
+	"apiservices.watch":  {Group: "apiregistration.k8s.io", Resource: "apiservices", Verb: "watch", Namespaced: false},
+	"apiservices.create": {Group: "apiregistration.k8s.io", Resource: "apiservices", Verb: "create", Namespaced: false},
+	"apiservices.update": {Group: "apiregistration.k8s.io", Resource: "apiservices", Verb: "update", Namespaced: false},
+	"apiservices.delete": {Group: "apiregistration.k8s.io", Resource: "apiservices", Verb: "delete", Namespaced: false},
+	"apiservices.patch":  {Group: "apiregistration.k8s.io", Resource: "apiservices", Verb: "patch", Namespaced: false},
+
+	// ---- Certificates (CSR + approvals) ----
+	"certificatesigningrequests.get":    {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Verb: "get", Namespaced: false},
+	"certificatesigningrequests.list":   {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Verb: "list", Namespaced: false},
+	"certificatesigningrequests.watch":  {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Verb: "watch", Namespaced: false},
+	"certificatesigningrequests.create": {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Verb: "create", Namespaced: false},
+	"certificatesigningrequests.update": {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Verb: "update", Namespaced: false},
+	"certificatesigningrequests.delete": {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Verb: "delete", Namespaced: false},
+	"certificatesigningrequests.patch":  {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Verb: "patch", Namespaced: false},
+	// CSR subresources
+	"certificatesigningrequests.approval": {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Subresource: "approval", Verb: "update", Namespaced: false},
+	"certificatesigningrequests.status":   {Group: "certificates.k8s.io", Resource: "certificatesigningrequests", Subresource: "status", Verb: "update", Namespaced: false},
+
+	// ---- AuthN / AuthZ review APIs ----
+	"tokenreviews.create":              {Group: "authentication.k8s.io", Resource: "tokenreviews", Verb: "create", Namespaced: false},
+	"subjectaccessreviews.create":      {Group: "authorization.k8s.io", Resource: "subjectaccessreviews", Verb: "create", Namespaced: false},
+	"selfsubjectaccessreviews.create":  {Group: "authorization.k8s.io", Resource: "selfsubjectaccessreviews", Verb: "create", Namespaced: false},
+	"selfsubjectrulesreviews.create":   {Group: "authorization.k8s.io", Resource: "selfsubjectrulesreviews", Verb: "create", Namespaced: false},
+	"localsubjectaccessreviews.create": {Group: "authorization.k8s.io", Resource: "localsubjectaccessreviews", Verb: "create", Namespaced: true},
+
+	// ---- API Priority & Fairness ----
+	"prioritylevelconfigurations.*": {Group: "flowcontrol.apiserver.k8s.io", Resource: "prioritylevelconfigurations", Verb: "list", Namespaced: false}, // + get/watch/create/update/delete/patch
+	"flowschemas.*":                 {Group: "flowcontrol.apiserver.k8s.io", Resource: "flowschemas", Verb: "list", Namespaced: false},                 // + get/watch/create/update/delete/patch
+
+	// ---- Storage: CSI & attachments ----
+	"csidrivers.*":           {Group: "storage.k8s.io", Resource: "csidrivers", Verb: "list", Namespaced: false},          // + get/watch/create/update/delete/patch
+	"csinodes.*":             {Group: "storage.k8s.io", Resource: "csinodes", Verb: "list", Namespaced: false},            // + get/watch/create/update/delete/patch
+	"csistoragecapacities.*": {Group: "storage.k8s.io", Resource: "csistoragecapacities", Verb: "list", Namespaced: true}, // + get/watch/create/update/delete/patch
+	"volumeattachments.*":    {Group: "storage.k8s.io", Resource: "volumeattachments", Verb: "list", Namespaced: false},   // + get/watch/create/update/delete/patch
+
+	// ---- Events: prefer events.k8s.io/v1 with fallback to core/v1 ----
+	"events.v1.get":    {Group: "events.k8s.io", Resource: "events", Verb: "get", Namespaced: true},
+	"events.v1.list":   {Group: "events.k8s.io", Resource: "events", Verb: "list", Namespaced: true},
+	"events.v1.watch":  {Group: "events.k8s.io", Resource: "events", Verb: "watch", Namespaced: true},
+	"events.v1.create": {Group: "events.k8s.io", Resource: "events", Verb: "create", Namespaced: true},
+
+	// ---- Policy: PodDisruptionBudget ----
+	"poddisruptionbudgets.get":    {Group: "policy", Resource: "poddisruptionbudgets", Verb: "get", Namespaced: true},
+	"poddisruptionbudgets.list":   {Group: "policy", Resource: "poddisruptionbudgets", Verb: "list", Namespaced: true},
+	"poddisruptionbudgets.watch":  {Group: "policy", Resource: "poddisruptionbudgets", Verb: "watch", Namespaced: true},
+	"poddisruptionbudgets.create": {Group: "policy", Resource: "poddisruptionbudgets", Verb: "create", Namespaced: true},
+	"poddisruptionbudgets.update": {Group: "policy", Resource: "poddisruptionbudgets", Verb: "update", Namespaced: true},
+	"poddisruptionbudgets.delete": {Group: "policy", Resource: "poddisruptionbudgets", Verb: "delete", Namespaced: true},
+	"poddisruptionbudgets.patch":  {Group: "policy", Resource: "poddisruptionbudgets", Verb: "patch", Namespaced: true},
+
+	// ---- RBAC special verbs: bind / escalate / impersonate ----
+	"rbac.roles.bind":            {Group: "rbac.authorization.k8s.io", Resource: "roles", Verb: "bind", Namespaced: true},
+	"rbac.clusterroles.bind":     {Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Verb: "bind", Namespaced: false},
+	"rbac.roles.escalate":        {Group: "rbac.authorization.k8s.io", Resource: "roles", Verb: "escalate", Namespaced: true},
+	"rbac.clusterroles.escalate": {Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Verb: "escalate", Namespaced: false},
+
+	// Impersonation (used by your backend to Impersonate-User/Group/SA)
+	"rbac.impersonate.users":             {Group: "", Resource: "users", Verb: "impersonate", Namespaced: false},
+	"rbac.impersonate.groups":            {Group: "", Resource: "groups", Verb: "impersonate", Namespaced: false},
+	"rbac.impersonate.serviceaccounts":   {Group: "", Resource: "serviceaccounts", Verb: "impersonate", Namespaced: false},
+	"rbac.impersonate.userextras.scopes": {Group: "authentication.k8s.io", Resource: "userextras", Subresource: "scopes", Verb: "impersonate", Namespaced: false},
 }
 
 // GetCapabilityCheck returns the CapabilityCheck for a given capability key
