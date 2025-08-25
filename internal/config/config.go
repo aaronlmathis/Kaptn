@@ -116,7 +116,9 @@ type RateLimitsConfig struct {
 
 // LoggingConfig represents the logging configuration
 type LoggingConfig struct {
-	Level string `yaml:"level"`
+	Level  string `yaml:"level"`
+	File   string `yaml:"file"`   // Path to the log file. If empty, logs only to stdout.
+	Format string `yaml:"format"` // "json" or "console"
 }
 
 // IntegrationsConfig represents external integrations configuration
@@ -244,7 +246,9 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			ActionsPerMinute: getEnvInt("KAPTN_ACTIONS_PER_MINUTE", 20),
 		},
 		Logging: LoggingConfig{
-			Level: getEnv("LOG_LEVEL", "info"),
+			Level:  getEnv("LOG_LEVEL", "info"),
+			File:   getEnv("KAPTN_LOG_FILE", ""),
+			Format: getEnv("KAPTN_LOG_FORMAT", "json"),
 		},
 		Integrations: IntegrationsConfig{
 			Prometheus: PrometheusConfig{
@@ -399,6 +403,12 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	}
 	if envValue := os.Getenv("LOG_LEVEL"); envValue != "" {
 		result.Logging.Level = envValue
+	}
+	if envValue := os.Getenv("KAPTN_LOG_FILE"); envValue != "" {
+		result.Logging.File = envValue
+	}
+	if envValue := os.Getenv("KAPTN_LOG_FORMAT"); envValue != "" {
+		result.Logging.Format = envValue
 	}
 	if envValue := os.Getenv("PORT"); envValue != "" {
 		result.Server.Addr = "0.0.0.0:" + envValue

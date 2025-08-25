@@ -61,11 +61,11 @@ function getInjectedSession(): InjectedSession | null {
 	const injected = (window as any).__KAPTN_SESSION__ || null
 
 	if (injected) {
-		console.log('✅ Found injected session data:', injected)
+		console.log('[SUCCESS]Found injected session data:', injected)
 		return injected
 	}
 
-	console.log('⚠️ No injected session found')
+	console.log('[WARNING] No injected session found')
 	return null
 }
 
@@ -132,13 +132,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 	const initializeAuth = async () => {
 		try {
-			console.log('🔄 Initializing auth...')
+			console.log('Initializing auth...')
 
 			const injectedSession = getInjectedSession()
-			console.log('📦 Injected session data:', injectedSession)
+			console.log('Injected session data:', injectedSession)
 
 			if (injectedSession) {
-				console.log('✅ Using injected session data, authMode:', injectedSession.authMode)
+				console.log('Using injected session data, authMode:', injectedSession.authMode)
 				setAuthState({
 					isAuthenticated: injectedSession.isAuthenticated,
 					isLoading: false,
@@ -154,10 +154,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				return
 			}
 
-			console.log('⚠️ No injected session data found, falling back to API calls')
+			console.log('[WARNING] No injected session data found, falling back to API calls')
 			await checkAuthStatus()
 		} catch (error) {
-			console.error('❌ Auth initialization error:', error)
+			console.error('[ERROR] Auth initialization error:', error)
 			setAuthState({
 				isAuthenticated: false,
 				isLoading: false,
@@ -180,14 +180,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			const authMode = config.auth.mode
 
 			if (authMode === 'none') {
-				console.log('🔓 Auth mode is none, setting dev user')
+				console.log('Auth mode is none, setting dev user')
 				setAuthState({
 					isAuthenticated: true,
 					isLoading: false,
 					user: {
 						id: 'dev-user',
 						email: 'dev@localhost',
-						name: 'Development User'
+						name: 'Development User',
+						picture: 'https://via.placeholder.com/150',
+						groups: ['kaptn-super-admins'],
+						roles: ['admin'],
+						perms: ['read', 'write', 'delete', 'admin'],
 					},
 					error: null,
 					authMode,
@@ -201,7 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				const data = await response.json()
 				const user = data.user || data
 
-				console.log('🔍 Raw user data from backend:', user)
+				console.log('Raw user data from backend:', user)
 
 				const safeUser: User = {
 					id: user.id || user.sub,
@@ -213,7 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					perms: user.perms || [],
 				}
 
-				console.log('🔍 Safe user object created:', safeUser)
+				console.log('Safe user object created:', safeUser)
 
 				setAuthState({
 					isAuthenticated: true,

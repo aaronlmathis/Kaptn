@@ -60,7 +60,7 @@ func main() {
 	}
 
 	// Initialize logger
-	logger, err := logging.NewLogger(cfg.Logging.Level)
+	logger, err := logging.NewLogger(cfg.Logging.Level, cfg.Logging.Format, cfg.Logging.File)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
