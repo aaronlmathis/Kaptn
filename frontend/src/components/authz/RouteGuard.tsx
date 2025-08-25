@@ -2,7 +2,7 @@ import * as React from "react";
 import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple";
 import { useAuth } from "@/contexts/auth-context";
 import type { CapabilityKey } from "@/lib/authz";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingBar } from "@/components/ui/loading-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ShieldX } from "lucide-react";
 
@@ -43,8 +43,12 @@ export function RouteGuard({
     return loading ? (
       <>{loading}</>
     ) : (
-      <div className="flex h-32 items-center justify-center">
-        <Skeleton className="h-8 w-48" />
+      <div className="flex h-64 items-center justify-center">
+        <LoadingBar 
+          variant="thin" 
+          label="Checking permissions..." 
+          className="w-full max-w-md"
+        />
       </div>
     );
   }

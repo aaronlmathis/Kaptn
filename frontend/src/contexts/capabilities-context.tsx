@@ -13,6 +13,7 @@ interface CapabilitiesState {
 
 interface CapabilitiesContextValue extends CapabilitiesState {
 	refetch: () => Promise<void>
+	fetchAdditional: (features: string[]) => Promise<void>
 	isAllowed: (capability: CapabilityKey) => boolean
 	hasAnyCapability: (capabilities: CapabilityKey[]) => boolean
 	hasAllCapabilities: (capabilities: CapabilityKey[]) => boolean
@@ -449,11 +450,25 @@ const DEFAULT_CAPABILITIES = {
 export function CapabilitiesProvider({ children }: { children: React.ReactNode }) {
 	const { isAuthenticated, authMode, fetchWithAuth } = useAuth()
 
-	const [state, setState] = React.useState<CapabilitiesState>({
-		capabilities: typeof window === 'undefined' ? DEFAULT_CAPABILITIES : {},
-		isLoading: typeof window === 'undefined' ? false : false,
-		error: null,
-		lastFetched: typeof window === 'undefined' ? Date.now() : null,
+	const [state, setState] = React.useState<CapabilitiesState>(() => {
+		// During SSR, provide defaults immediately
+		if (typeof window === 'undefined') {
+			return {
+				capabilities: DEFAULT_CAPABILITIES,
+				isLoading: false,
+				error: null,
+				lastFetched: Date.now(),
+			}
+		}
+		
+		// For auth mode 'none', start with defaults to avoid loading
+		// This will be overridden by the effect, but prevents unnecessary loading state
+		return {
+			capabilities: {},
+			isLoading: true, // Start loading on client side
+			error: null,
+			lastFetched: null,
+		}
 	})
 
 	const fetchCapabilities = React.useCallback(async () => {
@@ -473,7 +488,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 			return
 		}
 
-		// For auth mode 'none', grant all capabilities
+		// For auth mode 'none', grant all capabilities immediately (no API call needed)
 		if (authMode === 'none') {
 			setState({
 				capabilities: DEFAULT_CAPABILITIES,
@@ -487,68 +502,26 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 		setState(prev => ({ ...prev, isLoading: true, error: null }))
 
 		try {
-			// Create request body matching backend CapabilityRequest structure
+			// Create a smaller, focused request body for faster loading
+			// Only request the most commonly needed capabilities initially
 			const requestBody = {
-				cluster: "default", // For now, use default cluster
+				cluster: "default",
 				features: [
-					// Core workloads
-					'pods.list', 'pods.get', 'pods.create', 'pods.update', 'pods.patch', 'pods.delete',
-					'pods.logs', 'pods.exec', 'pods.portforward', 'pods.watch', 'pods.attach',
-					'deployments.list', 'deployments.get', 'deployments.create', 'deployments.update',
-					'deployments.patch', 'deployments.delete', 'deployments.restart', 'deployments.watch',
-					'statefulsets.list', 'statefulsets.get', 'statefulsets.create', 'statefulsets.update',
-					'statefulsets.patch', 'statefulsets.delete', 'statefulsets.watch',
-					'daemonsets.list', 'daemonsets.get', 'daemonsets.create', 'daemonsets.update',
-					'daemonsets.patch', 'daemonsets.delete', 'daemonsets.watch',
-					'replicasets.list', 'replicasets.get', 'replicasets.create', 'replicasets.update',
-					'replicasets.patch', 'replicasets.delete', 'replicasets.watch',
-					'jobs.list', 'jobs.get', 'jobs.create', 'jobs.update', 'jobs.patch', 'jobs.delete', 'jobs.watch',
-					'cronjobs.list', 'cronjobs.get', 'cronjobs.create', 'cronjobs.update', 'cronjobs.patch', 'cronjobs.delete', 'cronjobs.watch',
-
-					// Configuration
-					'services.list', 'services.get', 'services.create', 'services.update', 'services.patch', 'services.delete', 'services.watch',
-					'configmaps.list', 'configmaps.get', 'configmaps.create', 'configmaps.update', 'configmaps.patch', 'configmaps.delete', 'configmaps.edit', 'configmaps.watch',
-					'secrets.list', 'secrets.read', 'secrets.create', 'secrets.update', 'secrets.patch', 'secrets.delete', 'secrets.watch',
-					'serviceaccounts.list', 'serviceaccounts.get', 'serviceaccounts.create', 'serviceaccounts.update', 'serviceaccounts.patch', 'serviceaccounts.delete',
-
-					// Storage
-					'persistentvolumes.list', 'persistentvolumes.get', 'persistentvolumes.create', 'persistentvolumes.update', 'persistentvolumes.patch', 'persistentvolumes.delete', 'persistentvolumes.watch',
-					'persistentvolumeclaims.list', 'persistentvolumeclaims.get', 'persistentvolumeclaims.create', 'persistentvolumeclaims.update', 'persistentvolumeclaims.patch', 'persistentvolumeclaims.delete', 'persistentvolumeclaims.watch',
-					'storageclasses.list', 'storageclasses.get', 'storageclasses.create', 'storageclasses.update', 'storageclasses.patch', 'storageclasses.delete', 'storageclasses.watch',
-
-					// Networking
-					'ingresses.list', 'ingresses.get', 'ingresses.create', 'ingresses.update', 'ingresses.patch', 'ingresses.delete', 'ingresses.watch',
-					'networkpolicies.list', 'networkpolicies.get', 'networkpolicies.create', 'networkpolicies.update', 'networkpolicies.patch', 'networkpolicies.delete', 'networkpolicies.watch',
-					'endpoints.list', 'endpoints.get', 'endpoints.create', 'endpoints.update', 'endpoints.patch', 'endpoints.delete', 'endpoints.watch',
-					'endpointslices.list', 'endpointslices.get', 'endpointslices.create', 'endpointslices.update', 'endpointslices.patch', 'endpointslices.delete', 'endpointslices.watch',
-
-					// Cluster resources
-					'namespaces.list', 'namespaces.get', 'namespaces.create', 'namespaces.update', 'namespaces.patch', 'namespaces.delete', 'namespaces.watch',
-					'nodes.list', 'nodes.get', 'nodes.update', 'nodes.patch', 'nodes.shell',
-					'events.list', 'events.get', 'events.watch', 'events.create',
-					'events.v1.list', 'events.v1.get', 'events.v1.watch', 'events.v1.create',
-
-					// RBAC
-					'roles.list', 'roles.get', 'roles.create', 'roles.update', 'roles.delete',
-					'rolebindings.list', 'rolebindings.get', 'rolebindings.create', 'rolebindings.update', 'rolebindings.delete',
-					'clusterroles.list', 'clusterroles.get', 'clusterroles.create', 'clusterroles.update', 'clusterroles.delete',
-					'clusterrolebindings.list', 'clusterrolebindings.get', 'clusterrolebindings.create', 'clusterrolebindings.update', 'clusterrolebindings.delete',
-
-					// Advanced features
-					'customresourcedefinitions.list', 'customresourcedefinitions.get', 'customresourcedefinitions.create', 'customresourcedefinitions.update', 'customresourcedefinitions.patch', 'customresourcedefinitions.delete',
-					'resourcequotas.list', 'resourcequotas.get', 'resourcequotas.create', 'resourcequotas.update', 'resourcequotas.patch', 'resourcequotas.delete', 'resourcequotas.watch',
-					'limitranges.list', 'limitranges.get', 'limitranges.watch',
-					'horizontalpodautoscalers.list', 'horizontalpodautoscalers.get', 'horizontalpodautoscalers.create', 'horizontalpodautoscalers.update', 'horizontalpodautoscalers.patch', 'horizontalpodautoscalers.delete',
-					'poddisruptionbudgets.list', 'poddisruptionbudgets.get', 'poddisruptionbudgets.create', 'poddisruptionbudgets.update', 'poddisruptionbudgets.patch', 'poddisruptionbudgets.delete',
-
-					// Scaling operations
-					'deployments.scale.get', 'deployments.scale.update', 'deployments.scale.patch',
-					'statefulsets.scale.get', 'statefulsets.scale.update', 'statefulsets.scale.patch',
-					'replicasets.scale.get', 'replicasets.scale.update', 'replicasets.scale.patch',
+					// Core viewing capabilities - most pages need these
+					'pods.list', 'pods.get', 'deployments.list', 'deployments.get',
+					'services.list', 'services.get', 'configmaps.list', 'secrets.list',
+					'namespaces.list', 'events.list', 'nodes.list',
+					
+					// Basic management capabilities  
+					'pods.delete', 'deployments.delete', 'services.delete',
+					'pods.logs', 'pods.exec', 'deployments.restart',
+					
+					// Dashboard essentials
+					'dashboard.view',
 				]
 			}
 
-			console.log('🔍 Fetching capabilities with request:', requestBody)
+			console.log('🔍 Fetching core capabilities (fast load):', requestBody)
 
 			const response = await fetchWithAuth('/api/v1/authz/capabilities', {
 				method: 'POST',
@@ -582,6 +555,39 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				isLoading: false,
 				error: error instanceof Error ? error.message : 'Failed to fetch capabilities',
 			}))
+		}
+	}, [isAuthenticated, authMode, fetchWithAuth])
+
+	// Function to load additional capabilities on-demand (for specific pages that need more)
+	const fetchAdditionalCapabilities = React.useCallback(async (additionalFeatures: string[]) => {
+		if (typeof window === 'undefined' || !isAuthenticated || authMode === 'none') {
+			return
+		}
+
+		try {
+			const requestBody = {
+				cluster: "default",
+				features: additionalFeatures
+			}
+
+			const response = await fetchWithAuth('/api/v1/authz/capabilities', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(requestBody),
+			})
+
+			if (response.ok) {
+				const data = await response.json()
+				setState(prev => ({
+					...prev,
+					capabilities: { ...prev.capabilities, ...(data.caps || {}) },
+					lastFetched: Date.now(),
+				}))
+			}
+		} catch (error) {
+			console.warn('Failed to fetch additional capabilities:', error)
 		}
 	}, [isAuthenticated, authMode, fetchWithAuth])
 
@@ -619,6 +625,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 	const contextValue: CapabilitiesContextValue = {
 		...state,
 		refetch: fetchCapabilities,
+		fetchAdditional: fetchAdditionalCapabilities,
 		isAllowed,
 		hasAnyCapability,
 		hasAllCapabilities,

@@ -41,6 +41,7 @@ export function useCapabilities() {
 				error: null,
 				lastFetched: Date.now(),
 				refetch: async () => { },
+				fetchAdditional: async () => { },
 				isAllowed: () => true,
 				hasAnyCapability: () => true,
 				hasAllCapabilities: () => true,
