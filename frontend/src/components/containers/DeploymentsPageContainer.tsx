@@ -12,19 +12,19 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
-
+import { RouteGuard } from "@/components/authz"
 // Inner component that can access the namespace context
 function DeploymentsContent() {
 	const { data: deployments, loading: isLoading, error, isConnected } = useDeploymentsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
-	
+
 	// Update lastUpdated when deployments change
 	React.useEffect(() => {
 		if (deployments.length > 0) {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [deployments])
-	
+
 	// Generate summary cards from deployment data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
 		if (!deployments || deployments.length === 0) {
@@ -53,13 +53,13 @@ function DeploymentsContent() {
 		}
 
 		const totalDeployments = deployments.length
-		
+
 		// Calculate ready deployments (where ready fraction equals 1)
 		const readyDeployments = deployments.filter(d => {
 			const [ready, total] = d.ready.split('/').map(Number)
 			return ready === total && total > 0
 		}).length
-		
+
 		// Calculate total replicas stats
 		const totalUpToDate = deployments.reduce((sum, d) => sum + d.upToDate, 0)
 		const totalAvailable = deployments.reduce((sum, d) => sum + d.available, 0)
@@ -139,7 +139,12 @@ function DeploymentsContent() {
 export function DeploymentsPageContainer() {
 	return (
 		<SharedProviders>
-			<DeploymentsContent />
+			<RouteGuard
+				requiredCapabilities={['deployments.list']}
+				requireAll={false}
+			>
+				<DeploymentsContent />
+			</RouteGuard>
 		</SharedProviders>
 	)
 }

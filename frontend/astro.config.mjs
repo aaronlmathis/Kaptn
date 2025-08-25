@@ -4,10 +4,16 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 
+// Detect if we're running in development or building for production
+const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('dev');
+const isBuild = process.argv.includes('build');
+
+console.log(`🚀 Astro config: ${isDev ? 'Development (SSR)' : 'Production (Static)'}`);
+
 // https://astro.build/config
 export default defineConfig({
-  // Static site generation (default)
-  // output: "static", // This is the default, no need to specify
+  // Use SSR for development, static for production builds
+  output: isDev ? "server" : "static",
   integrations: [react()],
 
   // Bind Astro dev (helpful when running behind code-server / proxy)
