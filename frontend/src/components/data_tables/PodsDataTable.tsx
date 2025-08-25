@@ -41,6 +41,7 @@ import {
 	IconInfoCircle,
 } from "@tabler/icons-react"
 import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 import { useCluster } from "@/hooks/useCluster"
 
 import {
@@ -315,7 +316,7 @@ const createColumns = (
 						</IfAllowed>
 
 						<IfAllowed
-							feature="pods.update"
+							feature="pods.patch"
 							cluster={clusterId}
 							namespace={row.original.namespace}
 							resourceName={row.original.name}
@@ -415,7 +416,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof podSchema>> }) {
 }
 
 export function PodsDataTable() {
-	const { data: pods, loading, error, refetch, isConnected } = usePodsWithWebSocket(true)
+	const { data: pods, loading, error, isConnected } = usePodsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
 	const { openShell } = useShell()
 	const { clusterId } = useCluster()
@@ -501,42 +502,60 @@ export function PodsDataTable() {
 		},
 	})
 
-	// Bulk actions for pods
-	const podBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "get-logs",
-			label: "Get Logs for Selected",
-			icon: <IconFileText className="size-4" />,
-			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Get logs for pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
-				// TODO: Implement bulk log retrieval
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "describe-pods",
-			label: "Describe Selected Pods",
-			icon: <IconInfoCircle className="size-4" />,
-			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Describe pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
-				// TODO: Implement bulk pod describe
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for pods:', selectedPods.map(p => p.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
+	// Import the useAuthzCapabilitiesInContext hook to check bulk action permissions
+	const { isAllowed } = useAuthzCapabilitiesInContext(['pods.logs', 'pods.get', 'pods.patch', 'pods.delete'])
+
+	// Bulk actions for pods - filtered based on user capabilities
+	const podBulkActions: BulkAction[] = React.useMemo(() => {
+		const actions: BulkAction[] = []
+
+		// Get Logs - requires pods.logs capability
+		if (isAllowed('pods.logs')) {
+			actions.push({
+				id: "get-logs",
+				label: "Get Logs for Selected",
+				icon: <IconFileText className="size-4" />,
+				action: () => {
+					const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Get logs for pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
+					// TODO: Implement bulk log retrieval
+				},
+				requiresSelection: true,
+			})
+		}
+
+		// Describe Selected Pods - requires pods.get capability
+		if (isAllowed('pods.get')) {
+			actions.push({
+				id: "describe-pods",
+				label: "Describe Selected Pods",
+				icon: <IconInfoCircle className="size-4" />,
+				action: () => {
+					const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Describe pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
+					// TODO: Implement bulk pod describe
+				},
+				requiresSelection: true,
+			})
+		}
+
+		// Export Selected as YAML - requires pods.get capability
+		if (isAllowed('pods.get')) {
+			actions.push({
+				id: "export-yaml",
+				label: "Export Selected as YAML",
+				icon: <IconDownload className="size-4" />,
+				action: () => {
+					const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Export YAML for pods:', selectedPods.map(p => p.name))
+					// TODO: Implement bulk YAML export
+				},
+				requiresSelection: true,
+			})
+		}
+
+		// Copy Pod Names - no special permissions needed (just copying names)
+		actions.push({
 			id: "copy-names",
 			label: "Copy Pod Names",
 			icon: <IconCopy className="size-4" />,
@@ -547,31 +566,41 @@ export function PodsDataTable() {
 				console.log('Copied pod names:', names)
 			},
 			requiresSelection: true,
-		},
-		{
-			id: "restart-pods",
-			label: "Restart Selected Pods",
-			icon: <IconRefresh className="size-4" />,
-			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Restart pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
-				// TODO: Implement bulk pod restart
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-pods",
-			label: "Delete Selected Pods",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
-				// TODO: Implement bulk pod deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+		})
+
+		// Restart Selected Pods - requires pods.patch capability
+		if (isAllowed('pods.patch')) {
+			actions.push({
+				id: "restart-pods",
+				label: "Restart Selected Pods",
+				icon: <IconRefresh className="size-4" />,
+				action: () => {
+					const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Restart pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
+					// TODO: Implement bulk pod restart
+				},
+				requiresSelection: true,
+			})
+		}
+
+		// Delete Selected Pods - requires pods.delete capability
+		if (isAllowed('pods.delete')) {
+			actions.push({
+				id: "delete-pods",
+				label: "Delete Selected Pods",
+				icon: <IconTrash className="size-4" />,
+				action: () => {
+					const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Delete pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
+					// TODO: Implement bulk pod deletion with confirmation
+				},
+				variant: "destructive" as const,
+				requiresSelection: true,
+			})
+		}
+
+		return actions
+	}, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -639,8 +668,6 @@ export function PodsDataTable() {
 					bulkActionsLabel="Actions"
 					table={table}
 					showColumnToggle={true}
-					onRefresh={refetch}
-					isRefreshing={loading}
 				>
 					{/* Real-time updates indicator */}
 					{isConnected && (
