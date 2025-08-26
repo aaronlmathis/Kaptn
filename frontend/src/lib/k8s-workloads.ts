@@ -264,7 +264,8 @@ export interface DashboardCronJob {
 
 // Pod operations
 export async function getPods(namespace?: string): Promise<Pod[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
+	// Add large pageSize to get all pods (backend defaults to 25 if not specified)
+	const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
 	const response = await apiClient.get<{ data: { items: Pod[] }; status: string }>(`/pods${query}`);
 	return response.data?.items || [];
 }
@@ -279,35 +280,35 @@ export async function deletePod(namespace: string, name: string): Promise<{ succ
 
 // Deployment operations
 export async function getDeployments(namespace?: string): Promise<Deployment[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
+	const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
 	const response = await apiClient.get<{ data: { items: Deployment[] }; status: string }>(`/deployments${query}`);
 	return response.data?.items || [];
 }
 
 // StatefulSet operations
 export async function getStatefulSets(namespace?: string): Promise<StatefulSet[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
+	const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
 	const response = await apiClient.get<{ data: { items: StatefulSet[] }; status: string }>(`/statefulsets${query}`);
 	return response.data?.items || [];
 }
 
 // DaemonSet operations
 export async function getDaemonSets(namespace?: string): Promise<DaemonSet[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
+	const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
 	const response = await apiClient.get<{ data: { items: DaemonSet[] }; status: string }>(`/daemonsets${query}`);
 	return response.data?.items || [];
 }
 
 // ReplicaSet operations
 export async function getReplicaSets(namespace?: string): Promise<ReplicaSet[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
+	const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
 	const response = await apiClient.get<{ data: { items: ReplicaSet[] }; status: string }>(`/replicasets${query}`);
 	return response.data?.items || [];
 }
 
 // Job operations
 export async function getJobs(namespace?: string): Promise<Job[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
+	const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
 	const response = await apiClient.get<{ data: { items: Job[] }; status: string }>(`/k8s-jobs${query}`);
 	return response.data?.items || [];
 }
@@ -318,7 +319,7 @@ export async function getJob(namespace: string, name: string): Promise<Job> {
 
 // CronJob operations
 export async function getCronJobs(namespace?: string): Promise<CronJob[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
+	const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
 	const response = await apiClient.get<{ data: { items: CronJob[] }; status: string }>(`/cronjobs${query}`);
 	return response.data?.items || [];
 }
@@ -478,7 +479,7 @@ export interface DashboardIngress {
 // Ingress API functions
 export async function getIngresses(namespace?: string): Promise<Ingress[]> {
 	try {
-		const query = namespace ? `?namespace=${namespace}` : '';
+		const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
 		const response = await apiClient.get<{ data: { items: Ingress[] }; status: string }>(`/api/v1/ingresses${query}`);
 		return response.data?.items || [];
 	} catch (error) {

@@ -460,7 +460,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				lastFetched: Date.now(),
 			}
 		}
-		
+
 		// For auth mode 'none', start with defaults to avoid loading
 		// This will be overridden by the effect, but prevents unnecessary loading state
 		return {
@@ -511,11 +511,11 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 					'pods.list', 'pods.get', 'deployments.list', 'deployments.get',
 					'services.list', 'services.get', 'configmaps.list', 'secrets.list',
 					'namespaces.list', 'events.list', 'nodes.list',
-					
+
 					// Basic management capabilities  
 					'pods.delete', 'deployments.delete', 'services.delete',
 					'pods.logs', 'pods.exec', 'deployments.restart',
-					
+
 					// Dashboard essentials
 					'dashboard.view',
 				]
