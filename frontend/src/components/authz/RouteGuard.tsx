@@ -44,9 +44,9 @@ export function RouteGuard({
       <>{loading}</>
     ) : (
       <div className="flex h-64 items-center justify-center">
-        <LoadingBar 
-          variant="thin" 
-          label="Checking permissions..." 
+        <LoadingBar
+          variant="thin"
+          label="Loading..."
           className="w-full max-w-md"
         />
       </div>
