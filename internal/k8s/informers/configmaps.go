@@ -30,7 +30,7 @@ func (h *ConfigMapEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("ConfigMap added", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
+	// h.logger.Debug("ConfigMap added", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
 
 	summary := h.configMapToSummary(configMap)
 	h.hub.BroadcastToRoom("overview", "configmap_added", summary)
@@ -44,7 +44,7 @@ func (h *ConfigMapEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("ConfigMap updated", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
+	// h.logger.Debug("ConfigMap updated", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
 
 	summary := h.configMapToSummary(configMap)
 	h.hub.BroadcastToRoom("overview", "configmap_updated", summary)
@@ -58,7 +58,7 @@ func (h *ConfigMapEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("ConfigMap deleted", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
+	// h.logger.Debug("ConfigMap deleted", zap.String("name", configMap.Name), zap.String("namespace", configMap.Namespace))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "configmap_deleted", map[string]string{

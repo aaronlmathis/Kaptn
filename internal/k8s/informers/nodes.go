@@ -29,7 +29,7 @@ func (h *NodeEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("Node added", zap.String("name", node.Name))
+	// h.logger.Debug("Node added", zap.String("name", node.Name))
 
 	// Convert to summary and broadcast
 	summary := h.nodeToSummary(node)
@@ -40,11 +40,11 @@ func (h *NodeEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 func (h *NodeEventHandler) OnUpdate(oldObj, newObj interface{}) {
 	newNode, ok := newObj.(*v1.Node)
 	if !ok {
-		h.logger.Error("Unexpected object type in OnUpdate", zap.String("type", "node"))
+		// h.logger.Error("Unexpected object type in OnUpdate", zap.String("type", "node"))
 		return
 	}
 
-	h.logger.Debug("Node updated", zap.String("name", newNode.Name))
+	// h.logger.Debug("Node updated", zap.String("name", newNode.Name))
 
 	// Convert to summary and broadcast
 	summary := h.nodeToSummary(newNode)
@@ -59,7 +59,7 @@ func (h *NodeEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Node deleted", zap.String("name", node.Name))
+	// h.logger.Debug("Node deleted", zap.String("name", node.Name))
 
 	// Broadcast deletion event
 	h.hub.BroadcastToRoom("overview", "node_deleted", map[string]string{"name": node.Name})

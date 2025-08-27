@@ -34,7 +34,7 @@ type Factory struct {
 }
 
 // NewFactory creates a new client factory
-func NewFactory(logger *zap.Logger, mode ClientMode, kubeconfigPath string) (*Factory, error) {
+func NewFactory(logger *zap.Logger, mode ClientMode, kubeconfigPath string, qps float32, burst int) (*Factory, error) {
 	var config *rest.Config
 	var err error
 
@@ -53,6 +53,16 @@ func NewFactory(logger *zap.Logger, mode ClientMode, kubeconfigPath string) (*Fa
 		}
 	default:
 		return nil, fmt.Errorf("unsupported client mode: %s", mode)
+	}
+
+	// Apply rate limiting configuration to the REST config
+	if qps > 0 {
+		config.QPS = qps
+		logger.Info("Applied QPS rate limit to Kubernetes client", zap.Float32("qps", qps))
+	}
+	if burst > 0 {
+		config.Burst = burst
+		logger.Info("Applied burst rate limit to Kubernetes client", zap.Int("burst", burst))
 	}
 
 	// Create the clientset

@@ -145,7 +145,7 @@ func (c *OIDCClient) VerifyToken(ctx context.Context, tokenString string) (*User
 	// Extract groups from various possible claim names
 	user.Groups = c.extractGroups(claims)
 
-	c.logger.Debug("Successfully verified token",
+	c.logger.Debug("🎃 Successfully verified token",
 		zap.String("userId", user.ID),
 		zap.String("email", user.Email),
 		zap.Strings("groups", user.Groups))
@@ -196,9 +196,9 @@ func (c *OIDCClient) GetAuthURL(state string, pkceParams *PKCEParams) string {
 		oauth2.SetAuthURLParam("nonce", pkceParams.Nonce),
 	)
 
-	c.logger.Debug("Generated auth URL with PKCE",
-		zap.String("state", state),
-		zap.String("nonce", pkceParams.Nonce))
+	// c.logger.Debug("Generated auth URL with PKCE",
+	// 	zap.String("state", state),
+	// 	zap.String("nonce", pkceParams.Nonce))
 
 	return authURL
 }
@@ -213,7 +213,7 @@ func (c *OIDCClient) ExchangeCodeWithPKCE(ctx context.Context, code string, code
 		return nil, fmt.Errorf("failed to exchange code with PKCE: %w", err)
 	}
 
-	c.logger.Debug("Successfully exchanged code for tokens with PKCE")
+	// c.logger.Debug("Successfully exchanged code for tokens with PKCE")
 	return token, nil
 }
 

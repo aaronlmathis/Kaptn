@@ -60,11 +60,11 @@ func (h *SummaryEventHandler) handleResourceChange(obj interface{}, action strin
 	resourceType := getResourceType(obj)
 	namespace := metaObj.GetNamespace()
 
-	h.logger.Debug("Resource change detected",
-		zap.String("action", action),
-		zap.String("resource", resourceType),
-		zap.String("namespace", namespace),
-		zap.String("name", metaObj.GetName()))
+	// h.logger.Debug("Resource change detected",
+	// 	zap.String("action", action),
+	// 	zap.String("resource", resourceType),
+	// 	zap.String("namespace", namespace),
+	// 	zap.String("name", metaObj.GetName()))
 
 	// Invalidate cache for this resource type
 	h.summaryService.InvalidateCache(resourceType, namespace)
@@ -109,10 +109,10 @@ func (h *SummaryEventHandler) broadcastSummaryUpdate(resourceType, namespace, ac
 
 	h.wsHub.BroadcastToRoom(roomName, "summaryUpdate", event)
 
-	h.logger.Debug("Broadcasted summary update",
-		zap.String("resource", resourceType),
-		zap.String("namespace", namespace),
-		zap.String("room", roomName))
+	// h.logger.Debug("Broadcasted summary update",
+	// 	zap.String("resource", resourceType),
+	// 	zap.String("namespace", namespace),
+	// 	zap.String("room", roomName))
 }
 
 // getResourceType determines the resource type from a Kubernetes object

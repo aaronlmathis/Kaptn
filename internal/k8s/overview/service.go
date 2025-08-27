@@ -87,13 +87,13 @@ func (os *OverviewService) GetOverview(ctx context.Context) (*OverviewData, erro
 	if os.cache.Data != nil && time.Now().Before(os.cache.ExpiresAt) {
 		data := os.cache.Data
 		os.cache.mutex.RUnlock()
-		os.logger.Debug("Returning cached overview data")
+		// os.logger.Debug("Returning cached overview data")
 		return data, nil
 	}
 	os.cache.mutex.RUnlock()
 
 	// Cache miss or expired, fetch fresh data
-	os.logger.Debug("Fetching fresh overview data")
+	// os.logger.Debug("Fetching fresh overview data")
 	data, err := os.fetchOverviewData(ctx)
 	if err != nil {
 		return nil, err
@@ -384,12 +384,12 @@ func (os *OverviewService) streamOverviewUpdates() {
 			os.wsHub.BroadcastToRoom("overview", "overviewUpdate", data)
 			lastData = data
 
-			os.logger.Debug("Broadcasted overview update",
-				zap.Int("podsRunning", data.Pods.Running),
-				zap.Int("podsTotal", data.Pods.Total),
-				zap.Int("nodesReady", data.Nodes.Ready),
-				zap.Float64("cpuPercent", data.CPU.UsagePercent),
-				zap.Float64("memoryPercent", data.Memory.UsagePercent))
+			// os.logger.Debug("Broadcasted overview update",
+			// 	zap.Int("podsRunning", data.Pods.Running),
+			// 	zap.Int("podsTotal", data.Pods.Total),
+			// 	zap.Int("nodesReady", data.Nodes.Ready),
+			// 	zap.Float64("cpuPercent", data.CPU.UsagePercent),
+			// 	zap.Float64("memoryPercent", data.Memory.UsagePercent))
 		}
 	}
 }

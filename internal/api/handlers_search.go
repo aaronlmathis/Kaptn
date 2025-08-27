@@ -63,11 +63,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Debug("Search completed",
-		zap.String("query", query),
-		zap.Int("totalResults", searchResponse.Total),
-		zap.Strings("resourceTypes", resourceTypes),
-		zap.String("namespace", namespace))
+	// s.logger.Debug("Search completed",
+	// 	zap.String("query", query),
+	// 	zap.Int("totalResults", searchResponse.Total),
+	// 	zap.Strings("resourceTypes", resourceTypes),
+	// 	zap.String("namespace", namespace))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

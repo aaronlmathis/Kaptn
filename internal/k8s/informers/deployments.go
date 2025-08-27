@@ -29,7 +29,7 @@ func (h *DeploymentEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("Deployment added", zap.String("name", deployment.Name), zap.String("namespace", deployment.Namespace))
+	// h.logger.Debug("Deployment added", zap.String("name", deployment.Name), zap.String("namespace", deployment.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.deploymentToSummary(deployment)
@@ -45,7 +45,7 @@ func (h *DeploymentEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Deployment updated", zap.String("name", newDeployment.Name), zap.String("namespace", newDeployment.Namespace))
+	// h.logger.Debug("Deployment updated", zap.String("name", newDeployment.Name), zap.String("namespace", newDeployment.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.deploymentToSummary(newDeployment)
@@ -62,7 +62,7 @@ func (h *DeploymentEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Deployment deleted", zap.String("name", deployment.Name), zap.String("namespace", deployment.Namespace))
+	// h.logger.Debug("Deployment deleted", zap.String("name", deployment.Name), zap.String("namespace", deployment.Namespace))
 	// Create deletion event data
 	deletionData := map[string]string{
 		"name":      deployment.Name,

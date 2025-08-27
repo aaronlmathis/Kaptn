@@ -60,9 +60,9 @@ func (cds *CRDDiscoveryService) RefreshCRDs(ctx context.Context) error {
 	for _, apiResourceList := range apiResourceLists {
 		gv, err := schema.ParseGroupVersion(apiResourceList.GroupVersion)
 		if err != nil {
-			cds.logger.Debug("Failed to parse group version",
-				zap.String("group_version", apiResourceList.GroupVersion),
-				zap.Error(err))
+			// cds.logger.Debug("Failed to parse group version",
+			// 	zap.String("group_version", apiResourceList.GroupVersion),
+			// 	zap.Error(err))
 			continue
 		}
 

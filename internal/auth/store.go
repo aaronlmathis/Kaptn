@@ -74,9 +74,9 @@ func (s *ConfigMapBindingStore) GetUserBinding(ctx context.Context, key string) 
 
 	binding, exists = s.bindings[hashKey]
 	if exists {
-		s.logger.Debug("Found user binding using SHA256 hash lookup",
-			zap.String("original_key", key),
-			zap.String("hash_key", hashKey))
+		// s.logger.Debug("Found user binding using SHA256 hash lookup",
+		// 	zap.String("original_key", key),
+		// 	zap.String("hash_key", hashKey))
 		return binding, nil
 	}
 
@@ -118,10 +118,10 @@ func (s *ConfigMapBindingStore) loadBindings() error {
 		}
 
 		s.bindings[key] = &binding
-		s.logger.Debug("Loaded user binding",
-			zap.String("key", key),
-			zap.String("user_id", binding.UserID),
-			zap.Strings("groups", binding.Groups))
+		// s.logger.Debug("Loaded user binding",
+		// 	zap.String("key", key),
+		// 	zap.String("user_id", binding.UserID),
+		// 	zap.Strings("groups", binding.Groups))
 	}
 
 	s.logger.Info("Loaded user bindings from ConfigMap",

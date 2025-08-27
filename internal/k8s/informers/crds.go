@@ -30,7 +30,7 @@ func (h *CustomResourceDefinitionEventHandler) OnAdd(obj interface{}, isInInitia
 		return
 	}
 
-	h.logger.Debug("CustomResourceDefinition added", zap.String("name", crd.GetName()))
+	// h.logger.Debug("CustomResourceDefinition added", zap.String("name", crd.GetName()))
 
 	// Convert to summary and broadcast
 	summary := h.crdToSummary(crd)
@@ -45,7 +45,7 @@ func (h *CustomResourceDefinitionEventHandler) OnUpdate(oldObj, newObj interface
 		return
 	}
 
-	h.logger.Debug("CustomResourceDefinition updated", zap.String("name", newCRD.GetName()))
+	// h.logger.Debug("CustomResourceDefinition updated", zap.String("name", newCRD.GetName()))
 
 	// Convert to summary and broadcast
 	summary := h.crdToSummary(newCRD)
@@ -60,7 +60,7 @@ func (h *CustomResourceDefinitionEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("CustomResourceDefinition deleted", zap.String("name", crd.GetName()))
+	// h.logger.Debug("CustomResourceDefinition deleted", zap.String("name", crd.GetName()))
 
 	// Broadcast deletion event
 	h.hub.BroadcastToRoom("overview", "crd_deleted", map[string]string{"name": crd.GetName()})

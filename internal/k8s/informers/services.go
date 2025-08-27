@@ -29,7 +29,7 @@ func (h *ServiceEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("Service added", zap.String("name", service.Name))
+	// h.logger.Debug("Service added", zap.String("name", service.Name))
 
 	// Convert to summary and broadcast
 	summary := h.serviceToSummary(service)
@@ -44,7 +44,7 @@ func (h *ServiceEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Service updated", zap.String("name", newService.Name))
+	// h.logger.Debug("Service updated", zap.String("name", newService.Name))
 
 	// Convert to summary and broadcast
 	summary := h.serviceToSummary(newService)
@@ -59,7 +59,7 @@ func (h *ServiceEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Service deleted", zap.String("name", service.Name))
+	// h.logger.Debug("Service deleted", zap.String("name", service.Name))
 
 	// Broadcast deletion event
 	h.hub.BroadcastToRoom("overview", "service_deleted", map[string]string{"name": service.Name})

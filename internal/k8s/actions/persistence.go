@@ -75,10 +75,10 @@ func (jp *JobPersistence) SaveJob(job *Job) error {
 		return fmt.Errorf("failed to write job file: %w", err)
 	}
 
-	jp.logger.Debug("Saved job to disk",
-		zap.String("jobId", job.ID),
-		zap.String("status", string(job.Status)),
-		zap.String("filePath", filePath))
+	// jp.logger.Debug("Saved job to disk",
+	// 	zap.String("jobId", job.ID),
+	// 	zap.String("status", string(job.Status)),
+	// 	zap.String("filePath", filePath))
 
 	return nil
 }
@@ -118,9 +118,9 @@ func (jp *JobPersistence) LoadJobs() (map[string]*Job, error) {
 		// Skip jobs older than 24 hours that are completed or errored
 		if (job.Status == JobStatusCompleted || job.Status == JobStatusError) &&
 			time.Since(job.StartTime) > 24*time.Hour {
-			jp.logger.Debug("Skipping old completed job",
-				zap.String("jobId", job.ID),
-				zap.Duration("age", time.Since(job.StartTime)))
+			// jp.logger.Debug("Skipping old completed job",
+			// 	zap.String("jobId", job.ID),
+			// 	zap.Duration("age", time.Since(job.StartTime)))
 			// Delete the old file
 			os.Remove(filePath)
 			skipped++
@@ -179,7 +179,7 @@ func (jp *JobPersistence) DeleteJob(jobID string) error {
 		return fmt.Errorf("failed to delete job file: %w", err)
 	}
 
-	jp.logger.Debug("Deleted job file", zap.String("jobId", jobID), zap.String("filePath", filePath))
+	// jp.logger.Debug("Deleted job file", zap.String("jobId", jobID), zap.String("filePath", filePath))
 	return nil
 }
 

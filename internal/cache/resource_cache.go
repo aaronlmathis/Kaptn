@@ -152,7 +152,7 @@ func (rc *ResourceCache) backgroundRefresh(ctx context.Context) {
 
 // refresh updates the cache with fresh data from Kubernetes
 func (rc *ResourceCache) refresh(ctx context.Context) error {
-	rc.logger.Debug("Refreshing resource cache")
+	// rc.logger.Debug("Refreshing resource cache")
 	start := time.Now()
 
 	newResources := make(map[string]*ResourceCacheItem)
@@ -210,7 +210,7 @@ func (rc *ResourceCache) refreshResourceType(ctx context.Context, resourceType s
 	case "serviceaccounts":
 		return rc.refreshServiceAccounts(ctx, newResources)
 	default:
-		rc.logger.Debug("Unsupported resource type for caching", zap.String("resourceType", resourceType))
+		// rc.logger.Debug("Unsupported resource type for caching", zap.String("resourceType", resourceType))
 		return nil
 	}
 }

@@ -32,7 +32,7 @@ func (h *EventEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("Event added", zap.String("name", event.Name), zap.String("reason", event.Reason))
+	// h.logger.Debug("Event added", zap.String("name", event.Name), zap.String("reason", event.Reason))
 
 	// Convert to summary and broadcast
 	summary := h.eventToSummary(event)
@@ -47,7 +47,7 @@ func (h *EventEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Event updated", zap.String("name", newEvent.Name), zap.String("reason", newEvent.Reason))
+	// h.logger.Debug("Event updated", zap.String("name", newEvent.Name), zap.String("reason", newEvent.Reason))
 
 	// Convert to summary and broadcast
 	summary := h.eventToSummary(newEvent)
@@ -62,7 +62,7 @@ func (h *EventEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Event deleted", zap.String("name", event.Name), zap.String("reason", event.Reason))
+	// h.logger.Debug("Event deleted", zap.String("name", event.Name), zap.String("reason", event.Reason))
 
 	// Broadcast deletion event
 	h.hub.BroadcastToRoom("overview", "event_deleted", map[string]string{

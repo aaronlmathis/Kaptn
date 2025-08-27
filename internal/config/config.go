@@ -94,10 +94,12 @@ type SQLiteBinding struct {
 
 // KubernetesConfig represents the Kubernetes configuration
 type KubernetesConfig struct {
-	Mode             string `yaml:"mode"`
-	KubeconfigPath   string `yaml:"kubeconfig_path"`
-	NamespaceDefault string `yaml:"namespace_default"`
-	InsecureTLS      bool   `yaml:"insecure_tls"` // Skip TLS verification for development environments
+	Mode             string  `yaml:"mode"`
+	KubeconfigPath   string  `yaml:"kubeconfig_path"`
+	NamespaceDefault string  `yaml:"namespace_default"`
+	InsecureTLS      bool    `yaml:"insecure_tls"` // Skip TLS verification for development environments
+	QPS              float32 `yaml:"qps"`          // Queries per second allowed to API server
+	Burst            int     `yaml:"burst"`        // Maximum burst for throttle
 }
 
 // FeaturesConfig represents the features configuration
@@ -234,6 +236,8 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			KubeconfigPath:   getEnv("KUBECONFIG", ""),
 			NamespaceDefault: getEnv("KAPTN_NAMESPACE_DEFAULT", "default"),
 			InsecureTLS:      getEnvBool("KAPTN_KUBE_INSECURE_TLS", false),
+			QPS:              float32(getEnvInt("KAPTN_KUBE_QPS", 100)),    // Default 100 QPS
+			Burst:            getEnvInt("KAPTN_KUBE_BURST", 200),           // Default 200 burst
 		},
 		Features: FeaturesConfig{
 			EnableApply:               getEnvBool("KAPTN_ENABLE_APPLY", true),
@@ -401,6 +405,21 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	if envValue := os.Getenv("KAPTN_NAMESPACE_DEFAULT"); envValue != "" {
 		result.Kubernetes.NamespaceDefault = envValue
 	}
+	if envValue := os.Getenv("KAPTN_KUBE_INSECURE_TLS"); envValue != "" {
+		if parsed, err := strconv.ParseBool(envValue); err == nil {
+			result.Kubernetes.InsecureTLS = parsed
+		}
+	}
+	if envValue := os.Getenv("KAPTN_KUBE_QPS"); envValue != "" {
+		if parsed, err := strconv.Atoi(envValue); err == nil {
+			result.Kubernetes.QPS = float32(parsed)
+		}
+	}
+	if envValue := os.Getenv("KAPTN_KUBE_BURST"); envValue != "" {
+		if parsed, err := strconv.Atoi(envValue); err == nil {
+			result.Kubernetes.Burst = parsed
+		}
+	}
 	if envValue := os.Getenv("LOG_LEVEL"); envValue != "" {
 		result.Logging.Level = envValue
 	}
@@ -540,6 +559,18 @@ func (c *Config) Validate() error {
 	if c.Kubernetes.Mode != "incluster" && c.Kubernetes.Mode != "kubeconfig" {
 		return fmt.Errorf("kubernetes mode must be 'incluster' or 'kubeconfig'")
 	}
+
+	// Validate Kubernetes rate limiting configuration
+	if c.Kubernetes.QPS < 0 {
+		return fmt.Errorf("kubernetes QPS must be non-negative")
+	}
+	if c.Kubernetes.Burst < 0 {
+		return fmt.Errorf("kubernetes burst must be non-negative")
+	}
+	if c.Kubernetes.Burst > 0 && c.Kubernetes.QPS > 0 && float32(c.Kubernetes.Burst) < c.Kubernetes.QPS {
+		return fmt.Errorf("kubernetes burst (%d) must be greater than or equal to QPS (%.1f)", c.Kubernetes.Burst, c.Kubernetes.QPS)
+	}
+
 	if c.Security.AuthMode != "none" && c.Security.AuthMode != "header" && c.Security.AuthMode != "oidc" {
 		return fmt.Errorf("auth mode must be 'none', 'header', or 'oidc'")
 	}

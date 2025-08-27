@@ -31,7 +31,7 @@ func (h *PersistentVolumeClaimEventHandler) OnAdd(obj interface{}, isInInitialLi
 		return
 	}
 
-	h.logger.Info("PersistentVolumeClaim added", zap.String("name", pvc.Name), zap.String("namespace", pvc.Namespace))
+	// h.logger.Info("PersistentVolumeClaim added", zap.String("name", pvc.Name), zap.String("namespace", pvc.Namespace))
 
 	summary := h.pvcToSummary(pvc)
 	h.broadcastPVCEvent("persistentvolumeclaims_added", summary)
@@ -45,7 +45,7 @@ func (h *PersistentVolumeClaimEventHandler) OnUpdate(oldObj, newObj interface{})
 		return
 	}
 
-	h.logger.Info("PersistentVolumeClaim updated", zap.String("name", pvc.Name), zap.String("namespace", pvc.Namespace))
+	// h.logger.Info("PersistentVolumeClaim updated", zap.String("name", pvc.Name), zap.String("namespace", pvc.Namespace))
 
 	summary := h.pvcToSummary(pvc)
 	h.broadcastPVCEvent("persistentvolumeclaims_updated", summary)
@@ -59,7 +59,7 @@ func (h *PersistentVolumeClaimEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("PersistentVolumeClaim deleted", zap.String("name", pvc.Name), zap.String("namespace", pvc.Namespace))
+	// h.logger.Info("PersistentVolumeClaim deleted", zap.String("name", pvc.Name), zap.String("namespace", pvc.Namespace))
 
 	summary := h.pvcToSummary(pvc)
 	h.broadcastPVCEvent("persistentvolumeclaims_deleted", summary)

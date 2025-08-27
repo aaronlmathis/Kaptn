@@ -32,7 +32,7 @@ func (h *RoleEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("Role added", zap.String("name", role.Name), zap.String("namespace", role.Namespace))
+	// h.logger.Debug("Role added", zap.String("name", role.Name), zap.String("namespace", role.Namespace))
 
 	summary := h.roleToSummary(role)
 	h.hub.BroadcastToRoom("overview", "role_added", summary)
@@ -46,7 +46,7 @@ func (h *RoleEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Role updated", zap.String("name", role.Name), zap.String("namespace", role.Namespace))
+	// h.logger.Debug("Role updated", zap.String("name", role.Name), zap.String("namespace", role.Namespace))
 
 	summary := h.roleToSummary(role)
 	h.hub.BroadcastToRoom("overview", "role_updated", summary)
@@ -60,7 +60,7 @@ func (h *RoleEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Role deleted", zap.String("name", role.Name), zap.String("namespace", role.Namespace))
+	// h.logger.Debug("Role deleted", zap.String("name", role.Name), zap.String("namespace", role.Namespace))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "role_deleted", map[string]string{
@@ -175,7 +175,7 @@ func (h *RoleBindingEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("RoleBinding added", zap.String("name", roleBinding.Name), zap.String("namespace", roleBinding.Namespace))
+	// h.logger.Debug("RoleBinding added", zap.String("name", roleBinding.Name), zap.String("namespace", roleBinding.Namespace))
 
 	summary := h.roleBindingToSummary(roleBinding)
 	h.hub.BroadcastToRoom("overview", "rolebinding_added", summary)
@@ -189,7 +189,7 @@ func (h *RoleBindingEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("RoleBinding updated", zap.String("name", roleBinding.Name), zap.String("namespace", roleBinding.Namespace))
+	// h.logger.Debug("RoleBinding updated", zap.String("name", roleBinding.Name), zap.String("namespace", roleBinding.Namespace))
 
 	summary := h.roleBindingToSummary(roleBinding)
 	h.hub.BroadcastToRoom("overview", "rolebinding_updated", summary)
@@ -203,7 +203,7 @@ func (h *RoleBindingEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("RoleBinding deleted", zap.String("name", roleBinding.Name), zap.String("namespace", roleBinding.Namespace))
+	// h.logger.Debug("RoleBinding deleted", zap.String("name", roleBinding.Name), zap.String("namespace", roleBinding.Namespace))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "rolebinding_deleted", map[string]string{

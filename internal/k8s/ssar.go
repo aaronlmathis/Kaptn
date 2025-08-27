@@ -48,12 +48,12 @@ func (s *SSARHelper) CanPerformAction(ctx context.Context, client kubernetes.Int
 		return false, fmt.Errorf("failed to perform access review: %w", err)
 	}
 
-	s.logger.Debug("SelfSubjectAccessReview completed",
-		zap.String("verb", verb),
-		zap.String("resource", resource),
-		zap.String("namespace", namespace),
-		zap.Bool("allowed", result.Status.Allowed),
-		zap.String("reason", result.Status.Reason))
+	// s.logger.Debug("SelfSubjectAccessReview completed",
+	// 	zap.String("verb", verb),
+	// 	zap.String("resource", resource),
+	// 	zap.String("namespace", namespace),
+	// 	zap.Bool("allowed", result.Status.Allowed),
+	// 	zap.String("reason", result.Status.Reason))
 
 	return result.Status.Allowed, nil
 }

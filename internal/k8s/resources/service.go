@@ -761,8 +761,8 @@ func (rm *ResourceManager) ListIngresses(ctx context.Context, namespace string) 
 		gateways, err := rm.fetchIstioGateways(ctx, namespace)
 		if err != nil {
 			// Don't fail if Istio is not installed, just log and continue
-			rm.logger.Debug("Failed to fetch Istio gateways (Istio may not be installed)",
-				zap.String("namespace", namespace), zap.Error(err))
+			// rm.logger.Debug("Failed to fetch Istio gateways (Istio may not be installed)",
+			// 	zap.String("namespace", namespace), zap.Error(err))
 			gatewayChan <- []interface{}{}
 			return
 		}

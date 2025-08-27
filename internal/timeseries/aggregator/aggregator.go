@@ -287,9 +287,9 @@ func (a *Aggregator) refreshNodeCapacities(ctx context.Context, now time.Time) {
 
 	a.lastCapacityRefresh = now
 
-	a.logger.Debug("Refreshed node capacities",
-		zap.Int("nodeCount", len(nodeCapacities)),
-	)
+	// a.logger.Debug("Refreshed node capacities",
+	// 	zap.Int("nodeCount", len(nodeCapacities)),
+	// )
 }
 
 // collectMemoryUsageMetrics collects and aggregates memory usage metrics from the Metrics API
@@ -302,7 +302,7 @@ func (a *Aggregator) collectMemoryUsageMetrics(ctx context.Context, now time.Tim
 	}()
 
 	if !a.apiMetricsAdapter.HasMetricsAPI(ctx) {
-		a.logger.Debug("Metrics API not available, skipping memory usage metrics")
+		// a.logger.Debug("Metrics API not available, skipping memory usage metrics")
 		return
 	}
 
@@ -341,10 +341,10 @@ func (a *Aggregator) collectMemoryUsageMetrics(ctx context.Context, now time.Tim
 		usageSeries.Add(timeseries.Point{T: now, V: totalUsage})
 	}
 
-	a.logger.Debug("Collected memory usage metrics",
-		zap.Float64("total_usage_gb", totalUsage/(1024*1024*1024)),
-		zap.Int("nodes", len(nodeUsageMap)),
-	)
+	// a.logger.Debug("Collected memory usage metrics",
+	// 	zap.Float64("total_usage_gb", totalUsage/(1024*1024*1024)),
+	// 	zap.Int("nodes", len(nodeUsageMap)),
+	// )
 }
 
 // collectCPUMetrics collects and aggregates CPU metrics
@@ -404,11 +404,11 @@ func (a *Aggregator) collectCPUMetrics(ctx context.Context, now time.Time) {
 				usageSeries.Add(timeseries.Point{T: now, V: totalUsage})
 			}
 
-			a.logger.Debug("Collected CPU metrics",
-				zap.Float64("capacity", totalCapacity),
-				zap.Float64("usage", totalUsage),
-				zap.Int("nodes", len(nodeUsageMap)),
-			)
+			// a.logger.Debug("Collected CPU metrics",
+			// 	zap.Float64("capacity", totalCapacity),
+			// 	zap.Float64("usage", totalUsage),
+			// 	zap.Int("nodes", len(nodeUsageMap)),
+			// )
 		}
 	}
 }
@@ -522,11 +522,11 @@ func (a *Aggregator) collectNetworkMetrics(ctx context.Context, now time.Time) {
 		txSeries.Add(timeseries.Point{T: now, V: totalTxRate})
 	}
 
-	a.logger.Debug("Collected network metrics",
-		zap.Float64("rxBps", totalRxRate),
-		zap.Float64("txBps", totalTxRate),
-		zap.Int("nodes", len(networkStats)),
-	)
+	// a.logger.Debug("Collected network metrics",
+	// 	zap.Float64("rxBps", totalRxRate),
+	// 	zap.Float64("txBps", totalTxRate),
+	// 	zap.Int("nodes", len(networkStats)),
+	// )
 }
 
 // GetCapabilities returns the current capabilities of the aggregator
@@ -554,7 +554,7 @@ func (a *Aggregator) pruneLoop(ctx context.Context) {
 			a.logger.Info("Pruner stopped gracefully")
 			return
 		case <-ticker.C:
-			a.logger.Debug("Running background prune")
+			// a.logger.Debug("Running background prune")
 			a.store.Prune()
 		}
 	}
@@ -636,9 +636,9 @@ func (a *Aggregator) collectNodeResourceCapacityMetrics(ctx context.Context, now
 		}
 	}
 
-	a.logger.Debug("Collected node resource capacity metrics",
-		zap.Float64("cluster_allocatable_gb", totalMemoryCapacity/(1024*1024*1024)),
-		zap.Int("node_count", len(nodeList)))
+	// a.logger.Debug("Collected node resource capacity metrics",
+	// 	zap.Float64("cluster_allocatable_gb", totalMemoryCapacity/(1024*1024*1024)),
+	// 	zap.Int("node_count", len(nodeList)))
 }
 
 // collectNodeConditionMetrics collects node condition metrics (ready, pressure)
@@ -712,9 +712,9 @@ func (a *Aggregator) collectNodeConditionMetrics(ctx context.Context, now time.T
 		}
 	}
 
-	a.logger.Debug("Collected node condition metrics",
-		zap.Int("node_count", len(nodeList.Items)),
-	)
+	// a.logger.Debug("Collected node condition metrics",
+	// 	zap.Int("node_count", len(nodeList.Items)),
+	// )
 }
 
 // collectNodeFilesystemMetrics collects node filesystem and image filesystem metrics
@@ -726,7 +726,7 @@ func (a *Aggregator) collectNodeFilesystemMetrics(ctx context.Context, now time.
 	}()
 
 	if !a.summaryAdapter.HasSummaryAPI(ctx) {
-		a.logger.Debug("Summary API not available, skipping node filesystem metrics")
+		// a.logger.Debug("Summary API not available, skipping node filesystem metrics")
 		return
 	}
 
@@ -785,9 +785,9 @@ func (a *Aggregator) collectNodeFilesystemMetrics(ctx context.Context, now time.
 		}
 	}
 
-	a.logger.Debug("Collected node filesystem metrics",
-		zap.Int("node_count", len(fsStats)),
-	)
+	// a.logger.Debug("Collected node filesystem metrics",
+	// 	zap.Int("node_count", len(fsStats)),
+	// )
 }
 
 // storeMetric is a helper to store a metric point
@@ -872,14 +872,14 @@ func (a *Aggregator) collectStateMetrics(ctx context.Context, now time.Time) {
 		unschedulablePodsSeries.Add(timeseries.Point{T: now, V: unschedulable})
 	}
 
-	a.logger.Debug("Collected state metrics",
-		zap.Float64("nodes", nodeCount),
-		zap.Float64("running_pods", running),
-		zap.Float64("pending_pods", pending),
-		zap.Float64("failed_pods", failed),
-		zap.Float64("succeeded_pods", succeeded),
-		zap.Float64("unschedulable_pods", unschedulable),
-	)
+	// a.logger.Debug("Collected state metrics",
+	// 	zap.Float64("nodes", nodeCount),
+	// 	zap.Float64("running_pods", running),
+	// 	zap.Float64("pending_pods", pending),
+	// 	zap.Float64("failed_pods", failed),
+	// 	zap.Float64("succeeded_pods", succeeded),
+	// 	zap.Float64("unschedulable_pods", unschedulable),
+	// )
 }
 
 // storePodPlaceholders stores zero values for pod metrics when collection fails
@@ -955,11 +955,11 @@ func (a *Aggregator) collectResourceRequests(ctx context.Context, now time.Time)
 		memRequestsSeries.Add(timeseries.Point{T: now, V: totalMemoryRequests})
 	}
 
-	a.logger.Debug("Collected resource requests",
-		zap.Float64("cpu_requests_cores", totalCPURequests),
-		zap.Float64("memory_requests_gb", totalMemoryRequests/(1024*1024*1024)),
-		zap.Int("total_pods", len(pods.Items)),
-	)
+	// a.logger.Debug("Collected resource requests",
+	// 	zap.Float64("cpu_requests_cores", totalCPURequests),
+	// 	zap.Float64("memory_requests_gb", totalMemoryRequests/(1024*1024*1024)),
+	// 	zap.Int("total_pods", len(pods.Items)),
+	// )
 }
 
 // collectResourceLimits collects cluster-level resource limits from pod specs
@@ -1012,11 +1012,11 @@ func (a *Aggregator) collectResourceLimits(ctx context.Context, now time.Time) {
 		memLimitsSeries.Add(timeseries.Point{T: now, V: totalMemoryLimits})
 	}
 
-	a.logger.Debug("Collected resource limits",
-		zap.Float64("cpu_limits_cores", totalCPULimits),
-		zap.Float64("memory_limits_gb", totalMemoryLimits/(1024*1024*1024)),
-		zap.Int("total_pods", len(pods.Items)),
-	)
+	// a.logger.Debug("Collected resource limits",
+	// 	zap.Float64("cpu_limits_cores", totalCPULimits),
+	// 	zap.Float64("memory_limits_gb", totalMemoryLimits/(1024*1024*1024)),
+	// 	zap.Int("total_pods", len(pods.Items)),
+	// )
 }
 
 // collectClusterRestartMetrics collects cluster-level pod restart metrics
@@ -1075,11 +1075,11 @@ func (a *Aggregator) collectClusterRestartMetrics(ctx context.Context, now time.
 		restarts1hSeries.Add(timeseries.Point{T: now, V: restarts1h})
 	}
 
-	a.logger.Debug("Collected restart metrics",
-		zap.Int64("total_restarts", totalRestarts),
-		zap.Float64("restart_rate_per_sec", restartRate),
-		zap.Int("total_pods", len(pods.Items)),
-	)
+	// a.logger.Debug("Collected restart metrics",
+	// 	zap.Int64("total_restarts", totalRestarts),
+	// 	zap.Float64("restart_rate_per_sec", restartRate),
+	// 	zap.Int("total_pods", len(pods.Items)),
+	// )
 }
 
 // collectClusterNodeReadiness collects cluster-level node readiness metrics
@@ -1127,11 +1127,11 @@ func (a *Aggregator) collectClusterNodeReadiness(ctx context.Context, now time.T
 		notReadyNodesSeries.Add(timeseries.Point{T: now, V: float64(notReadyNodes)})
 	}
 
-	a.logger.Debug("Collected node readiness metrics",
-		zap.Int64("ready_nodes", readyNodes),
-		zap.Int64("not_ready_nodes", notReadyNodes),
-		zap.Int("total_nodes", len(nodes.Items)),
-	)
+	// a.logger.Debug("Collected node readiness metrics",
+	// 	zap.Int64("ready_nodes", readyNodes),
+	// 	zap.Int64("not_ready_nodes", notReadyNodes),
+	// 	zap.Int("total_nodes", len(nodes.Items)),
+	// )
 }
 
 // collectClusterImageFsMetrics collects cluster-level image filesystem metrics
@@ -1143,7 +1143,7 @@ func (a *Aggregator) collectClusterImageFsMetrics(ctx context.Context, now time.
 	}()
 
 	if !a.summaryAdapter.HasSummaryAPI(ctx) {
-		a.logger.Debug("Summary API not available, skipping image filesystem metrics")
+		// a.logger.Debug("Summary API not available, skipping image filesystem metrics")
 		return
 	}
 
@@ -1173,11 +1173,11 @@ func (a *Aggregator) collectClusterImageFsMetrics(ctx context.Context, now time.
 		imageFsCapacitySeries.Add(timeseries.Point{T: now, V: float64(totalImageFsCapacity)})
 	}
 
-	a.logger.Debug("Collected image filesystem metrics (placeholder)",
-		zap.Uint64("total_used_bytes", totalImageFsUsed),
-		zap.Uint64("total_capacity_bytes", totalImageFsCapacity),
-		zap.Int("total_nodes", len(nodes.Items)),
-	)
+	// a.logger.Debug("Collected image filesystem metrics (placeholder)",
+	// 	zap.Uint64("total_used_bytes", totalImageFsUsed),
+	// 	zap.Uint64("total_capacity_bytes", totalImageFsCapacity),
+	// 	zap.Int("total_nodes", len(nodes.Items)),
+	// )
 }
 
 // collectPodResourceMetrics collects per-pod resource requests and limits
@@ -1255,10 +1255,10 @@ func (a *Aggregator) collectPodResourceMetrics(ctx context.Context, now time.Tim
 		podCount++
 	}
 
-	a.logger.Debug("Collected pod resource metrics",
-		zap.Int("active_pods", podCount),
-		zap.Int("total_pods", len(pods.Items)),
-	)
+	// a.logger.Debug("Collected pod resource metrics",
+	// 	zap.Int("active_pods", podCount),
+	// 	zap.Int("total_pods", len(pods.Items)),
+	// )
 }
 
 // collectPodRestartMetrics collects per-pod restart counts and rates
@@ -1305,9 +1305,9 @@ func (a *Aggregator) collectPodRestartMetrics(ctx context.Context, now time.Time
 		podCount++
 	}
 
-	a.logger.Debug("Collected pod restart metrics",
-		zap.Int("total_pods", podCount),
-	)
+	// a.logger.Debug("Collected pod restart metrics",
+	// 	zap.Int("total_pods", podCount),
+	// )
 }
 
 // collectNamespaceMetrics collects namespace-level aggregated metrics
@@ -1485,10 +1485,10 @@ func (a *Aggregator) collectNamespaceMetrics(ctx context.Context, now time.Time)
 		}
 	}
 
-	a.logger.Debug("Collected namespace metrics",
-		zap.Int("total_namespaces", len(namespaceData)),
-		zap.Bool("has_usage_metrics", podUsageMap != nil),
-	)
+	// a.logger.Debug("Collected namespace metrics",
+	// 	zap.Int("total_namespaces", len(namespaceData)),
+	// 	zap.Bool("has_usage_metrics", podUsageMap != nil),
+	// )
 }
 
 // calculateRestartsInWindow calculates the number of restarts in a given time window
@@ -1524,7 +1524,7 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 	}()
 
 	if !a.apiMetricsAdapter.HasMetricsAPI(ctx) {
-		a.logger.Debug("Metrics API not available, skipping pod metrics collection")
+		// a.logger.Debug("Metrics API not available, skipping pod metrics collection")
 		return
 	}
 
@@ -1541,7 +1541,7 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 		// Type assert to get real pod metrics data
 		podMetric, ok := podMetricInterface.(metricsv1beta1types.PodMetrics)
 		if !ok {
-			a.logger.Debug("Unable to extract pod metrics object, skipping")
+			// a.logger.Debug("Unable to extract pod metrics object, skipping")
 			continue
 		}
 
@@ -1577,10 +1577,10 @@ func (a *Aggregator) collectPodMetrics(ctx context.Context, now time.Time) {
 		}
 	}
 
-	a.logger.Debug("Collected pod metrics",
-		zap.Int("pod_count", len(podMetricsRaw)),
-		zap.String("note", "using real pod names with sample values - full metrics parsing needed"),
-	)
+	// a.logger.Debug("Collected pod metrics",
+	// 	zap.Int("pod_count", len(podMetricsRaw)),
+	// 	zap.String("note", "using real pod names with sample values - full metrics parsing needed"),
+	// )
 }
 
 // collectContainerMetrics collects basic container-level metrics
@@ -1592,7 +1592,7 @@ func (a *Aggregator) collectContainerMetrics(ctx context.Context, now time.Time)
 	}()
 
 	if !a.apiMetricsAdapter.HasMetricsAPI(ctx) {
-		a.logger.Debug("Metrics API not available, skipping container metrics collection")
+		// a.logger.Debug("Metrics API not available, skipping container metrics collection")
 		return
 	}
 
@@ -1645,10 +1645,10 @@ func (a *Aggregator) collectContainerMetrics(ctx context.Context, now time.Time)
 		}
 	}
 
-	a.logger.Debug("Collected container metrics",
-		zap.Int("estimated_containers", estimatedContainers),
-		zap.String("note", "using sample values - full metrics parsing needed"),
-	)
+	// a.logger.Debug("Collected container metrics",
+	// 	zap.Int("estimated_containers", estimatedContainers),
+	// 	zap.String("note", "using sample values - full metrics parsing needed"),
+	// )
 }
 
 // collectNodeDetailedMetrics collects detailed node-level metrics
@@ -1659,13 +1659,13 @@ func (a *Aggregator) collectNodeDetailedMetrics(ctx context.Context, now time.Ti
 		metrics.RecordCollectorScrape("node_details", time.Since(start), hasError)
 	}()
 
-	// Get node list
-	nodeList, err := a.nodesAdapter.ListNodes(ctx)
-	if err != nil {
-		hasError = true
-		a.logger.Error("Failed to get node list for detailed metrics", zap.Error(err))
-		return
-	}
+	// // Get node list
+	// // nodeList, err := a.nodesAdapter.ListNodes(ctx)
+	// if err != nil {
+	// 	hasError = true
+	// 	a.logger.Error("Failed to get node list for detailed metrics", zap.Error(err))
+	// 	return
+	// }
 
 	// Collect per-node network rates if Summary API is available
 	if a.summaryAdapter.HasSummaryAPI(ctx) {
@@ -1702,10 +1702,10 @@ func (a *Aggregator) collectNodeDetailedMetrics(ctx context.Context, now time.Ti
 		}
 	}
 
-	a.logger.Debug("Collected detailed node metrics",
-		zap.Int("node_count", len(nodeList)),
-		zap.String("note", "memory metrics are placeholders - need Summary API implementation"),
-	)
+	// a.logger.Debug("Collected detailed node metrics",
+	// 	zap.Int("node_count", len(nodeList)),
+	// 	zap.String("note", "memory metrics are placeholders - need Summary API implementation"),
+	// )
 }
 
 // collectBasicNodeMetrics collects basic node metrics that don't require Summary API
@@ -1736,10 +1736,10 @@ func (a *Aggregator) collectBasicNodeMetrics(ctx context.Context, now time.Time)
 		}
 	}
 
-	a.logger.Debug("Collected basic node metrics",
-		zap.Int("node_count", len(nodeList)),
-		zap.String("note", "only process count is collected here, other metrics moved to dedicated functions"),
-	)
+	// a.logger.Debug("Collected basic node metrics",
+	// 	zap.Int("node_count", len(nodeList)),
+	// 	zap.String("note", "only process count is collected here, other metrics moved to dedicated functions"),
+	// )
 }
 
 // collectNodePodCounts collects pod counts per node
@@ -1775,10 +1775,10 @@ func (a *Aggregator) collectNodePodCounts(ctx context.Context, now time.Time) {
 		}
 	}
 
-	a.logger.Debug("Collected node pod counts",
-		zap.Int("total_nodes_with_pods", len(podCountPerNode)),
-		zap.Int("total_pods", len(pods.Items)),
-	)
+	// a.logger.Debug("Collected node pod counts",
+	// 	zap.Int("total_nodes_with_pods", len(podCountPerNode)),
+	// 	zap.Int("total_pods", len(pods.Items)),
+	// )
 }
 
 // collectNodePacketStats collects packet-per-second metrics for nodes
@@ -1790,7 +1790,7 @@ func (a *Aggregator) collectNodePacketStats(ctx context.Context, now time.Time) 
 	}()
 
 	if !a.summaryAdapter.HasSummaryAPI(ctx) {
-		a.logger.Debug("Summary API not available, using placeholder packet stats")
+		// a.logger.Debug("Summary API not available, using placeholder packet stats")
 
 		// Get node list for placeholder stats
 		nodeList, err := a.nodesAdapter.ListNodes(ctx)
@@ -1817,15 +1817,15 @@ func (a *Aggregator) collectNodePacketStats(ctx context.Context, now time.Time) 
 			}
 		}
 
-		a.logger.Debug("Collected placeholder packet stats",
-			zap.Int("node_count", len(nodeList)),
-		)
+		// a.logger.Debug("Collected placeholder packet stats",
+		// 	zap.Int("node_count", len(nodeList)),
+		// )
 		return
 	}
 
 	// TODO: Implement real packet stats collection via Summary API
 	// For now, just use placeholder values even when Summary API is available
-	a.logger.Debug("Packet stats collection from Summary API not yet implemented")
+	// a.logger.Debug("Packet stats collection from Summary API not yet implemented")
 }
 
 // collectBasicPodNetworkMetrics collects basic pod network placeholder metrics
@@ -1896,8 +1896,8 @@ func (a *Aggregator) collectBasicPodNetworkMetrics(ctx context.Context, now time
 		podIndex++
 	}
 
-	a.logger.Debug("Collected basic pod network metrics",
-		zap.Int("running_pods", runningPods),
-		zap.String("note", "using placeholder values - Summary API needed for real data"),
-	)
+	// a.logger.Debug("Collected basic pod network metrics",
+	// 	zap.Int("running_pods", runningPods),
+	// 	zap.String("note", "using placeholder values - Summary API needed for real data"),
+	// )
 }

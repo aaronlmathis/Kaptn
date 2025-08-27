@@ -30,7 +30,7 @@ func (h *DaemonSetEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("DaemonSet added", zap.String("name", daemonSet.Name), zap.String("namespace", daemonSet.Namespace))
+	// h.logger.Debug("DaemonSet added", zap.String("name", daemonSet.Name), zap.String("namespace", daemonSet.Namespace))
 
 	summary := h.daemonSetToSummary(daemonSet)
 	h.hub.BroadcastToRoom("overview", "daemonsets_added", summary)
@@ -44,7 +44,7 @@ func (h *DaemonSetEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("DaemonSet updated", zap.String("name", daemonSet.Name), zap.String("namespace", daemonSet.Namespace))
+	// h.logger.Debug("DaemonSet updated", zap.String("name", daemonSet.Name), zap.String("namespace", daemonSet.Namespace))
 
 	summary := h.daemonSetToSummary(daemonSet)
 	h.hub.BroadcastToRoom("overview", "daemonsets_updated", summary)
@@ -58,7 +58,7 @@ func (h *DaemonSetEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("DaemonSet deleted", zap.String("name", daemonSet.Name), zap.String("namespace", daemonSet.Namespace))
+	// h.logger.Debug("DaemonSet deleted", zap.String("name", daemonSet.Name), zap.String("namespace", daemonSet.Namespace))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "daemonsets_deleted", map[string]string{

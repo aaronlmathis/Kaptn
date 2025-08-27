@@ -106,16 +106,16 @@ func (ama *APIMetricsAdapter) ListNodeCPUUsage(ctx context.Context) (map[string]
 
 		usage[nodeMetric.Name] = cores
 
-		ama.logger.Debug("Node CPU usage collected",
-			zap.String("node", nodeMetric.Name),
-			zap.Float64("cores", cores),
-			zap.Int64("nanocores", nanocores),
-		)
+		// ama.logger.Debug("Node CPU usage collected",
+		// 	zap.String("node", nodeMetric.Name),
+		// 	zap.Float64("cores", cores),
+		// 	zap.Int64("nanocores", nanocores),
+		// )
 	}
 
-	ama.logger.Debug("Collected CPU usage for all nodes",
-		zap.Int("nodeCount", len(usage)),
-	)
+	// ama.logger.Debug("Collected CPU usage for all nodes",
+	// 	zap.Int("nodeCount", len(usage)),
+	// )
 
 	return usage, nil
 }
@@ -145,16 +145,16 @@ func (ama *APIMetricsAdapter) ListNodeMemoryUsage(ctx context.Context) (map[stri
 		memoryBytes := nodeMetric.Usage.Memory().Value()
 		usage[nodeMetric.Name] = float64(memoryBytes)
 
-		ama.logger.Debug("Node memory usage collected",
-			zap.String("node", nodeMetric.Name),
-			zap.Float64("memoryGiB", float64(memoryBytes)/(1024*1024*1024)),
-			zap.Int64("memoryBytes", memoryBytes),
-		)
+		// ama.logger.Debug("Node memory usage collected",
+		// 	zap.String("node", nodeMetric.Name),
+		// 	zap.Float64("memoryGiB", float64(memoryBytes)/(1024*1024*1024)),
+		// 	zap.Int64("memoryBytes", memoryBytes),
+		// )
 	}
 
-	ama.logger.Debug("Collected memory usage for all nodes",
-		zap.Int("nodeCount", len(usage)),
-	)
+	// ama.logger.Debug("Collected memory usage for all nodes",
+	// 	zap.Int("nodeCount", len(usage)),
+	// )
 
 	return usage, nil
 }
@@ -171,9 +171,9 @@ func (ama *APIMetricsAdapter) GetTotalClusterCPUUsage(ctx context.Context) (floa
 		totalCores += cores
 	}
 
-	ama.logger.Debug("Total cluster CPU usage calculated",
-		zap.Float64("totalCores", totalCores),
-	)
+	// ama.logger.Debug("Total cluster CPU usage calculated",
+	// 	zap.Float64("totalCores", totalCores),
+	// )
 
 	return totalCores, nil
 }
@@ -202,9 +202,9 @@ func (ama *APIMetricsAdapter) ListPodMetrics(ctx context.Context) ([]interface{}
 		result[i] = pm
 	}
 
-	ama.logger.Debug("Collected pod metrics",
-		zap.Int("pod_count", len(result)),
-	)
+	// ama.logger.Debug("Collected pod metrics",
+	// 	zap.Int("pod_count", len(result)),
+	// )
 
 	return result, nil
 }

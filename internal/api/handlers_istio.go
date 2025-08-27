@@ -122,10 +122,10 @@ func (s *Server) countResources(ctx context.Context, gvr schema.GroupVersionReso
 			zap.Error(err))
 		return 0
 	}
-	s.logger.Debug("Counted resources",
-		zap.String("gvr", gvr.String()),
-		zap.Int("count", len(list.Items)),
-		zap.Any("items", list.Items))
+	// s.logger.Debug("Counted resources",
+	// 	zap.String("gvr", gvr.String()),
+	// 	zap.Int("count", len(list.Items)),
+	// 	zap.Any("items", list.Items))
 	return len(list.Items)
 }
 

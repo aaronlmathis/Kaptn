@@ -67,16 +67,16 @@ func (s *SummaryService) GetResourceSummary(ctx context.Context, resource, names
 	// Check cache first
 	cacheKey := GenerateCacheKey(resource, namespace)
 	if cached, found := s.cache.Get(cacheKey); found {
-		s.logger.Debug("Returning cached summary data",
-			zap.String("resource", resource),
-			zap.String("namespace", namespace))
+		// s.logger.Debug("Returning cached summary data",
+		// 	zap.String("resource", resource),
+		// 	zap.String("namespace", namespace))
 		return cached, nil
 	}
 
 	// Cache miss - compute fresh summary
-	s.logger.Debug("Computing fresh summary data",
-		zap.String("resource", resource),
-		zap.String("namespace", namespace))
+	// s.logger.Debug("Computing fresh summary data",
+	// 	zap.String("resource", resource),
+	// 	zap.String("namespace", namespace))
 
 	summary, err := s.computeResourceSummary(ctx, resource, namespace)
 	if err != nil {
@@ -101,9 +101,9 @@ func (s *SummaryService) InvalidateCache(resource, namespace string) {
 		s.cache.Invalidate(cacheKey)
 	}
 
-	s.logger.Debug("Invalidated summary cache",
-		zap.String("resource", resource),
-		zap.String("namespace", namespace))
+	// s.logger.Debug("Invalidated summary cache",
+	// 	zap.String("resource", resource),
+	// 	zap.String("namespace", namespace))
 }
 
 // GetCacheStats returns cache performance statistics
@@ -150,7 +150,7 @@ func (s *SummaryService) StopBackgroundProcessing() {
 
 // computeResourceSummary computes summary data for a specific resource
 func (s *SummaryService) computeResourceSummary(ctx context.Context, resource, namespace string) (*ResourceSummary, error) {
-	startTime := time.Now()
+	// startTime := time.Now()
 
 	var cards []SummaryCard
 	var err error
@@ -217,12 +217,12 @@ func (s *SummaryService) computeResourceSummary(ctx context.Context, resource, n
 		CacheHit:     false,
 	}
 
-	duration := time.Since(startTime)
-	s.logger.Debug("Computed summary data",
-		zap.String("resource", resource),
-		zap.String("namespace", namespace),
-		zap.Duration("duration", duration),
-		zap.Int("cards", len(cards)))
+	// duration := time.Since(startTime)
+	// s.logger.Debug("Computed summary data",
+	// 	zap.String("resource", resource),
+	// 	zap.String("namespace", namespace),
+	// 	zap.Duration("duration", duration),
+	// 	zap.Int("cards", len(cards)))
 
 	return summary, nil
 }

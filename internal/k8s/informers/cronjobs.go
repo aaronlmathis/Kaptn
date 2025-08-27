@@ -30,7 +30,7 @@ func (h *CronJobEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("CronJob added", zap.String("name", cronJob.Name), zap.String("namespace", cronJob.Namespace))
+	// h.logger.Debug("CronJob added", zap.String("name", cronJob.Name), zap.String("namespace", cronJob.Namespace))
 
 	summary := h.cronJobToSummary(cronJob)
 	h.hub.BroadcastToRoom("overview", "cronjobs_added", summary)
@@ -44,7 +44,7 @@ func (h *CronJobEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("CronJob updated", zap.String("name", cronJob.Name), zap.String("namespace", cronJob.Namespace))
+	// h.logger.Debug("CronJob updated", zap.String("name", cronJob.Name), zap.String("namespace", cronJob.Namespace))
 
 	summary := h.cronJobToSummary(cronJob)
 	h.hub.BroadcastToRoom("overview", "cronjobs_updated", summary)
@@ -58,7 +58,7 @@ func (h *CronJobEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("CronJob deleted", zap.String("name", cronJob.Name), zap.String("namespace", cronJob.Namespace))
+	// h.logger.Debug("CronJob deleted", zap.String("name", cronJob.Name), zap.String("namespace", cronJob.Namespace))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "cronjobs_deleted", map[string]string{

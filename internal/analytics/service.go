@@ -119,7 +119,7 @@ func (s *AnalyticsService) GetVisitors(ctx context.Context, window, step string)
 	// Check cache first
 	cacheKey := CacheKey{Window: window, Step: step}.String()
 	if cached, found := s.cache.Get(cacheKey); found {
-		s.logger.Debug("Returning cached visitors data", zap.String("window", window), zap.String("step", step))
+		// s.logger.Debug("Returning cached visitors data", zap.String("window", window), zap.String("step", step))
 		return cached.(*VisitorsResponse), nil
 	}
 

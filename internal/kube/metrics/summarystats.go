@@ -26,20 +26,20 @@ type NetworkStats struct {
 
 // FilesystemStats represents filesystem statistics for a node
 type FilesystemStats struct {
-	NodeName            string    `json:"nodeName"`
-	FsCapacityBytes     uint64    `json:"fsCapacityBytes"`
-	FsAvailableBytes    uint64    `json:"fsAvailableBytes"`
-	FsUsedBytes         uint64    `json:"fsUsedBytes"` // Derived if not directly available
-	FsInodesTotal       uint64    `json:"fsInodesTotal"`
-	FsInodesFree        uint64    `json:"fsInodesFree"`
-	FsInodesUsed        uint64    `json:"fsInodesUsed"` // Derived if not directly available
-	ImageFsCapacityBytes uint64    `json:"imageFsCapacityBytes"`
+	NodeName              string    `json:"nodeName"`
+	FsCapacityBytes       uint64    `json:"fsCapacityBytes"`
+	FsAvailableBytes      uint64    `json:"fsAvailableBytes"`
+	FsUsedBytes           uint64    `json:"fsUsedBytes"` // Derived if not directly available
+	FsInodesTotal         uint64    `json:"fsInodesTotal"`
+	FsInodesFree          uint64    `json:"fsInodesFree"`
+	FsInodesUsed          uint64    `json:"fsInodesUsed"` // Derived if not directly available
+	ImageFsCapacityBytes  uint64    `json:"imageFsCapacityBytes"`
 	ImageFsAvailableBytes uint64    `json:"imageFsAvailableBytes"`
-	ImageFsUsedBytes    uint64    `json:"imageFsUsedBytes"` // Derived if not directly available
-	ImageFsInodesTotal  uint64    `json:"imageFsInodesTotal"`
-	ImageFsInodesFree   uint64    `json:"imageFsInodesFree"`
-	ImageFsInodesUsed   uint64    `json:"imageFsInodesUsed"` // Derived if not directly available
-	Timestamp           time.Time `json:"timestamp"`
+	ImageFsUsedBytes      uint64    `json:"imageFsUsedBytes"` // Derived if not directly available
+	ImageFsInodesTotal    uint64    `json:"imageFsInodesTotal"`
+	ImageFsInodesFree     uint64    `json:"imageFsInodesFree"`
+	ImageFsInodesUsed     uint64    `json:"imageFsInodesUsed"` // Derived if not directly available
+	Timestamp             time.Time `json:"timestamp"`
 }
 
 // InterfaceStats represents network statistics for a single network interface
@@ -64,19 +64,19 @@ type SummaryStatsResponse struct {
 			Interfaces []InterfaceStats `json:"interfaces"` // Per-interface stats
 		} `json:"network"`
 		Fs struct {
-			UsedBytes     uint64 `json:"usedBytes"`
-			CapacityBytes uint64 `json:"capacityBytes"`
+			UsedBytes      uint64 `json:"usedBytes"`
+			CapacityBytes  uint64 `json:"capacityBytes"`
 			AvailableBytes uint64 `json:"availableBytes"`
-			Inodes        uint64 `json:"inodes"`      // Total inodes
-			InodesFree    uint64 `json:"inodesFree"`  // Free inodes
+			Inodes         uint64 `json:"inodes"`     // Total inodes
+			InodesFree     uint64 `json:"inodesFree"` // Free inodes
 		} `json:"fs"`
 		Runtime struct {
 			ImageFs struct {
-				UsedBytes     uint64 `json:"usedBytes"`
-				CapacityBytes uint64 `json:"capacityBytes"`
+				UsedBytes      uint64 `json:"usedBytes"`
+				CapacityBytes  uint64 `json:"capacityBytes"`
 				AvailableBytes uint64 `json:"availableBytes"`
-				Inodes        uint64 `json:"inodes"`      // Total inodes
-				InodesFree    uint64 `json:"inodesFree"`  // Free inodes
+				Inodes         uint64 `json:"inodes"`     // Total inodes
+				InodesFree     uint64 `json:"inodesFree"` // Free inodes
 			} `json:"imageFs"`
 		} `json:"runtime"`
 		Memory struct {
@@ -172,7 +172,7 @@ func (ssa *SummaryStatsAdapter) HasSummaryAPI(ctx context.Context) bool {
 		return false
 	}
 
-	ssa.logger.Info("Summary API confirmed available")
+	// ssa.logger.Info("Summary API confirmed available")
 	return true
 }
 
@@ -214,11 +214,11 @@ func (ssa *SummaryStatsAdapter) ListNodeNetworkStats(ctx context.Context) ([]Net
 			// check for a node-level aggregate. This handles cases where Kubelet
 			// provides per-interface byte counts but only node-level packet counts.
 			if rxPackets == 0 && summaryStats.Node.Network.RxPackets > 0 {
-				ssa.logger.Debug("Falling back to node-level rxPackets", zap.String("node", nodeName))
+				//ssa.logger.Debug("Falling back to node-level rxPackets", zap.String("node", nodeName))
 				rxPackets = summaryStats.Node.Network.RxPackets
 			}
 			if txPackets == 0 && summaryStats.Node.Network.TxPackets > 0 {
-				ssa.logger.Debug("Falling back to node-level txPackets", zap.String("node", nodeName))
+				//ssa.logger.Debug("Falling back to node-level txPackets", zap.String("node", nodeName))
 				txPackets = summaryStats.Node.Network.TxPackets
 			}
 		} else {
@@ -240,19 +240,19 @@ func (ssa *SummaryStatsAdapter) ListNodeNetworkStats(ctx context.Context) ([]Net
 
 		stats = append(stats, nodeStats)
 
-		ssa.logger.Debug("Node network stats collected",
-			zap.String("node", nodeName),
-			zap.Uint64("rxBytes", nodeStats.RxBytes),
-			zap.Uint64("rxPackets", nodeStats.RxPackets),
-			zap.Uint64("txBytes", nodeStats.TxBytes),
-			zap.Uint64("txPackets", nodeStats.TxPackets),
-		)
+		// ssa.logger.Debug("Node network stats collected",
+		// 	zap.String("node", nodeName),
+		// 	zap.Uint64("rxBytes", nodeStats.RxBytes),
+		// 	zap.Uint64("rxPackets", nodeStats.RxPackets),
+		// 	zap.Uint64("txBytes", nodeStats.TxBytes),
+		// 	zap.Uint64("txPackets", nodeStats.TxPackets),
+		// )
 	}
 
-	ssa.logger.Debug("Collected network stats for nodes",
-		zap.Int("nodeCount", len(stats)),
-		zap.Int("totalNodes", len(nodes.Items)),
-	)
+	// ssa.logger.Debug("Collected network stats for nodes",
+	// 	zap.Int("nodeCount", len(stats)),
+	// 	zap.Int("totalNodes", len(nodes.Items)),
+	// )
 
 	return stats, nil
 }
@@ -283,12 +283,12 @@ func (ssa *SummaryStatsAdapter) GetClusterNetworkStats(ctx context.Context) (Net
 		Timestamp: timestamp,
 	}
 
-	ssa.logger.Debug("Cluster network stats calculated",
-		zap.Uint64("totalRxBytes", totalRxBytes),
-		zap.Uint64("totalTxBytes", totalTxBytes),
-		zap.Uint64("totalRxPackets", totalRxPackets),
-		zap.Uint64("totalTxPackets", totalTxPackets),
-	)
+	// ssa.logger.Debug("Cluster network stats calculated",
+	// 	zap.Uint64("totalRxBytes", totalRxBytes),
+	// 	zap.Uint64("totalTxBytes", totalTxBytes),
+	// 	zap.Uint64("totalRxPackets", totalRxPackets),
+	// 	zap.Uint64("totalTxPackets", totalTxPackets),
+	// )
 
 	return clusterStats, nil
 }
@@ -316,25 +316,25 @@ func (ssa *SummaryStatsAdapter) ListNodeFilesystemStats(ctx context.Context) ([]
 		}
 
 		fsStats := FilesystemStats{
-			NodeName:            nodeName,
-			FsCapacityBytes:     summaryStats.Node.Fs.CapacityBytes,
-			FsAvailableBytes:    summaryStats.Node.Fs.AvailableBytes,
-			FsUsedBytes:         summaryStats.Node.Fs.UsedBytes,
-			FsInodesTotal:       summaryStats.Node.Fs.Inodes,
-			FsInodesFree:        summaryStats.Node.Fs.InodesFree,
-			ImageFsCapacityBytes: summaryStats.Node.Runtime.ImageFs.CapacityBytes,
+			NodeName:              nodeName,
+			FsCapacityBytes:       summaryStats.Node.Fs.CapacityBytes,
+			FsAvailableBytes:      summaryStats.Node.Fs.AvailableBytes,
+			FsUsedBytes:           summaryStats.Node.Fs.UsedBytes,
+			FsInodesTotal:         summaryStats.Node.Fs.Inodes,
+			FsInodesFree:          summaryStats.Node.Fs.InodesFree,
+			ImageFsCapacityBytes:  summaryStats.Node.Runtime.ImageFs.CapacityBytes,
 			ImageFsAvailableBytes: summaryStats.Node.Runtime.ImageFs.AvailableBytes,
-			ImageFsUsedBytes:    summaryStats.Node.Runtime.ImageFs.UsedBytes,
-			ImageFsInodesTotal:  summaryStats.Node.Runtime.ImageFs.Inodes,
-			ImageFsInodesFree:   summaryStats.Node.Runtime.ImageFs.InodesFree,
-			Timestamp:           timestamp,
+			ImageFsUsedBytes:      summaryStats.Node.Runtime.ImageFs.UsedBytes,
+			ImageFsInodesTotal:    summaryStats.Node.Runtime.ImageFs.Inodes,
+			ImageFsInodesFree:     summaryStats.Node.Runtime.ImageFs.InodesFree,
+			Timestamp:             timestamp,
 		}
 		stats = append(stats, fsStats)
 	}
 
-	ssa.logger.Debug("Collected filesystem stats for nodes",
-		zap.Int("nodeCount", len(stats)),
-	)
+	// ssa.logger.Debug("Collected filesystem stats for nodes",
+	// 	zap.Int("nodeCount", len(stats)),
+	// )
 
 	return stats, nil
 }
@@ -374,12 +374,12 @@ func (ssa *SummaryStatsAdapter) getNodeSummaryStats(ctx context.Context, nodeNam
 
 	if resp.StatusCode != http.StatusOK {
 		// Log more details about the error for debugging
-		body, _ := io.ReadAll(resp.Body)
-		ssa.logger.Debug("Summary API request failed",
-			zap.String("node", nodeName),
-			zap.Int("status", resp.StatusCode),
-			zap.String("response", string(body)),
-			zap.String("url", url))
+		// body, _ := io.ReadAll(resp.Body)
+		// ssa.logger.Debug("Summary API request failed",
+		// 	zap.String("node", nodeName),
+		// 	zap.Int("status", resp.StatusCode),
+		// 	zap.String("response", string(body)),
+		// 	zap.String("url", url))
 		return nil, fmt.Errorf("node %s returned status %d", nodeName, resp.StatusCode)
 	}
 

@@ -160,7 +160,7 @@ func (tm *TokenManager) CreateAccessToken(user *User, sessionVer int64, traceID 
 		return "", fmt.Errorf("failed to sign access token: %w", err)
 	}
 
-	tm.logger.Debug("Created access token",
+	tm.logger.Debug("🎃 Created access token",
 		zap.String("user_id", user.ID),
 		zap.String("jti", jti),
 		zap.Int64("session_ver", sessionVer),
@@ -227,7 +227,7 @@ func (tm *TokenManager) CreateRefreshToken(user *User, clientHash string, parent
 	tm.refreshFamilies[tokenID] = family
 	tm.mutex.Unlock()
 
-	tm.logger.Debug("Created refresh token",
+	tm.logger.Debug("🎃 Created refresh token",
 		zap.String("user_id", user.ID),
 		zap.String("family_id", familyID),
 		zap.String("token_id", tokenID),
@@ -690,7 +690,7 @@ func (tm *TokenManager) cleanup() {
 
 	tm.mutex.Unlock()
 
-	tm.logger.Debug("Token cleanup completed")
+	tm.logger.Debug("🎃 Token cleanup completed")
 }
 
 // Shutdown stops the token manager

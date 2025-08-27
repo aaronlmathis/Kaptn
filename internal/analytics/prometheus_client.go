@@ -96,12 +96,12 @@ func (p *PrometheusClient) QueryRange(ctx context.Context, query string, start, 
 
 	u.RawQuery = params.Encode()
 
-	p.logger.Debug("Querying Prometheus",
-		zap.String("url", u.String()),
-		zap.String("query", query),
-		zap.Time("start", start),
-		zap.Time("end", end),
-		zap.Duration("step", step))
+	// p.logger.Debug("Querying Prometheus",
+	// 	zap.String("url", u.String()),
+	// 	zap.String("query", query),
+	// 	zap.Time("start", start),
+	// 	zap.Time("end", end),
+	// 	zap.Duration("step", step))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {

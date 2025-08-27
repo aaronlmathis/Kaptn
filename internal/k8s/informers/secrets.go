@@ -30,7 +30,7 @@ func (h *SecretEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("Secret added", zap.String("name", secret.Name), zap.String("namespace", secret.Namespace))
+	// h.logger.Debug("Secret added", zap.String("name", secret.Name), zap.String("namespace", secret.Namespace))
 
 	summary := h.secretToSummary(secret)
 	h.hub.BroadcastToRoom("overview", "secret_added", summary)
@@ -44,7 +44,7 @@ func (h *SecretEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Secret updated", zap.String("name", secret.Name), zap.String("namespace", secret.Namespace))
+	// h.logger.Debug("Secret updated", zap.String("name", secret.Name), zap.String("namespace", secret.Namespace))
 
 	summary := h.secretToSummary(secret)
 	h.hub.BroadcastToRoom("overview", "secret_updated", summary)
@@ -58,7 +58,7 @@ func (h *SecretEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Secret deleted", zap.String("name", secret.Name), zap.String("namespace", secret.Namespace))
+	// h.logger.Debug("Secret deleted", zap.String("name", secret.Name), zap.String("namespace", secret.Namespace))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "secret_deleted", map[string]string{

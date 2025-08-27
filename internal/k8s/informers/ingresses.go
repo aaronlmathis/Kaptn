@@ -30,9 +30,9 @@ func (h *IngressEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Info("Ingress added",
-		zap.String("name", ingress.Name),
-		zap.String("namespace", ingress.Namespace))
+	// h.logger.Info("Ingress added",
+	// 	zap.String("name", ingress.Name),
+	// 	zap.String("namespace", ingress.Namespace))
 
 	summary := h.ingressToSummary(ingress)
 	h.broadcast("overview", "ingress_added", summary)
@@ -46,9 +46,9 @@ func (h *IngressEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("Ingress updated",
-		zap.String("name", ingress.Name),
-		zap.String("namespace", ingress.Namespace))
+	// h.logger.Info("Ingress updated",
+	// 	zap.String("name", ingress.Name),
+	// 	zap.String("namespace", ingress.Namespace))
 
 	summary := h.ingressToSummary(ingress)
 	h.broadcast("overview", "ingress_updated", summary)
@@ -71,9 +71,9 @@ func (h *IngressEventHandler) OnDelete(obj interface{}) {
 		}
 	}
 
-	h.logger.Info("Ingress deleted",
-		zap.String("name", ingress.Name),
-		zap.String("namespace", ingress.Namespace))
+	// h.logger.Info("Ingress deleted",
+	// 	zap.String("name", ingress.Name),
+	// 	zap.String("namespace", ingress.Namespace))
 
 	summary := h.ingressToSummary(ingress)
 	h.broadcast("overview", "ingress_deleted", summary)

@@ -30,7 +30,7 @@ func (h *EndpointEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("Endpoint added", zap.String("name", endpoint.Name), zap.String("namespace", endpoint.Namespace))
+	// h.logger.Debug("Endpoint added", zap.String("name", endpoint.Name), zap.String("namespace", endpoint.Namespace))
 
 	summary := h.endpointToSummary(endpoint)
 	h.hub.BroadcastToRoom("overview", "endpoints_added", summary)
@@ -44,7 +44,7 @@ func (h *EndpointEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Endpoint updated", zap.String("name", endpoint.Name), zap.String("namespace", endpoint.Namespace))
+	// h.logger.Debug("Endpoint updated", zap.String("name", endpoint.Name), zap.String("namespace", endpoint.Namespace))
 
 	summary := h.endpointToSummary(endpoint)
 	h.hub.BroadcastToRoom("overview", "endpoints_updated", summary)
@@ -58,7 +58,7 @@ func (h *EndpointEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Endpoint deleted", zap.String("name", endpoint.Name), zap.String("namespace", endpoint.Namespace))
+	// h.logger.Debug("Endpoint deleted", zap.String("name", endpoint.Name), zap.String("namespace", endpoint.Namespace))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "endpoints_deleted", map[string]string{

@@ -29,7 +29,7 @@ func (h *ReplicaSetEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("ReplicaSet added", zap.String("name", replicaSet.Name), zap.String("namespace", replicaSet.Namespace))
+	// h.logger.Debug("ReplicaSet added", zap.String("name", replicaSet.Name), zap.String("namespace", replicaSet.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.replicaSetToSummary(replicaSet)
@@ -40,11 +40,11 @@ func (h *ReplicaSetEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 func (h *ReplicaSetEventHandler) OnUpdate(oldObj, newObj interface{}) {
 	newReplicaSet, ok := newObj.(*appsv1.ReplicaSet)
 	if !ok {
-		h.logger.Error("Unexpected object type in OnUpdate", zap.String("type", "replicaset"))
+		// h.logger.Error("Unexpected object type in OnUpdate", zap.String("type", "replicaset"))
 		return
 	}
 
-	h.logger.Debug("ReplicaSet updated", zap.String("name", newReplicaSet.Name), zap.String("namespace", newReplicaSet.Namespace))
+	// h.logger.Debug("ReplicaSet updated", zap.String("name", newReplicaSet.Name), zap.String("namespace", newReplicaSet.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.replicaSetToSummary(newReplicaSet)
@@ -59,7 +59,7 @@ func (h *ReplicaSetEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("ReplicaSet deleted", zap.String("name", replicaSet.Name), zap.String("namespace", replicaSet.Namespace))
+	// h.logger.Debug("ReplicaSet deleted", zap.String("name", replicaSet.Name), zap.String("namespace", replicaSet.Namespace))
 
 	// Create deletion event data
 	deletionData := map[string]string{

@@ -312,11 +312,11 @@ func (s *Server) handleGetClusterTimeSeries(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Log successful request
-	s.logger.Debug("TimeSeries API request",
-		zap.Strings("series", requestedKeys),
-		zap.String("resolution", resParam),
-		zap.String("since", sinceParam),
-		zap.Int("total_points", getTotalPoints(seriesData)))
+	// s.logger.Debug("TimeSeries API request",
+	// 	zap.Strings("series", requestedKeys),
+	// 	zap.String("resolution", resParam),
+	// 	zap.String("since", sinceParam),
+	// 	zap.Int("total_points", getTotalPoints(seriesData)))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -1334,10 +1334,10 @@ func (s *Server) handleGetTimeSeriesHealth(w http.ResponseWriter, r *http.Reques
 		Status:       health.GetStatus(),
 	}
 
-	s.logger.Debug("TimeSeries health request",
-		zap.String("status", health.GetStatus()),
-		zap.Int64("series_count", health.SeriesCount),
-		zap.Int64("ws_clients", health.WSClientCount))
+	// s.logger.Debug("TimeSeries health request",
+	// 	zap.String("status", health.GetStatus()),
+	// 	zap.Int64("series_count", health.SeriesCount),
+	// 	zap.Int64("ws_clients", health.WSClientCount))
 
 	w.Header().Set("Content-Type", "application/json")
 

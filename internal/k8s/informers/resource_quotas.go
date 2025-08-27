@@ -31,9 +31,9 @@ func (h *ResourceQuotaEventHandler) OnAdd(obj interface{}, isInInitialList bool)
 		return
 	}
 
-	h.logger.Info("ResourceQuota added",
-		zap.String("name", resourceQuota.Name),
-		zap.String("namespace", resourceQuota.Namespace))
+	// h.logger.Info("ResourceQuota added",
+	// 	zap.String("name", resourceQuota.Name),
+	// 	zap.String("namespace", resourceQuota.Namespace))
 
 	summary := h.resourceQuotaToSummary(resourceQuota)
 	h.broadcastResourceQuotaEvent("resource_quotas_added", summary)
@@ -47,9 +47,9 @@ func (h *ResourceQuotaEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("ResourceQuota updated",
-		zap.String("name", resourceQuota.Name),
-		zap.String("namespace", resourceQuota.Namespace))
+	// h.logger.Info("ResourceQuota updated",
+	// 	zap.String("name", resourceQuota.Name),
+	// 	zap.String("namespace", resourceQuota.Namespace))
 
 	summary := h.resourceQuotaToSummary(resourceQuota)
 	h.broadcastResourceQuotaEvent("resource_quotas_updated", summary)
@@ -63,9 +63,9 @@ func (h *ResourceQuotaEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("ResourceQuota deleted",
-		zap.String("name", resourceQuota.Name),
-		zap.String("namespace", resourceQuota.Namespace))
+	// h.logger.Info("ResourceQuota deleted",
+	// 	zap.String("name", resourceQuota.Name),
+	// 	zap.String("namespace", resourceQuota.Namespace))
 
 	summary := h.resourceQuotaToSummary(resourceQuota)
 	h.broadcastResourceQuotaEvent("resource_quotas_deleted", summary)
@@ -121,9 +121,9 @@ func (h *ResourceQuotaEventHandler) resourceQuotaToSummary(resourceQuota *corev1
 
 // broadcastResourceQuotaEvent broadcasts resource quota events to WebSocket clients
 func (h *ResourceQuotaEventHandler) broadcastResourceQuotaEvent(action string, data map[string]interface{}) {
-	h.logger.Info("Broadcasting resource quota event",
-		zap.String("action", action),
-		zap.Any("data", data))
+	// h.logger.Info("Broadcasting resource quota event",
+	// 	zap.String("action", action),
+	// 	zap.Any("data", data))
 	// Broadcast to "overview" room for unified resource monitoring
 	h.hub.BroadcastToRoom("overview", action, data)
 }

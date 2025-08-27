@@ -32,8 +32,8 @@ func (h *GatewayEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	name := gateway.GetName()
-	h.logger.Debug("Gateway added", zap.String("name", name))
+	// name := gateway.GetName()
+	// h.logger.Debug("Gateway added", zap.String("name", name))
 
 	// Convert to summary and broadcast
 	summary := h.gatewayToSummary(gateway)
@@ -48,8 +48,8 @@ func (h *GatewayEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	name := newGateway.GetName()
-	h.logger.Debug("Gateway updated", zap.String("name", name))
+	// name := newGateway.GetName()
+	// h.logger.Debug("Gateway updated", zap.String("name", name))
 
 	// Convert to summary and broadcast
 	summary := h.gatewayToSummary(newGateway)
@@ -65,7 +65,7 @@ func (h *GatewayEventHandler) OnDelete(obj interface{}) {
 	}
 
 	name := gateway.GetName()
-	h.logger.Debug("Gateway deleted", zap.String("name", name))
+	// h.logger.Debug("Gateway deleted", zap.String("name", name))
 
 	// Broadcast deletion event
 	h.hub.BroadcastToRoom("overview", "gateway_deleted", map[string]string{"name": name})

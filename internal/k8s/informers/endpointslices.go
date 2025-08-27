@@ -33,9 +33,9 @@ func (h *EndpointSliceEventHandler) OnAdd(obj interface{}, isInInitialList bool)
 		return
 	}
 
-	h.logger.Debug("EndpointSlice added",
-		zap.String("name", endpointSlice.Name),
-		zap.String("namespace", endpointSlice.Namespace))
+	// h.logger.Debug("EndpointSlice added",
+	// 	zap.String("name", endpointSlice.Name),
+	// 	zap.String("namespace", endpointSlice.Namespace))
 
 	summary := endpointSliceToSummary(endpointSlice)
 	h.broadcast("overview", "endpointslice_added", summary)
@@ -49,9 +49,9 @@ func (h *EndpointSliceEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("EndpointSlice updated",
-		zap.String("name", endpointSlice.Name),
-		zap.String("namespace", endpointSlice.Namespace))
+	// h.logger.Debug("EndpointSlice updated",
+	// 	zap.String("name", endpointSlice.Name),
+	// 	zap.String("namespace", endpointSlice.Namespace))
 
 	summary := endpointSliceToSummary(endpointSlice)
 	h.broadcast("overview", "endpointslice_updated", summary)
@@ -74,9 +74,9 @@ func (h *EndpointSliceEventHandler) OnDelete(obj interface{}) {
 		}
 	}
 
-	h.logger.Debug("EndpointSlice deleted",
-		zap.String("name", endpointSlice.Name),
-		zap.String("namespace", endpointSlice.Namespace))
+	// h.logger.Debug("EndpointSlice deleted",
+	// 	zap.String("name", endpointSlice.Name),
+	// 	zap.String("namespace", endpointSlice.Namespace))
 
 	summary := endpointSliceToSummary(endpointSlice)
 	h.broadcast("overview", "endpointslice_deleted", summary)

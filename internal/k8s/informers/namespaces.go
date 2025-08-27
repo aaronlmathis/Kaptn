@@ -31,8 +31,8 @@ func (h *NamespaceEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Info("Namespace added",
-		zap.String("name", namespace.Name))
+	// h.logger.Info("Namespace added",
+	// 	zap.String("name", namespace.Name))
 
 	summary := h.namespaceToSummary(namespace)
 	h.broadcastNamespaceEvent("namespaces_added", summary)
@@ -46,8 +46,8 @@ func (h *NamespaceEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("Namespace updated",
-		zap.String("name", namespace.Name))
+	// h.logger.Info("Namespace updated",
+	// 	zap.String("name", namespace.Name))
 
 	summary := h.namespaceToSummary(namespace)
 	h.broadcastNamespaceEvent("namespaces_updated", summary)
@@ -61,8 +61,8 @@ func (h *NamespaceEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("Namespace deleted",
-		zap.String("name", namespace.Name))
+	// h.logger.Info("Namespace deleted",
+	// 	zap.String("name", namespace.Name))
 
 	summary := h.namespaceToSummary(namespace)
 	h.broadcastNamespaceEvent("namespaces_deleted", summary)

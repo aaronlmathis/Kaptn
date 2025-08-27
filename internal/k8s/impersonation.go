@@ -35,9 +35,9 @@ func (f *ImpersonatedClientFactory) BuildImpersonatedConfig(username string, gro
 		Groups:   groups,
 	}
 
-	f.logger.Debug("Created impersonated config",
-		zap.String("username", username),
-		zap.Strings("groups", groups))
+	// f.logger.Debug("Created impersonated config",
+	// 	zap.String("username", username),
+	// 	zap.Strings("groups", groups))
 
 	return config
 }

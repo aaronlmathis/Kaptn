@@ -32,7 +32,7 @@ func (h *StatefulSetEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Info("StatefulSet added", zap.String("name", statefulSet.Name), zap.String("namespace", statefulSet.Namespace))
+	// h.logger.Info("StatefulSet added", zap.String("name", statefulSet.Name), zap.String("namespace", statefulSet.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.statefulSetToSummary(statefulSet)
@@ -47,7 +47,7 @@ func (h *StatefulSetEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("StatefulSet updated", zap.String("name", newStatefulSet.Name), zap.String("namespace", newStatefulSet.Namespace))
+	// h.logger.Info("StatefulSet updated", zap.String("name", newStatefulSet.Name), zap.String("namespace", newStatefulSet.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.statefulSetToSummary(newStatefulSet)
@@ -62,7 +62,7 @@ func (h *StatefulSetEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("StatefulSet deleted", zap.String("name", statefulSet.Name), zap.String("namespace", statefulSet.Namespace))
+	// h.logger.Info("StatefulSet deleted", zap.String("name", statefulSet.Name), zap.String("namespace", statefulSet.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.statefulSetToSummary(statefulSet)

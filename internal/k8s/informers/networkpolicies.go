@@ -31,7 +31,7 @@ func (h *NetworkPolicyEventHandler) OnAdd(obj interface{}, isInInitialList bool)
 		return
 	}
 
-	h.logger.Info("Network policy added", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
+	// h.logger.Info("Network policy added", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
 
 	summary := h.networkPolicyToSummary(networkPolicy)
 	h.broadcastNetworkPolicyEvent("networkpolicies_added", summary)
@@ -45,7 +45,7 @@ func (h *NetworkPolicyEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("Network policy updated", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
+	// h.logger.Info("Network policy updated", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
 
 	summary := h.networkPolicyToSummary(networkPolicy)
 	h.broadcastNetworkPolicyEvent("networkpolicies_updated", summary)
@@ -59,7 +59,7 @@ func (h *NetworkPolicyEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("Network policy deleted", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
+	// h.logger.Info("Network policy deleted", zap.String("name", networkPolicy.Name), zap.String("namespace", networkPolicy.Namespace))
 
 	summary := h.networkPolicyToSummary(networkPolicy)
 	h.broadcastNetworkPolicyEvent("networkpolicies_deleted", summary)

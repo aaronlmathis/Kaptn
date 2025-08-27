@@ -36,7 +36,7 @@ func (h *LoadBalancerEventHandler) OnAdd(obj interface{}, isInInitialList bool) 
 		return
 	}
 
-	h.logger.Info("LoadBalancer service added", zap.String("name", service.Name), zap.String("namespace", service.Namespace))
+	// h.logger.Info("LoadBalancer service added", zap.String("name", service.Name), zap.String("namespace", service.Namespace))
 
 	summary := h.loadBalancerToSummary(service)
 	h.broadcastLoadBalancerEvent("loadbalancers_added", summary)
@@ -55,7 +55,7 @@ func (h *LoadBalancerEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("LoadBalancer service updated", zap.String("name", service.Name), zap.String("namespace", service.Namespace))
+	// h.logger.Info("LoadBalancer service updated", zap.String("name", service.Name), zap.String("namespace", service.Namespace))
 
 	summary := h.loadBalancerToSummary(service)
 	h.broadcastLoadBalancerEvent("loadbalancers_updated", summary)
@@ -74,7 +74,7 @@ func (h *LoadBalancerEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("LoadBalancer service deleted", zap.String("name", service.Name), zap.String("namespace", service.Namespace))
+	// h.logger.Info("LoadBalancer service deleted", zap.String("name", service.Name), zap.String("namespace", service.Namespace))
 
 	summary := h.loadBalancerToSummary(service)
 	h.broadcastLoadBalancerEvent("loadbalancers_deleted", summary)

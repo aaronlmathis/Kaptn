@@ -124,7 +124,7 @@ func (s *Server) initKubernetesClient() error {
 	s.logger.Info("Initializing Kubernetes client", zap.String("mode", s.config.Kubernetes.Mode))
 
 	mode := client.ClientMode(s.config.Kubernetes.Mode)
-	factory, err := client.NewFactory(s.logger, mode, s.config.Kubernetes.KubeconfigPath)
+	factory, err := client.NewFactory(s.logger, mode, s.config.Kubernetes.KubeconfigPath, s.config.Kubernetes.QPS, s.config.Kubernetes.Burst)
 	if err != nil {
 		return err
 	}

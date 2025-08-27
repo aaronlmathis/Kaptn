@@ -31,7 +31,7 @@ func (h *PersistentVolumeEventHandler) OnAdd(obj interface{}, isInInitialList bo
 		return
 	}
 
-	h.logger.Info("PersistentVolume added", zap.String("name", pv.Name))
+	// h.logger.Info("PersistentVolume added", zap.String("name", pv.Name))
 
 	summary := h.persistentVolumeToSummary(pv)
 	h.broadcastPersistentVolumeEvent("persistentvolumes_added", summary)
@@ -45,7 +45,7 @@ func (h *PersistentVolumeEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("PersistentVolume updated", zap.String("name", pv.Name))
+	// h.logger.Info("PersistentVolume updated", zap.String("name", pv.Name))
 
 	summary := h.persistentVolumeToSummary(pv)
 	h.broadcastPersistentVolumeEvent("persistentvolumes_updated", summary)
@@ -59,7 +59,7 @@ func (h *PersistentVolumeEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("PersistentVolume deleted", zap.String("name", pv.Name))
+	// h.logger.Info("PersistentVolume deleted", zap.String("name", pv.Name))
 
 	summary := h.persistentVolumeToSummary(pv)
 	h.broadcastPersistentVolumeEvent("persistentvolumes_deleted", summary)

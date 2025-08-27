@@ -32,7 +32,7 @@ func (h *PodEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("Pod added", zap.String("name", pod.Name), zap.String("namespace", pod.Namespace))
+	// h.logger.Debug("Pod added", zap.String("name", pod.Name), zap.String("namespace", pod.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.podToSummary(pod)
@@ -47,7 +47,7 @@ func (h *PodEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Pod updated", zap.String("name", newPod.Name), zap.String("namespace", newPod.Namespace))
+	// h.logger.Debug("Pod updated", zap.String("name", newPod.Name), zap.String("namespace", newPod.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.podToSummary(newPod)
@@ -62,7 +62,7 @@ func (h *PodEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("Pod deleted", zap.String("name", pod.Name), zap.String("namespace", pod.Namespace))
+	// h.logger.Debug("Pod deleted", zap.String("name", pod.Name), zap.String("namespace", pod.Namespace))
 
 	// Broadcast deletion event
 	h.hub.BroadcastToRoom("overview", "pod_deleted", map[string]string{

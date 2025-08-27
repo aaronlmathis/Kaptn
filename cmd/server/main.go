@@ -69,7 +69,7 @@ func main() {
 
 	// Log startup information
 	info := version.Get()
-	logger.Info("Starting Kubernetes Admin Dashboard",
+	logger.Info("Starting Kaptn Admin Dashboard",
 		zap.String("version", info.Version),
 		zap.String("gitCommit", info.GitCommit),
 		zap.String("buildDate", info.BuildDate),

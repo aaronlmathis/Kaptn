@@ -32,7 +32,7 @@ func (h *JobEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Info("Job added", zap.String("name", job.Name), zap.String("namespace", job.Namespace))
+	// h.logger.Info("Job added", zap.String("name", job.Name), zap.String("namespace", job.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.jobToSummary(job)
@@ -47,7 +47,7 @@ func (h *JobEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("Job updated", zap.String("name", newJob.Name), zap.String("namespace", newJob.Namespace))
+	// h.logger.Info("Job updated", zap.String("name", newJob.Name), zap.String("namespace", newJob.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.jobToSummary(newJob)
@@ -62,7 +62,7 @@ func (h *JobEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("Job deleted", zap.String("name", job.Name), zap.String("namespace", job.Namespace))
+	// h.logger.Info("Job deleted", zap.String("name", job.Name), zap.String("namespace", job.Namespace))
 
 	// Convert to summary and broadcast
 	summary := h.jobToSummary(job)

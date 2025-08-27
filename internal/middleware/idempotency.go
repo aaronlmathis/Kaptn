@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
@@ -66,10 +65,10 @@ func (im *IdempotencyMiddleware) Middleware(next http.Handler) http.Handler {
 
 		// Check if we have a cached result
 		if result := im.getCachedResult(cacheKey); result != nil {
-			im.logger.Debug("Serving cached idempotent response",
-				zap.String("cache_key", cacheKey),
-				zap.String("idempotency_key", idempotencyKey),
-				zap.String("request_id", middleware.GetReqID(r.Context())))
+			// im.logger.Debug("Serving cached idempotent response",
+			// 	zap.String("cache_key", cacheKey),
+			// 	zap.String("idempotency_key", idempotencyKey),
+			// 	zap.String("request_id", middleware.GetReqID(r.Context())))
 
 			// Serve cached response
 			im.serveCachedResponse(w, result)
@@ -97,11 +96,11 @@ func (im *IdempotencyMiddleware) Middleware(next http.Handler) http.Handler {
 
 			im.cacheResult(cacheKey, result)
 
-			im.logger.Debug("Cached idempotent response",
-				zap.String("cache_key", cacheKey),
-				zap.String("idempotency_key", idempotencyKey),
-				zap.Int("status_code", result.StatusCode),
-				zap.String("request_id", middleware.GetReqID(r.Context())))
+			// im.logger.Debug("Cached idempotent response",
+			// 	zap.String("cache_key", cacheKey),
+			// 	zap.String("idempotency_key", idempotencyKey),
+			// 	zap.Int("status_code", result.StatusCode),
+			// 	zap.String("request_id", middleware.GetReqID(r.Context())))
 		}
 	})
 }
@@ -176,8 +175,8 @@ func (im *IdempotencyMiddleware) cleanup() {
 			}
 		}
 
-		im.logger.Debug("Idempotency cache cleanup completed",
-			zap.Int("remaining_entries", len(im.cache)))
+		// im.logger.Debug("Idempotency cache cleanup completed",
+		// 	zap.Int("remaining_entries", len(im.cache)))
 
 		im.mutex.Unlock()
 	}

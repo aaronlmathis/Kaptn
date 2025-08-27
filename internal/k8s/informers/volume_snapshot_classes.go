@@ -33,8 +33,8 @@ func (h *VolumeSnapshotClassEventHandler) OnAdd(obj interface{}, isInInitialList
 		return
 	}
 
-	h.logger.Debug("VolumeSnapshotClass added",
-		zap.String("name", unstructuredObj.GetName()))
+	// h.logger.Debug("VolumeSnapshotClass added",
+	// 	zap.String("name", unstructuredObj.GetName()))
 
 	// Convert to summary and broadcast
 	summary := h.volumeSnapshotClassToSummary(unstructuredObj)
@@ -49,8 +49,8 @@ func (h *VolumeSnapshotClassEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("VolumeSnapshotClass updated",
-		zap.String("name", newUnstructuredObj.GetName()))
+	// h.logger.Debug("VolumeSnapshotClass updated",
+	// 	zap.String("name", newUnstructuredObj.GetName()))
 
 	// Convert to summary and broadcast
 	summary := h.volumeSnapshotClassToSummary(newUnstructuredObj)
@@ -77,8 +77,8 @@ func (h *VolumeSnapshotClassEventHandler) OnDelete(obj interface{}) {
 		}
 	}
 
-	h.logger.Debug("VolumeSnapshotClass deleted",
-		zap.String("name", unstructuredObj.GetName()))
+	// h.logger.Debug("VolumeSnapshotClass deleted",
+	// 	zap.String("name", unstructuredObj.GetName()))
 
 	// For delete events, we just need basic info
 	summary := map[string]interface{}{

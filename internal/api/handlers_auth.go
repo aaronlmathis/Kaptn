@@ -187,7 +187,7 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	// Resolve authorization if authz resolver is available
 	// TODO: We'll need to access the authz resolver from the middleware or create a direct reference
 	// For now, the middleware will handle authorization resolution on subsequent requests
-	s.logger.Debug("User groups will be resolved by middleware on subsequent requests")
+	// s.logger.Debug("User groups will be resolved by middleware on subsequent requests")
 
 	// Create dual token session (enhanced for Phase 3)
 	if s.sessionManager != nil {
@@ -332,12 +332,12 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Debug: Log what we're sending to frontend
-	s.logger.Info("Sending user data to frontend via /me endpoint",
-		zap.String("id", user.ID),
-		zap.String("email", user.Email),
-		zap.String("name", user.Name),
-		zap.String("picture", user.Picture),
-		zap.String("auth_method", authMethod))
+	// s.logger.Info("Sending user data to frontend via /me endpoint",
+	// 	zap.String("id", user.ID),
+	// 	zap.String("email", user.Email),
+	// 	zap.String("name", user.Name),
+	// 	zap.String("picture", user.Picture),
+	// 	zap.String("auth_method", authMethod))
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"authenticated": true,

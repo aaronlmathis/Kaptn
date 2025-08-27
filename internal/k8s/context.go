@@ -60,7 +60,7 @@ func (im *ImpersonationManager) BuildClientsFromUser(user *auth.User, usernameFo
 		return nil, fmt.Errorf("failed to build impersonated clients for user %s: %w", username, err)
 	}
 
-	im.logger.Debug("Built impersonated clients from user",
+	im.logger.Debug("🎃 Built impersonated clients from user",
 		zap.String("username", username),
 		zap.String("userEmail", user.Email),
 		zap.Strings("groups", groups))

@@ -54,9 +54,9 @@ func (h *VolumeSnapshotEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("VolumeSnapshot updated",
-		zap.String("name", newUnstructuredObj.GetName()),
-		zap.String("namespace", newUnstructuredObj.GetNamespace()))
+	// h.logger.Debug("VolumeSnapshot updated",
+	// 	zap.String("name", newUnstructuredObj.GetName()),
+	// 	zap.String("namespace", newUnstructuredObj.GetNamespace()))
 
 	// Convert to summary and broadcast
 	summary := h.volumeSnapshotToSummary(newUnstructuredObj)

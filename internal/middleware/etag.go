@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
@@ -75,10 +74,10 @@ func (em *ETagMiddleware) Middleware(next http.Handler) http.Handler {
 			// Check if client has matching ETag
 			if clientETag := r.Header.Get("If-None-Match"); clientETag != "" {
 				if em.etagMatches(clientETag, etag) {
-					em.logger.Debug("ETag matched, serving 304",
-						zap.String("path", r.URL.Path),
-						zap.String("etag", etag),
-						zap.String("request_id", middleware.GetReqID(r.Context())))
+					// em.logger.Debug("ETag matched, serving 304",
+					// 	zap.String("path", r.URL.Path),
+					// 	zap.String("etag", etag),
+					// 	zap.String("request_id", middleware.GetReqID(r.Context())))
 
 					w.WriteHeader(http.StatusNotModified)
 					return
@@ -89,11 +88,11 @@ func (em *ETagMiddleware) Middleware(next http.Handler) http.Handler {
 			if modSince := r.Header.Get("If-Modified-Since"); modSince != "" {
 				if clientTime, err := http.ParseTime(modSince); err == nil {
 					if !recorder.lastModified.After(clientTime) {
-						em.logger.Debug("Content not modified since client cache, serving 304",
-							zap.String("path", r.URL.Path),
-							zap.Time("client_time", clientTime),
-							zap.Time("last_modified", recorder.lastModified),
-							zap.String("request_id", middleware.GetReqID(r.Context())))
+						// em.logger.Debug("Content not modified since client cache, serving 304",
+						// 	zap.String("path", r.URL.Path),
+						// 	zap.Time("client_time", clientTime),
+						// 	zap.Time("last_modified", recorder.lastModified),
+						// 	zap.String("request_id", middleware.GetReqID(r.Context())))
 
 						w.WriteHeader(http.StatusNotModified)
 						return

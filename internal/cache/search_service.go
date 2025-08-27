@@ -47,11 +47,11 @@ func (ss *SearchService) Search(ctx context.Context, query string, resourceTypes
 		limit = 100 // Default limit
 	}
 
-	ss.logger.Debug("Performing search",
-		zap.String("query", query),
-		zap.Strings("resourceTypes", resourceTypes),
-		zap.String("namespace", namespace),
-		zap.Int("limit", limit))
+	// ss.logger.Debug("Performing search",
+	// 	zap.String("query", query),
+	// 	zap.Strings("resourceTypes", resourceTypes),
+	// 	zap.String("namespace", namespace),
+	// 	zap.Int("limit", limit))
 
 	// Search the cache
 	cacheResults, err := ss.cache.Search(query, resourceTypes, namespace, limit)
@@ -86,9 +86,9 @@ func (ss *SearchService) Search(ctx context.Context, query string, resourceTypes
 		Query:   query,
 	}
 
-	ss.logger.Debug("Search completed",
-		zap.String("query", query),
-		zap.Int("totalResults", len(results)))
+	// ss.logger.Debug("Search completed",
+	// 	zap.String("query", query),
+	// 	zap.Int("totalResults", len(results)))
 
 	return response, nil
 }

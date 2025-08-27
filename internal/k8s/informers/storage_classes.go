@@ -31,7 +31,7 @@ func (h *StorageClassEventHandler) OnAdd(obj interface{}, isInInitialList bool) 
 		return
 	}
 
-	h.logger.Info("StorageClass added", zap.String("name", sc.Name))
+	// h.logger.Info("StorageClass added", zap.String("name", sc.Name))
 
 	summary := h.storageClassToSummary(sc)
 	h.broadcastStorageClassEvent("storageclasses_added", summary)
@@ -45,7 +45,7 @@ func (h *StorageClassEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Info("StorageClass updated", zap.String("name", sc.Name))
+	// h.logger.Info("StorageClass updated", zap.String("name", sc.Name))
 
 	summary := h.storageClassToSummary(sc)
 	h.broadcastStorageClassEvent("storageclasses_updated", summary)
@@ -59,7 +59,7 @@ func (h *StorageClassEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Info("StorageClass deleted", zap.String("name", sc.Name))
+	// h.logger.Info("StorageClass deleted", zap.String("name", sc.Name))
 
 	summary := h.storageClassToSummary(sc)
 	h.broadcastStorageClassEvent("storageclasses_deleted", summary)

@@ -32,7 +32,7 @@ func (h *ClusterRoleEventHandler) OnAdd(obj interface{}, isInInitialList bool) {
 		return
 	}
 
-	h.logger.Debug("ClusterRole added", zap.String("name", clusterRole.Name))
+	// h.logger.Debug("ClusterRole added", zap.String("name", clusterRole.Name))
 
 	summary := h.clusterRoleToSummary(clusterRole)
 	h.hub.BroadcastToRoom("overview", "clusterrole_added", summary)
@@ -46,7 +46,7 @@ func (h *ClusterRoleEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("ClusterRole updated", zap.String("name", clusterRole.Name))
+	// h.logger.Debug("ClusterRole updated", zap.String("name", clusterRole.Name))
 
 	summary := h.clusterRoleToSummary(clusterRole)
 	h.hub.BroadcastToRoom("overview", "clusterrole_updated", summary)
@@ -60,7 +60,7 @@ func (h *ClusterRoleEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("ClusterRole deleted", zap.String("name", clusterRole.Name))
+	// h.logger.Debug("ClusterRole deleted", zap.String("name", clusterRole.Name))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "clusterrole_deleted", map[string]string{
@@ -173,7 +173,7 @@ func (h *ClusterRoleBindingEventHandler) OnAdd(obj interface{}, isInInitialList 
 		return
 	}
 
-	h.logger.Debug("ClusterRoleBinding added", zap.String("name", clusterRoleBinding.Name))
+	// h.logger.Debug("ClusterRoleBinding added", zap.String("name", clusterRoleBinding.Name))
 
 	summary := h.clusterRoleBindingToSummary(clusterRoleBinding)
 	h.hub.BroadcastToRoom("overview", "clusterrolebinding_added", summary)
@@ -187,7 +187,7 @@ func (h *ClusterRoleBindingEventHandler) OnUpdate(oldObj, newObj interface{}) {
 		return
 	}
 
-	h.logger.Debug("ClusterRoleBinding updated", zap.String("name", clusterRoleBinding.Name))
+	// h.logger.Debug("ClusterRoleBinding updated", zap.String("name", clusterRoleBinding.Name))
 
 	summary := h.clusterRoleBindingToSummary(clusterRoleBinding)
 	h.hub.BroadcastToRoom("overview", "clusterrolebinding_updated", summary)
@@ -201,7 +201,7 @@ func (h *ClusterRoleBindingEventHandler) OnDelete(obj interface{}) {
 		return
 	}
 
-	h.logger.Debug("ClusterRoleBinding deleted", zap.String("name", clusterRoleBinding.Name))
+	// h.logger.Debug("ClusterRoleBinding deleted", zap.String("name", clusterRoleBinding.Name))
 
 	// Broadcast deletion event with basic identifiers
 	h.hub.BroadcastToRoom("overview", "clusterrolebinding_deleted", map[string]string{
