@@ -1,10 +1,13 @@
 ---
 import { ApplyConfigContainer } from "@/components/containers/ApplyConfigContainer";
 import Layout from "@/layouts/dashboard.astro";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Apply Config";
 ---
 
 <Layout title={title}>
-	<ApplyConfigContainer client:load />
+<AppShell client:load>
+  <ApplyConfigContainer />
+</AppShell>
 </Layout>

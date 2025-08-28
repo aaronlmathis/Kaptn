@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { ClusterRolesPageContainer } from "@/components/containers/ClusterRolesPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Cluster Roles & Cluster Role Bindings";
 ---
 
 <Layout title={title}>
-	<ClusterRolesPageContainer client:load />
+<AppShell client:load>
+  <ClusterRolesPageContainer />
+</AppShell>
 </Layout>

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { RolesDataTable } from "@/components/data_tables/RolesDataTable"
 import { RoleBindingsDataTable } from "@/components/data_tables/RoleBindingsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
@@ -178,8 +177,6 @@ function RolesContent() {
 
 export function RolesPageContainer() {
 	return (
-		<SharedProviders>
-			<RolesContent />
-		</SharedProviders>
+		<RolesContent />
 	)
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { StatefulSetsDataTable } from "@/components/data_tables/StatefulSetsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useStatefulSetsWithWebSocket } from "@/hooks/useStatefulSetsWithWebSocket"
@@ -145,9 +144,5 @@ function StatefulSetsContent() {
 }
 
 export function StatefulSetsPageContainer() {
-	return (
-		<SharedProviders>
-			<StatefulSetsContent />
-		</SharedProviders>
-	)
+	return <StatefulSetsContent />
 }

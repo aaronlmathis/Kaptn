@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { CodeEditor } from "@/components/CodeEditor"
 
 // Inner component that can access the context
@@ -22,9 +21,7 @@ function ApplyContent() {
 
 export function ApplyConfigContainer() {
 	return (
-		<SharedProviders>
-			{/* Temporarily disabled RouteGuard for testing */}
-			<ApplyContent />
-		</SharedProviders>
+		/* Temporarily disabled RouteGuard for testing */
+		<ApplyContent />
 	)
 }

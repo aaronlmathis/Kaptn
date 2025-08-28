@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { ApiResourcesPageContainer } from "@/components/containers/ApiResourcesPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "API Resources";
 ---
 
 <Layout title={title}>
-	<ApiResourcesPageContainer client:load />
+<AppShell client:load>
+  <ApiResourcesPageContainer />
+</AppShell>
 </Layout>

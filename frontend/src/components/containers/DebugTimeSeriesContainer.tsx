@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -388,8 +387,6 @@ function DebugTimeSeriesContent() {
 
 export function DebugTimeSeriesContainer() {
 	return (
-		<SharedProviders>
-			<DebugTimeSeriesContent />
-		</SharedProviders>
+		<DebugTimeSeriesContent />
 	)
 }

@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { VolumeSnapshotsPageContainer } from "@/components/containers/VolumeSnapshotsPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Volume Snapshots";
 ---
 
 <Layout title={title}>
-	<VolumeSnapshotsPageContainer client:load />
+<AppShell client:load>
+  <VolumeSnapshotsPageContainer />
+</AppShell>
 </Layout>

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { PersistentVolumeClaimsDataTable } from "@/components/data_tables/PersistentVolumeClaimsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { usePersistentVolumeClaimsWithWebSocket } from "@/hooks/usePersistentVolumeClaimsWithWebSocket"
@@ -109,9 +108,5 @@ function PersistentVolumeClaimsContent() {
 }
 
 export function PersistentVolumeClaimsPageContainer() {
-	return (
-		<SharedProviders>
-			<PersistentVolumeClaimsContent />
-		</SharedProviders>
-	)
+	return <PersistentVolumeClaimsContent />
 }

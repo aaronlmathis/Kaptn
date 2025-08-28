@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { RBACBuilder } from "@/components/rbac/RBACBuilder"
 
 
@@ -27,9 +26,5 @@ function RBACContent() {
 }
 
 export function RBACPageContainer() {
-	return (
-		<SharedProviders>
-			<RBACContent />
-		</SharedProviders>
-	)
+	return <RBACContent />
 }

@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { EventsPageContainer } from "@/components/containers/EventsPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Events";
 ---
 
 <Layout title={title}>
-	<EventsPageContainer client:load />
+<AppShell client:load>
+  <EventsPageContainer />
+</AppShell>
 </Layout>

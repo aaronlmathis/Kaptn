@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { ConfigMapsDataTable } from "@/components/data_tables/ConfigMapsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useConfigMapsWithWebSocket } from "@/hooks/useConfigMapsWithWebSocket"
@@ -145,9 +144,5 @@ function ConfigMapsContent() {
 }
 
 export function ConfigMapsPageContainer() {
-	return (
-		<SharedProviders>
-			<ConfigMapsContent />
-		</SharedProviders>
-	)
+	return <ConfigMapsContent />
 }

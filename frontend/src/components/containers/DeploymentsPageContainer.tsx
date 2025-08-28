@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { DeploymentsDataTable } from "@/components/data_tables/DeploymentsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useDeploymentsWithWebSocket } from "@/hooks/useDeploymentsWithWebSocket"
@@ -138,13 +137,11 @@ function DeploymentsContent() {
 
 export function DeploymentsPageContainer() {
 	return (
-		<SharedProviders>
-			<RouteGuard
-				requiredCapabilities={['deployments.list']}
-				requireAll={false}
-			>
-				<DeploymentsContent />
-			</RouteGuard>
-		</SharedProviders>
+		<RouteGuard
+			requiredCapabilities={['deployments.list']}
+			requireAll={false}
+		>
+			<DeploymentsContent />
+		</RouteGuard>
 	)
 }

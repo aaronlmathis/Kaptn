@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { ResourceQuotasDataTable } from "@/components/data_tables/ResourceQuotasDataTable"
 import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceQuotasWithWebSocket } from "@/hooks/useResourceQuotasWithWebSocket"
@@ -120,9 +119,5 @@ function ResourceQuotasContent() {
 }
 
 export function ResourceQuotasPageContainer() {
-	return (
-		<SharedProviders>
-			<ResourceQuotasContent />
-		</SharedProviders>
-	)
+	return <ResourceQuotasContent />
 }

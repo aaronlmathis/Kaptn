@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { RouteGuard } from "@/components/authz"
 import { PodsDataTable } from "@/components/data_tables/PodsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
@@ -146,13 +145,11 @@ function PodsContent() {
 
 export function PodsPageContainer() {
 	return (
-		<SharedProviders>
-			<RouteGuard
-				requiredCapabilities={['pods.list']}
-				requireAll={false}
-			>
-				<PodsContent />
-			</RouteGuard>
-		</SharedProviders>
+		<RouteGuard
+			requiredCapabilities={['pods.list']}
+			requireAll={false}
+		>
+			<PodsContent />
+		</RouteGuard>
 	)
 }

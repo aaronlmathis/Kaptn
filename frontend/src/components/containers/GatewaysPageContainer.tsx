@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useCapabilities } from "@/hooks/use-capabilities"
 import { GatewaysDataTable } from "@/components/data_tables/GatewaysDataTable"
@@ -168,9 +167,5 @@ function GatewaysContent() {
 }
 
 export function GatewaysPageContainer() {
-	return (
-		<SharedProviders>
-			<GatewaysContent />
-		</SharedProviders>
-	)
+	return <GatewaysContent />
 }

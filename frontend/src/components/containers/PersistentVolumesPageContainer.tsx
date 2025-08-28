@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 
 import { PersistentVolumesDataTable } from "@/components/data_tables/PersistentVolumesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
@@ -111,9 +110,5 @@ function PersistentVolumesContent() {
 
 
 export function PersistentVolumesPageContainer() {
-	return (
-		<SharedProviders>
-			<PersistentVolumesContent />
-		</SharedProviders>
-	)
+	return <PersistentVolumesContent />
 }

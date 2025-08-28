@@ -412,3 +412,6 @@ config.production.yaml
 config.auth.yaml
 config.authdev.yaml
 CLAUDE.md
+.gocache
+unused/
+AGENTS.md

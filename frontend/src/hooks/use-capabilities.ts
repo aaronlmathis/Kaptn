@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CapabilitiesContext, type CapabilitiesContextType } from "@/contexts/capabilities-context"
+import { CapabilitiesContext, type CapabilitiesContextValue } from "@/contexts/capabilities-context"
 
 const DEFAULT_CAPABILITIES = {
 	'pods.list': true,
@@ -30,7 +30,7 @@ const DEFAULT_CAPABILITIES = {
 	'events.get': true,
 }
 
-export function useCapabilities(): CapabilitiesContextType {
+export function useCapabilities(): CapabilitiesContextValue {
 	const context = React.useContext(CapabilitiesContext)
 	if (context === undefined) {
 		// Fallback for SSR - assume all capabilities are allowed during build

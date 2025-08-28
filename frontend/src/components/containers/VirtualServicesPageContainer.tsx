@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useCapabilities } from "@/hooks/use-capabilities"
 import { VirtualServicesDataTable } from "@/components/data_tables/VirtualServicesDataTable"
@@ -165,9 +164,5 @@ function VirtualServicesContent() {
 }
 
 export function VirtualServicesPageContainer() {
-	return (
-		<SharedProviders>
-			<VirtualServicesContent />
-		</SharedProviders>
-	)
+	return <VirtualServicesContent />
 }

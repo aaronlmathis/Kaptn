@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { EventsDataTable } from "@/components/data_tables/EventsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useEventsWithWebSocket } from "@/hooks/useEventsWithWebSocket"
@@ -142,9 +141,5 @@ function EventsContent() {
 }
 
 export function EventsPageContainer() {
-	return (
-		<SharedProviders>
-			<EventsContent />
-		</SharedProviders>
-	)
+	return <EventsContent />
 }

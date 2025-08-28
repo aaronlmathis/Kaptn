@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { StatefulSetsPageContainer } from "@/components/containers/StatefulSetsPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "StatefulSets";
 ---
 
 <Layout title={title}>
-	<StatefulSetsPageContainer client:load />
+<AppShell client:load>
+  <StatefulSetsPageContainer />
+</AppShell>
 </Layout>

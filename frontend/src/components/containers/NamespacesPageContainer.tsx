@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { NamespacesDataTable } from "@/components/data_tables/NamespacesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useNamespacesWithWebSocket } from "@/hooks/useNamespacesWithWebSocket"
@@ -113,9 +112,5 @@ function NamespacesContent() {
 }
 
 export function NamespacesPageContainer() {
-	return (
-		<SharedProviders>
-			<NamespacesContent />
-		</SharedProviders>
-	)
+	return <NamespacesContent />
 }

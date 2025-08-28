@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { VolumeSnapshotsDataTable } from "@/components/data_tables/VolumeSnapshotsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useVolumeSnapshotsWithWebSocket } from "@/hooks/useVolumeSnapshotsWithWebSocket"
@@ -108,9 +107,5 @@ function VolumeSnapshotsContent() {
 }
 
 export function VolumeSnapshotsPageContainer() {
-	return (
-		<SharedProviders>
-			<VolumeSnapshotsContent />
-		</SharedProviders>
-	)
+	return <VolumeSnapshotsContent />
 }
