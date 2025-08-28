@@ -1,12 +1,53 @@
 "use client"
 
-import { useContext } from "react"
+import * as React from "react"
 import { CapabilitiesContext, type CapabilitiesContextType } from "@/contexts/capabilities-context"
 
+const DEFAULT_CAPABILITIES = {
+	'pods.list': true,
+	'pods.get': true,
+	'pods.create': true,
+	'pods.update': true,
+	'pods.patch': true,
+	'pods.delete': true,
+	'pods.logs': true,
+	'pods.exec': true,
+	'deployments.list': true,
+	'deployments.get': true,
+	'deployments.create': true,
+	'deployments.update': true,
+	'deployments.patch': true,
+	'deployments.delete': true,
+	'services.list': true,
+	'services.get': true,
+	'services.create': true,
+	'services.update': true,
+	'services.patch': true,
+	'services.delete': true,
+	'namespaces.list': true,
+	'namespaces.get': true,
+	'events.list': true,
+	'events.get': true,
+}
+
 export function useCapabilities(): CapabilitiesContextType {
-	const context = useContext(CapabilitiesContext)
-	if (!context) {
-		throw new Error("useCapabilities must be used within a CapabilitiesProvider")
+	const context = React.useContext(CapabilitiesContext)
+	if (context === undefined) {
+		// Fallback for SSR - assume all capabilities are allowed during build
+		if (typeof window === 'undefined') {
+			return {
+				capabilities: DEFAULT_CAPABILITIES,
+				isLoading: false,
+				error: null,
+				lastFetched: Date.now(),
+				refetch: async () => { },
+				fetchAdditional: async () => { },
+				isAllowed: () => true,
+				hasAnyCapability: () => true,
+				hasAllCapabilities: () => true,
+			}
+		}
+		throw new Error('useCapabilities must be used within a CapabilitiesProvider')
 	}
 	return context
 }

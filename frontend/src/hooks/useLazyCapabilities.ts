@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useCapabilities } from "@/hooks/useCapabilities"
+import { useCapabilities } from "@/hooks/use-capabilities"
 import type { CapabilityKey } from "@/lib/authz"
 
 /**

@@ -236,8 +236,8 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			KubeconfigPath:   getEnv("KUBECONFIG", ""),
 			NamespaceDefault: getEnv("KAPTN_NAMESPACE_DEFAULT", "default"),
 			InsecureTLS:      getEnvBool("KAPTN_KUBE_INSECURE_TLS", false),
-			QPS:              float32(getEnvInt("KAPTN_KUBE_QPS", 100)),    // Default 100 QPS
-			Burst:            getEnvInt("KAPTN_KUBE_BURST", 200),           // Default 200 burst
+			QPS:              float32(getEnvInt("KAPTN_KUBE_QPS", 100)), // Default 100 QPS
+			Burst:            getEnvInt("KAPTN_KUBE_BURST", 200),        // Default 200 burst
 		},
 		Features: FeaturesConfig{
 			EnableApply:               getEnvBool("KAPTN_ENABLE_APPLY", true),

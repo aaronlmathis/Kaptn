@@ -190,24 +190,24 @@ users:
 	}
 
 	tests := []struct {
-		name         string
-		qps          float32
-		burst        int
-		expectedQPS  float32
+		name          string
+		qps           float32
+		burst         int
+		expectedQPS   float32
 		expectedBurst int
 	}{
 		{
-			name:         "default rate limits",
-			qps:          0,
-			burst:        0,
-			expectedQPS:  5,   // Default client-go QPS
+			name:          "default rate limits",
+			qps:           0,
+			burst:         0,
+			expectedQPS:   5,  // Default client-go QPS
 			expectedBurst: 10, // Default client-go burst
 		},
 		{
-			name:         "custom rate limits",
-			qps:          100,
-			burst:        200,
-			expectedQPS:  100,
+			name:          "custom rate limits",
+			qps:           100,
+			burst:         200,
+			expectedQPS:   100,
 			expectedBurst: 200,
 		},
 	}

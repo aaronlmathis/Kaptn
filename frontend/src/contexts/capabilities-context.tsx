@@ -542,6 +542,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 			const data = await response.json()
 			console.log('🔍 Capabilities response data:', data)
 
+			console.log('🔍 Setting capabilities state to:', data.caps || {})
 			setState({
 				capabilities: data.caps || {},
 				isLoading: false,
@@ -611,7 +612,9 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 	}, [isAuthenticated, authMode, state.lastFetched, fetchCapabilities])
 
 	const isAllowed = React.useCallback((capability: CapabilityKey): boolean => {
-		return state.capabilities[capability] === true
+		const result = state.capabilities[capability] === true
+		console.log(`🔍 Checking capability "${capability}": ${result} (available caps:`, Object.keys(state.capabilities).length, ')')
+		return result
 	}, [state.capabilities])
 
 	const hasAnyCapability = React.useCallback((capabilities: CapabilityKey[]): boolean => {
