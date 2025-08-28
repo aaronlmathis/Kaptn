@@ -1,4 +1,4 @@
-# Kaptain
+# Kaptn
 
 Kaptn intends to be a secure, production-ready **Kubernetes admin dashboard** that can observe cluster state, track metrics, generate alerts+actions, render opentelemetry traces of web applications for visualizing issues, and perform safe operational actions. Built with Go backend (client-go + WebSockets) and Astro + React + Shadcn frontend (TypeScript + Tailwind CSS).
 
@@ -21,7 +21,10 @@ Features may be incomplete, and you may encounter bugs or breaking changes. It i
 
 ---
 
+Note: These screenshots are outdated. More to come soon.
+
 **Current Dashboard**
+
 
 Features live updates via kubernetes informer + websockets.
 
