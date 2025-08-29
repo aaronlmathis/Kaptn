@@ -76,13 +76,16 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { DataTableFilters } from "@/components/ui/data-table-filters"
+import { DataTableFilters, type BulkAction } from "@/components/ui/data-table-filters"
 import { JobDetailDrawer } from "@/components/viewers/JobDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useJobsWithWebSocket } from "@/hooks/useJobsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { jobSchema } from "@/lib/schemas/job"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -139,7 +142,8 @@ function getStatusBadge(status: string) {
 
 // Column definitions for jobs table
 const createColumns = (
-	onViewDetails: (job: z.infer<typeof jobSchema>) => void
+    onViewDetails: (job: z.infer<typeof jobSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof jobSchema>>[] => [
 		{
 			id: "drag",
@@ -172,21 +176,29 @@ const createColumns = (
 			enableSorting: false,
 			enableHiding: false,
 		},
-		{
-			accessorKey: "name",
-			header: "Job Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
-			enableHiding: false,
-		},
+    {
+        accessorKey: "name",
+        header: "Job Name",
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="jobs.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
+        enableHiding: false,
+    },
 		{
 			accessorKey: "namespace",
 			header: "Namespace",
@@ -231,57 +243,58 @@ const createColumns = (
 				</div>
 			),
 		},
-		{
-			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="Job"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart Job
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
+    {
+        id: "actions",
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                    <IfAllowed feature="jobs.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="jobs.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <ResourceYamlEditor resourceName={row.original.name} namespace={row.original.namespace} resourceKind="Job">
+                            <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer" style={{ background: 'transparent', border: 'none', textAlign: 'left' }}>
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+                    <IfAllowed feature="jobs.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconRefresh className="size-4 mr-2" />Restart Job</DropdownMenuItem>}>
+                        <DropdownMenuItem>
+                            <IconRefresh className="size-4 mr-2" />
+                            Restart Job
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="jobs.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => { const j = row.original; console.log('Export YAML for Job:', `${j.name} in ${j.namespace}`) }}>
+                            <IconDownload className="size-4 mr-2" />
+                            Export YAML
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <DropdownMenuSeparator />
+                    <IfAllowed feature="jobs.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
 	]
 
 // Draggable row component
@@ -317,8 +330,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof jobSchema>> }) {
 }
 
 export function JobsDataTable() {
-	const { data: jobs, loading, error, refetch, isConnected } = useJobsWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: jobs, loading, error, refetch, isConnected } = useJobsWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -338,10 +352,10 @@ export function JobsDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	// Create filter options for job statuses
 	const jobStatuses = React.useMemo(() => {
@@ -397,57 +411,60 @@ export function JobsDataTable() {
 		},
 	})
 
-	// Bulk actions for jobs
-	const bulkActions = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export to YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedRowModel = table.getFilteredSelectedRowModel()
-				const yamlContent = selectedRowModel.rows.map((row: any) => row.original).map((job: any) => `---\n${JSON.stringify(job, null, 2)}`).join('\n')
-				const blob = new Blob([yamlContent], { type: 'text/yaml' })
-				const url = URL.createObjectURL(blob)
-				const a = document.createElement('a')
-				a.href = url
-				a.download = `jobs-${new Date().toISOString().split('T')[0]}.yaml`
-				document.body.appendChild(a)
-				a.click()
-				document.body.removeChild(a)
-				URL.revokeObjectURL(url)
-			}
-		},
-		{
-			id: "copy-names",
-			label: "Copy Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedRowModel = table.getFilteredSelectedRowModel()
-				const names = selectedRowModel.rows.map((row: any) => row.original.name).join('\n')
-				navigator.clipboard.writeText(names)
-			}
-		},
-		{
-			id: "get-logs",
-			label: "Get Logs",
-			icon: <IconFileText className="size-4" />,
-			action: () => {
-				const selectedRowModel = table.getFilteredSelectedRowModel()
-				console.log("Getting logs for jobs:", selectedRowModel.rows.map((row: any) => row.original.name))
-				// TODO: Implement bulk log retrieval
-			}
-		},
-		{
-			id: "describe-jobs",
-			label: "Describe Jobs",
-			icon: <IconInfoCircle className="size-4" />,
-			action: () => {
-				const selectedRowModel = table.getFilteredSelectedRowModel()
-				console.log("Describing jobs:", selectedRowModel.rows.map((row: any) => row.original.name))
-				// TODO: Implement bulk job describe
-			}
-		}
-	], [table])
+    // Bulk actions (capability-aware)
+    const { isAllowed } = useAuthzCapabilitiesInContext(['jobs.get','jobs.patch','jobs.delete'])
+    const bulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+        if (isAllowed('jobs.get')) {
+            actions.push({
+                id: 'export-yaml',
+                label: 'Export Selected as YAML',
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Export YAML for jobs:', selected.map(j => j.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: 'copy-names',
+            label: 'Copy Job Names',
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                const names = selected.map(j => j.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('jobs.patch')) {
+            actions.push({
+                id: 'restart-jobs',
+                label: 'Restart Selected Jobs',
+                icon: <IconRefresh className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Restart jobs:', selected.map(j => `${j.name} in ${j.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+        if (isAllowed('jobs.delete')) {
+            actions.push({
+                id: 'delete-jobs',
+                label: 'Delete Selected Jobs',
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Delete jobs:', selected.map(j => `${j.name} in ${j.namespace}`))
+                },
+                variant: 'destructive' as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(

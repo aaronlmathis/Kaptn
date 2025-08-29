@@ -12,10 +12,25 @@ import {
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
 import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 // Inner component that can access the namespace context
 function DeploymentsContent() {
 	const { data: deployments, loading: isLoading, error, isConnected } = useDeploymentsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+	const { fetchAdditional } = useCapabilities()
+
+	// Ensure deployment-specific action capabilities are requested (default is conservative)
+	React.useEffect(() => {
+		fetchAdditional([
+			'deployments.get',
+			'deployments.patch', // edit YAML / rollout changes
+			'deployments.delete',
+			'deployments.restart',
+			'deployments.scale.update',
+		]).catch(() => { /* noop */ })
+		// run once on mount
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when deployments change
 	React.useEffect(() => {

@@ -16,6 +16,8 @@ import {
 import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 import { useCronJobDetails } from "@/hooks/use-resource-details"
 import { cronJobSchema } from "@/lib/schemas/cronjob"
 
@@ -49,6 +51,7 @@ interface CronJobDetailDrawerProps {
  */
 export function CronJobDetailDrawer({ item, open, onOpenChange }: CronJobDetailDrawerProps) {
 	const isMobile = useIsMobile()
+	const { clusterId } = useCluster()
 
 	// Fetch detailed cronjob information
 	const { data: cronJobDetails, loading, error } = useCronJobDetails(item.namespace, item.name, open)
@@ -131,6 +134,7 @@ export function CronJobDetailDrawer({ item, open, onOpenChange }: CronJobDetailD
 
 	const actions = (
 		<>
+			<IfAllowed feature="cronjobs.patch" cluster={clusterId} namespace={item.namespace} resourceName={item.name}>
 			<Button
 				size="sm"
 				className="w-full"
@@ -149,10 +153,14 @@ export function CronJobDetailDrawer({ item, open, onOpenChange }: CronJobDetailD
 					</>
 				)}
 			</Button>
+			</IfAllowed>
+			<IfAllowed feature="jobs.create" cluster={clusterId} namespace={item.namespace} resourceName={item.name}>
 			<Button size="sm" variant="outline" className="w-full" onClick={handleTriggerJob}>
 				<IconRefresh className="size-4 mr-2" />
 				Trigger Job Now
 			</Button>
+			</IfAllowed>
+			<IfAllowed feature="cronjobs.patch" cluster={clusterId} namespace={item.namespace} resourceName={item.name}>
 			<ResourceYamlEditor
 				resourceName={item.name}
 				namespace={item.namespace}
@@ -163,6 +171,7 @@ export function CronJobDetailDrawer({ item, open, onOpenChange }: CronJobDetailD
 					Edit YAML
 				</Button>
 			</ResourceYamlEditor>
+			</IfAllowed>
 		</>
 	)
 

@@ -10,11 +10,24 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function DaemonSetsContent() {
-	const { data: daemonSets, loading: isLoading, error, isConnected } = useDaemonSetsWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: daemonSets, loading: isLoading, error, isConnected } = useDaemonSetsWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    // Ensure daemonset-specific action capabilities are requested
+    React.useEffect(() => {
+        fetchAdditional([
+            'daemonsets.get',
+            'daemonsets.patch',
+            'daemonsets.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when daemonSets change
 	React.useEffect(() => {
@@ -138,5 +151,9 @@ function DaemonSetsContent() {
 }
 
 export function DaemonSetsPageContainer() {
-	return <DaemonSetsContent />
+    return (
+        <RouteGuard requiredCapabilities={["daemonsets.list"]} requireAll={false}>
+            <DaemonSetsContent />
+        </RouteGuard>
+    )
 }

@@ -16,6 +16,8 @@ import {
 import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 import { useDeploymentDetails } from "@/hooks/use-resource-details"
 
 // Import the deployment schema from the main dashboard component
@@ -33,6 +35,7 @@ interface DeploymentDetailDrawerProps {
  */
 export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentDetailDrawerProps) {
 	const isMobile = useIsMobile()
+	const { clusterId } = useCluster()
 
 	// Fetch detailed deployment information
 	const { data: deploymentDetails, loading, error } = useDeploymentDetails(item.namespace, item.name, open)
@@ -132,24 +135,45 @@ export function DeploymentDetailDrawer({ item, open, onOpenChange }: DeploymentD
 
 	const actions = (
 		<>
-			<Button size="sm" className="w-full">
-				<IconRefresh className="size-4 mr-2" />
-				Scale Deployment
-			</Button>
-			<Button variant="destructive" size="sm" className="w-full">
-				<IconRefresh className="size-4 mr-2" />
-				Restart Deployment
-			</Button>
-			<ResourceYamlEditor
-				resourceName={item.name}
+			<IfAllowed
+				feature="deployments.scale.update"
+				cluster={clusterId}
 				namespace={item.namespace}
-				resourceKind="Deployment"
+				resourceName={item.name}
 			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
+				<Button size="sm" className="w-full">
+					<IconRefresh className="size-4 mr-2" />
+					Scale Deployment
 				</Button>
-			</ResourceYamlEditor>
+			</IfAllowed>
+			<IfAllowed
+				feature="deployments.restart"
+				cluster={clusterId}
+				namespace={item.namespace}
+				resourceName={item.name}
+			>
+				<Button variant="destructive" size="sm" className="w-full">
+					<IconRefresh className="size-4 mr-2" />
+					Restart Deployment
+				</Button>
+			</IfAllowed>
+			<IfAllowed
+				feature="deployments.patch"
+				cluster={clusterId}
+				namespace={item.namespace}
+				resourceName={item.name}
+			>
+				<ResourceYamlEditor
+					resourceName={item.name}
+					namespace={item.namespace}
+					resourceKind="Deployment"
+				>
+					<Button variant="outline" size="sm" className="w-full">
+						<IconEdit className="size-4 mr-2" />
+						Edit YAML
+					</Button>
+				</ResourceYamlEditor>
+			</IfAllowed>
 		</>
 	)
 

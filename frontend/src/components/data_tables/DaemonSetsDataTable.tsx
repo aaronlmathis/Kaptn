@@ -82,6 +82,9 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useDaemonSetsWithWebSocket } from "@/hooks/useDaemonSetsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { daemonSetSchema } from "@/lib/schemas/daemonset"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 import { z } from "zod"
 
 // Drag handle component
@@ -135,7 +138,8 @@ function getReadyBadge(ready: number, desired: number) {
 
 // Column definitions for daemonsets table
 const createColumns = (
-	onViewDetails: (daemonSet: z.infer<typeof daemonSetSchema>) => void
+    onViewDetails: (daemonSet: z.infer<typeof daemonSetSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof daemonSetSchema>>[] => [
 		{
 			id: "drag",
@@ -168,21 +172,29 @@ const createColumns = (
 			enableSorting: false,
 			enableHiding: false,
 		},
-		{
-			accessorKey: "name",
-			header: "DaemonSet Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
-			enableHiding: false,
-		},
+    {
+        accessorKey: "name",
+        header: "DaemonSet Name",
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="daemonsets.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
+        enableHiding: false,
+    },
 		{
 			accessorKey: "namespace",
 			header: "Namespace",
@@ -241,58 +253,97 @@ const createColumns = (
 				<div className="text-sm">{row.original.updateStrategy}</div>
 			),
 		},
-		{
-			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="DaemonSet"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+    {
+        id: "actions",
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                    <IfAllowed
+                        feature="daemonsets.get"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                    >
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed
+                        feature="daemonsets.patch"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                    >
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="DaemonSet"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+                    <IfAllowed
+                        feature="daemonsets.patch"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={<DropdownMenuItem disabled><IconRefresh className="size-4 mr-2" />Restart</DropdownMenuItem>}
+                    >
+                        <DropdownMenuItem>
+                            <IconRefresh className="size-4 mr-2" />
+                            Restart
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed
+                        feature="daemonsets.get"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                    >
+                        <DropdownMenuItem onClick={() => {
+                            const ds = row.original;
+                            console.log('Export YAML for DaemonSet:', `${ds.name} in ${ds.namespace}`);
+                            // TODO: Implement single-item YAML export
+                        }}>
+                            <IconDownload className="size-4 mr-2" />
+                            Export YAML
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <DropdownMenuSeparator />
+                    <IfAllowed
+                        feature="daemonsets.delete"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+                    >
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof daemonSetSchema>> }) {
@@ -327,8 +378,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof daemonSetSchema>> }) {
 }
 
 export function DaemonSetsDataTable() {
-	const { data: daemonSets, loading, error, refetch, isConnected } = useDaemonSetsWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: daemonSets, loading, error, refetch, isConnected } = useDaemonSetsWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -339,17 +391,17 @@ export function DaemonSetsDataTable() {
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedDaemonSetForDetails, setSelectedDaemonSetForDetails] = React.useState<z.infer<typeof daemonSetSchema> | null>(null)
 
-	// Handle opening detail drawer
-	const handleViewDetails = React.useCallback((daemonSet: z.infer<typeof daemonSetSchema>) => {
-		setSelectedDaemonSetForDetails(daemonSet)
-		setDetailDrawerOpen(true)
-	}, [])
+    // Handle opening detail drawer
+    const handleViewDetails = React.useCallback((daemonSet: z.infer<typeof daemonSetSchema>) => {
+        setSelectedDaemonSetForDetails(daemonSet)
+        setDetailDrawerOpen(true)
+    }, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	// Create readiness status options based on daemon set state
 	const daemonSetStatuses: FilterOption[] = React.useMemo(() => {
@@ -365,6 +417,7 @@ export function DaemonSetsDataTable() {
 				statuses.add("Not Ready")
 			}
 		})
+
 		return Array.from(statuses).sort().map(status => ({
 			value: status,
 			label: status,
@@ -380,8 +433,16 @@ export function DaemonSetsDataTable() {
 					{status}
 				</Badge>
 			)
-		}))
-	}, [daemonSets])
+			}))
+		}, [daemonSets])
+
+	// Bulk actions filtered by capabilities
+	const { isAllowed } = useAuthzCapabilitiesInContext([
+		'daemonsets.get',
+		'daemonsets.patch',
+		'daemonsets.delete',
+		'pods.logs',
+	])
 
 	// Filter data based on global filter and status filter
 	const filteredData = React.useMemo(() => {
@@ -432,77 +493,66 @@ export function DaemonSetsDataTable() {
 		},
 	})
 
-	// Bulk actions for daemon sets
-	const daemonSetBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for daemon sets:', selectedDaemonSets.map(ds => ds.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-names",
-			label: "Copy DaemonSet Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedDaemonSets.map(ds => ds.name).join('\n')
-				navigator.clipboard.writeText(names)
-				console.log('Copied daemon set names:', names)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "restart-daemonsets",
-			label: "Restart Selected DaemonSets",
-			icon: <IconRefresh className="size-4" />,
-			action: () => {
-				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Restart daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
-				// TODO: Implement bulk daemon set restart
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "get-logs",
-			label: "Get Logs for Selected",
-			icon: <IconFileText className="size-4" />,
-			action: () => {
-				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Get logs for daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
-				// TODO: Implement bulk log retrieval
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "describe-daemonsets",
-			label: "Describe Selected DaemonSets",
-			icon: <IconInfoCircle className="size-4" />,
-			action: () => {
-				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Describe daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
-				// TODO: Implement bulk daemon set describe
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-daemonsets",
-			label: "Delete Selected DaemonSets",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
-				// TODO: Implement bulk deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+    // Bulk actions for daemon sets (capability-aware)
+    const daemonSetBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+
+        if (isAllowed('daemonsets.get')) {
+            actions.push({
+                id: "export-yaml",
+                label: "Export Selected as YAML",
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Export YAML for daemon sets:', selectedDaemonSets.map(ds => ds.name))
+                },
+                requiresSelection: true,
+            })
+        }
+
+        actions.push({
+            id: "copy-names",
+            label: "Copy DaemonSet Names",
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                const names = selectedDaemonSets.map(ds => ds.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+
+        if (isAllowed('daemonsets.patch')) {
+            actions.push({
+                id: "restart-daemonsets",
+                label: "Restart Selected DaemonSets",
+                icon: <IconRefresh className="size-4" />,
+                action: () => {
+                    const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Restart daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+
+        // Align row and bulk menus: omit logs/describe for now
+
+        if (isAllowed('daemonsets.delete')) {
+            actions.push({
+                id: "delete-daemonsets",
+                label: "Delete Selected DaemonSets",
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selectedDaemonSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Delete daemon sets:', selectedDaemonSets.map(ds => `${ds.name} in ${ds.namespace}`))
+                },
+                variant: "destructive" as const,
+                requiresSelection: true,
+            })
+        }
+
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -515,9 +565,9 @@ export function DaemonSetsDataTable() {
 		daemonSets.map((daemonSet) => daemonSet.id)
 	)
 
-	React.useEffect(() => {
-		setSortableIds(daemonSets.map((daemonSet) => daemonSet.id))
-	}, [daemonSets])
+    React.useEffect(() => {
+        setSortableIds(daemonSets.map((daemonSet) => daemonSet.id))
+    }, [daemonSets])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
