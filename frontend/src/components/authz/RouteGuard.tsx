@@ -28,15 +28,13 @@ export function RouteGuard({
   const { isAuthenticated, authMode, isLoading: authLoading } = useAuth();
   const { isLoading: capabilitiesLoading, error, isAllowed } = useAuthzCapabilitiesInContext(requiredCapabilities);
 
-  // Debug logging
-  console.log('🛡️ RouteGuard debug:', {
-    isAuthenticated,
-    authMode,
-    authLoading,
-    capabilitiesLoading,
-    error,
-    capabilities: isAllowed('pods.list'),
-  });
+  // Dev-only logging helpers
+  const IS_DEV = (import.meta as any)?.env?.DEV === true;
+  const devLog = (...args: unknown[]) => { if (IS_DEV) console.log(...args); };
+  const devWarn = (...args: unknown[]) => { if (IS_DEV) console.warn(...args); };
+
+  // Dev-only debug logging
+  devLog('[route-guard] state', { isAuthenticated, authMode, authLoading, capabilitiesLoading, hasPodsList: isAllowed('pods.list') });
 
   // Show loading state while auth is initializing OR capabilities are loading
   if (authLoading || capabilitiesLoading) {
@@ -55,7 +53,7 @@ export function RouteGuard({
 
   // Check authentication first (only after auth has finished loading)
   if (!isAuthenticated) {
-    console.log('🛡️ RouteGuard: Redirecting to login - not authenticated');
+    devLog('[route-guard] redirecting to login (unauthenticated)');
     // Redirect to login
     if (typeof window !== 'undefined') {
       window.location.href = '/login';
@@ -65,7 +63,7 @@ export function RouteGuard({
 
   // On error, show error state
   if (error) {
-    console.warn(`Route authorization check failed:`, error);
+    devWarn('[route-guard] authorization check failed');
     return fallback ? (
       <>{fallback}</>
     ) : (
@@ -86,15 +84,7 @@ export function RouteGuard({
     ? requiredCapabilities.every(capability => isAllowed(capability))
     : requiredCapabilities.some(capability => isAllowed(capability));
 
-  console.log('🛡️ RouteGuard access check:', {
-    requiredCapabilities,
-    requireAll,
-    hasAccess,
-    capabilities: requiredCapabilities.reduce((acc, cap) => {
-      acc[cap] = isAllowed(cap);
-      return acc;
-    }, {} as Record<string, boolean>)
-  });
+  devLog('[route-guard] access check', { requiredCapabilities, requireAll, hasAccess });
 
   if (!hasAccess) {
     return fallback ? (

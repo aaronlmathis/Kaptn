@@ -27,6 +27,12 @@ export { CapabilitiesContext }
 
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
+// Dev-only logging helpers
+const IS_DEV = (import.meta as any)?.env?.DEV === true
+const devLog = (...args: unknown[]) => { if (IS_DEV) console.log(...args) }
+const devWarn = (...args: unknown[]) => { if (IS_DEV) console.warn(...args) }
+const devError = (...args: unknown[]) => { if (IS_DEV) console.error(...args) }
+
 const DEFAULT_CAPABILITIES = {
 	// Dashboard capabilities
 	'dashboard.view': true,
@@ -520,7 +526,8 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				]
 			}
 
-			console.log('🔍 Fetching core capabilities (fast load):', requestBody)
+
+			devLog('[capabilities] Fetching core capabilities (fast load)')
 
 			const response = await fetchWithAuth('/api/v1/authz/capabilities', {
 				method: 'POST',
@@ -530,18 +537,18 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				body: JSON.stringify(requestBody),
 			})
 
-			console.log('🔍 Capabilities response status:', response.status, response.statusText)
+			devLog('[capabilities] Response status:', response.status, response.statusText)
 
 			if (!response.ok) {
 				const errorText = await response.text()
-				console.error('🔍 Capabilities error response:', errorText)
+				devError('[capabilities] Error response')
 				throw new Error(`Failed to fetch capabilities: ${response.statusText} - ${errorText}`)
 			}
 
 			const data = await response.json()
-			console.log('🔍 Capabilities response data:', data)
+			devLog('[capabilities] Response received')
 
-			console.log('🔍 Setting capabilities state to:', data.caps || {})
+			devLog('[capabilities] Setting capabilities state')
 			setState({
 				capabilities: data.caps || {},
 				isLoading: false,
@@ -549,7 +556,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				lastFetched: Date.now(),
 			})
 		} catch (error) {
-			console.error('🔍 Failed to fetch capabilities:', error)
+			devError('[capabilities] Failed to fetch capabilities')
 			setState(prev => ({
 				...prev,
 				isLoading: false,
@@ -587,7 +594,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				}))
 			}
 		} catch (error) {
-			console.warn('Failed to fetch additional capabilities:', error)
+			devWarn('[capabilities] Failed to fetch additional capabilities')
 		}
 	}, [isAuthenticated, authMode, fetchWithAuth])
 
@@ -612,7 +619,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 
 	const isAllowed = React.useCallback((capability: CapabilityKey): boolean => {
 		const result = state.capabilities[capability] === true
-		console.log(`🔍 Checking capability "${capability}": ${result} (available caps:`, Object.keys(state.capabilities).length, ')')
+		devLog(`[capabilities] Check "${capability}": ${result}`)
 		return result
 	}, [state.capabilities])
 

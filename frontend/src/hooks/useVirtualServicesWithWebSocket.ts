@@ -17,24 +17,29 @@ export function useVirtualServicesWithWebSocket(enableWebSocket: boolean = true)
 			? "/api/v1/istio/virtualservices"
 			: `/api/v1/istio/virtualservices?namespace=${selectedNamespace}`;
 
-		const response = await fetch(url);
-		if (!response.ok) {
-			throw new Error(`Failed to fetch virtual services: ${response.statusText}`);
-		}
+    const response = await fetch(url);
+    if (!response.ok) {
+        if (response.status === 404) {
+            // Treat 404 as empty dataset for UX parity (show empty table/cards)
+            return [] as z.infer<typeof virtualServiceSchema>[];
+        }
+        throw new Error(`Failed to fetch virtual services: ${response.statusText}`);
+    }
 
-		const result = await response.json();
-		if (result.status === 'success') {
-			return result.data.items.map((item: VirtualServiceApiItem, index: number) => ({
-				id: index + 1,
-				name: item.name,
-				namespace: item.namespace,
-				gateways: item.gateways || [],
-				hosts: item.hosts || [],
-				age: item.age || 'Unknown',
-			}));
-		} else {
-			throw new Error(result.error || 'Failed to fetch virtual services');
-		}
+    const result = await response.json();
+    if (result.status === 'success') {
+        const items: VirtualServiceApiItem[] = Array.isArray(result?.data?.items) ? result.data.items : [];
+        return items.map((item: VirtualServiceApiItem, index: number) => ({
+            id: index + 1,
+            name: item.name,
+            namespace: item.namespace,
+            gateways: item.gateways || [],
+            hosts: item.hosts || [],
+            age: item.age || 'Unknown',
+        }));
+    } else {
+        throw new Error(result.error || 'Failed to fetch virtual services');
+    }
 	}, [selectedNamespace]);
 
 	// WebSocket data transformer

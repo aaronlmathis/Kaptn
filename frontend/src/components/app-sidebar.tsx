@@ -20,12 +20,12 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } fr
 import { Separator } from "./ui/separator";
 import { AppLogo } from "@/components/AppLogo";
 import { useNavigation } from "@/contexts/navigation-context";
-import { useCapabilities } from "@/hooks/use-capabilities";
+import { useClusterFeatures } from "@/contexts/cluster-features-context";
 import { useAuth } from "@/contexts/auth-context";
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { isMenuExpanded } = useNavigation();
-  const { capabilities } = useCapabilities();
+  const { istioInstalled, istioUsed, istio } = useClusterFeatures();
   const { user } = useAuth();
 
 
@@ -47,12 +47,16 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       ],
     };
 
-    // Add Istio items if installed and in use
-    if (capabilities?.istio?.installed && capabilities?.istio?.used) {
-      servicesNav.items.push(
-        { title: "Virtual Services", url: "/virtual-services" },
-        { title: "Gateways", url: "/gateways" }
-      );
+    // Add Istio items if installed and resource present (per-item gating)
+    if (istioInstalled) {
+      const vsCount = istio?.counts?.virtualservices ?? 0;
+      const gwCount = istio?.counts?.gateways ?? 0;
+      if (vsCount > 0) {
+        servicesNav.items.push({ title: "Virtual Services", url: "/virtual-services" });
+      }
+      if (gwCount > 0) {
+        servicesNav.items.push({ title: "Gateways", url: "/gateways" });
+      }
     }
 
     // Unified navigation items combining main and secondary navigation
