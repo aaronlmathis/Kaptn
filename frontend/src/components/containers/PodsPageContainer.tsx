@@ -5,6 +5,7 @@ import { RouteGuard } from "@/components/authz"
 import { PodsDataTable } from "@/components/data_tables/PodsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { usePodsWithWebSocket } from "@/hooks/usePodsWithWebSocket"
+import { useCapabilities } from "@/hooks/use-capabilities"
 import {
 	getPodStatusBadge,
 	getPodPhaseBadge,
@@ -16,6 +17,20 @@ import {
 function PodsContent() {
 	const { data: pods, loading: isLoading, error, isConnected } = usePodsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+	const { fetchAdditional } = useCapabilities()
+
+	// Ensure pod-specific action capabilities are requested (default is conservative)
+	React.useEffect(() => {
+		fetchAdditional([
+			'pods.get',
+			'pods.patch', // restart
+			'pods.delete',
+			'pods.logs',
+			'pods.exec',
+		]).catch(() => { /* noop */ })
+		// run once on mount
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when pods change
 	React.useEffect(() => {

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple";
 import { useAuth } from "@/contexts/auth-context";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import type { CapabilityKey } from "@/lib/authz";
 import { LoadingBar } from "@/components/ui/loading-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -27,6 +28,7 @@ export function RouteGuard({
 }: RouteGuardProps) {
   const { isAuthenticated, authMode, isLoading: authLoading } = useAuth();
   const { isLoading: capabilitiesLoading, error, isAllowed } = useAuthzCapabilitiesInContext(requiredCapabilities);
+  const { fetchAdditional } = useCapabilities();
 
   // Dev-only logging helpers
   const IS_DEV = (import.meta as any)?.env?.DEV === true;
@@ -35,6 +37,16 @@ export function RouteGuard({
 
   // Dev-only debug logging
   devLog('[route-guard] state', { isAuthenticated, authMode, authLoading, capabilitiesLoading, hasPodsList: isAllowed('pods.list') });
+
+  // Ensure required capabilities are requested explicitly on mount (fast-path fetch is minimal)
+  React.useEffect(() => {
+    if (requiredCapabilities && requiredCapabilities.length > 0) {
+      // Fire and forget; backend ignores unknown capability keys safely
+      fetchAdditional(requiredCapabilities as unknown as string[]).catch(() => { /* noop */ });
+    }
+    // Only run on first mount for this set of requirements
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Show loading state while auth is initializing OR capabilities are loading
   if (authLoading || capabilitiesLoading) {

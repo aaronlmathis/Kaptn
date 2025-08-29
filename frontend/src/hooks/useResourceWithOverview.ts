@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNamespace } from '@/contexts/namespace-context';
 import { useOverviewWebSocket, type OverviewWebSocketEvent } from './useOverviewWebSocket';
+import { useCapabilities } from '@/hooks/use-capabilities';
 
 export interface UseResourceWithOverviewOptions<T> {
 	/**
@@ -60,6 +61,7 @@ export function useResourceWithOverview<T>(
 
     const { isConnected, subscribe } = useOverviewWebSocket({ debug });
     const { selectedNamespace } = useNamespace();
+    const { fetchAdditional } = useCapabilities();
 
 	const log = useCallback((message: string, ...args: any[]) => {
 		if (debug) {
@@ -186,6 +188,18 @@ export function useResourceWithOverview<T>(
 			unsubscribe();
 		};
 	}, [subscribe, resource, handleOverviewEvent, log]);
+
+    // Ensure minimal capabilities for this resource (fast-path defaults are conservative)
+    useEffect(() => {
+        const baseCaps = [
+            `${resource}.list`,
+            `${resource}.watch`,
+        ];
+        // Fire-and-forget; backend will ignore unknown keys
+        fetchAdditional(baseCaps).catch(() => { /* noop */ });
+        // Only when resource changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resource]);
 
 	// Fetch initial data when dependencies change
 	useEffect(() => {
