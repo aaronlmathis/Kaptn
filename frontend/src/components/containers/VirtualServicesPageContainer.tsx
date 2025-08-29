@@ -1,9 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
-import { useCapabilities } from "@/hooks/use-capabilities"
+import { useClusterFeatures } from "@/contexts/cluster-features-context"
 import { VirtualServicesDataTable } from "@/components/data_tables/VirtualServicesDataTable"
 import { useVirtualServicesWithWebSocket } from "@/hooks/useVirtualServicesWithWebSocket"
 import {
@@ -15,13 +14,13 @@ import {
 
 // Inner component that can access the namespace context
 function VirtualServicesContent() {
-	const { capabilities } = useCapabilities()
+	const { istioInstalled, istio, loading: featuresLoading } = useClusterFeatures()
 	const { data: virtualServices, loading: isLoading, error, isConnected } = useVirtualServicesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 
 	// Update lastUpdated when virtual services change
 	React.useEffect(() => {
-		if (virtualServices.length > 0) {
+		if ((virtualServices?.length ?? 0) > 0) {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [virtualServices])
@@ -91,8 +90,9 @@ function VirtualServicesContent() {
 		]
 	}, [virtualServices])
 
-	// Show message if Istio is not available
-	if (!capabilities?.istio?.installed || !capabilities?.istio?.used) {
+	// Show message if Istio is not available (after features load)
+	const vsCount = istio?.counts?.virtualservices ?? 0
+	if (!featuresLoading && (!istioInstalled || vsCount === 0)) {
 		return (
 			<div className="space-y-6">
 				<div className="px-4 lg:px-6">
@@ -100,20 +100,13 @@ function VirtualServicesContent() {
 						<div className="space-y-2">
 							<div className="flex items-center gap-2">
 								<h1 className="text-2xl font-bold tracking-tight">Virtual Services</h1>
-								<p className="text-muted-foreground">
-									Istio virtual services are not available in this cluster
-								</p>
+								<p className="text-muted-foreground">Istio virtual services are not available in this cluster</p>
 							</div>
 						</div>
 						<div className="flex items-center justify-center p-8">
 							<div className="text-center space-y-2">
 								<h3 className="text-lg font-medium">Istio Not Available</h3>
-								<p className="text-muted-foreground">
-									{!capabilities?.istio?.installed
-										? "Istio is not installed in this cluster"
-										: "Istio is installed but no virtual services are configured"
-									}
-								</p>
+								<p className="text-muted-foreground">{!istioInstalled ? "Istio is not installed in this cluster" : "Istio is installed but no virtual services are configured"}</p>
 							</div>
 						</div>
 					</div>
@@ -151,9 +144,9 @@ function VirtualServicesContent() {
 
 			{/* Summary Cards */}
 			<SummaryCards
-				cards={summaryData}
+				cards={summaryData || []}
 				loading={isLoading}
-				error={error}
+				error={(virtualServices?.length ?? 0) === 0 ? null : error}
 				lastUpdated={lastUpdated}
 			/>
 
@@ -165,9 +158,5 @@ function VirtualServicesContent() {
 }
 
 export function VirtualServicesPageContainer() {
-	return (
-		<SharedProviders>
-			<VirtualServicesContent />
-		</SharedProviders>
-	)
+	return <VirtualServicesContent />
 }

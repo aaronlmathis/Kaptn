@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { SecretsDataTable } from "@/components/data_tables/SecretsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useSecretsWithWebSocket } from "@/hooks/useSecretsWithWebSocket"
@@ -196,9 +195,5 @@ function SecretsContent() {
 }
 
 export function SecretsPageContainer() {
-	return (
-		<SharedProviders>
-			<SecretsContent />
-		</SharedProviders>
-	)
+	return <SecretsContent />
 }

@@ -1,10 +1,13 @@
 ---
 import { MetricExplorerContainer } from "@/components/metric-explorer-container";
 import Layout from "@/layouts/dashboard.astro";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Metric Explorer";
 ---
 
 <Layout title={title}>
-	<MetricExplorerContainer client:load />
+<AppShell client:load>
+  <MetricExplorerContainer />
+</AppShell>
 </Layout>

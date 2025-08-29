@@ -1,10 +1,14 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { RolesPageContainer } from "@/components/containers/RolesPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Roles & Role Bindings";
 ---
 
 <Layout title={title}>
-	<RolesPageContainer client:load />
+	<AppShell client:load>
+		<RolesPageContainer />
+	</AppShell>
+
 </Layout>

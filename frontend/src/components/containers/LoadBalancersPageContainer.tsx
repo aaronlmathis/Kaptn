@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { LoadBalancersDataTable } from "@/components/data_tables/LoadBalancersDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useLoadBalancersWithWebSocket } from "@/hooks/useLoadBalancersWithWebSocket"
@@ -140,9 +139,5 @@ function LoadBalancersContent() {
 }
 
 export function LoadBalancersPageContainer() {
-	return (
-		<SharedProviders>
-			<LoadBalancersContent />
-		</SharedProviders>
-	)
+	return <LoadBalancersContent />
 }

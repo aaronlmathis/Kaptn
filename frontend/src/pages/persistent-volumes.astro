@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { PersistentVolumesPageContainer } from "@/components/containers/PersistentVolumesPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Persistent Volumes";
 ---
 
 <Layout title={title}>
-	<PersistentVolumesPageContainer client:load />
+<AppShell client:load>
+  <PersistentVolumesPageContainer />
+</AppShell>
 </Layout>

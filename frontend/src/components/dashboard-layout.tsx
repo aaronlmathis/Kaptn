@@ -4,7 +4,6 @@ import * as React from "react"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
-import { SharedProviders } from "@/components/shared-providers"
 
 interface DashboardLayoutProps {
 	children: React.ReactNode
@@ -18,8 +17,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 	}, []);
 
 	return (
-		<SharedProviders>
-			<div
+		<div
 				className="sidebar-layout"
 				style={{
 					"--sidebar-width": "calc(var(--spacing) * 72)",
@@ -53,6 +51,5 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 					</div>
 				)}
 			</div>
-		</SharedProviders>
 	)
 }

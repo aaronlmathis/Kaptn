@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useClusterRolesWithWebSocket } from "@/hooks/useClusterRolesWithWebSocket"
 import { useClusterRoleBindingsWithWebSocket } from "@/hooks/useClusterRoleBindingsWithWebSocket"
@@ -177,9 +176,5 @@ function ClusterRolesContent() {
 }
 
 export function ClusterRolesPageContainer() {
-	return (
-		<SharedProviders>
-			<ClusterRolesContent />
-		</SharedProviders>
-	)
+	return <ClusterRolesContent />
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { NetworkPoliciesDataTable } from "@/components/data_tables/NetworkPoliciesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useNetworkPoliciesWithWebSocket } from "@/hooks/useNetworkPoliciesWithWebSocket"
@@ -138,9 +137,5 @@ function NetworkPoliciesContent() {
 }
 
 export function NetworkPoliciesPageContainer() {
-	return (
-		<SharedProviders>
-			<NetworkPoliciesContent />
-		</SharedProviders>
-	)
+	return <NetworkPoliciesContent />
 }

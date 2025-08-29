@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { JobsDataTable } from "@/components/data_tables/JobsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useJobsWithWebSocket } from "@/hooks/useJobsWithWebSocket"
@@ -132,9 +131,5 @@ function JobsContent() {
 }
 
 export function JobsPageContainer() {
-	return (
-		<SharedProviders>
-			<JobsContent />
-		</SharedProviders>
-	)
+	return <JobsContent />
 }

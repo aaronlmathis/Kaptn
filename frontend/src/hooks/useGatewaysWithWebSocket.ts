@@ -19,12 +19,16 @@ export function useGatewaysWithWebSocket(enableWebSocket: boolean = true) {
 
 		const response = await fetch(url);
 		if (!response.ok) {
+			if (response.status === 404) {
+				return [] as z.infer<typeof gatewaySchema>[];
+			}
 			throw new Error(`Failed to fetch gateways: ${response.statusText}`);
 		}
 
 		const result = await response.json();
 		if (result.status === 'success') {
-			return result.data.items.map((item: GatewayApiItem, index: number) => ({
+			const items: GatewayApiItem[] = Array.isArray(result?.data?.items) ? result.data.items : [];
+			return items.map((item: GatewayApiItem, index: number) => ({
 				id: index + 1,
 				name: item.name,
 				namespace: item.namespace,

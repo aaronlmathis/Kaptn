@@ -1,10 +1,13 @@
 ---
 import { ApiSettingsContainer } from "@/components/settings/api-settings-container";
 import Layout from "../../layouts/dashboard.astro";
+import { AppShell } from "@/components/AppShell";
 
 const title = "API Settings";
 ---
 
 <Layout title={title}>
-	<ApiSettingsContainer client:load />
+<AppShell client:load>
+  <ApiSettingsContainer />
+</AppShell>
 </Layout>

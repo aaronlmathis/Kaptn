@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { NamespacesDataTable } from "@/components/data_tables/NamespacesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useNamespacesWithWebSocket } from "@/hooks/useNamespacesWithWebSocket"
@@ -20,7 +19,8 @@ function NamespacesContent() {
 	// Update lastUpdated when namespaces change
 	React.useEffect(() => {
 		if (namespaces && namespaces.length > 0) {
-			setLastUpdated(new Date().toLocaleTimeString())
+			// Use ISO string so SummaryCards can format correctly (avoids Invalid Date)
+			setLastUpdated(new Date().toISOString())
 		}
 	}, [namespaces])
 
@@ -64,10 +64,11 @@ function NamespacesContent() {
 		},
 		{
 			title: "Status Distribution",
-			value: `${terminatingNamespaces} terminating`,
-			subtitle: failedNamespaces > 0 ? `${failedNamespaces} failed` : "No failures",
-			icon: getResourceIcon("namespaces"),
-			badge: failedNamespaces > 0 ? getHealthTrendBadge(0) : getHealthTrendBadge(100),
+			// Keep the large title area compact and numeric
+			value: terminatingNamespaces + failedNamespaces,
+			subtitle: `${terminatingNamespaces} terminating, ${failedNamespaces} failed`,
+			badge: getNamespaceStatusBadge(activeNamespaces, terminatingNamespaces, failedNamespaces, totalNamespaces),
+			footer: `${activeNamespaces} active out of ${totalNamespaces}`,
 		},
 	]
 
@@ -113,9 +114,5 @@ function NamespacesContent() {
 }
 
 export function NamespacesPageContainer() {
-	return (
-		<SharedProviders>
-			<NamespacesContent />
-		</SharedProviders>
-	)
+	return <NamespacesContent />
 }

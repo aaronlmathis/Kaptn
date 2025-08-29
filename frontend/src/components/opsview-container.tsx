@@ -8,7 +8,6 @@
 import * as React from "react";
 import { AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SharedProviders } from "@/components/shared-providers";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -149,8 +148,7 @@ export function OpsViewContainer() {
 	}, [disconnect, refresh, connect]);
 
 	return (
-		<SharedProviders>
-			<TooltipProvider>
+		<TooltipProvider>
 				<div className="min-h-screen bg-background">
 					{/* Filter Bar */}
 					<OpsViewFilterBar
@@ -204,7 +202,6 @@ export function OpsViewContainer() {
 					{/* Connection Status */}
 					<ConnectionStatus isConnected={isConnected} />
 				</div>
-			</TooltipProvider>
-		</SharedProviders>
+		</TooltipProvider>
 	);
 }

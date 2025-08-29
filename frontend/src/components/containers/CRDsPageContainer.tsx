@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { CRDsDataTable } from "@/components/data_tables/CRDsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useCRDsWithWebSocket } from "@/hooks/useCRDsWithWebSocket"
@@ -131,9 +130,5 @@ function CRDsContent() {
 }
 
 export function CRDsPageContainer() {
-	return (
-		<SharedProviders>
-			<CRDsContent />
-		</SharedProviders>
-	)
+	return <CRDsContent />
 }

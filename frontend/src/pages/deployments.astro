@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { DeploymentsPageContainer } from "@/components/containers/DeploymentsPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Deployments";
 ---
 
 <Layout title={title}>
-	<DeploymentsPageContainer client:load />
+<AppShell client:load>
+  <DeploymentsPageContainer />
+</AppShell>
 </Layout>

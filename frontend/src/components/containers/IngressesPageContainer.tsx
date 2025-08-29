@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { IngressesDataTable } from "@/components/data_tables/IngressesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useIngressesWithWebSocket } from "@/hooks/useIngressesWithWebSocket"
@@ -145,8 +144,6 @@ function IngressesContent() {
 }
 export function IngressesPageContainer() {
 	return (
-		<SharedProviders>
-			<IngressesContent />
-		</SharedProviders>
+		<IngressesContent />
 	)
 } 

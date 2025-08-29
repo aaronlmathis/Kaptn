@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { CRDsPageContainer } from "@/components/containers/CRDsPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Custom Resource Definitions";
 ---
 
 <Layout title={title}>
-	<CRDsPageContainer client:load />
+<AppShell client:load>
+  <CRDsPageContainer />
+</AppShell>
 </Layout>

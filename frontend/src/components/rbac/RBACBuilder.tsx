@@ -8,6 +8,7 @@ import { Plus, Trash2, Download, Copy, Play, Save, RotateCcw } from "lucide-reac
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -74,6 +75,7 @@ type FormData = z.infer<typeof rbacFormSchema>;
 const STORAGE_KEY = 'kaptn-rbac-draft';
 
 export function RBACBuilder() {
+	const { isAuthenticated, isLoading: authLoading, authMode } = useAuth();
 	// Form state
 	const form = useForm<FormData>({
 		resolver: zodResolver(rbacFormSchema),
@@ -101,7 +103,7 @@ export function RBACBuilder() {
 	const [apiResources, setApiResources] = React.useState<ApiResource[]>([]);
 
 	// Loading states
-	const [isLoadingData, setIsLoadingData] = React.useState(true);
+	const [isLoadingData, setIsLoadingData] = React.useState(false);
 	const [isGeneratingYAML, setIsGeneratingYAML] = React.useState(false);
 	const [isDryRunning, setIsDryRunning] = React.useState(false);
 	const [isApplying, setIsApplying] = React.useState(false);
@@ -113,42 +115,25 @@ export function RBACBuilder() {
 	// Watch form values for auto-generating role name
 	const watchedValues = form.watch();
 
-	// Load initial data
+	// Load initial data after auth is ready
 	React.useEffect(() => {
+		let cancelled = false;
+
+		// Wait until auth has settled unless auth is disabled
+		const canLoad = !authLoading; // load as soon as auth has settled; API client handles 401/refresh
+		if (!canLoad) return;
+
 		const loadData = async () => {
 			setIsLoadingData(true);
 			try {
-				console.log('Loading RBAC form data...');
-
 				const [identitiesData, namespacesData, apiData] = await Promise.all([
-					getIdentities().catch(err => {
-						console.error('Failed to load identities:', err);
-						return [];
-					}),
-					getNamespaces().catch(err => {
-						console.error('Failed to load namespaces:', err);
-						return [];
-					}),
-					getApiResources().catch(err => {
-						console.error('Failed to load API resources:', err);
-						return { groups: [], resources: [] };
-					}),
+					getIdentities().catch(() => []),
+					getNamespaces().catch(() => []),
+					getApiResources().catch(() => ({ groups: [], resources: [] })),
 				]);
 
-				console.log('Raw API responses:', {
-					identitiesData,
-					namespacesData,
-					apiData
-				});
+				if (cancelled) return;
 
-				console.log('Loaded data:', {
-					identities: identitiesData?.length || 0,
-					namespaces: namespacesData?.length || 0,
-					apiGroups: apiData?.groups?.length || 0,
-					apiResources: apiData?.resources?.length || 0
-				});
-
-				// Ensure all data is arrays, fallback to empty arrays
 				const safeIdentities = Array.isArray(identitiesData) ? identitiesData : [];
 				const safeNamespaces = Array.isArray(namespacesData) ? namespacesData : [];
 				const safeApiGroups = Array.isArray(apiData?.groups) ? apiData.groups : [];
@@ -159,20 +144,21 @@ export function RBACBuilder() {
 				setApiGroups(safeApiGroups);
 				setApiResources(safeApiResources);
 			} catch (error) {
-				console.error('Failed to load initial data:', error);
-				toast.error('Failed to load form data');
-				// Set default empty arrays on error
-				setIdentities([]);
-				setNamespaces([]);
-				setApiGroups([]);
-				setApiResources([]);
+				if (!cancelled) {
+					toast.error('Failed to load form data');
+					setIdentities([]);
+					setNamespaces([]);
+					setApiGroups([]);
+					setApiResources([]);
+				}
 			} finally {
-				setIsLoadingData(false);
+				if (!cancelled) setIsLoadingData(false);
 			}
 		};
 
 		loadData();
-	}, []);
+		return () => { cancelled = true };
+	}, [isAuthenticated, authLoading, authMode]);
 
 	// Load saved draft from localStorage
 	React.useEffect(() => {

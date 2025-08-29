@@ -8,6 +8,7 @@ import { NavigationProvider } from "@/contexts/navigation-context"
 import { NamespaceProvider } from "@/contexts/namespace-context"
 import { CapabilitiesProvider } from "@/contexts/capabilities-context"
 import { ClusterProvider } from "@/contexts/cluster-context"
+import { ClusterFeaturesProvider } from "@/contexts/cluster-features-context"
 import { ShellProvider } from "@/contexts/shell-context"
 import { Toaster } from "@/components/ui/sonner"
 import { PodShellManager } from "@/components/PodShellManager"
@@ -51,17 +52,19 @@ export function SharedProviders({ children }: SharedProvidersProps) {
 					<AuthProvider>
 						<ClusterProvider>
 							<CapabilitiesProvider>
-								<NavigationProvider>
-									<NamespaceProvider>
-										<ShellProvider>
-											<AppContent>
-												{children}
-											</AppContent>
-											<Toaster />
-											<PodShellManager />
-										</ShellProvider>
-									</NamespaceProvider>
-								</NavigationProvider>
+								<ClusterFeaturesProvider>
+									<NavigationProvider>
+										<NamespaceProvider>
+											<ShellProvider>
+												<AppContent>
+													{children}
+												</AppContent>
+												<Toaster />
+												<PodShellManager />
+											</ShellProvider>
+										</NamespaceProvider>
+									</NavigationProvider>
+								</ClusterFeaturesProvider>
 							</CapabilitiesProvider>
 						</ClusterProvider>
 					</AuthProvider>

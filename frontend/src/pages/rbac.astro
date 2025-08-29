@@ -1,8 +1,8 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
-import { RBACPageContainer } from "@/components/containers/RbacPageContainer";
+import { RBACPage } from "@/components/pages/RBACPage";
 ---
 
-<Layout title="ReplicaSets">
-	<RBACPageContainer client:load />
+<Layout title="RBAC">
+	<RBACPage client:load />
 </Layout>

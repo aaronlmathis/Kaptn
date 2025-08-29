@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { ReplicaSetsDataTable } from "@/components/data_tables/ReplicaSetsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useReplicaSetsWithWebSocket } from "@/hooks/useReplicaSetsWithWebSocket"
@@ -143,8 +142,6 @@ function ReplicaSetsContent() {
 
 export function ReplicaSetsPageContainer() {
   return (
-    <SharedProviders>
       <ReplicaSetsContent />
-    </SharedProviders>
   )
 } 

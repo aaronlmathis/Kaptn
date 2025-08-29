@@ -1,10 +1,13 @@
 ---
 import { OpsViewContainer } from "@/components/opsview-container";
 import Layout from "@/layouts/dashboard.astro";
+import { AppShell } from "@/components/AppShell";
 
 const title = "OpsView";
 ---
 
 <Layout title={title}>
-	<OpsViewContainer client:load />
+<AppShell client:load>
+  <OpsViewContainer />
+</AppShell>
 </Layout>

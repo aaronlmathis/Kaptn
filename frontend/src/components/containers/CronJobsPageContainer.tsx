@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { CronJobsDataTable } from "@/components/data_tables/CronJobsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useCronJobsWithWebSocket } from "@/hooks/useCronJobsWithWebSocket"
@@ -138,9 +137,5 @@ function CronJobsContent() {
 }
 
 export function CronJobsPageContainer() {
-	return (
-		<SharedProviders>
-			<CronJobsContent />
-		</SharedProviders>
-	)
+	return <CronJobsContent />
 }

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { DaemonSetsDataTable } from "@/components/data_tables/DaemonSetsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useDaemonSetsWithWebSocket } from "@/hooks/useDaemonSetsWithWebSocket"
@@ -139,9 +138,5 @@ function DaemonSetsContent() {
 }
 
 export function DaemonSetsPageContainer() {
-	return (
-		<SharedProviders>
-			<DaemonSetsContent />
-		</SharedProviders>
-	)
+	return <DaemonSetsContent />
 }

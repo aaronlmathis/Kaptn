@@ -24,22 +24,31 @@ export function useVirtualServicesWithWebSocket(enableWebSocket = true) {
 	const [isConnected, setIsConnected] = React.useState(false)
 	const { selectedNamespace } = useNamespace()
 
-	React.useEffect(() => {
-		const fetchData = async () => {
-			try {
-				setLoading(true)
+    React.useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true)
+                setError(null)
 				const url = selectedNamespace === "all"
 					? "/api/v1/istio/virtualservices"
 					: `/api/v1/istio/virtualservices?namespace=${selectedNamespace}`
 
-				const response = await fetch(url)
-				if (!response.ok) {
-					throw new Error(`Failed to fetch virtual services: ${response.statusText}`)
-				}
+                const response = await fetch(url)
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        // Treat not found as empty list for UX: show empty table, not error
+                        setData([])
+                        setError(null)
+                        setLoading(false)
+                        return
+                    }
+                    throw new Error(`Failed to fetch virtual services: ${response.statusText}`)
+                }
 
-				const result = await response.json()
-				if (result.status === 'success') {
-					const transformedData = result.data.items.map((item: VirtualServiceApiItem, index: number) => ({
+                const result = await response.json()
+                if (result.status === 'success') {
+                    const items: VirtualServiceApiItem[] = Array.isArray(result?.data?.items) ? result.data.items : []
+                    const transformedData = items.map((item: VirtualServiceApiItem, index: number) => ({
 						id: index + 1,
 						name: item.metadata.name,
 						namespace: item.metadata.namespace,
@@ -47,16 +56,18 @@ export function useVirtualServicesWithWebSocket(enableWebSocket = true) {
 						hosts: item.spec.hosts || [],
 						age: calculateAge(item.metadata.creationTimestamp),
 					}))
-					setData(transformedData)
-				} else {
-					throw new Error(result.error || 'Failed to fetch virtual services')
-				}
-			} catch (err) {
-				setError(err instanceof Error ? err.message : 'Unknown error')
-			} finally {
-				setLoading(false)
-			}
-		}
+                    setData(transformedData)
+                    // Clear any prior error on successful fetch
+                    setError(null)
+                } else {
+                    throw new Error(result.error || 'Failed to fetch virtual services')
+                }
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Unknown error')
+            } finally {
+                setLoading(false)
+            }
+        }
 
 		fetchData()
 
@@ -75,24 +86,26 @@ export function useVirtualServicesWithWebSocket(enableWebSocket = true) {
 				}
 			}
 
-			ws.onmessage = (event) => {
-				try {
-					const message = JSON.parse(event.data)
-					if (message.type === 'virtualservices' && message.data) {
-						const transformedData = message.data.items.map((item: VirtualServiceApiItem, index: number) => ({
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data)
+                    if (message.type === 'virtualservices' && message.data) {
+                        const items: VirtualServiceApiItem[] = Array.isArray(message?.data?.items) ? message.data.items : []
+                        const transformedData = items.map((item: VirtualServiceApiItem, index: number) => ({
 							id: index + 1,
 							name: item.metadata.name,
 							namespace: item.metadata.namespace,
 							gateways: item.spec.gateways || [],
 							hosts: item.spec.hosts || [],
 							age: calculateAge(item.metadata.creationTimestamp),
-						}))
-						setData(transformedData)
-					}
-				} catch (err) {
-					console.error('Error parsing WebSocket message:', err)
-				}
-			}
+                        }))
+                        setData(transformedData)
+                        setError(null)
+                    }
+                } catch (err) {
+                    console.error('Error parsing WebSocket message:', err)
+                }
+            }
 
 			ws.onclose = () => {
 				setIsConnected(false)
@@ -109,39 +122,48 @@ export function useVirtualServicesWithWebSocket(enableWebSocket = true) {
 		}
 	}, [selectedNamespace, enableWebSocket])
 
-	const refetch = React.useCallback(async () => {
-		// Re-trigger the fetch
-		setLoading(true)
-		try {
-			const url = selectedNamespace === "all"
-				? "/api/v1/istio/virtualservices"
-				: `/api/v1/istio/virtualservices?namespace=${selectedNamespace}`
+    const refetch = React.useCallback(async () => {
+        // Re-trigger the fetch
+        setLoading(true)
+        setError(null)
+        try {
+            const url = selectedNamespace === "all"
+                ? "/api/v1/istio/virtualservices"
+                : `/api/v1/istio/virtualservices?namespace=${selectedNamespace}`
 
-			const response = await fetch(url)
-			if (!response.ok) {
-				throw new Error(`Failed to fetch virtual services: ${response.statusText}`)
-			}
+            const response = await fetch(url)
+            if (!response.ok) {
+                if (response.status === 404) {
+                    setData([])
+                    setError(null)
+                    setLoading(false)
+                    return
+                }
+                throw new Error(`Failed to fetch virtual services: ${response.statusText}`)
+            }
 
-			const result = await response.json()
-			if (result.status === 'success') {
-				const transformedData = result.data.items.map((item: VirtualServiceApiItem, index: number) => ({
+            const result = await response.json()
+            if (result.status === 'success') {
+                const items: VirtualServiceApiItem[] = Array.isArray(result?.data?.items) ? result.data.items : []
+                const transformedData = items.map((item: VirtualServiceApiItem, index: number) => ({
 					id: index + 1,
 					name: item.metadata.name,
 					namespace: item.metadata.namespace,
 					gateways: item.spec.gateways || [],
 					hosts: item.spec.hosts || [],
 					age: calculateAge(item.metadata.creationTimestamp),
-				}))
-				setData(transformedData)
-			} else {
-				throw new Error(result.error || 'Failed to fetch virtual services')
-			}
-		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Unknown error')
-		} finally {
-			setLoading(false)
-		}
-	}, [selectedNamespace])
+                }))
+                setData(transformedData)
+                setError(null)
+            } else {
+                throw new Error(result.error || 'Failed to fetch virtual services')
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Unknown error')
+        } finally {
+            setLoading(false)
+        }
+    }, [selectedNamespace])
 
 	return { data, loading, error, refetch, isConnected }
 }

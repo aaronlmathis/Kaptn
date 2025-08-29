@@ -28,7 +28,7 @@ interface NamespaceProviderProps {
 export function NamespaceProvider({ children }: NamespaceProviderProps) {
 	// Use hydration-safe localStorage hooks
 	const [selectedNamespace, setSelectedNamespaceState, isNamespaceHydrated] = useHydratedLocalStorageString('selectedNamespace', 'all')
-	const [cachedData, _setCachedData, isCacheHydrated] = useHydratedLocalStorage<{namespaces: Namespace[], timestamp: number} | null>(
+	const [cachedData, setCachedData, isCacheHydrated] = useHydratedLocalStorage<{namespaces: Namespace[], timestamp: number} | null>(
 		NAMESPACE_CACHE_KEY, 
 		null,
 		JSON.parse,
@@ -47,18 +47,9 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
 			const data = await k8sService.getNamespaces()
 			setNamespaces(data)
 
-			// Cache the namespaces with timestamp using hydrated storage
+			// Cache the namespaces with timestamp using hydrated storage setter
 			if (isHydrated) {
-				const cacheData = {
-					namespaces: data,
-					timestamp: Date.now()
-				}
-				// Update through the hydrated storage hook (we'll need to expose this)
-				try {
-					localStorage.setItem(NAMESPACE_CACHE_KEY, JSON.stringify(cacheData))
-				} catch (error) {
-					console.warn('Failed to cache namespaces:', error)
-				}
+				setCachedData({ namespaces: data, timestamp: Date.now() })
 			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to fetch namespaces')
@@ -66,7 +57,7 @@ export function NamespaceProvider({ children }: NamespaceProviderProps) {
 		} finally {
 			setLoading(false)
 		}
-	}, [isHydrated])
+	}, [isHydrated, setCachedData])
 
 	// Load cached namespaces after hydration
 	useEffect(() => {

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { ServicesDataTable } from "@/components/data_tables/ServicesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useServicesWithWebSocket } from "@/hooks/useServicesWithWebSocket"
@@ -132,9 +131,5 @@ function ServicesContent() {
 }
 
 export function ServicesPageContainer() {
-	return (
-		<SharedProviders>
-			<ServicesContent />
-		</SharedProviders>
-	)
+	return <ServicesContent />
 }

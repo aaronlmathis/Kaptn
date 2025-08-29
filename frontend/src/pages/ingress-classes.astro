@@ -1,10 +1,13 @@
 ---
 import Layout from "@/layouts/dashboard.astro";
 import { IngressClassesPageContainer } from "@/components/containers/IngressClassesPageContainer";
+import { AppShell } from "@/components/AppShell";
 
 const title = "Ingress Classes";
 ---
 
 <Layout title={title}>
-	<IngressClassesPageContainer client:load />
+<AppShell client:load>
+  <IngressClassesPageContainer />
+</AppShell>
 </Layout>

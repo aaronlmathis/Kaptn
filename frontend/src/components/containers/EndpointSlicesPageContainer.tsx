@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { SharedProviders } from "@/components/shared-providers"
 import { EndpointSlicesDataTable } from "@/components/data_tables/EndpointSlicesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useEndpointSlicesWithWebSocket } from "@/hooks/useEndpointSlicesWithWebSocket"
@@ -109,9 +108,5 @@ function EndpointSlicesContent() {
 }
 
 export function EndpointSlicesPageContainer() {
-	return (
-		<SharedProviders>
-			<EndpointSlicesContent />
-		</SharedProviders>
-	)
+	return <EndpointSlicesContent />
 }

@@ -8,7 +8,6 @@
 import * as React from "react";
 import { AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SharedProviders } from "@/components/shared-providers";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -148,9 +147,8 @@ export function MetricExplorerContainer() {
   }, [disconnect, refresh, connect]);
 
   return (
-    <SharedProviders>
-      <TooltipProvider>
-        <div className="min-h-screen bg-background">
+    <TooltipProvider>
+      <div className="min-h-screen bg-background">
           {/* Filter Bar */}
           <FilterBar
             filters={filters}
@@ -204,6 +202,5 @@ export function MetricExplorerContainer() {
           <ConnectionStatus isConnected={isConnected} />
         </div>
       </TooltipProvider>
-    </SharedProviders>
   );
 }

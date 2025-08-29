@@ -1,7 +1,7 @@
 ---
 import "../styles/global.css";
 import { ViewTransitions } from "astro:transitions";
-import { DashboardLayout } from "@/components/dashboard-layout";
+// React layout is now composed at the page level via AppShell
 export interface Props {
 	title: string;
 }
@@ -66,8 +66,6 @@ const { title } = Astro.props;
 		</script>
 	</head>
 	<body>
-		<DashboardLayout client:load>
-			<slot />
-		</DashboardLayout>
+		<slot />
 	</body>
 </html>
