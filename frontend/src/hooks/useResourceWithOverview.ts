@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNamespace } from '@/contexts/namespace-context';
 import { useOverviewWebSocket, type OverviewWebSocketEvent } from './useOverviewWebSocket';
 
 export interface UseResourceWithOverviewOptions<T> {
@@ -41,8 +42,8 @@ export interface UseResourceWithOverviewResult<T> {
  * Uses the unified overview stream instead of resource-specific streams
  */
 export function useResourceWithOverview<T>(
-	resource: string,
-	options: UseResourceWithOverviewOptions<T>
+    resource: string,
+    options: UseResourceWithOverviewOptions<T>
 ): UseResourceWithOverviewResult<T> {
 	const {
 		fetchData,
@@ -57,7 +58,8 @@ export function useResourceWithOverview<T>(
 	const [error, setError] = useState<string | null>(null);
 	const dataRef = useRef<T[]>([]);
 
-	const { isConnected, subscribe } = useOverviewWebSocket({ debug });
+    const { isConnected, subscribe } = useOverviewWebSocket({ debug });
+    const { selectedNamespace } = useNamespace();
 
 	const log = useCallback((message: string, ...args: any[]) => {
 		if (debug) {
@@ -85,13 +87,20 @@ export function useResourceWithOverview<T>(
 			setLoading(false);
 		}
 	}, [fetchData, resource, log]);	// Handle overview WebSocket events
-	const handleOverviewEvent = useCallback((event: OverviewWebSocketEvent) => {
-		log('Overview event received:', event);
+    const handleOverviewEvent = useCallback((event: OverviewWebSocketEvent) => {
+        log('Overview event received:', event);
 
-		// Only handle events for our resource type
-		if (event.resource !== resource) {
-			return;
-		}
+        // Only handle events for our resource type
+        if (event.resource !== resource) {
+            return;
+        }
+
+        // If a namespace is selected, ignore events from other namespaces.
+        // For cluster-scoped events that don't include a namespace, always allow.
+        const eventNs = (event.data as any)?.namespace as string | undefined; // eslint-disable-line @typescript-eslint/no-explicit-any
+        if (selectedNamespace !== 'all' && typeof eventNs === 'string' && eventNs !== selectedNamespace) {
+            return;
+        }
 
 		if (event.action === 'added') {
 			log('Adding new item:', event.data.name);
@@ -165,7 +174,7 @@ export function useResourceWithOverview<T>(
 				return updatedData;
 			});
 		}
-	}, [resource, transformWebSocketData, getItemKey, log]);
+    }, [resource, transformWebSocketData, getItemKey, log, selectedNamespace]);
 
 	// Set up overview WebSocket subscription
 	useEffect(() => {
