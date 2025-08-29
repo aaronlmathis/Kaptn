@@ -451,21 +451,20 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 	const { isAuthenticated, authMode, fetchWithAuth } = useAuth()
 
 	const [state, setState] = React.useState<CapabilitiesState>(() => {
-		// During SSR, provide defaults immediately
+		// During SSR, be conservative: no capabilities and loading state
 		if (typeof window === 'undefined') {
 			return {
-				capabilities: DEFAULT_CAPABILITIES,
-				isLoading: false,
+				capabilities: {},
+				isLoading: true,
 				error: null,
-				lastFetched: Date.now(),
+				lastFetched: null,
 			}
 		}
 
-		// For auth mode 'none', start with defaults to avoid loading
-		// This will be overridden by the effect, but prevents unnecessary loading state
+		// For browser: start in loading state; we'll fetch below.
 		return {
 			capabilities: {},
-			isLoading: true, // Start loading on client side
+			isLoading: true,
 			error: null,
 			lastFetched: null,
 		}

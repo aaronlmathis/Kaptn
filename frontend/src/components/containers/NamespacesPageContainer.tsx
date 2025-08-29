@@ -19,7 +19,8 @@ function NamespacesContent() {
 	// Update lastUpdated when namespaces change
 	React.useEffect(() => {
 		if (namespaces && namespaces.length > 0) {
-			setLastUpdated(new Date().toLocaleTimeString())
+			// Use ISO string so SummaryCards can format correctly (avoids Invalid Date)
+			setLastUpdated(new Date().toISOString())
 		}
 	}, [namespaces])
 
@@ -63,10 +64,11 @@ function NamespacesContent() {
 		},
 		{
 			title: "Status Distribution",
-			value: `${terminatingNamespaces} terminating`,
-			subtitle: failedNamespaces > 0 ? `${failedNamespaces} failed` : "No failures",
-			icon: getResourceIcon("namespaces"),
-			badge: failedNamespaces > 0 ? getHealthTrendBadge(0) : getHealthTrendBadge(100),
+			// Keep the large title area compact and numeric
+			value: terminatingNamespaces + failedNamespaces,
+			subtitle: `${terminatingNamespaces} terminating, ${failedNamespaces} failed`,
+			badge: getNamespaceStatusBadge(activeNamespaces, terminatingNamespaces, failedNamespaces, totalNamespaces),
+			footer: `${activeNamespaces} active out of ${totalNamespaces}`,
 		},
 	]
 

@@ -254,19 +254,13 @@ export function useAuth() {
 
 	if (context === undefined) {
 		if (typeof window === 'undefined') {
-			// Build-time fallback for SSR
+			// Conservative SSR fallback: unauthenticated and loading to avoid rendering privileged UI
 			return {
-				isAuthenticated: true, // Assume authenticated during build
-				isLoading: false,
-				user: {
-					id: 'dev-user',
-					email: 'dev@localhost',
-					name: 'Development User',
-					roles: ['admin'],
-					perms: ['read', 'write', 'delete', 'admin'],
-				},
+				isAuthenticated: false,
+				isLoading: true,
+				user: null,
 				error: null,
-				authMode: 'none',
+				authMode: null,
 				login: () => { },
 				logout: async () => { },
 				refresh: async () => false,

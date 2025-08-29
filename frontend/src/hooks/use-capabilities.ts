@@ -3,32 +3,7 @@
 import * as React from "react"
 import { CapabilitiesContext, type CapabilitiesContextValue } from "@/contexts/capabilities-context"
 
-const DEFAULT_CAPABILITIES = {
-	'pods.list': true,
-	'pods.get': true,
-	'pods.create': true,
-	'pods.update': true,
-	'pods.patch': true,
-	'pods.delete': true,
-	'pods.logs': true,
-	'pods.exec': true,
-	'deployments.list': true,
-	'deployments.get': true,
-	'deployments.create': true,
-	'deployments.update': true,
-	'deployments.patch': true,
-	'deployments.delete': true,
-	'services.list': true,
-	'services.get': true,
-	'services.create': true,
-	'services.update': true,
-	'services.patch': true,
-	'services.delete': true,
-	'namespaces.list': true,
-	'namespaces.get': true,
-	'events.list': true,
-	'events.get': true,
-}
+// No default allowlist. SSR and missing provider should be conservative.
 
 export function useCapabilities(): CapabilitiesContextValue {
 	const context = React.useContext(CapabilitiesContext)
@@ -36,15 +11,15 @@ export function useCapabilities(): CapabilitiesContextValue {
 		// Fallback for SSR - assume all capabilities are allowed during build
 		if (typeof window === 'undefined') {
 			return {
-				capabilities: DEFAULT_CAPABILITIES,
-				isLoading: false,
+				capabilities: {},
+				isLoading: true,
 				error: null,
-				lastFetched: Date.now(),
+				lastFetched: null,
 				refetch: async () => { },
 				fetchAdditional: async () => { },
-				isAllowed: () => true,
-				hasAnyCapability: () => true,
-				hasAllCapabilities: () => true,
+				isAllowed: () => false,
+				hasAnyCapability: () => false,
+				hasAllCapabilities: () => false,
 			}
 		}
 		throw new Error('useCapabilities must be used within a CapabilitiesProvider')

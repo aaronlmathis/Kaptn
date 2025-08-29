@@ -60,8 +60,8 @@ async function resolvePageComponent(pathname: string): Promise<PageComponent | n
         return (await import("@/components/containers/NetworkPoliciesPageContainer")).NetworkPoliciesPageContainer;
       case "/nodes":
         return (await import("@/components/containers/NodesPageContainer")).NodesPageContainer;
-      case "/opsview":
-        return (await import("@/components/kubernetes-dashboard")).KubernetesDashboard;
+  case "/opsview":
+        return (await import("@/components/opsview-container")).OpsViewContainer;
       case "/persistent-volume-claims":
         return (await import("@/components/containers/PersistentVolumeClaimsPage")).PersistentVolumeClaimsPageContainer;
       case "/persistent-volumes":
@@ -69,7 +69,7 @@ async function resolvePageComponent(pathname: string): Promise<PageComponent | n
       case "/pods":
         return (await import("@/components/containers/PodsPageContainer")).PodsPageContainer;
       case "/rbac":
-        return (await import("@/components/containers/RbacPageContainer")).RbacPageContainer;
+        return (await import("@/components/containers/RbacPageContainer")).RBACPageContainer;
       case "/replicasets":
         return (await import("@/components/containers/ReplicaSetsPageContainer")).ReplicaSetsPageContainer;
       case "/resource-quotas":
