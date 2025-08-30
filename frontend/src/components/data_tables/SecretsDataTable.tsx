@@ -94,6 +94,9 @@ import { useSecretsWithWebSocket } from "@/hooks/useSecretsWithWebSocket"
 import { type DashboardSecret, deleteSecret } from "@/lib/k8s-storage"
 import { toast } from "sonner"
 import { useNamespace } from "@/contexts/namespace-context"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 
 interface SecretsDataTableProps {
 	secrets?: DashboardSecret[]
@@ -154,9 +157,10 @@ function getSecretTypeBadge(type: string) {
 
 // Column definitions for secrets table
 const createColumns = (
-	onViewDetails: (secret: DashboardSecret) => void,
-	onEditSecret: (secret: DashboardSecret) => void,
-	onDeleteSecret: (secret: DashboardSecret) => void
+    onViewDetails: (secret: DashboardSecret) => void,
+    onEditSecret: (secret: DashboardSecret) => void,
+    onDeleteSecret: (secret: DashboardSecret) => void,
+    clusterId: string
 ): ColumnDef<DashboardSecret>[] => [
 		{
 			id: "drag",
@@ -193,14 +197,22 @@ const createColumns = (
 			accessorKey: "name",
 			header: "Name",
 			cell: ({ row }) => {
-				return (
-					<div className="flex items-center gap-2">
-						<button
-							onClick={() => onViewDetails(row.original)}
-							className="text-left hover:underline focus:underline focus:outline-none font-mono text-sm"
-						>
-							{row.original.name}
-						</button>
+            return (
+                <div className="flex items-center gap-2">
+                    <IfAllowed
+                        feature="secrets.get"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={<span className="font-mono text-sm">{row.original.name}</span>}
+                    >
+                        <button
+                            onClick={() => onViewDetails(row.original)}
+                            className="text-left hover:underline focus:underline focus:outline-none font-mono text-sm"
+                        >
+                            {row.original.name}
+                        </button>
+                    </IfAllowed>
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button
@@ -294,7 +306,7 @@ const createColumns = (
 		{
 			id: "actions",
 			cell: ({ row }) => (
-				<DropdownMenu>
+            <DropdownMenu>
 					<DropdownMenuTrigger asChild>
 						<Button
 							variant="ghost"
@@ -305,68 +317,68 @@ const createColumns = (
 							<span className="sr-only">Open menu</span>
 						</Button>
 					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							onClick={() => onEditSecret(row.original)}
-						>
-							<IconEdit className="size-4 mr-2" />
-							Edit Secret
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="Secret"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed feature="secrets.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="secrets.update" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit Secret</DropdownMenuItem>}>
+                        <DropdownMenuItem onClick={() => onEditSecret(row.original)}>
+                            <IconEdit className="size-4 mr-2" />
+                            Edit Secret
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="secrets.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}>
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="Secret"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
 						<DropdownMenuSeparator />
-						<AlertDialog>
-							<AlertDialogTrigger asChild>
-								<DropdownMenuItem className="text-red-600" onSelect={(e) => e.preventDefault()}>
-									<IconTrash className="size-4 mr-2" />
-									Delete
-								</DropdownMenuItem>
-							</AlertDialogTrigger>
-							<AlertDialogContent>
-								<AlertDialogHeader>
-									<AlertDialogTitle>Delete Secret</AlertDialogTitle>
-									<AlertDialogDescription>
-										Are you sure you want to delete the secret "{row.original.name}" in namespace "{row.original.namespace}"?
-										This action cannot be undone and will permanently remove the secret and all its data.
-									</AlertDialogDescription>
-								</AlertDialogHeader>
-								<AlertDialogFooter>
-									<AlertDialogCancel>Cancel</AlertDialogCancel>
-									<AlertDialogAction
-										onClick={() => onDeleteSecret(row.original)}
-										className="bg-red-600 hover:bg-red-700 text-white"
-									>
-										Delete Secret
-									</AlertDialogAction>
-								</AlertDialogFooter>
-							</AlertDialogContent>
-						</AlertDialog>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+                    <IfAllowed feature="secrets.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <DropdownMenuItem className="text-red-600" onSelect={(e) => e.preventDefault()}>
+                                    <IconTrash className="size-4 mr-2" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Secret</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Are you sure you want to delete the secret "{row.original.name}" in namespace "{row.original.namespace}"?
+                                        This action cannot be undone and will permanently remove the secret and all its data.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                        onClick={() => onDeleteSecret(row.original)}
+                                        className="bg-red-600 hover:bg-red-700 text-white"
+                                    >
+                                        Delete Secret
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<DashboardSecret> }) {
@@ -481,10 +493,11 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 	}, [refetch])
 
 	// Create columns with the callbacks
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleEditSecret, handleDeleteSecret),
-		[handleViewDetails, handleEditSecret, handleDeleteSecret]
-	)
+    const { clusterId } = useCluster()
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, handleEditSecret, handleDeleteSecret, clusterId),
+        [handleViewDetails, handleEditSecret, handleDeleteSecret, clusterId]
+    )
 
 	// Filter data based on global filter and type filter
 	const filteredData = React.useMemo(() => {
@@ -541,55 +554,60 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 	})
 
 	// Bulk actions for secrets
-	const secretBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for secrets:', selectedSecrets.map(s => s.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-names",
-			label: "Copy Secret Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedSecrets.map(s => s.name).join('\n')
-				navigator.clipboard.writeText(names)
-				console.log('Copied secret names:', names)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-keys",
-			label: "Copy Secret Keys",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const allKeys = selectedSecrets.flatMap(s => s.keys).join('\n')
-				navigator.clipboard.writeText(allKeys)
-				console.log('Copied secret keys:', allKeys)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-secrets",
-			label: "Delete Selected Secrets",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete secrets:', selectedSecrets.map(s => `${s.name} in ${s.namespace}`))
-				// TODO: Implement bulk secret deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+    const { isAllowed } = useAuthzCapabilitiesInContext([
+        'secrets.get', 'secrets.delete', 'secrets.update', 'secrets.patch', 'secrets.create'
+    ])
+    const secretBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+        if (isAllowed('secrets.get')) {
+            actions.push({
+                id: "export-yaml",
+                label: "Export Selected as YAML",
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Export YAML for secrets:', selectedSecrets.map(s => s.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: "copy-names",
+            label: "Copy Secret Names",
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                const names = selectedSecrets.map(s => s.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        actions.push({
+            id: "copy-keys",
+            label: "Copy Secret Keys",
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                const allKeys = selectedSecrets.flatMap(s => s.keys).join('\n')
+                navigator.clipboard.writeText(allKeys)
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('secrets.delete')) {
+            actions.push({
+                id: "delete-secrets",
+                label: "Delete Selected Secrets",
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selectedSecrets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Delete secrets:', selectedSecrets.map(s => `${s.name} in ${s.namespace}`))
+                },
+                variant: "destructive" as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
 
 	React.useEffect(() => {
 		setSortableIds(secrets.map((secret) => secret.id))
@@ -688,9 +706,9 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 					totalCount={table.getFilteredRowModel().rows.length}
 					bulkActions={secretBulkActions}
 					bulkActionsLabel="Actions"
-					onCreateNew={handleNewSecret}
-					createLabel="New Secret"
-					createIcon={<IconPlus className="size-4" />}
+                onCreateNew={isAllowed('secrets.create') ? handleNewSecret : undefined}
+                createLabel={isAllowed('secrets.create') ? "New Secret" : undefined}
+                createIcon={isAllowed('secrets.create') ? <IconPlus className="size-4" /> : undefined}
 					table={table}
 					showColumnToggle={true}
 					onRefresh={refetch}

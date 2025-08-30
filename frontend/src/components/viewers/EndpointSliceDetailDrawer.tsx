@@ -2,7 +2,7 @@ import * as React from "react"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconRefresh, IconEye } from "@tabler/icons-react"
+import { IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
 	Drawer,
@@ -18,6 +18,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useEndpointSliceDetails } from "@/hooks/use-resource-details"
 import { endpointSliceSchema } from "@/lib/schemas/endpointslice"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 function getEndpointSliceStatusBadge(ready: string, readyCount: number, totalCount: number) {
 	const isAllReady = readyCount === totalCount && totalCount > 0
@@ -58,7 +60,8 @@ interface EndpointSliceDetailDrawerProps {
  * This shows full EndpointSlice details from the detailed API endpoint.
  */
 export function EndpointSliceDetailDrawer({ item, open, onOpenChange }: EndpointSliceDetailDrawerProps) {
-	const isMobile = useIsMobile()
+    const isMobile = useIsMobile()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed endpoint slice information
 	const { data: endpointSliceDetails, loading, error } = useEndpointSliceDetails(item.namespace, item.name, open)
@@ -143,43 +146,27 @@ export function EndpointSliceDetailDrawer({ item, open, onOpenChange }: Endpoint
 	// Combine basic and detailed rows
 	const allRows = [...basicRows, ...detailedRows]
 
-	const actions = (
-		<>
-			<Button
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement EndpointSlice details functionality
-					console.log('Show EndpointSlice details:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconEye className="size-4 mr-2" />
-				View Details
-			</Button>
-			<ResourceYamlEditor
-				resourceName={item.name}
-				namespace={item.namespace}
-				resourceKind="EndpointSlice"
-			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
-				</Button>
-			</ResourceYamlEditor>
-			<Button
-				variant="destructive"
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement EndpointSlice restart functionality
-					console.log('Restart EndpointSlice:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconRefresh className="size-4 mr-2" />
-				Restart EndpointSlice
-			</Button>
-		</>
-	)
+    const actions = (
+        <>
+            <IfAllowed
+                feature="endpointslices.patch"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <ResourceYamlEditor
+                    resourceName={item.name}
+                    namespace={item.namespace}
+                    resourceKind="EndpointSlice"
+                >
+                    <Button variant="outline" size="sm" className="w-full">
+                        <IconEdit className="size-4 mr-2" />
+                        Edit YAML
+                    </Button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+        </>
+    )
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>

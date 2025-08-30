@@ -5,16 +5,28 @@ import { EndpointsDataTable } from "@/components/data_tables/EndpointsDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useEndpointsWithWebSocket } from "@/hooks/useEndpointsWithWebSocket"
 import {
-	getReplicaStatusBadge,
-	getUpdateStatusBadge,
-	getResourceIcon,
-	getHealthTrendBadge
+    getReplicaStatusBadge,
+    getUpdateStatusBadge,
+    getResourceIcon,
+    getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function EndpointsContent() {
-	const { data: endpoints, loading: isLoading, error, isConnected } = useEndpointsWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: endpoints, loading: isLoading, error, isConnected } = useEndpointsWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'endpoints.get',
+            'endpoints.patch',
+            'endpoints.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when endpoints change
 	React.useEffect(() => {
@@ -135,5 +147,9 @@ function EndpointsContent() {
 }
 
 export function EndpointsPageContainer() {
-	return <EndpointsContent />
+    return (
+        <RouteGuard requiredCapabilities={["endpoints.list"]}>
+            <EndpointsContent />
+        </RouteGuard>
+    )
 }

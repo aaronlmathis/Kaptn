@@ -76,6 +76,9 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ServiceDetailDrawer } from "@/components/viewers/ServiceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { useServicesWithWebSocket } from "@/hooks/useServicesWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
@@ -144,7 +147,8 @@ function getServiceTypeBadge(type: string) {
 
 // Column definitions for services table
 const createColumns = (
-	onViewDetails: (service: z.infer<typeof serviceSchema>) => void
+    onViewDetails: (service: z.infer<typeof serviceSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof serviceSchema>>[] => [
 		{
 			id: "drag",
@@ -179,17 +183,25 @@ const createColumns = (
 		},
 		{
 			accessorKey: "name",
-			header: "Service Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        header: "Service Name",
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="services.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -235,61 +247,73 @@ const createColumns = (
 			),
 		},
 		{
-			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="Service"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem onClick={() => {
-							// TODO: Implement service restart functionality
-							console.log('Restart service:', row.original.name, 'in namespace:', row.original.namespace)
-						}}>
-							<IconRefresh className="size-4 mr-2" />
-							Restart Service
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+        id: "actions",
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed
+                        feature="services.get"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                    >
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed
+                        feature="services.patch"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
+                    >
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="Service"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+
+                    <DropdownMenuSeparator />
+
+                    <IfAllowed
+                        feature="services.delete"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+                    >
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof serviceSchema>> }) {
@@ -324,8 +348,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof serviceSchema>> }) {
 }
 
 export function ServicesDataTable() {
-	const { data: services, loading, error, refetch, isConnected } = useServicesWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: services, loading, error, refetch, isConnected } = useServicesWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -343,10 +368,10 @@ export function ServicesDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	// Filter options for service types
 	const serviceTypes: FilterOption[] = React.useMemo(() => {
@@ -358,7 +383,7 @@ export function ServicesDataTable() {
 		}))
 	}, [services])
 
-	// Filter data based on global filter and type filter
+    // Filter data based on global filter and type filter
 	const filteredData = React.useMemo(() => {
 		let filtered = services
 
@@ -405,54 +430,50 @@ export function ServicesDataTable() {
 	})
 
 	// Bulk actions for services
-	const serviceBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for services:', selectedServices.map(s => s.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-names",
-			label: "Copy Service Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedServices.map(s => s.name).join('\n')
-				navigator.clipboard.writeText(names)
-				console.log('Copied service names:', names)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "restart-services",
-			label: "Restart Selected Services",
-			icon: <IconRefresh className="size-4" />,
-			action: () => {
-				const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Restart services:', selectedServices.map(s => `${s.name} in ${s.namespace}`))
-				// TODO: Implement bulk service restart
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-services",
-			label: "Delete Selected Services",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete services:', selectedServices.map(s => `${s.name} in ${s.namespace}`))
-				// TODO: Implement bulk service deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+    // Bulk actions gated by capabilities
+    const { isAllowed } = useAuthzCapabilitiesInContext([
+        'services.get', 'services.patch', 'services.delete'
+    ])
+    const serviceBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+        if (isAllowed('services.get')) {
+            actions.push({
+                id: "export-yaml",
+                label: "Export Selected as YAML",
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Export YAML for services:', selectedServices.map(s => s.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: "copy-names",
+            label: "Copy Service Names",
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                const names = selectedServices.map(s => s.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('services.delete')) {
+            actions.push({
+                id: "delete-services",
+                label: "Delete Selected Services",
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selectedServices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Delete services:', selectedServices.map(s => `${s.name} in ${s.namespace}`))
+                },
+                variant: "destructive" as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(

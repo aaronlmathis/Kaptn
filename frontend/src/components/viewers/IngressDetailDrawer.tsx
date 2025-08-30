@@ -2,7 +2,7 @@ import * as React from "react"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconEdit, IconRefresh } from "@tabler/icons-react"
+import { IconEdit } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
 	Drawer,
@@ -18,6 +18,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useIngressDetails } from "@/hooks/use-resource-details"
 import { ingressSchema } from "@/lib/schemas/ingress"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 interface IngressDetailDrawerProps {
 	item: z.infer<typeof ingressSchema>
@@ -30,7 +32,8 @@ interface IngressDetailDrawerProps {
  * This shows full ingress details from the detailed API endpoint instead of the condensed version.
  */
 export function IngressDetailDrawer({ item, open, onOpenChange }: IngressDetailDrawerProps) {
-	const isMobile = useIsMobile()
+    const isMobile = useIsMobile()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed ingress information
 	const { data: ingressDetails, loading, error } = useIngressDetails(item.namespace, item.name, open)
@@ -149,32 +152,27 @@ export function IngressDetailDrawer({ item, open, onOpenChange }: IngressDetailD
 	// Combine basic and detailed rows
 	const allRows = [...basicRows, ...detailedRows]
 
-	const actions = (
-		<>
-			<ResourceYamlEditor
-				resourceName={item.name}
-				namespace={item.namespace}
-				resourceKind="Ingress"
-			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
-				</Button>
-			</ResourceYamlEditor>
-			<Button
-				variant="destructive"
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement ingress restart functionality
-					console.log('Restart ingress:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconRefresh className="size-4 mr-2" />
-				Restart
-			</Button>
-		</>
-	)
+    const actions = (
+        <>
+            <IfAllowed
+                feature="ingresses.patch"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <ResourceYamlEditor
+                    resourceName={item.name}
+                    namespace={item.namespace}
+                    resourceKind="Ingress"
+                >
+                    <Button variant="outline" size="sm" className="w-full">
+                        <IconEdit className="size-4 mr-2" />
+                        Edit YAML
+                    </Button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+        </>
+    )
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>

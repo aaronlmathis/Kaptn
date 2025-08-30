@@ -5,14 +5,26 @@ import { IngressesDataTable } from "@/components/data_tables/IngressesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useIngressesWithWebSocket } from "@/hooks/useIngressesWithWebSocket"
 import {
-	getResourceIcon,
-	getReplicaStatusBadge
+    getResourceIcon,
+    getReplicaStatusBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function IngressesContent() {
-	const { data: ingresses, loading: isLoading, error, isConnected } = useIngressesWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: ingresses, loading: isLoading, error, isConnected } = useIngressesWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'ingresses.get',
+            'ingresses.patch',
+            'ingresses.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when ingresses change
 	React.useEffect(() => {
@@ -143,7 +155,9 @@ function IngressesContent() {
 	)
 }
 export function IngressesPageContainer() {
-	return (
-		<IngressesContent />
-	)
+    return (
+        <RouteGuard requiredCapabilities={["ingresses.list"]}>
+            <IngressesContent />
+        </RouteGuard>
+    )
 } 

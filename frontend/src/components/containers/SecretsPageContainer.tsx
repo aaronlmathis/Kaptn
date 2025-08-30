@@ -6,6 +6,8 @@ import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useSecretsWithWebSocket } from "@/hooks/useSecretsWithWebSocket"
 import { Badge } from "@/components/ui/badge"
 import { IconShieldLock, IconKey, IconDatabase, IconExclamationCircle } from "@tabler/icons-react"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Helper function to get secret type badge
 function getSecretTypeBadge(type: string) {
@@ -29,8 +31,20 @@ function getSecretTypeBadge(type: string) {
 
 // Inner component that can access the namespace context
 function SecretsContent() {
-	const { data: secrets, loading: isLoading, error, isConnected, refetch } = useSecretsWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: secrets, loading: isLoading, error, isConnected, refetch } = useSecretsWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'secrets.get',
+            'secrets.update',
+            'secrets.patch',
+            'secrets.delete',
+            'secrets.create',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when secrets change
 	React.useEffect(() => {
@@ -195,5 +209,9 @@ function SecretsContent() {
 }
 
 export function SecretsPageContainer() {
-	return <SecretsContent />
+    return (
+        <RouteGuard requiredCapabilities={["secrets.list"]}>
+            <SecretsContent />
+        </RouteGuard>
+    )
 }

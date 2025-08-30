@@ -2,7 +2,7 @@ import * as React from "react"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconEdit, IconCircleCheckFilled, IconLoader, IconEye, IconRefresh } from "@tabler/icons-react"
+import { IconEdit, IconCircleCheckFilled, IconLoader, IconEye } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
 	Drawer,
@@ -17,6 +17,8 @@ import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useServiceDetails } from "@/hooks/use-resource-details"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Import the service schema from the main dashboard component
 import { serviceSchema } from "@/components/kubernetes-dashboard"
@@ -71,7 +73,8 @@ interface ServiceDetailDrawerProps {
  * This shows full service details from the detailed API endpoint instead of the condensed version.
  */
 export function ServiceDetailDrawer({ item, open, onOpenChange }: ServiceDetailDrawerProps) {
-	const isMobile = useIsMobile()
+    const isMobile = useIsMobile()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed service information
 	const { data: serviceDetails, loading, error } = useServiceDetails(item.namespace, item.name, open)
@@ -150,43 +153,38 @@ export function ServiceDetailDrawer({ item, open, onOpenChange }: ServiceDetailD
 	// Combine basic and detailed rows
 	const allRows = [...basicRows, ...detailedRows]
 
-	const actions = (
-		<>
-			<Button
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement service port details functionality
-					console.log('Show service ports:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconEye className="size-4 mr-2" />
-				Show Ports
-			</Button>
-			<ResourceYamlEditor
-				resourceName={item.name}
-				namespace={item.namespace}
-				resourceKind="Service"
-			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
-				</Button>
-			</ResourceYamlEditor>
-			<Button
-				variant="destructive"
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement service restart functionality
-					console.log('Restart service:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconRefresh className="size-4 mr-2" />
-				Restart Service
-			</Button>
-		</>
-	)
+    const actions = (
+        <>
+            <Button
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                    // TODO: Implement service port details functionality
+                    console.log('Show service ports:', item.name, 'in namespace:', item.namespace)
+                }}
+            >
+                <IconEye className="size-4 mr-2" />
+                Show Ports
+            </Button>
+            <IfAllowed
+                feature="services.patch"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <ResourceYamlEditor
+                    resourceName={item.name}
+                    namespace={item.namespace}
+                    resourceKind="Service"
+                >
+                    <Button variant="outline" size="sm" className="w-full">
+                        <IconEdit className="size-4 mr-2" />
+                        Edit YAML
+                    </Button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+        </>
+    )
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>

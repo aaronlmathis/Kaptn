@@ -5,16 +5,28 @@ import { ConfigMapsDataTable } from "@/components/data_tables/ConfigMapsDataTabl
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useConfigMapsWithWebSocket } from "@/hooks/useConfigMapsWithWebSocket"
 import {
-	getReplicaStatusBadge,
-	getUpdateStatusBadge,
-	getResourceIcon,
-	getHealthTrendBadge
+    getReplicaStatusBadge,
+    getUpdateStatusBadge,
+    getResourceIcon,
+    getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function ConfigMapsContent() {
-	const { data: configMaps, loading: isLoading, error, isConnected } = useConfigMapsWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: configMaps, loading: isLoading, error, isConnected } = useConfigMapsWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'configmaps.get',
+            'configmaps.patch',
+            'configmaps.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when configMaps change
 	React.useEffect(() => {
@@ -144,5 +156,9 @@ function ConfigMapsContent() {
 }
 
 export function ConfigMapsPageContainer() {
-	return <ConfigMapsContent />
+    return (
+        <RouteGuard requiredCapabilities={["configmaps.list"]}>
+            <ConfigMapsContent />
+        </RouteGuard>
+    )
 }

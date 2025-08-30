@@ -5,14 +5,26 @@ import { EndpointSlicesDataTable } from "@/components/data_tables/EndpointSlices
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useEndpointSlicesWithWebSocket } from "@/hooks/useEndpointSlicesWithWebSocket"
 import {
-	getResourceIcon,
-	getHealthTrendBadge
+    getResourceIcon,
+    getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function EndpointSlicesContent() {
-	const { data: endpointSlices, loading: isLoading, error, isConnected } = useEndpointSlicesWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: endpointSlices, loading: isLoading, error, isConnected } = useEndpointSlicesWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'endpointslices.get',
+            'endpointslices.patch',
+            'endpointslices.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when endpointSlices change
 	React.useEffect(() => {
@@ -108,5 +120,9 @@ function EndpointSlicesContent() {
 }
 
 export function EndpointSlicesPageContainer() {
-	return <EndpointSlicesContent />
+    return (
+        <RouteGuard requiredCapabilities={["endpointslices.list"]}>
+            <EndpointSlicesContent />
+        </RouteGuard>
+    )
 }

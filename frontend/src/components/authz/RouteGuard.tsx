@@ -50,8 +50,14 @@ export function RouteGuard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // If any required capabilities are still unknown (undefined), treat as loading
+  const hasUnknownRequiredCaps = React.useMemo(
+    () => requiredCapabilities.some(cap => capabilities[cap] === undefined),
+    [requiredCapabilities, capabilities]
+  );
+
   // Show loading state while auth is initializing OR capabilities are loading
-  if (authLoading || capabilitiesLoading) {
+  if (authLoading || capabilitiesLoading || hasUnknownRequiredCaps) {
     return loading ? (
       <>{loading}</>
     ) : (
