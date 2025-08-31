@@ -21,20 +21,19 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import {
-	IconChevronDown,
-	IconChevronLeft,
-	IconChevronRight,
-	IconChevronsLeft,
-	IconChevronsRight,
-	IconDotsVertical,
-	IconGripVertical,
-	IconLayoutColumns,
-	IconLoader,
-	IconAlertTriangle,
-	IconRefresh,
-	IconTrash,
-	IconEdit,
-	IconEye,
+    IconChevronLeft,
+    IconChevronRight,
+    IconChevronsLeft,
+    IconChevronsRight,
+    IconDotsVertical,
+    IconGripVertical,
+    IconLoader,
+    IconAlertTriangle,
+    IconTrash,
+    IconEdit,
+    IconEye,
+    IconDownload,
+    IconCopy,
 } from "@tabler/icons-react"
 
 import {
@@ -57,12 +56,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-	DropdownMenu,
-	DropdownMenuCheckboxItem,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
 	Table,
@@ -74,12 +72,16 @@ import {
 } from "@/components/ui/table"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { IngressDetailDrawer } from "@/components/viewers/IngressDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useIngressesWithWebSocket } from "@/hooks/useIngressesWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { ingressSchema } from "@/lib/schemas/ingress"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -103,7 +105,8 @@ function DragHandle({ id }: { id: number }) {
 
 // Column definitions for ingresses table
 const createColumns = (
-	onViewDetails: (ingress: z.infer<typeof ingressSchema>) => void
+    onViewDetails: (ingress: z.infer<typeof ingressSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof ingressSchema>>[] => [
 		{
 			id: "drag",
@@ -139,16 +142,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Ingress Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="ingresses.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -190,56 +201,55 @@ const createColumns = (
 		},
 		{
 			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="Ingress"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed feature="ingresses.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed feature="ingresses.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}>
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="Ingress"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+
+                    <DropdownMenuSeparator />
+
+                    <IfAllowed feature="ingresses.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof ingressSchema>> }) {
@@ -274,15 +284,18 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof ingressSchema>> }) {
 }
 
 export function IngressesDataTable() {
-	const { data: ingresses, loading, error, refetch } = useIngressesWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: ingresses, loading, error, refetch } = useIngressesWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
-	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
-	const [selectedIngressForDetails, setSelectedIngressForDetails] = React.useState<z.infer<typeof ingressSchema> | null>(null)
+    const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
+    const [selectedIngressForDetails, setSelectedIngressForDetails] = React.useState<z.infer<typeof ingressSchema> | null>(null)
+    const [globalFilter, setGlobalFilter] = React.useState("")
+    const [classFilter, setClassFilter] = React.useState<string>("all")
 
 	// Handle opening detail drawer
 	const handleViewDetails = React.useCallback((ingress: z.infer<typeof ingressSchema>) => {
@@ -291,18 +304,42 @@ export function IngressesDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
-	const table = useReactTable({
-		data: ingresses,
-		columns,
-		onSortingChange: setSorting,
-		onColumnFiltersChange: setColumnFilters,
-		getCoreRowModel: getCoreRowModel(),
-		getPaginationRowModel: getPaginationRowModel(),
+    // Build class options and filtered data
+    const ingressClassOptions: FilterOption[] = React.useMemo(() => {
+        const classes = new Set(ingresses.map(i => i.ingressClass).filter(Boolean))
+        return Array.from(classes).sort().map(ic => ({ value: ic, label: ic }))
+    }, [ingresses])
+
+    const filteredData = React.useMemo(() => {
+        let data = ingresses
+        if (classFilter !== "all") {
+            data = data.filter(i => i.ingressClass === classFilter)
+        }
+        if (globalFilter) {
+            const term = globalFilter.toLowerCase()
+            data = data.filter(i =>
+                i.name.toLowerCase().includes(term) ||
+                i.namespace.toLowerCase().includes(term) ||
+                (i.ingressClass || "").toLowerCase().includes(term) ||
+                (i.hostsDisplay || "").toLowerCase().includes(term) ||
+                (i.externalIPsDisplay || "").toLowerCase().includes(term)
+            )
+        }
+        return data
+    }, [ingresses, classFilter, globalFilter])
+
+    const table = useReactTable({
+        data: filteredData,
+        columns,
+        onSortingChange: setSorting,
+        onColumnFiltersChange: setColumnFilters,
+        getCoreRowModel: getCoreRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
 		getSortedRowModel: getSortedRowModel(),
 		getFilteredRowModel: getFilteredRowModel(),
 		onColumnVisibilityChange: setColumnVisibility,
@@ -317,12 +354,55 @@ export function IngressesDataTable() {
 		},
 	})
 
-	// Drag and drop setup
-	const sensors = useSensors(
-		useSensor(MouseSensor, {}),
-		useSensor(TouchSensor, {}),
-		useSensor(KeyboardSensor, {})
-	)
+    // Bulk actions (capability-aware)
+    const { isAllowed } = useAuthzCapabilitiesInContext(['ingresses.get', 'ingresses.delete'])
+    const ingressBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+        if (isAllowed('ingresses.get')) {
+            actions.push({
+                id: 'export-yaml',
+                label: 'Export Selected as YAML',
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Export YAML for ingresses:', selected.map(i => i.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: 'copy-names',
+            label: 'Copy Ingress Names',
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                const names = selected.map(i => i.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('ingresses.delete')) {
+            actions.push({
+                id: 'delete-ingresses',
+                label: 'Delete Selected Ingresses',
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Delete ingresses:', selected.map(i => `${i.name} in ${i.namespace}`))
+                },
+                variant: 'destructive',
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
+
+    // Drag and drop setup
+    const sensors = useSensors(
+        useSensor(MouseSensor, {}),
+        useSensor(TouchSensor, {}),
+        useSensor(KeyboardSensor, {})
+    )
 
 	const [sortableIds, setSortableIds] = React.useState<UniqueIdentifier[]>(
 		ingresses.map((ingress) => ingress.id)
@@ -368,53 +448,21 @@ export function IngressesDataTable() {
 	return (
 		<div className="px-4 lg:px-6">
 			<div className="space-y-4">
-				{/* Table controls */}
-				<div className="flex items-center justify-between">
-					<div className="flex items-center space-x-2">
-						<p className="text-sm text-muted-foreground">
-							{table.getFilteredSelectedRowModel().rows.length} of{" "}
-							{table.getFilteredRowModel().rows.length} row(s) selected.
-						</p>
-					</div>
-					<div className="flex items-center space-x-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="outline" size="sm">
-									<IconLayoutColumns />
-									<span className="hidden lg:inline">Customize Columns</span>
-									<span className="lg:hidden">Columns</span>
-									<IconChevronDown />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-56">
-								{table
-									.getAllColumns()
-									.filter(
-										(column) =>
-											typeof column.accessorFn !== "undefined" &&
-											column.getCanHide()
-									)
-									.map((column) => {
-										return (
-											<DropdownMenuCheckboxItem
-												key={column.id}
-												className="capitalize"
-												checked={column.getIsVisible()}
-												onCheckedChange={(value) =>
-													column.toggleVisibility(!!value)
-												}
-											>
-												{column.id}
-											</DropdownMenuCheckboxItem>
-										)
-									})}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-							<IconRefresh className={loading ? "animate-spin" : ""} />
-						</Button>
-					</div>
-				</div>
+                <DataTableFilters
+                    globalFilter={globalFilter}
+                    onGlobalFilterChange={setGlobalFilter}
+                    searchPlaceholder="Search ingresses by name, namespace, class, host, or address... (Press '/' to focus)"
+                    categoryFilter={classFilter}
+                    onCategoryFilterChange={setClassFilter}
+                    categoryLabel="Filter by class"
+                    categoryOptions={ingressClassOptions}
+                    selectedCount={table.getFilteredSelectedRowModel().rows.length}
+                    totalCount={table.getFilteredRowModel().rows.length}
+                    bulkActions={ingressBulkActions}
+                    bulkActionsLabel="Actions"
+                    table={table}
+                    showColumnToggle={true}
+                />
 
 				{/* Data table */}
 				<div className="overflow-hidden rounded-lg border">

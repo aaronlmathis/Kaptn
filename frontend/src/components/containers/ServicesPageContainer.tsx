@@ -4,6 +4,8 @@ import * as React from "react"
 import { ServicesDataTable } from "@/components/data_tables/ServicesDataTable"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useServicesWithWebSocket } from "@/hooks/useServicesWithWebSocket"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 import {
 	getServiceStatusBadge,
 	getServiceTypeBadge,
@@ -12,8 +14,18 @@ import {
 
 // Inner component that can access the namespace context
 function ServicesContent() {
-	const { data: services, loading: isLoading, error, isConnected } = useServicesWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: services, loading: isLoading, error, isConnected } = useServicesWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'services.get',
+            'services.patch',
+            'services.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when services change
 	React.useEffect(() => {
@@ -131,5 +143,9 @@ function ServicesContent() {
 }
 
 export function ServicesPageContainer() {
-	return <ServicesContent />
+    return (
+        <RouteGuard requiredCapabilities={["services.list"]}>
+            <ServicesContent />
+        </RouteGuard>
+    )
 }

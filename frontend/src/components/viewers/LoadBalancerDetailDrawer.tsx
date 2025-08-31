@@ -2,7 +2,7 @@ import * as React from "react"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconRefresh, IconNetwork, IconEye } from "@tabler/icons-react"
+import { IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconNetwork, IconEye } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
 	Drawer,
@@ -18,6 +18,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useServiceDetails } from "@/hooks/use-resource-details"
 import { loadBalancerSchema } from "@/lib/schemas/loadbalancer"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 function getLoadBalancerStatusBadge(externalIP: string) {
 	if (externalIP && externalIP !== '<none>' && externalIP !== '<pending>') {
@@ -64,7 +66,8 @@ interface LoadBalancerDetailDrawerProps {
  * This shows full LoadBalancer service details from the detailed API endpoint.
  */
 export function LoadBalancerDetailDrawer({ item, open, onOpenChange }: LoadBalancerDetailDrawerProps) {
-	const isMobile = useIsMobile()
+    const isMobile = useIsMobile()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed service information (LoadBalancers are services with type=LoadBalancer)
 	const { data: serviceDetails, loading, error } = useServiceDetails(item.namespace, item.name, open)
@@ -162,43 +165,32 @@ export function LoadBalancerDetailDrawer({ item, open, onOpenChange }: LoadBalan
 	// Combine basic and detailed rows
 	const allRows = [...basicRows, ...detailedRows]
 
-	const actions = (
-		<>
-			<Button
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement LoadBalancer ingress details functionality
-					console.log('Show LoadBalancer ingress details:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconEye className="size-4 mr-2" />
-				View Ingress
-			</Button>
-			<ResourceYamlEditor
-				resourceName={item.name}
-				namespace={item.namespace}
-				resourceKind="Service"
-			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
-				</Button>
-			</ResourceYamlEditor>
-			<Button
-				variant="destructive"
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement LoadBalancer restart functionality
-					console.log('Restart LoadBalancer:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconRefresh className="size-4 mr-2" />
-				Restart
-			</Button>
-		</>
-	)
+    const actions = (
+        <>
+            <Button
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                    console.log('Show LoadBalancer ingress details:', item.name, 'in namespace:', item.namespace)
+                }}
+            >
+                <IconEye className="size-4 mr-2" />
+                View Ingress
+            </Button>
+            <IfAllowed feature="services.patch" cluster={clusterId} namespace={item.namespace} resourceName={item.name}>
+                <ResourceYamlEditor
+                    resourceName={item.name}
+                    namespace={item.namespace}
+                    resourceKind="Service"
+                >
+                    <Button variant="outline" size="sm" className="w-full">
+                        <IconEdit className="size-4 mr-2" />
+                        Edit YAML
+                    </Button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+        </>
+    )
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>

@@ -83,6 +83,9 @@ import { useCronJobsWithWebSocket } from "@/hooks/useCronJobsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { cronJobSchema } from "@/lib/schemas/cronjob"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -125,7 +128,8 @@ function getSuspendBadge(suspend: boolean) {
 
 // Column definitions for cronjobs table
 const createColumns = (
-	onViewDetails: (cronJob: z.infer<typeof cronJobSchema>) => void
+    onViewDetails: (cronJob: z.infer<typeof cronJobSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof cronJobSchema>>[] => [
 		{
 			id: "drag",
@@ -158,21 +162,29 @@ const createColumns = (
 			enableSorting: false,
 			enableHiding: false,
 		},
-		{
-			accessorKey: "name",
-			header: "CronJob Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
-			enableHiding: false,
-		},
+    {
+        accessorKey: "name",
+        header: "CronJob Name",
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="cronjobs.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
+        enableHiding: false,
+    },
 		{
 			accessorKey: "namespace",
 			header: "Namespace",
@@ -224,70 +236,73 @@ const createColumns = (
 				</div>
 			),
 		},
-		{
-			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="CronJob"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							{row.original.suspend ? (
-								<>
-									<IconPlayerPlay className="size-4 mr-2" />
-									Resume
-								</>
-							) : (
-								<>
-									<IconPlayerPause className="size-4 mr-2" />
-									Suspend
-								</>
-							)}
-						</DropdownMenuItem>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Trigger Job
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
+    {
+        id: "actions",
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                    <IfAllowed feature="cronjobs.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="cronjobs.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <ResourceYamlEditor resourceName={row.original.name} namespace={row.original.namespace} resourceKind="CronJob">
+                            <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer" style={{ background: 'transparent', border: 'none', textAlign: 'left' }}>
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+                    <IfAllowed feature="cronjobs.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled>{row.original.suspend ? (<><IconPlayerPlay className="size-4 mr-2" />Resume</>) : (<><IconPlayerPause className="size-4 mr-2" />Suspend</>)}</DropdownMenuItem>}>
+                        <DropdownMenuItem>
+                            {row.original.suspend ? (
+                                <>
+                                    <IconPlayerPlay className="size-4 mr-2" />
+                                    Resume
+                                </>
+                            ) : (
+                                <>
+                                    <IconPlayerPause className="size-4 mr-2" />
+                                    Suspend
+                                </>
+                            )}
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="jobs.create" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconRefresh className="size-4 mr-2" />Trigger Job</DropdownMenuItem>}>
+                        <DropdownMenuItem>
+                            <IconRefresh className="size-4 mr-2" />
+                            Trigger Job
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="cronjobs.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => { const cj = row.original; console.log('Export YAML for CronJob:', `${cj.name} in ${cj.namespace}`) }}>
+                            <IconDownload className="size-4 mr-2" />
+                            Export YAML
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <DropdownMenuSeparator />
+                    <IfAllowed feature="cronjobs.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
 	]
 
 // Draggable row component
@@ -323,8 +338,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof cronJobSchema>> }) {
 }
 
 export function CronJobsDataTable() {
-	const { data: cronJobs, loading, error, refetch, isConnected } = useCronJobsWithWebSocket()
-	const { selectedNamespace } = useNamespace()
+    const { data: cronJobs, loading, error, refetch, isConnected } = useCronJobsWithWebSocket()
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -342,13 +358,91 @@ export function CronJobsDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
-	// Create filter options for cronjobs based on suspend status
-	const cronJobStatuses: FilterOption[] = React.useMemo(() => {
+    // Capability-aware bulk actions
+    const { isAllowed } = useAuthzCapabilitiesInContext(['cronjobs.get','cronjobs.patch','cronjobs.delete','jobs.create'])
+
+    const cronJobBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+        if (isAllowed('cronjobs.get')) {
+            actions.push({
+                id: 'export-yaml',
+                label: 'Export Selected as YAML',
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Export YAML for CronJobs:', selected.map(cj => cj.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: 'copy-names',
+            label: 'Copy CronJob Names',
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                const names = selected.map(cj => cj.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('cronjobs.patch')) {
+            actions.push({
+                id: 'resume-cronjobs',
+                label: 'Resume Selected CronJobs',
+                icon: <IconPlayerPlay className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Resume cronjobs:', selected.map(cj => `${cj.name} in ${cj.namespace}`))
+                },
+                requiresSelection: true,
+            })
+            actions.push({
+                id: 'suspend-cronjobs',
+                label: 'Suspend Selected CronJobs',
+                icon: <IconPlayerPause className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Suspend cronjobs:', selected.map(cj => `${cj.name} in ${cj.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+        if (isAllowed('jobs.create')) {
+            actions.push({
+                id: 'trigger-jobs',
+                label: 'Trigger Jobs For Selected',
+                icon: <IconRefresh className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Trigger jobs for cronjobs:', selected.map(cj => `${cj.name} in ${cj.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+        if (isAllowed('cronjobs.delete')) {
+            actions.push({
+                id: 'delete-cronjobs',
+                label: 'Delete Selected CronJobs',
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Delete cronjobs:', selected.map(cj => `${cj.name} in ${cj.namespace}`))
+                },
+                variant: 'destructive' as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
+
+    // Create filter options for cronjobs based on suspend status
+    const cronJobStatuses: FilterOption[] = React.useMemo(() => {
 		const statuses = new Set<string>()
 		cronJobs.forEach(cronJob => {
 			// Create status based on suspend field
@@ -419,66 +513,7 @@ export function CronJobsDataTable() {
 		},
 	})
 
-	// Create bulk actions for cronjobs
-	const cronJobBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for cronjobs:', selectedCronJobs.map(cj => cj.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-names",
-			label: "Copy CronJob Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedCronJobs.map(cj => cj.name).join('\n')
-				navigator.clipboard.writeText(names)
-				console.log('Copied cronjob names:', names)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "trigger-jobs",
-			label: "Trigger Selected Jobs",
-			icon: <IconClock className="size-4" />,
-			action: () => {
-				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Trigger jobs for cronjobs:', selectedCronJobs.map(cj => `${cj.name} in ${cj.namespace}`))
-				// TODO: Implement bulk job triggering
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "toggle-suspend",
-			label: "Toggle Suspend/Resume",
-			icon: <IconPlayerPause className="size-4" />,
-			action: () => {
-				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Toggle suspend for cronjobs:', selectedCronJobs.map(cj => `${cj.name} in ${cj.namespace}`))
-				// TODO: Implement bulk suspend/resume toggle
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-cronjobs",
-			label: "Delete Selected CronJobs",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedCronJobs = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete cronjobs:', selectedCronJobs.map(cj => `${cj.name} in ${cj.namespace}`))
-				// TODO: Implement bulk deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -541,8 +576,8 @@ export function CronJobsDataTable() {
 					categoryLabel="Filter by status"
 					categoryOptions={cronJobStatuses}
 					selectedCount={table.getFilteredSelectedRowModel().rows.length}
-					totalCount={table.getFilteredRowModel().rows.length}
-					bulkActions={cronJobBulkActions}
+                    totalCount={table.getFilteredRowModel().rows.length}
+                    bulkActions={cronJobBulkActions}
 					bulkActionsLabel="Actions"
 					table={table}
 					showColumnToggle={true}

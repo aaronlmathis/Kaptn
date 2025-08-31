@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconEdit, IconRefresh, IconLoader, IconCircleCheckFilled } from "@tabler/icons-react"
+import { IconEdit, IconRefresh, IconLoader, IconCircleCheckFilled, IconScale } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
 	Drawer,
@@ -17,6 +17,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { type StatefulSetTableRow } from "@/lib/schemas/statefulset"
 import { useStatefulSetDetails } from "@/hooks/use-resource-details"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Status badge helper for StatefulSets
 function getReadyBadge(ready: string) {
@@ -51,7 +53,8 @@ interface StatefulSetDetailDrawerProps {
  * This shows full StatefulSet details from the detailed API endpoint instead of the condensed version.
  */
 export function StatefulSetDetailDrawer({ statefulSet, open, onClose }: StatefulSetDetailDrawerProps) {
-	const isMobile = useIsMobile()
+    const isMobile = useIsMobile()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed StatefulSet information - always call hooks at top level
 	const { data: statefulSetDetails, loading, error } = useStatefulSetDetails(
@@ -135,28 +138,49 @@ export function StatefulSetDetailDrawer({ statefulSet, open, onClose }: Stateful
 	// Combine basic and detailed rows
 	const allRows = [...basicRows, ...detailedRows]
 
-	const actions = (
-		<>
-			<Button size="sm" className="w-full">
-				<IconRefresh className="size-4 mr-2" />
-				Scale StatefulSet
-			</Button>
-			<Button variant="outline" size="sm" className="w-full">
-				<IconRefresh className="size-4 mr-2" />
-				Restart StatefulSet
-			</Button>
-			<ResourceYamlEditor
-				resourceName={statefulSet.name}
-				namespace={statefulSet.namespace}
-				resourceKind="StatefulSet"
-			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
-				</Button>
-			</ResourceYamlEditor>
-		</>
-	)
+    const actions = (
+        <>
+            <IfAllowed
+                feature="statefulsets.scale.update"
+                cluster={clusterId}
+                namespace={statefulSet.namespace}
+                resourceName={statefulSet.name}
+            >
+                <Button size="sm" className="w-full">
+                    <IconScale className="size-4 mr-2" />
+                    Scale StatefulSet
+                </Button>
+            </IfAllowed>
+            <IfAllowed
+                feature="statefulsets.patch"
+                cluster={clusterId}
+                namespace={statefulSet.namespace}
+                resourceName={statefulSet.name}
+            >
+                <Button variant="outline" size="sm" className="w-full">
+                    <IconRefresh className="size-4 mr-2" />
+                    Restart StatefulSet
+                </Button>
+            </IfAllowed>
+            <IfAllowed
+                feature="statefulsets.patch"
+                cluster={clusterId}
+                namespace={statefulSet.namespace}
+                resourceName={statefulSet.name}
+            >
+                <ResourceYamlEditor
+                    resourceName={statefulSet.name}
+                    namespace={statefulSet.namespace}
+                    resourceKind="StatefulSet"
+                >
+                    <Button variant="outline" size="sm" className="w-full">
+                        <IconEdit className="size-4 mr-2" />
+                        Edit YAML
+                    </Button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+        </>
+    )
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onClose}>

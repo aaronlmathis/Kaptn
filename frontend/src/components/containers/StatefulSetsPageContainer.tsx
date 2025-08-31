@@ -5,16 +5,29 @@ import { StatefulSetsDataTable } from "@/components/data_tables/StatefulSetsData
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useStatefulSetsWithWebSocket } from "@/hooks/useStatefulSetsWithWebSocket"
 import {
-	getReplicaStatusBadge,
-	getUpdateStatusBadge,
-	getResourceIcon,
-	getHealthTrendBadge
+    getReplicaStatusBadge,
+    getUpdateStatusBadge,
+    getResourceIcon,
+    getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function StatefulSetsContent() {
-	const { data: statefulSets, loading: isLoading, error, isConnected } = useStatefulSetsWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: statefulSets, loading: isLoading, error, isConnected } = useStatefulSetsWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'statefulsets.get',
+            'statefulsets.patch',
+            'statefulsets.delete',
+            'statefulsets.scale.update',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when statefulSets change
 	React.useEffect(() => {
@@ -144,5 +157,9 @@ function StatefulSetsContent() {
 }
 
 export function StatefulSetsPageContainer() {
-	return <StatefulSetsContent />
+    return (
+        <RouteGuard requiredCapabilities={["statefulsets.list"]}>
+            <StatefulSetsContent />
+        </RouteGuard>
+    )
 }

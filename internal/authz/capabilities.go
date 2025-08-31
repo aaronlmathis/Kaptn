@@ -256,6 +256,24 @@ var Registry = map[string]CapabilityCheck{
 	"services.proxy.get":    {Group: "", Resource: "services", Subresource: "proxy", Verb: "get", Namespaced: true},
 	"services.proxy.create": {Group: "", Resource: "services", Subresource: "proxy", Verb: "create", Namespaced: true},
 
+	// Istio VirtualServices (CRD: networking.istio.io)
+	"virtualservices.get":    {Group: "networking.istio.io", Resource: "virtualservices", Verb: "get", Namespaced: true},
+	"virtualservices.list":   {Group: "networking.istio.io", Resource: "virtualservices", Verb: "list", Namespaced: true},
+	"virtualservices.watch":  {Group: "networking.istio.io", Resource: "virtualservices", Verb: "watch", Namespaced: true},
+	"virtualservices.create": {Group: "networking.istio.io", Resource: "virtualservices", Verb: "create", Namespaced: true},
+	"virtualservices.update": {Group: "networking.istio.io", Resource: "virtualservices", Verb: "update", Namespaced: true},
+	"virtualservices.patch":  {Group: "networking.istio.io", Resource: "virtualservices", Verb: "patch", Namespaced: true},
+	"virtualservices.delete": {Group: "networking.istio.io", Resource: "virtualservices", Verb: "delete", Namespaced: true},
+
+	// Istio Gateways (CRD: networking.istio.io)
+	"gateways.get":    {Group: "networking.istio.io", Resource: "gateways", Verb: "get", Namespaced: true},
+	"gateways.list":   {Group: "networking.istio.io", Resource: "gateways", Verb: "list", Namespaced: true},
+	"gateways.watch":  {Group: "networking.istio.io", Resource: "gateways", Verb: "watch", Namespaced: true},
+	"gateways.create": {Group: "networking.istio.io", Resource: "gateways", Verb: "create", Namespaced: true},
+	"gateways.update": {Group: "networking.istio.io", Resource: "gateways", Verb: "update", Namespaced: true},
+	"gateways.patch":  {Group: "networking.istio.io", Resource: "gateways", Verb: "patch", Namespaced: true},
+	"gateways.delete": {Group: "networking.istio.io", Resource: "gateways", Verb: "delete", Namespaced: true},
+
 	// Namespace finalize
 	"namespaces.finalize.update": {Group: "", Resource: "namespaces", Subresource: "finalize", Verb: "update", Namespaced: false},
 

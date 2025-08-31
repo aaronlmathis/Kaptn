@@ -18,6 +18,8 @@ import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { usePodDetails } from "@/hooks/use-resource-details"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Import the pod schema from the main dashboard component
 import { podSchema } from "@/components/kubernetes-dashboard"
@@ -66,8 +68,9 @@ interface PodDetailDrawerProps {
  * This shows full pod details from the detailed API endpoint instead of the condensed version.
  */
 export function PodDetailDrawer({ item, open, onOpenChange }: PodDetailDrawerProps) {
-	const isMobile = useIsMobile()
-	const { openShell } = useShell()
+    const isMobile = useIsMobile()
+    const { openShell } = useShell()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed pod information
 	const { data: podDetails, loading, error } = usePodDetails(item.namespace, item.name, open)
@@ -167,36 +170,59 @@ export function PodDetailDrawer({ item, open, onOpenChange }: PodDetailDrawerPro
 	// Combine basic and detailed rows
 	const allRows = [...basicRows, ...detailedRows]
 
-	const actions = (
-		<>
-			<Button size="sm" className="w-full" onClick={handleExecShell}>
-				<IconTerminal className="size-4 mr-2" />
-				Exec Shell
-			</Button>
-			<ResourceYamlEditor
-				resourceName={item.name}
-				namespace={item.namespace}
-				resourceKind="Pod"
-			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
-				</Button>
-			</ResourceYamlEditor>
-			<Button
-				variant="destructive"
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement pod restart functionality
-					console.log('Restart pod:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconRefresh className="size-4 mr-2" />
-				Restart
-			</Button>
-		</>
-	)
+    const actions = (
+        <>
+            <IfAllowed
+                feature="pods.exec"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <Button size="sm" className="w-full" onClick={handleExecShell}>
+                    <IconTerminal className="size-4 mr-2" />
+                    Exec Shell
+                </Button>
+            </IfAllowed>
+
+            <IfAllowed
+                feature="pods.patch"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <ResourceYamlEditor
+                    resourceName={item.name}
+                    namespace={item.namespace}
+                    resourceKind="Pod"
+                >
+                    <Button variant="outline" size="sm" className="w-full">
+                        <IconEdit className="size-4 mr-2" />
+                        Edit YAML
+                    </Button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+
+            <IfAllowed
+                feature="pods.patch"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <Button
+                    variant="destructive"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                        // TODO: Implement pod restart functionality
+                        console.log('Restart pod:', item.name, 'in namespace:', item.namespace)
+                    }}
+                >
+                    <IconRefresh className="size-4 mr-2" />
+                    Restart
+                </Button>
+            </IfAllowed>
+        </>
+    )
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>

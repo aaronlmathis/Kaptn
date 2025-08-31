@@ -194,21 +194,29 @@ const createColumns = (
 			enableSorting: false,
 			enableHiding: false,
 		},
-		{
-			accessorKey: "name",
-			header: "Pod Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
-			enableHiding: false,
-		},
+    {
+        accessorKey: "name",
+        header: "Pod Name",
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="pods.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
+        enableHiding: false,
+    },
 		{
 			accessorKey: "namespace",
 			header: "Namespace",

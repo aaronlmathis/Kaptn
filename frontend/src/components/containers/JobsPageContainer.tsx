@@ -10,11 +10,24 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function JobsContent() {
-	const { data: jobs, loading: isLoading, error, isConnected } = useJobsWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: jobs, loading: isLoading, error, isConnected } = useJobsWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    // Ensure job-specific action capabilities are requested
+    React.useEffect(() => {
+        fetchAdditional([
+            'jobs.get',
+            'jobs.patch',
+            'jobs.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when jobs change
 	React.useEffect(() => {
@@ -131,5 +144,9 @@ function JobsContent() {
 }
 
 export function JobsPageContainer() {
-	return <JobsContent />
+    return (
+        <RouteGuard requiredCapabilities={["jobs.list"]} requireAll={false}>
+            <JobsContent />
+        </RouteGuard>
+    )
 }

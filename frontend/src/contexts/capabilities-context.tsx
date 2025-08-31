@@ -509,22 +509,34 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 		try {
 			// Create a smaller, focused request body for faster loading
 			// Only request the most commonly needed capabilities initially
-			const requestBody = {
-				cluster: "default",
-				features: [
-					// Core viewing capabilities - most pages need these
-					'pods.list', 'pods.get', 'deployments.list', 'deployments.get',
-					'services.list', 'services.get', 'configmaps.list', 'secrets.list',
-					'namespaces.list', 'events.list', 'nodes.list',
+            const requestBody = {
+                cluster: "default",
+                features: [
+                    // Core viewing capabilities - most pages need these
+                    'pods.list', 'pods.get',
+                    'deployments.list', 'deployments.get',
+                    'replicasets.list', 'replicasets.get',
+                    'daemonsets.list', 'daemonsets.get',
+                    'statefulsets.list', 'statefulsets.get',
+                    'endpoints.list', 'endpoints.get',
+                    'endpointslices.list', 'endpointslices.get',
+                    'ingresses.list', 'ingresses.get',
+                    'ingressclasses.list', 'ingressclasses.get',
+                    'networkpolicies.list', 'networkpolicies.get',
+                    'virtualservices.list', 'virtualservices.get',
+                    'gateways.list', 'gateways.get',
+                    'services.list', 'services.get',
+                    'configmaps.list', 'secrets.list',
+                    'namespaces.list', 'events.list', 'nodes.list',
 
-					// Basic management capabilities  
-					'pods.delete', 'deployments.delete', 'services.delete',
-					'pods.logs', 'pods.exec', 'deployments.restart',
+                    // Basic management capabilities  
+                    'pods.delete', 'deployments.delete', 'services.delete',
+                    'pods.logs', 'pods.exec', 'deployments.restart',
 
-					// Dashboard essentials
-					'dashboard.view',
-				]
-			}
+                    // Dashboard essentials
+                    'dashboard.view',
+                ]
+            }
 
 
 			devLog('[capabilities] Fetching core capabilities (fast load)')
@@ -565,38 +577,56 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 		}
 	}, [isAuthenticated, authMode, fetchWithAuth])
 
-	// Function to load additional capabilities on-demand (for specific pages that need more)
-	const fetchAdditionalCapabilities = React.useCallback(async (additionalFeatures: string[]) => {
-		if (typeof window === 'undefined' || !isAuthenticated || authMode === 'none') {
-			return
-		}
+    // Track features we've already requested in this session to avoid duplicate POSTs
+    const inFlightRef = React.useRef<Set<string>>(new Set());
 
-		try {
-			const requestBody = {
-				cluster: "default",
-				features: additionalFeatures
-			}
+    // Function to load additional capabilities on-demand (for specific pages that need more)
+    const fetchAdditionalCapabilities = React.useCallback(async (additionalFeatures: string[]) => {
+        if (typeof window === 'undefined' || !isAuthenticated || authMode === 'none') {
+            return
+        }
 
-			const response = await fetchWithAuth('/api/v1/authz/capabilities', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(requestBody),
-			})
+        // Filter out capabilities we already know about or have requested
+        const featuresToRequest = additionalFeatures
+            .filter(f => !inFlightRef.current.has(f))
+            .filter(f => state.capabilities[f] === undefined)
 
-			if (response.ok) {
-				const data = await response.json()
-				setState(prev => ({
-					...prev,
-					capabilities: { ...prev.capabilities, ...(data.caps || {}) },
-					lastFetched: Date.now(),
-				}))
-			}
-		} catch (error) {
-			devWarn('[capabilities] Failed to fetch additional capabilities')
-		}
-	}, [isAuthenticated, authMode, fetchWithAuth])
+        if (featuresToRequest.length === 0) {
+            return
+        }
+
+        // Mark as in-flight to prevent duplicate concurrent requests
+        featuresToRequest.forEach(f => inFlightRef.current.add(f))
+
+        try {
+            const requestBody = {
+                cluster: "default",
+                features: featuresToRequest,
+            }
+
+            const response = await fetchWithAuth('/api/v1/authz/capabilities', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                setState(prev => ({
+                    ...prev,
+                    capabilities: { ...prev.capabilities, ...(data.caps || {}) },
+                    lastFetched: Date.now(),
+                }))
+            } else {
+                devWarn('[capabilities] Additional capabilities request failed:', response.status, response.statusText)
+            }
+        } catch (error) {
+            devWarn('[capabilities] Failed to fetch additional capabilities')
+        } finally {
+            // Clear in-flight flags so future attempts can retry
+            featuresToRequest.forEach(f => inFlightRef.current.delete(f))
+        }
+    }, [isAuthenticated, authMode, fetchWithAuth, state.capabilities])
 
 	// Fetch capabilities on mount and when auth state changes
 	React.useEffect(() => {

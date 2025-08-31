@@ -16,6 +16,8 @@ import {
 import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 import { useDaemonSetDetails } from "@/hooks/use-resource-details"
 import { daemonSetSchema } from "@/lib/schemas/daemonset"
 
@@ -60,7 +62,8 @@ interface DaemonSetDetailDrawerProps {
  * This shows full daemonset details from the detailed API endpoint instead of the condensed version.
  */
 export function DaemonSetDetailDrawer({ item, open, onOpenChange }: DaemonSetDetailDrawerProps) {
-	const isMobile = useIsMobile()
+    const isMobile = useIsMobile()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed daemonset information
 	const { data: daemonSetDetails, loading, error } = useDaemonSetDetails(item.namespace, item.name, open)
@@ -151,24 +154,38 @@ export function DaemonSetDetailDrawer({ item, open, onOpenChange }: DaemonSetDet
 	// Combine basic and detailed rows
 	const allRows = [...basicRows, ...detailedRows]
 
-	const actions = (
-		<>
-			<ResourceYamlEditor
-				resourceName={item.name}
-				namespace={item.namespace}
-				resourceKind="DaemonSet"
-			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
-				</Button>
-			</ResourceYamlEditor>
-			<Button size="sm" className="w-full" variant="destructive">
-				<IconRefresh className="size-4 mr-2" />
-				Restart DaemonSet
-			</Button>
-		</>
-	)
+    const actions = (
+        <>
+            <IfAllowed
+                feature="daemonsets.patch"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <ResourceYamlEditor
+                    resourceName={item.name}
+                    namespace={item.namespace}
+                    resourceKind="DaemonSet"
+                >
+                    <Button variant="outline" size="sm" className="w-full">
+                        <IconEdit className="size-4 mr-2" />
+                        Edit YAML
+                    </Button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+            <IfAllowed
+                feature="daemonsets.patch"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <Button size="sm" className="w-full" variant="destructive">
+                    <IconRefresh className="size-4 mr-2" />
+                    Restart DaemonSet
+                </Button>
+            </IfAllowed>
+        </>
+    )
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>

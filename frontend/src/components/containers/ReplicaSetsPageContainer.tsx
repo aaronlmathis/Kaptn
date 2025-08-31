@@ -10,11 +10,25 @@ import {
   getResourceIcon,
   getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function ReplicaSetsContent() {
   const { data: replicaSets, loading: isLoading, error, isConnected } = useReplicaSetsWithWebSocket(true)
   const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+  const { fetchAdditional } = useCapabilities()
+
+  // Ensure replicaset-specific action capabilities are requested
+  React.useEffect(() => {
+    fetchAdditional([
+      'replicasets.get',
+      'replicasets.patch',
+      'replicasets.delete',
+      'replicasets.scale.update',
+    ]).catch(() => { /* noop */ })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Update lastUpdated when replicaSets change
   React.useEffect(() => {
@@ -61,7 +75,7 @@ function ReplicaSetsContent() {
     // Calculate total replica stats
     const totalAvailable = replicaSets.reduce((sum, rs) => sum + rs.available, 0)
     const totalCurrent = replicaSets.reduce((sum, rs) => sum + rs.current, 0)
-    const totalDesired = replicaSets.reduce((sum, rs) => rs.desired, 0)
+    const totalDesired = replicaSets.reduce((sum, rs) => sum + rs.desired, 0)
     const totalReady = replicaSets.reduce((sum, rs) => {
       const [ready] = rs.ready.split('/').map(Number)
       return sum + (ready || 0)
@@ -142,6 +156,8 @@ function ReplicaSetsContent() {
 
 export function ReplicaSetsPageContainer() {
   return (
-      <ReplicaSetsContent />
+      <RouteGuard requiredCapabilities={["replicasets.list"]} requireAll={false}>
+        <ReplicaSetsContent />
+      </RouteGuard>
   )
 } 

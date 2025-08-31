@@ -81,6 +81,9 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useEndpointsWithWebSocket } from "@/hooks/useEndpointsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { type DashboardEndpoints } from "@/lib/k8s-services"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -104,7 +107,8 @@ function DragHandle({ id }: { id: number }) {
 
 // Column definitions for endpoints table
 const createColumns = (
-	onViewDetails: (endpoint: DashboardEndpoints) => void
+    onViewDetails: (endpoint: DashboardEndpoints) => void,
+    clusterId: string
 ): ColumnDef<DashboardEndpoints>[] => [
 		{
 			id: "drag",
@@ -140,16 +144,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Endpoint Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="endpoints.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -191,56 +203,55 @@ const createColumns = (
 		},
 		{
 			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="Endpoints"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed feature="endpoints.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed feature="endpoints.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}>
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="Endpoints"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+
+                    <DropdownMenuSeparator />
+
+                    <IfAllowed feature="endpoints.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<DashboardEndpoints> }) {
@@ -275,8 +286,9 @@ function DraggableRow({ row }: { row: Row<DashboardEndpoints> }) {
 }
 
 export function EndpointsDataTable() {
-	const { data: endpoints, loading, error, refetch, isConnected } = useEndpointsWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: endpoints, loading, error, refetch, isConnected } = useEndpointsWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -294,10 +306,10 @@ export function EndpointsDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	// Create filter options for endpoints based on subset count
 	const endpointStatuses: FilterOption[] = React.useMemo(() => {
@@ -384,65 +396,69 @@ export function EndpointsDataTable() {
 	})
 
 	// Bulk actions for endpoints
-	const endpointBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for endpoints:', selectedEndpoints.map(ep => ep.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-names",
-			label: "Copy Endpoint Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedEndpoints.map(ep => ep.name).join('\n')
-				navigator.clipboard.writeText(names)
-				console.log('Copied endpoint names:', names)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "show-network-info",
-			label: "Show Network Information",
-			icon: <IconNetwork className="size-4" />,
-			action: () => {
-				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Show network info for endpoints:', selectedEndpoints.map(ep => `${ep.name}: ${ep.addressesDisplay}`))
-				// TODO: Implement network information display
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "describe-endpoints",
-			label: "Describe Selected Endpoints",
-			icon: <IconInfoCircle className="size-4" />,
-			action: () => {
-				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Describe endpoints:', selectedEndpoints.map(ep => `${ep.name} in ${ep.namespace}`))
-				// TODO: Implement bulk endpoint describe
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-endpoints",
-			label: "Delete Selected Endpoints",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete endpoints:', selectedEndpoints.map(ep => `${ep.name} in ${ep.namespace}`))
-				// TODO: Implement bulk deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+    const { isAllowed } = useAuthzCapabilitiesInContext([
+        'endpoints.get', 'endpoints.patch', 'endpoints.delete'
+    ])
+    const endpointBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+        if (isAllowed('endpoints.get')) {
+            actions.push({
+                id: "export-yaml",
+                label: "Export Selected as YAML",
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Export YAML for endpoints:', selectedEndpoints.map(ep => ep.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: "copy-names",
+            label: "Copy Endpoint Names",
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                const names = selectedEndpoints.map(ep => ep.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        actions.push({
+            id: "show-network-info",
+            label: "Show Network Information",
+            icon: <IconNetwork className="size-4" />,
+            action: () => {
+                const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                console.log('Show network info for endpoints:', selectedEndpoints.map(ep => `${ep.name}: ${ep.addressesDisplay}`))
+            },
+            requiresSelection: true,
+        })
+        actions.push({
+            id: "describe-endpoints",
+            label: "Describe Selected Endpoints",
+            icon: <IconInfoCircle className="size-4" />,
+            action: () => {
+                const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                console.log('Describe endpoints:', selectedEndpoints.map(ep => `${ep.name} in ${ep.namespace}`))
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('endpoints.delete')) {
+            actions.push({
+                id: "delete-endpoints",
+                label: "Delete Selected Endpoints",
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selectedEndpoints = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Delete endpoints:', selectedEndpoints.map(ep => `${ep.name} in ${ep.namespace}`))
+                },
+                variant: "destructive" as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -507,7 +523,7 @@ export function EndpointsDataTable() {
 					selectedCount={table.getFilteredSelectedRowModel().rows.length}
 					totalCount={table.getFilteredRowModel().rows.length}
 					bulkActions={endpointBulkActions}
-					bulkActionsLabel="Endpoint Actions"
+                    bulkActionsLabel="Actions"
 					table={table}
 					showColumnToggle={true}
 					onRefresh={refetch}

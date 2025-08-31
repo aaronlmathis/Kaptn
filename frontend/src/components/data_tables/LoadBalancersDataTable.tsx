@@ -81,6 +81,9 @@ import { useLoadBalancersWithWebSocket } from "@/hooks/useLoadBalancersWithWebSo
 import { useNamespace } from "@/contexts/namespace-context"
 import { loadBalancerSchema, type LoadBalancer } from "@/lib/schemas/loadbalancer"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -140,7 +143,8 @@ function getLoadBalancerTypeBadge() {
 
 // Column definitions for load balancers table
 const createColumns = (
-	onViewDetails: (loadBalancer: z.infer<typeof loadBalancerSchema>) => void
+    onViewDetails: (loadBalancer: z.infer<typeof loadBalancerSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof loadBalancerSchema>>[] => [
 		{
 			id: "drag",
@@ -176,16 +180,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Load Balancer Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="services.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -237,61 +249,52 @@ const createColumns = (
 		},
 		{
 			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="Service"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem
-							onClick={() => {
-								// TODO: Implement LoadBalancer restart functionality
-								console.log('Restart LoadBalancer:', row.original.name, 'in namespace:', row.original.namespace)
-							}}
-						>
-							<IconRefresh className="size-4 mr-2" />
-							Restart
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed feature="services.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="services.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}>
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="Service"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+                    <DropdownMenuSeparator />
+                    <IfAllowed feature="services.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof loadBalancerSchema>> }) {
@@ -326,8 +329,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof loadBalancerSchema>> })
 }
 
 export function LoadBalancersDataTable() {
-	const { data: loadBalancers, loading, error, refetch, isConnected } = useLoadBalancersWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: loadBalancers, loading, error, refetch, isConnected } = useLoadBalancersWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -338,7 +342,8 @@ export function LoadBalancersDataTable() {
 
 	// Additional state variables for DataTableFilters
 	const [globalFilter, setGlobalFilter] = React.useState("")
-	const [statusFilter, setStatusFilter] = React.useState<string>("all")
+    const [statusFilter, setStatusFilter] = React.useState<string>("all")
+    const { isAllowed } = useAuthzCapabilitiesInContext(['services.get', 'services.delete'])
 
 	// Handle opening detail drawer
 	const handleViewDetails = React.useCallback((loadBalancer: z.infer<typeof loadBalancerSchema>) => {
@@ -347,10 +352,10 @@ export function LoadBalancersDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	// Create filter options for load balancer statuses based on externalIP
 	const loadBalancerStatuses = React.useMemo(() => {
@@ -413,8 +418,8 @@ export function LoadBalancersDataTable() {
 		return filtered
 	}, [loadBalancers, statusFilter, globalFilter])
 
-	const table = useReactTable({
-		data: filteredData,
+    const table = useReactTable({
+        data: filteredData,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -432,7 +437,48 @@ export function LoadBalancersDataTable() {
 			columnVisibility,
 			rowSelection,
 		},
-	})
+    })
+
+    const loadBalancerBulkActions = React.useMemo(() => {
+        const actions: any[] = []
+        if (isAllowed('services.get')) {
+            actions.push({
+                id: 'export-yaml',
+                label: 'Export Selected as YAML',
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Export YAML for load balancers:', selected.map(s => s.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: 'copy-names',
+            label: 'Copy Names',
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                const names = selected.map(s => s.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('services.delete')) {
+            actions.push({
+                id: 'delete-loadbalancers',
+                label: 'Delete Selected LoadBalancers',
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Delete load balancers:', selected.map(s => `${s.name} in ${s.namespace}`))
+                },
+                variant: 'destructive' as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -499,30 +545,7 @@ export function LoadBalancersDataTable() {
 					isRefreshing={loading}
 					selectedCount={table.getFilteredSelectedRowModel().rows.length}
 					totalCount={table.getFilteredRowModel().rows.length}
-					bulkActions={[
-						{
-							id: "export-yaml",
-							icon: <IconDownload />,
-							label: "Export to YAML",
-							action: () => {
-								const selectedRows = table.getFilteredSelectedRowModel().rows
-								// TODO: Implement bulk YAML export for selected load balancers
-								console.log('Export selected load balancers:', selectedRows.map(row => row.original))
-							},
-							requiresSelection: true
-						},
-						{
-							id: "copy-names",
-							icon: <IconCopy />,
-							label: "Copy names",
-							action: () => {
-								const selectedRows = table.getFilteredSelectedRowModel().rows
-								const names = selectedRows.map(row => row.original.name).join('\n')
-								navigator.clipboard.writeText(names)
-							},
-							requiresSelection: true
-						}
-					]}
+                bulkActions={loadBalancerBulkActions}
 					bulkActionsLabel="Actions"
 					showColumnToggle={true}
 				>

@@ -82,6 +82,9 @@ import { useEndpointSlicesWithWebSocket } from "@/hooks/useEndpointSlicesWithWeb
 import { useNamespace } from "@/contexts/namespace-context"
 import { endpointSliceSchema } from "@/lib/schemas/endpointslice"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -134,7 +137,8 @@ function getReadyBadge(ready: string, readyCount: number, totalCount: number) {
 
 // Column definitions for endpoint slices table
 const createColumns = (
-	onViewDetails: (endpointSlice: z.infer<typeof endpointSliceSchema>) => void
+    onViewDetails: (endpointSlice: z.infer<typeof endpointSliceSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof endpointSliceSchema>>[] => [
 		{
 			id: "drag",
@@ -170,16 +174,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="endpointslices.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -237,56 +249,55 @@ const createColumns = (
 		},
 		{
 			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="EndpointSlice"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart EndpointSlice
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed feature="endpointslices.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed feature="endpointslices.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}>
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="EndpointSlice"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+
+                    <DropdownMenuSeparator />
+
+                    <IfAllowed feature="endpointslices.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof endpointSliceSchema>> }) {
@@ -321,8 +332,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof endpointSliceSchema>> }
 }
 
 export function EndpointSlicesDataTable() {
-	const { data: endpointSlices, loading, error, refetch, isConnected } = useEndpointSlicesWithWebSocket()
-	const { selectedNamespace } = useNamespace()
+    const { data: endpointSlices, loading, error, refetch, isConnected } = useEndpointSlicesWithWebSocket()
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -340,10 +352,10 @@ export function EndpointSlicesDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	// Create filter options for endpoint slices based on address type
 	const endpointSliceTypes: FilterOption[] = React.useMemo(() => {
@@ -406,54 +418,59 @@ export function EndpointSlicesDataTable() {
 	})
 
 	// Create bulk actions for endpoint slices
-	const endpointSliceBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for endpoint slices:', selectedSlices.map(slice => slice.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-names",
-			label: "Copy EndpointSlice Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedSlices.map(slice => slice.name).join('\n')
-				navigator.clipboard.writeText(names)
-				console.log('Copied endpoint slice names:', names)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "monitor-endpoints",
-			label: "Monitor Selected Endpoints",
-			icon: <IconNetwork className="size-4" />,
-			action: () => {
-				const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Monitor endpoints for slices:', selectedSlices.map(slice => `${slice.name} in ${slice.namespace}`))
-				// TODO: Implement endpoint monitoring
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-endpointslices",
-			label: "Delete Selected EndpointSlices",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete endpoint slices:', selectedSlices.map(slice => `${slice.name} in ${slice.namespace}`))
-				// TODO: Implement bulk deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+    const { isAllowed } = useAuthzCapabilitiesInContext([
+        'endpointslices.get', 'endpointslices.delete', 'endpointslices.patch'
+    ])
+    const endpointSliceBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+        if (isAllowed('endpointslices.get')) {
+            actions.push({
+                id: "export-yaml",
+                label: "Export Selected as YAML",
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Export YAML for endpoint slices:', selectedSlices.map(slice => slice.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: "copy-names",
+            label: "Copy EndpointSlice Names",
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                const names = selectedSlices.map(slice => slice.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        actions.push({
+            id: "monitor-endpoints",
+            label: "Monitor Selected Endpoints",
+            icon: <IconNetwork className="size-4" />,
+            action: () => {
+                const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                console.log('Monitor endpoints for slices:', selectedSlices.map(slice => `${slice.name} in ${slice.namespace}`))
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('endpointslices.delete')) {
+            actions.push({
+                id: "delete-endpointslices",
+                label: "Delete Selected EndpointSlices",
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selectedSlices = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Delete endpoint slices:', selectedSlices.map(slice => `${slice.name} in ${slice.namespace}`))
+                },
+                variant: "destructive" as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(

@@ -82,6 +82,9 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useStatefulSetsWithWebSocket } from "@/hooks/useStatefulSetsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { type StatefulSetTableRow } from "@/lib/schemas/statefulset"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -127,7 +130,8 @@ function getReadyBadge(ready: string) {
 
 // Column definitions for statefulsets table
 const createColumns = (
-	onViewDetails: (statefulSet: StatefulSetTableRow) => void
+    onViewDetails: (statefulSet: StatefulSetTableRow) => void,
+    clusterId: string
 ): ColumnDef<StatefulSetTableRow>[] => [
 		{
 			id: "drag",
@@ -163,16 +167,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "StatefulSet Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="statefulsets.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -228,56 +240,69 @@ const createColumns = (
 		},
 		{
 			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="StatefulSet"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed feature="statefulsets.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed feature="statefulsets.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}>
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="StatefulSet"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+
+                    <IfAllowed feature="statefulsets.scale.update" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconScale className="size-4 mr-2" />Scale</DropdownMenuItem>}>
+                        <DropdownMenuItem>
+                            <IconScale className="size-4 mr-2" />
+                            Scale
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed feature="statefulsets.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconRefresh className="size-4 mr-2" />Restart</DropdownMenuItem>}>
+                        <DropdownMenuItem>
+                            <IconRefresh className="size-4 mr-2" />
+                            Restart
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <DropdownMenuSeparator />
+
+                    <IfAllowed feature="statefulsets.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<StatefulSetTableRow> }) {
@@ -312,8 +337,9 @@ function DraggableRow({ row }: { row: Row<StatefulSetTableRow> }) {
 }
 
 export function StatefulSetsDataTable() {
-	const { data: statefulSets, loading, error, refetch, isConnected } = useStatefulSetsWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: statefulSets, loading, error, refetch, isConnected } = useStatefulSetsWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -378,10 +404,10 @@ export function StatefulSetsDataTable() {
 	}, [statefulSets, statusFilter, globalFilter])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	const table = useReactTable({
 		data: filteredData,
@@ -405,76 +431,73 @@ export function StatefulSetsDataTable() {
 	})
 
 	// Create bulk actions for StatefulSets (moved after table creation)
-	const statefulSetBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for StatefulSets:', selectedStatefulSets.map(ss => ss.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-names",
-			label: "Copy StatefulSet Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedStatefulSets.map(ss => ss.name).join('\n')
-				navigator.clipboard.writeText(names)
-				console.log('Copied StatefulSet names:', names)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "scale-statefulsets",
-			label: "Scale Selected StatefulSets",
-			icon: <IconScale className="size-4" />,
-			action: () => {
-				const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Scale StatefulSets:', selectedStatefulSets.map(ss => `${ss.name} in ${ss.namespace}`))
-				// TODO: Implement bulk scaling with modal
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "get-logs",
-			label: "Get Logs for Selected",
-			icon: <IconFileText className="size-4" />,
-			action: () => {
-				const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Get logs for StatefulSets:', selectedStatefulSets.map(ss => `${ss.name} in ${ss.namespace}`))
-				// TODO: Implement bulk log retrieval
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "restart-statefulsets",
-			label: "Restart Selected StatefulSets",
-			icon: <IconRefresh className="size-4" />,
-			action: () => {
-				const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Restart StatefulSets:', selectedStatefulSets.map(ss => `${ss.name} in ${ss.namespace}`))
-				// TODO: Implement bulk restart
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-statefulsets",
-			label: "Delete Selected StatefulSets",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete StatefulSets:', selectedStatefulSets.map(ss => `${ss.name} in ${ss.namespace}`))
-				// TODO: Implement bulk deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+    const { isAllowed } = useAuthzCapabilitiesInContext([
+        'statefulsets.get', 'statefulsets.patch', 'statefulsets.delete', 'statefulsets.scale.update'
+    ])
+    const statefulSetBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+        if (isAllowed('statefulsets.get')) {
+            actions.push({
+                id: "export-yaml",
+                label: "Export Selected as YAML",
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Export YAML for StatefulSets:', selectedStatefulSets.map(ss => ss.name))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: "copy-names",
+            label: "Copy StatefulSet Names",
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                const names = selectedStatefulSets.map(ss => ss.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('statefulsets.scale.update')) {
+            actions.push({
+                id: "scale-statefulsets",
+                label: "Scale Selected StatefulSets",
+                icon: <IconScale className="size-4" />,
+                action: () => {
+                    const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Scale StatefulSets:', selectedStatefulSets.map(ss => `${ss.name} in ${ss.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+        if (isAllowed('statefulsets.patch')) {
+            actions.push({
+                id: "restart-statefulsets",
+                label: "Restart Selected StatefulSets",
+                icon: <IconRefresh className="size-4" />,
+                action: () => {
+                    const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Restart StatefulSets:', selectedStatefulSets.map(ss => `${ss.name} in ${ss.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+        if (isAllowed('statefulsets.delete')) {
+            actions.push({
+                id: "delete-statefulsets",
+                label: "Delete Selected StatefulSets",
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selectedStatefulSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Delete StatefulSets:', selectedStatefulSets.map(ss => `${ss.name} in ${ss.namespace}`))
+                },
+                variant: "destructive" as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(

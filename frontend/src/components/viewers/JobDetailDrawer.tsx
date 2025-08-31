@@ -16,6 +16,8 @@ import {
 import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 import { useJobDetails } from "@/hooks/use-resource-details"
 import { jobSchema } from "@/lib/schemas/job"
 
@@ -63,6 +65,7 @@ interface JobDetailDrawerProps {
  */
 export function JobDetailDrawer({ item, open, onOpenChange }: JobDetailDrawerProps) {
 	const isMobile = useIsMobile()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed job information
 	const { data: jobDetails, loading, error } = useJobDetails(item.namespace, item.name, open)
@@ -141,6 +144,7 @@ export function JobDetailDrawer({ item, open, onOpenChange }: JobDetailDrawerPro
 
 	const actions = (
 		<>
+			<IfAllowed feature="jobs.patch" cluster={clusterId} namespace={item.namespace} resourceName={item.name}>
 			<ResourceYamlEditor
 				resourceName={item.name}
 				namespace={item.namespace}
@@ -151,6 +155,8 @@ export function JobDetailDrawer({ item, open, onOpenChange }: JobDetailDrawerPro
 					Edit YAML
 				</Button>
 			</ResourceYamlEditor>
+			</IfAllowed>
+			<IfAllowed feature="jobs.patch" cluster={clusterId} namespace={item.namespace} resourceName={item.name}>
 			<Button
 				variant="destructive"
 				size="sm"
@@ -163,6 +169,7 @@ export function JobDetailDrawer({ item, open, onOpenChange }: JobDetailDrawerPro
 				<IconRefresh className="size-4 mr-2" />
 				Restart Job
 			</Button>
+			</IfAllowed>
 		</>
 	)
 

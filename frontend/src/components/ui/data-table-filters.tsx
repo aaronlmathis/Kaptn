@@ -194,27 +194,37 @@ export function DataTableFilters({
 										<IconChevronDown className="size-3" />
 									</Button>
 								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end" className="w-48">
-									{bulkActions.map((action, index) => {
-										const isDisabled = action.disabled || (action.requiresSelection !== false && selectedCount === 0)
+                        <DropdownMenuContent align="end" className="w-auto min-w-max whitespace-nowrap">
+                            {(() => {
+                                const normalActions = bulkActions.filter(a => a.variant !== 'destructive')
+                                const destructiveActions = bulkActions.filter(a => a.variant === 'destructive')
 
-										return (
-											<React.Fragment key={action.id}>
-												<DropdownMenuItem
-													onClick={action.action}
-													disabled={isDisabled}
-													className={action.variant === "destructive" ? "text-red-600 focus:text-red-600" : ""}
-												>
-													{action.icon}
-													<span className="ml-2">{action.label}</span>
-												</DropdownMenuItem>
-												{index < bulkActions.length - 1 && action.variant === "destructive" && (
-													<DropdownMenuSeparator />
-												)}
-											</React.Fragment>
-										)
-									})}
-								</DropdownMenuContent>
+                                const renderItem = (action: BulkAction) => {
+                                    const isDisabled = action.disabled || (action.requiresSelection !== false && selectedCount === 0)
+                                    return (
+                                        <DropdownMenuItem
+                                            key={action.id}
+                                            onClick={action.action}
+                                            disabled={isDisabled}
+                                            variant={action.variant === 'destructive' ? 'destructive' : 'default'}
+                                        >
+                                            {action.icon}
+                                            <span className="ml-2">{action.label}</span>
+                                        </DropdownMenuItem>
+                                    )
+                                }
+
+                                return (
+                                    <>
+                                        {normalActions.map(renderItem)}
+                                        {destructiveActions.length > 0 && (normalActions.length > 0) && (
+                                            <DropdownMenuSeparator />
+                                        )}
+                                        {destructiveActions.map(renderItem)}
+                                    </>
+                                )
+                            })()}
+                        </DropdownMenuContent>
 							</DropdownMenu>
 						)}
 

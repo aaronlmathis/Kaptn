@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { IconEdit, IconRefresh } from "@tabler/icons-react"
+import { IconEdit } from "@tabler/icons-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
 	Drawer,
@@ -17,6 +17,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useEndpointsDetails } from "@/hooks/use-resource-details"
 import { type DashboardEndpoints } from "@/lib/k8s-services"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 interface EndpointDetailDrawerProps {
 	item: DashboardEndpoints
@@ -29,7 +31,8 @@ interface EndpointDetailDrawerProps {
  * This shows full endpoint details from the detailed API endpoint instead of the condensed version.
  */
 export function EndpointDetailDrawer({ item, open, onOpenChange }: EndpointDetailDrawerProps) {
-	const isMobile = useIsMobile()
+    const isMobile = useIsMobile()
+    const { clusterId } = useCluster()
 
 	// Fetch detailed endpoint information
 	const { data: endpointDetails, loading, error } = useEndpointsDetails(item.namespace, item.name, open)
@@ -97,32 +100,27 @@ export function EndpointDetailDrawer({ item, open, onOpenChange }: EndpointDetai
 	// Combine basic and detailed rows
 	const allRows = [...basicRows, ...detailedRows]
 
-	const actions = (
-		<>
-			<ResourceYamlEditor
-				resourceName={item.name}
-				namespace={item.namespace}
-				resourceKind="Endpoints"
-			>
-				<Button variant="outline" size="sm" className="w-full">
-					<IconEdit className="size-4 mr-2" />
-					Edit YAML
-				</Button>
-			</ResourceYamlEditor>
-			<Button
-				variant="destructive"
-				size="sm"
-				className="w-full"
-				onClick={() => {
-					// TODO: Implement endpoint restart functionality
-					console.log('Restart endpoint:', item.name, 'in namespace:', item.namespace)
-				}}
-			>
-				<IconRefresh className="size-4 mr-2" />
-				Restart
-			</Button>
-		</>
-	)
+    const actions = (
+        <>
+            <IfAllowed
+                feature="endpoints.patch"
+                cluster={clusterId}
+                namespace={item.namespace}
+                resourceName={item.name}
+            >
+                <ResourceYamlEditor
+                    resourceName={item.name}
+                    namespace={item.namespace}
+                    resourceKind="Endpoints"
+                >
+                    <Button variant="outline" size="sm" className="w-full">
+                        <IconEdit className="size-4 mr-2" />
+                        Edit YAML
+                    </Button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+        </>
+    )
 
 	return (
 		<Drawer direction={isMobile ? "bottom" : "right"} open={open} onOpenChange={onOpenChange}>

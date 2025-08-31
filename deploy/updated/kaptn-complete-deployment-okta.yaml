@@ -275,9 +275,12 @@ data:
       default_groups: [""]
 
     kubernetes:
-      mode: "incluster"        # Production runs in-cluster
+      mode: "kubeconfig"        # or "incluster"
+      kubeconfig_path: ""       # used if mode=kubeconfig, defaults to $KUBECONFIG
       namespace_default: "default"
-      insecure_tls: false      # Secure TLS in production
+      insecure_tls: false       # skip TLS verification for development environments
+      qps: 100                  # queries per second allowed to Kubernetes API server
+      burst: 200                # maximum burst for throttle
 
     features:
       enable_apply: true
@@ -291,6 +294,8 @@ data:
 
     logging:
       level: "info"
+      file: "kaptn.log"           # e.g., /var/log/kaptn/kaptn.log. Leave empty to disable file logging.
+      format: "console"     # "json" or "console" for human-readable logs
 
     integrations:
       prometheus:

@@ -80,6 +80,9 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useConfigMapsWithWebSocket } from "@/hooks/useConfigMapsWithWebSocket"
 import { type DashboardConfigMap } from "@/lib/k8s-storage"
 import { useNamespace } from "@/contexts/namespace-context"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: string }) {
@@ -103,7 +106,8 @@ function DragHandle({ id }: { id: string }) {
 
 // Column definitions for config maps table
 const createColumns = (
-	onViewDetails: (configMap: DashboardConfigMap) => void
+	onViewDetails: (configMap: DashboardConfigMap) => void,
+	clusterId: string
 ): ColumnDef<DashboardConfigMap>[] => [
 		{
 			id: "drag",
@@ -139,16 +143,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Name",
-			cell: ({ row }) => {
-				return (
+		cell: ({ row }) => {
+			return (
+				<IfAllowed
+					feature="configmaps.get"
+					cluster={clusterId}
+					namespace={row.original.namespace}
+					resourceName={row.original.name}
+					fallback={<span>{row.original.name}</span>}
+				>
 					<button
 						onClick={() => onViewDetails(row.original)}
 						className="text-left hover:underline focus:underline focus:outline-none"
 					>
 						{row.original.name}
 					</button>
-				)
-			},
+				</IfAllowed>
+			)
+		},
 			enableHiding: false,
 		},
 		{
@@ -197,25 +209,38 @@ const createColumns = (
 		},
 		{
 			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
+		cell: ({ row }) => (
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button
+						variant="ghost"
+						className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+						size="icon"
+					>
+						<IconDotsVertical />
+						<span className="sr-only">Open menu</span>
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-44">
+					<IfAllowed
+						feature="configmaps.get"
+						cluster={clusterId}
+						namespace={row.original.namespace}
+						resourceName={row.original.name}
+					>
+						<DropdownMenuItem onClick={() => onViewDetails(row.original)}>
 							<IconEye className="size-4 mr-2" />
 							View Details
 						</DropdownMenuItem>
+					</IfAllowed>
+
+					<IfAllowed
+						feature="configmaps.patch"
+						cluster={clusterId}
+						namespace={row.original.namespace}
+						resourceName={row.original.name}
+						fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
+					>
 						<ResourceYamlEditor
 							resourceName={row.original.name}
 							namespace={row.original.namespace}
@@ -223,30 +248,33 @@ const createColumns = (
 						>
 							<button
 								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
+								style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
 							>
 								<IconEdit className="size-4" />
 								Edit YAML
 							</button>
 						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart ConfigMap
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
+					</IfAllowed>
+
+					<DropdownMenuSeparator />
+
+					<IfAllowed
+						feature="configmaps.delete"
+						cluster={clusterId}
+						namespace={row.original.namespace}
+						resourceName={row.original.name}
+						fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+					>
 						<DropdownMenuItem className="text-red-600">
 							<IconTrash className="size-4 mr-2" />
 							Delete
 						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+					</IfAllowed>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		),
+	},
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<DashboardConfigMap> }) {
@@ -283,6 +311,7 @@ function DraggableRow({ row }: { row: Row<DashboardConfigMap> }) {
 export function ConfigMapsDataTable() {
 	const { data: configMaps, loading, error, refetch, isConnected } = useConfigMapsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -301,8 +330,8 @@ export function ConfigMapsDataTable() {
 
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
+		() => createColumns(handleViewDetails, clusterId),
+		[handleViewDetails, clusterId]
 	)
 
 	// Create filter options for config maps based on data keys count
@@ -389,19 +418,24 @@ export function ConfigMapsDataTable() {
 	})
 
 	// Create bulk actions for config maps
-	const configMapBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for config maps:', selectedConfigMaps.map(cm => cm.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
+	const { isAllowed } = useAuthzCapabilitiesInContext([
+		'configmaps.get', 'configmaps.delete', 'configmaps.patch'
+	])
+	const configMapBulkActions: BulkAction[] = React.useMemo(() => {
+		const actions: BulkAction[] = []
+		if (isAllowed('configmaps.get')) {
+			actions.push({
+				id: "export-yaml",
+				label: "Export Selected as YAML",
+				icon: <IconDownload className="size-4" />,
+				action: () => {
+					const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Export YAML for config maps:', selectedConfigMaps.map(cm => cm.name))
+				},
+				requiresSelection: true,
+			})
+		}
+		actions.push({
 			id: "copy-names",
 			label: "Copy ConfigMap Names",
 			icon: <IconCopy className="size-4" />,
@@ -409,34 +443,24 @@ export function ConfigMapsDataTable() {
 				const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
 				const names = selectedConfigMaps.map(cm => cm.name).join('\n')
 				navigator.clipboard.writeText(names)
-				console.log('Copied config map names:', names)
 			},
 			requiresSelection: true,
-		},
-		{
-			id: "download-data",
-			label: "Download ConfigMap Data",
-			icon: <IconDatabase className="size-4" />,
-			action: () => {
-				const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Download data for config maps:', selectedConfigMaps.map(cm => `${cm.name} in ${cm.namespace}`))
-				// TODO: Implement bulk data download
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-configmaps",
-			label: "Delete Selected ConfigMaps",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete config maps:', selectedConfigMaps.map(cm => `${cm.name} in ${cm.namespace}`))
-				// TODO: Implement bulk deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+		})
+		if (isAllowed('configmaps.delete')) {
+			actions.push({
+				id: "delete-configmaps",
+				label: "Delete Selected ConfigMaps",
+				icon: <IconTrash className="size-4" />,
+				action: () => {
+					const selectedConfigMaps = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Delete config maps:', selectedConfigMaps.map(cm => `${cm.name} in ${cm.namespace}`))
+				},
+				variant: "destructive" as const,
+				requiresSelection: true,
+			})
+		}
+		return actions
+	}, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(

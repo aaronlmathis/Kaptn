@@ -80,6 +80,9 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 import { useReplicaSetsWithWebSocket } from "@/hooks/useReplicaSetsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 import { replicaSetSchema } from "@/lib/schemas/replicaset"
 import { z } from "zod"
 
@@ -135,7 +138,8 @@ function getReadyBadge(ready: string) {
 
 // Column definitions for replicasets table
 const createColumns = (
-	onViewDetails: (replicaSet: z.infer<typeof replicaSetSchema>) => void
+    onViewDetails: (replicaSet: z.infer<typeof replicaSetSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof replicaSetSchema>>[] => [
 		{
 			id: "rs-drag",
@@ -168,22 +172,30 @@ const createColumns = (
 			enableSorting: false,
 			enableHiding: false,
 		},
-		{
-			id: "rs-name",
-			accessorKey: "name",
-			header: "ReplicaSet Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
-			enableHiding: false,
-		},
+    {
+        id: "rs-name",
+        accessorKey: "name",
+        header: "ReplicaSet Name",
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="replicasets.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
+        enableHiding: false,
+    },
 		{
 			id: "rs-namespace",
 			accessorKey: "namespace",
@@ -232,58 +244,130 @@ const createColumns = (
 				<div className="font-mono text-sm">{row.original.age}</div>
 			),
 		},
-		{
-			id: "rs-actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="ReplicaSet"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+    {
+        id: "rs-actions",
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                    <IfAllowed
+                        feature="replicasets.get"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                    >
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed
+                        feature="replicasets.scale.update"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={
+                            <DropdownMenuItem disabled>
+                                <IconScale className="size-4 mr-2" />
+                                Scale
+                            </DropdownMenuItem>
+                        }
+                    >
+                        <DropdownMenuItem>
+                            <IconScale className="size-4 mr-2" />
+                            Scale
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed
+                        feature="replicasets.patch"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                    >
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="ReplicaSet"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+
+                    <IfAllowed
+                        feature="replicasets.patch"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={
+                            <DropdownMenuItem disabled>
+                                <IconRefresh className="size-4 mr-2" />
+                                Restart
+                            </DropdownMenuItem>
+                        }
+                    >
+                        <DropdownMenuItem>
+                            <IconRefresh className="size-4 mr-2" />
+                            Restart
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <IfAllowed
+                        feature="replicasets.get"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                    >
+                        <DropdownMenuItem onClick={() => {
+                            const rs = row.original;
+                            console.log('Export YAML for ReplicaSet:', `${rs.name} in ${rs.namespace}`);
+                            // TODO: Implement single-item YAML export
+                        }}>
+                            <IconDownload className="size-4 mr-2" />
+                            Export YAML
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+                    <DropdownMenuSeparator />
+
+                    <IfAllowed
+                        feature="replicasets.delete"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={
+                            <DropdownMenuItem disabled className="text-muted-foreground">
+                                <IconTrash className="size-4 mr-2" />
+                                Delete
+                            </DropdownMenuItem>
+                        }
+                    >
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof replicaSetSchema>> }) {
@@ -318,8 +402,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof replicaSetSchema>> }) {
 }
 
 export function ReplicaSetsDataTable() {
-	const { data: replicaSets, loading, error, refetch, isConnected } = useReplicaSetsWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: replicaSets, loading, error, refetch, isConnected } = useReplicaSetsWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -337,10 +422,10 @@ export function ReplicaSetsDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	// Filter options for ReplicaSet statuses based on readiness
 	const replicaSetStatuses: FilterOption[] = React.useMemo(() => {
@@ -418,66 +503,84 @@ export function ReplicaSetsDataTable() {
 		},
 	})
 
-	// Bulk actions for replicasets
-	const replicaSetBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for ReplicaSets:', selectedReplicaSets.map(rs => rs.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "copy-names",
-			label: "Copy ReplicaSet Names",
-			icon: <IconCopy className="size-4" />,
-			action: () => {
-				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				const names = selectedReplicaSets.map(rs => rs.name).join('\n')
-				navigator.clipboard.writeText(names)
-				console.log('Copied ReplicaSet names:', names)
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "scale-replicasets",
-			label: "Scale Selected ReplicaSets",
-			icon: <IconScale className="size-4" />,
-			action: () => {
-				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Scale ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
-				// TODO: Implement bulk ReplicaSet scaling
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "restart-replicasets",
-			label: "Restart Selected ReplicaSets",
-			icon: <IconRefresh className="size-4" />,
-			action: () => {
-				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Restart ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
-				// TODO: Implement bulk ReplicaSet restart
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "delete-replicasets",
-			label: "Delete Selected ReplicaSets",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
-				// TODO: Implement bulk ReplicaSet deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+    // Bulk actions filtered by capabilities
+    const { isAllowed } = useAuthzCapabilitiesInContext([
+        'replicasets.get',
+        'replicasets.scale.update',
+        'replicasets.patch',
+        'replicasets.delete',
+    ])
+
+    const replicaSetBulkActions: BulkAction[] = React.useMemo(() => {
+        const actions: BulkAction[] = []
+
+        if (isAllowed('replicasets.get')) {
+            actions.push({
+                id: "export-yaml",
+                label: "Export Selected as YAML",
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Export YAML for ReplicaSets:', selectedReplicaSets.map(rs => rs.name))
+                },
+                requiresSelection: true,
+            })
+        }
+
+        actions.push({
+            id: "copy-names",
+            label: "Copy ReplicaSet Names",
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                const names = selectedReplicaSets.map(rs => rs.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+
+        if (isAllowed('replicasets.scale.update')) {
+            actions.push({
+                id: "scale-replicasets",
+                label: "Scale Selected ReplicaSets",
+                icon: <IconScale className="size-4" />,
+                action: () => {
+                    const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Scale ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+
+        if (isAllowed('replicasets.patch')) {
+            actions.push({
+                id: "restart-replicasets",
+                label: "Restart Selected ReplicaSets",
+                icon: <IconRefresh className="size-4" />,
+                action: () => {
+                    const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Restart ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+
+        if (isAllowed('replicasets.delete')) {
+            actions.push({
+                id: "delete-replicasets",
+                label: "Delete Selected ReplicaSets",
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selectedReplicaSets = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+                    console.log('Delete ReplicaSets:', selectedReplicaSets.map(rs => `${rs.name} in ${rs.namespace}`))
+                },
+                variant: "destructive" as const,
+                requiresSelection: true,
+            })
+        }
+
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(

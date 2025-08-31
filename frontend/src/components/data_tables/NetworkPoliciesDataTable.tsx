@@ -80,6 +80,9 @@ import { useNetworkPoliciesWithWebSocket } from "@/hooks/useNetworkPoliciesWithW
 import { useNamespace } from "@/contexts/namespace-context"
 import { networkPolicySchema } from "@/lib/schemas/networkpolicy"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -103,7 +106,8 @@ function DragHandle({ id }: { id: number }) {
 
 // Column definitions for NetworkPolicies table
 const createColumns = (
-	onViewDetails: (networkPolicy: z.infer<typeof networkPolicySchema>) => void
+    onViewDetails: (networkPolicy: z.infer<typeof networkPolicySchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof networkPolicySchema>>[] => [
 		{
 			id: "drag",
@@ -143,16 +147,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Network Policy Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="networkpolicies.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -208,52 +220,52 @@ const createColumns = (
 		},
 		{
 			id: "actions",
-			cell: ({ row }) => (
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
-							size="icon"
-						>
-							<IconDotsVertical />
-							<span className="sr-only">Open menu</span>
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="NetworkPolicy"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+        cell: ({ row }) => (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
+                        size="icon"
+                    >
+                        <IconDotsVertical />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed feature="networkpolicies.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="networkpolicies.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}>
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="NetworkPolicy"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+                    <DropdownMenuSeparator />
+                    <IfAllowed feature="networkpolicies.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof networkPolicySchema>> }) {
@@ -288,8 +300,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof networkPolicySchema>> }
 }
 
 export function NetworkPoliciesDataTable() {
-	const { data: networkPolicies, loading, error, refetch, isConnected } = useNetworkPoliciesWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: networkPolicies, loading, error, refetch, isConnected } = useNetworkPoliciesWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [policyTypeFilter, setPolicyTypeFilter] = React.useState<string>("all")
@@ -298,7 +311,8 @@ export function NetworkPoliciesDataTable() {
 	const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
 	const [rowSelection, setRowSelection] = React.useState({})
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
-	const [selectedNetworkPolicyForDetails, setSelectedNetworkPolicyForDetails] = React.useState<z.infer<typeof networkPolicySchema> | null>(null)
+    const [selectedNetworkPolicyForDetails, setSelectedNetworkPolicyForDetails] = React.useState<z.infer<typeof networkPolicySchema> | null>(null)
+    const { isAllowed } = useAuthzCapabilitiesInContext(['networkpolicies.get', 'networkpolicies.delete'])
 
 	// Handle opening detail drawer
 	const handleViewDetails = React.useCallback((networkPolicy: z.infer<typeof networkPolicySchema>) => {
@@ -307,10 +321,10 @@ export function NetworkPoliciesDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	// Create filter options for policy types
 	const policyTypes = React.useMemo(() => {
@@ -361,7 +375,7 @@ export function NetworkPoliciesDataTable() {
 		return filtered
 	}, [networkPolicies, policyTypeFilter, globalFilter])
 
-	const table = useReactTable({
+    const table = useReactTable({
 		data: filteredData,
 		columns,
 		onSortingChange: setSorting,
@@ -380,7 +394,48 @@ export function NetworkPoliciesDataTable() {
 			columnVisibility,
 			rowSelection,
 		},
-	})
+    })
+
+    const networkPolicyBulkActions = React.useMemo(() => {
+        const actions: any[] = []
+        if (isAllowed('networkpolicies.get')) {
+            actions.push({
+                id: 'export-yaml',
+                label: 'Export Selected as YAML',
+                icon: <IconDownload className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Export YAML for network policies:', selected.map(p => `${p.name} in ${p.namespace}`))
+                },
+                requiresSelection: true,
+            })
+        }
+        actions.push({
+            id: 'copy-names',
+            label: 'Copy Names',
+            icon: <IconCopy className="size-4" />,
+            action: () => {
+                const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                const names = selected.map(p => p.name).join('\n')
+                navigator.clipboard.writeText(names)
+            },
+            requiresSelection: true,
+        })
+        if (isAllowed('networkpolicies.delete')) {
+            actions.push({
+                id: 'delete-policies',
+                label: 'Delete Selected Policies',
+                icon: <IconTrash className="size-4" />,
+                action: () => {
+                    const selected = table.getFilteredSelectedRowModel().rows.map(r => r.original)
+                    console.log('Delete network policies:', selected.map(p => `${p.name} in ${p.namespace}`))
+                },
+                variant: 'destructive' as const,
+                requiresSelection: true,
+            })
+        }
+        return actions
+    }, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(
@@ -442,49 +497,11 @@ export function NetworkPoliciesDataTable() {
 					onCategoryFilterChange={setPolicyTypeFilter}
 					categoryLabel="Filter by policy type"
 					categoryOptions={policyTypes}
-					selectedCount={table.getFilteredSelectedRowModel().rows.length}
-					totalCount={table.getFilteredRowModel().rows.length}
-					bulkActions={[
-						{
-							id: "export-yaml",
-							label: "Export Selected as YAML",
-							icon: <IconDownload className="size-4" />,
-							action: () => {
-								const selectedPolicies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-								console.log('Export YAML for network policies:', selectedPolicies.map(policy => `${policy.name} in ${policy.namespace}`))
-								// TODO: Implement bulk YAML export
-							},
-							requiresSelection: true,
-						},
-						{
-							id: "copy-names",
-							label: "Copy Policy Names",
-							icon: <IconCopy className="size-4" />,
-							action: () => {
-								const selectedPolicies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-								const names = selectedPolicies.map(policy => policy.name).join('\n')
-								navigator.clipboard.writeText(names)
-								console.log('Copied network policy names:', names)
-							},
-							requiresSelection: true,
-						},
-						{
-							id: "delete-policies",
-							label: "Delete Selected Policies",
-							icon: <IconTrash className="size-4" />,
-							action: () => {
-								const selectedPolicies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-								if (confirm(`Are you sure you want to delete ${selectedPolicies.length} network polic${selectedPolicies.length === 1 ? 'y' : 'ies'}? This action cannot be undone.`)) {
-									console.log('Delete network policies:', selectedPolicies.map(policy => `${policy.name} in ${policy.namespace}`))
-									// TODO: Implement bulk deletion
-								}
-							},
-							variant: "destructive" as const,
-							requiresSelection: true,
-						},
-					]}
-					bulkActionsLabel="Actions"
-					table={table}
+                selectedCount={table.getFilteredSelectedRowModel().rows.length}
+                totalCount={table.getFilteredRowModel().rows.length}
+                bulkActions={networkPolicyBulkActions}
+                bulkActionsLabel="Actions"
+                table={table}
 					showColumnToggle={true}
 					onRefresh={refetch}
 					isRefreshing={loading}

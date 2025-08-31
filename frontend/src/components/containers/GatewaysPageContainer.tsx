@@ -10,12 +10,24 @@ import {
 	getGatewayStatusBadge,
 	getGatewayServerTypeBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function GatewaysContent() {
 	const { istioInstalled, istio, loading: featuresLoading } = useClusterFeatures()
-	const { data: gateways, loading: isLoading, error, isConnected } = useGatewaysWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: gateways, loading: isLoading, error, isConnected } = useGatewaysWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'gateways.get',
+            'gateways.patch',
+            'gateways.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when gateways change
 	React.useEffect(() => {
@@ -161,5 +173,9 @@ function GatewaysContent() {
 }
 
 export function GatewaysPageContainer() {
-	return <GatewaysContent />
+    return (
+        <RouteGuard requiredCapabilities={["gateways.list"]}>
+            <GatewaysContent />
+        </RouteGuard>
+    )
 }

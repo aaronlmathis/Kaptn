@@ -10,11 +10,25 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function CronJobsContent() {
-	const { data: cronJobs, loading: isLoading, error, isConnected } = useCronJobsWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: cronJobs, loading: isLoading, error, isConnected } = useCronJobsWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    // Ensure cronjob-specific capabilities are requested
+    React.useEffect(() => {
+        fetchAdditional([
+            'cronjobs.get',
+            'cronjobs.patch',
+            'cronjobs.delete',
+            'jobs.create',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when cronJobs change
 	React.useEffect(() => {
@@ -137,5 +151,9 @@ function CronJobsContent() {
 }
 
 export function CronJobsPageContainer() {
-	return <CronJobsContent />
+    return (
+        <RouteGuard requiredCapabilities={["cronjobs.list"]} requireAll={false}>
+            <CronJobsContent />
+        </RouteGuard>
+    )
 }

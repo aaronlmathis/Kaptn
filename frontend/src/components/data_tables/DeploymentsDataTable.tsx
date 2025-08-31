@@ -79,6 +79,9 @@ import { DeploymentDetailDrawer } from "@/components/viewers/DeploymentDetailDra
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useDeploymentsWithWebSocket } from "@/hooks/useDeploymentsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 import { z } from "zod"
 
 // Deployment schema from kubernetes-dashboard.tsx
@@ -115,7 +118,8 @@ function DragHandle({ id }: { id: number }) {
 
 // Column definitions for deployments table
 const createColumns = (
-	onViewDetails: (deployment: z.infer<typeof deploymentSchema>) => void
+	onViewDetails: (deployment: z.infer<typeof deploymentSchema>) => void,
+	clusterId: string
 ): ColumnDef<z.infer<typeof deploymentSchema>>[] => [
 		{
 			id: "drag",
@@ -148,21 +152,29 @@ const createColumns = (
 			enableSorting: false,
 			enableHiding: false,
 		},
-		{
-			accessorKey: "name",
-			header: "Deployment Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
-			enableHiding: false,
-		},
+    {
+        accessorKey: "name",
+        header: "Deployment Name",
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="deployments.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
+        enableHiding: false,
+    },
 		{
 			accessorKey: "namespace",
 			header: "Namespace",
@@ -222,43 +234,94 @@ const createColumns = (
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
+						<IfAllowed
+							feature="deployments.get"
+							cluster={clusterId}
 							namespace={row.original.namespace}
-							resourceKind="Deployment"
+							resourceName={row.original.name}
 						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem>
-							<IconRefresh className="size-4 mr-2" />
-							Restart
-						</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+								<IconEye className="size-4 mr-2" />
+								View Details
+							</DropdownMenuItem>
+						</IfAllowed>
+
+                    <IfAllowed
+                        feature="deployments.patch"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                    >
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="Deployment"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+
+                    <IfAllowed
+                        feature="deployments.scale.update"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={<DropdownMenuItem disabled><IconScale className="size-4 mr-2" />Scale</DropdownMenuItem>}
+                    >
+                        <DropdownMenuItem>
+                            <IconScale className="size-4 mr-2" />
+                            Scale
+                        </DropdownMenuItem>
+                    </IfAllowed>
+
+						<IfAllowed
+							feature="deployments.restart"
+							cluster={clusterId}
+							namespace={row.original.namespace}
+							resourceName={row.original.name}
+							fallback={
+								<DropdownMenuItem disabled>
+									<IconRefresh className="size-4 mr-2" />
+									Restart
+								</DropdownMenuItem>
+							}
+						>
+							<DropdownMenuItem>
+								<IconRefresh className="size-4 mr-2" />
+								Restart
+							</DropdownMenuItem>
+						</IfAllowed>
+
 						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
+
+						<IfAllowed
+							feature="deployments.delete"
+							cluster={clusterId}
+							namespace={row.original.namespace}
+							resourceName={row.original.name}
+							fallback={
+								<DropdownMenuItem disabled className="text-muted-foreground">
+									<IconTrash className="size-4 mr-2" />
+									Delete
+								</DropdownMenuItem>
+							}
+						>
+							<DropdownMenuItem className="text-red-600">
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
 		},
-	]
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof deploymentSchema>> }) {
@@ -295,6 +358,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof deploymentSchema>> }) {
 export function DeploymentsDataTable() {
 	const { data: deployments, loading, error, refetch, isConnected } = useDeploymentsWithWebSocket(true)
 	const { selectedNamespace } = useNamespace()
+	const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -313,8 +377,8 @@ export function DeploymentsDataTable() {
 
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
+		() => createColumns(handleViewDetails, clusterId),
+		[handleViewDetails, clusterId]
 	)
 
 	// For deployments, we can create status filters based on the ready/available status
@@ -387,41 +451,61 @@ export function DeploymentsDataTable() {
 	})
 
 	// Bulk actions for deployments
-	const deploymentBulkActions: BulkAction[] = React.useMemo(() => [
-		{
-			id: "scale-deployments",
-			label: "Scale Selected Deployments",
-			icon: <IconScale className="size-4" />,
-			action: () => {
-				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Scale deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
-				// TODO: Implement bulk deployment scaling
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "restart-deployments",
-			label: "Restart Selected Deployments",
-			icon: <IconRefresh className="size-4" />,
-			action: () => {
-				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Restart deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
-				// TODO: Implement bulk deployment restart
-			},
-			requiresSelection: true,
-		},
-		{
-			id: "export-yaml",
-			label: "Export Selected as YAML",
-			icon: <IconDownload className="size-4" />,
-			action: () => {
-				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Export YAML for deployments:', selectedDeployments.map(d => d.name))
-				// TODO: Implement bulk YAML export
-			},
-			requiresSelection: true,
-		},
-		{
+	// Filter bulk actions based on capabilities
+	const { isAllowed } = useAuthzCapabilitiesInContext([
+		'deployments.get',
+		'deployments.scale.update',
+		'deployments.restart',
+		'deployments.delete',
+	])
+
+	const deploymentBulkActions: BulkAction[] = React.useMemo(() => {
+		const actions: BulkAction[] = []
+
+		if (isAllowed('deployments.scale.update')) {
+			actions.push({
+				id: "scale-deployments",
+				label: "Scale Selected Deployments",
+				icon: <IconScale className="size-4" />,
+				action: () => {
+					const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Scale deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
+					// TODO: Implement bulk deployment scaling
+				},
+				requiresSelection: true,
+			})
+		}
+
+		if (isAllowed('deployments.restart')) {
+			actions.push({
+				id: "restart-deployments",
+				label: "Restart Selected Deployments",
+				icon: <IconRefresh className="size-4" />,
+				action: () => {
+					const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Restart deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
+					// TODO: Implement bulk deployment restart
+				},
+				requiresSelection: true,
+			})
+		}
+
+		if (isAllowed('deployments.get')) {
+			actions.push({
+				id: "export-yaml",
+				label: "Export Selected as YAML",
+				icon: <IconDownload className="size-4" />,
+				action: () => {
+					const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Export YAML for deployments:', selectedDeployments.map(d => d.name))
+					// TODO: Implement bulk YAML export
+				},
+				requiresSelection: true,
+			})
+		}
+
+		// Copy names does not need cluster permissions
+		actions.push({
 			id: "copy-names",
 			label: "Copy Deployment Names",
 			icon: <IconCopy className="size-4" />,
@@ -432,20 +516,25 @@ export function DeploymentsDataTable() {
 				console.log('Copied deployment names:', names)
 			},
 			requiresSelection: true,
-		},
-		{
-			id: "delete-deployments",
-			label: "Delete Selected Deployments",
-			icon: <IconTrash className="size-4" />,
-			action: () => {
-				const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-				console.log('Delete deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
-				// TODO: Implement bulk deployment deletion with confirmation
-			},
-			variant: "destructive" as const,
-			requiresSelection: true,
-		},
-	], [table])
+		})
+
+		if (isAllowed('deployments.delete')) {
+			actions.push({
+				id: "delete-deployments",
+				label: "Delete Selected Deployments",
+				icon: <IconTrash className="size-4" />,
+				action: () => {
+					const selectedDeployments = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+					console.log('Delete deployments:', selectedDeployments.map(d => `${d.name} in ${d.namespace}`))
+					// TODO: Implement bulk deployment deletion with confirmation
+				},
+				variant: "destructive" as const,
+				requiresSelection: true,
+			})
+		}
+
+		return actions
+	}, [table, isAllowed])
 
 	// Drag and drop setup
 	const sensors = useSensors(

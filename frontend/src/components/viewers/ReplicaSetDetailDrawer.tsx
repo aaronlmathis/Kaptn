@@ -15,6 +15,8 @@ import {
 import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 import { type ReplicaSetTableRow } from "@/lib/schemas/replicaset"
 import { useReplicaSetDetails } from "@/hooks/use-resource-details"
 
@@ -50,6 +52,7 @@ interface ReplicaSetDetailDrawerProps {
  */
 export function ReplicaSetDetailDrawer({ item, open, onOpenChange }: ReplicaSetDetailDrawerProps) {
   const isMobile = useIsMobile()
+  const { clusterId } = useCluster()
 
   // Fetch detailed ReplicaSet information - always call hooks at top level
   const { data: replicaSetDetails, loading, error } = useReplicaSetDetails(
@@ -126,24 +129,45 @@ export function ReplicaSetDetailDrawer({ item, open, onOpenChange }: ReplicaSetD
 
   const actions = (
     <>
-      <Button size="sm" className="w-full">
-        <IconRefresh className="size-4 mr-2" />
-        Scale ReplicaSet
-      </Button>
-      <Button variant="outline" size="sm" className="w-full">
-        <IconRefresh className="size-4 mr-2" />
-        Restart ReplicaSet
-      </Button>
-      <ResourceYamlEditor
-        resourceName={item.name}
+      <IfAllowed
+        feature="replicasets.scale.update"
+        cluster={clusterId}
         namespace={item.namespace}
-        resourceKind="ReplicaSet"
+        resourceName={item.name}
+      >
+        <Button size="sm" className="w-full">
+          <IconRefresh className="size-4 mr-2" />
+          Scale ReplicaSet
+        </Button>
+      </IfAllowed>
+      <IfAllowed
+        feature="replicasets.patch"
+        cluster={clusterId}
+        namespace={item.namespace}
+        resourceName={item.name}
       >
         <Button variant="outline" size="sm" className="w-full">
-          <IconEdit className="size-4 mr-2" />
-          Edit YAML
+          <IconRefresh className="size-4 mr-2" />
+          Restart ReplicaSet
         </Button>
-      </ResourceYamlEditor>
+      </IfAllowed>
+      <IfAllowed
+        feature="replicasets.patch"
+        cluster={clusterId}
+        namespace={item.namespace}
+        resourceName={item.name}
+      >
+        <ResourceYamlEditor
+          resourceName={item.name}
+          namespace={item.namespace}
+          resourceKind="ReplicaSet"
+        >
+          <Button variant="outline" size="sm" className="w-full">
+            <IconEdit className="size-4 mr-2" />
+            Edit YAML
+          </Button>
+        </ResourceYamlEditor>
+      </IfAllowed>
     </>
   )
 
