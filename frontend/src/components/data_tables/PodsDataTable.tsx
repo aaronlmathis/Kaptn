@@ -78,6 +78,9 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+import { useBulkActions } from "@/hooks/use-bulk-actions"
+import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
+import { toast } from "sonner"
 import { DataTableFilters, type FilterOption, type BulkAction } from "@/components/ui/data-table-filters"
 
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
@@ -194,29 +197,29 @@ const createColumns = (
 			enableSorting: false,
 			enableHiding: false,
 		},
-    {
-        accessorKey: "name",
-        header: "Pod Name",
-        cell: ({ row }) => {
-            return (
-                <IfAllowed
-                    feature="pods.get"
-                    cluster={clusterId}
-                    namespace={row.original.namespace}
-                    resourceName={row.original.name}
-                    fallback={<span>{row.original.name}</span>}
-                >
-                    <button
-                        onClick={() => onViewDetails(row.original)}
-                        className="text-left hover:underline focus:underline focus:outline-none"
-                    >
-                        {row.original.name}
-                    </button>
-                </IfAllowed>
-            )
-        },
-        enableHiding: false,
-    },
+		{
+			accessorKey: "name",
+			header: "Pod Name",
+			cell: ({ row }) => {
+				return (
+					<IfAllowed
+						feature="pods.get"
+						cluster={clusterId}
+						namespace={row.original.namespace}
+						resourceName={row.original.name}
+						fallback={<span>{row.original.name}</span>}
+					>
+						<button
+							onClick={() => onViewDetails(row.original)}
+							className="text-left hover:underline focus:underline focus:outline-none"
+						>
+							{row.original.name}
+						</button>
+					</IfAllowed>
+				)
+			},
+			enableHiding: false,
+		},
 		{
 			accessorKey: "namespace",
 			header: "Namespace",
@@ -438,6 +441,27 @@ export function PodsDataTable() {
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedPodForDetails, setSelectedPodForDetails] = React.useState<z.infer<typeof podSchema> | null>(null)
 
+	// Bulk actions state
+	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
+	const [pendingAction, setPendingAction] = React.useState<{
+		type: 'restart' | 'delete'
+		pods: Array<{ name: string; namespace: string }>
+	} | null>(null)
+
+	// Initialize bulk actions hook
+	const bulkActions = useBulkActions({
+		onSuccess: (response) => {
+			toast.success(`Action completed successfully! ${response.resources_affected} pods affected.`)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+			// Clear row selection
+			table.toggleAllPageRowsSelected(false)
+		},
+		onError: (error) => {
+			toast.error(`Action failed: ${error.message}`)
+		}
+	})
+
 	// Handle opening detail drawer
 	const handleViewDetails = React.useCallback((pod: z.infer<typeof podSchema>) => {
 		setSelectedPodForDetails(pod)
@@ -584,8 +608,9 @@ export function PodsDataTable() {
 				icon: <IconRefresh className="size-4" />,
 				action: () => {
 					const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-					console.log('Restart pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
-					// TODO: Implement bulk pod restart
+					const podTargets = selectedPods.map(p => ({ name: p.name, namespace: p.namespace }))
+					setPendingAction({ type: 'restart', pods: podTargets })
+					setConfirmDialogOpen(true)
 				},
 				requiresSelection: true,
 			})
@@ -599,8 +624,9 @@ export function PodsDataTable() {
 				icon: <IconTrash className="size-4" />,
 				action: () => {
 					const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-					console.log('Delete pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
-					// TODO: Implement bulk pod deletion with confirmation
+					const podTargets = selectedPods.map(p => ({ name: p.name, namespace: p.namespace }))
+					setPendingAction({ type: 'delete', pods: podTargets })
+					setConfirmDialogOpen(true)
 				},
 				variant: "destructive" as const,
 				requiresSelection: true,
@@ -624,6 +650,22 @@ export function PodsDataTable() {
 	React.useEffect(() => {
 		setSortableIds(pods.map((pod) => pod.id))
 	}, [pods])
+
+	// Handle confirmation dialog action
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+
+		try {
+			if (pendingAction.type === 'restart') {
+				await bulkActions.restartPods(pendingAction.pods, true)
+			} else if (pendingAction.type === 'delete') {
+				await bulkActions.deletePods(pendingAction.pods, true)
+			}
+		} catch (error) {
+			// Error handling is done in the useBulkActions hook
+			console.error('Action failed:', error)
+		}
+	}, [pendingAction, bulkActions])
 
 	function handleDragEnd(event: DragEndEvent) {
 		const { active, over } = event
@@ -829,6 +871,25 @@ export function PodsDataTable() {
 					/>
 				)
 			}
+
+			{/* Bulk action confirmation dialog */}
+			<ActionConfirmationDialog
+				open={confirmDialogOpen}
+				onOpenChange={setConfirmDialogOpen}
+				title={pendingAction?.type === 'restart' ? 'Restart Pods' : 'Delete Pods'}
+				description={
+					pendingAction?.type === 'restart'
+						? 'Are you sure you want to restart the selected pods? This will terminate and recreate them.'
+						: 'Are you sure you want to delete the selected pods? This action cannot be undone.'
+				}
+				actionLabel={pendingAction?.type === 'restart' ? 'Restart Pods' : 'Delete Pods'}
+				variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
+				isExecuting={bulkActions.isExecuting}
+				onConfirm={handleConfirmAction}
+				resources={pendingAction?.pods || []}
+				safetyViolations={bulkActions.lastResponse?.safety_violations || []}
+				warnings={bulkActions.lastResponse?.warnings || []}
+			/>
 		</div >
 	)
 }
