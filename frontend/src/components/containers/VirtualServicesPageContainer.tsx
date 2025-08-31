@@ -11,12 +11,24 @@ import {
 	getVirtualServiceHostsBadge,
 	getVirtualServiceGatewaysBadge,
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function VirtualServicesContent() {
 	const { istioInstalled, istio, loading: featuresLoading } = useClusterFeatures()
-	const { data: virtualServices, loading: isLoading, error, isConnected } = useVirtualServicesWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: virtualServices, loading: isLoading, error, isConnected } = useVirtualServicesWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'virtualservices.get',
+            'virtualservices.patch',
+            'virtualservices.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when virtual services change
 	React.useEffect(() => {
@@ -158,5 +170,9 @@ function VirtualServicesContent() {
 }
 
 export function VirtualServicesPageContainer() {
-	return <VirtualServicesContent />
+    return (
+        <RouteGuard requiredCapabilities={["virtualservices.list"]}>
+            <VirtualServicesContent />
+        </RouteGuard>
+    )
 }

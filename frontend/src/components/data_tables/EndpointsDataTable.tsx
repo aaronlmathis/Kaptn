@@ -523,7 +523,7 @@ export function EndpointsDataTable() {
 					selectedCount={table.getFilteredSelectedRowModel().rows.length}
 					totalCount={table.getFilteredRowModel().rows.length}
 					bulkActions={endpointBulkActions}
-					bulkActionsLabel="Endpoint Actions"
+                    bulkActionsLabel="Actions"
 					table={table}
 					showColumnToggle={true}
 					onRefresh={refetch}

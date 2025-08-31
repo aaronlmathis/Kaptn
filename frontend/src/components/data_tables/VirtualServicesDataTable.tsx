@@ -82,6 +82,9 @@ import { useVirtualServicesWithWebSocket } from "@/hooks/useVirtualServicesWithW
 import { useNamespace } from "@/contexts/namespace-context"
 import { virtualServiceSchema } from "@/types/virtual-service"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -173,7 +176,8 @@ function getVirtualServiceTypeBadge(hosts: string[], gateways: string[]) {
 
 // Column definitions for virtual services table
 const createColumns = (
-	onViewDetails: (virtualService: z.infer<typeof virtualServiceSchema>) => void
+    onViewDetails: (virtualService: z.infer<typeof virtualServiceSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof virtualServiceSchema>>[] => [
 		{
 			id: "drag",
@@ -209,16 +213,13 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Virtual Service Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        cell: ({ row }) => (
+            <IfAllowed feature="virtualservices.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<span>{row.original.name}</span>}>
+                <button onClick={() => onViewDetails(row.original)} className="text-left hover:underline focus:underline focus:outline-none">
+                    {row.original.name}
+                </button>
+            </IfAllowed>
+        ),
 			enableHiding: false,
 		},
 		{
@@ -288,48 +289,33 @@ const createColumns = (
 							<span className="sr-only">Open menu</span>
 						</Button>
 					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="VirtualService"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem onClick={() => {
-							// TODO: Implement virtual service restart functionality
-							console.log('Restart virtual service:', row.original.name, 'in namespace:', row.original.namespace)
-						}}>
-							<IconRefresh className="size-4 mr-2" />
-							Restart Virtual Service
-						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			),
-		},
-	]
+                <DropdownMenuContent align="end" className="w-44">
+                    <IfAllowed feature="virtualservices.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed feature="virtualservices.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}>
+                        <ResourceYamlEditor resourceName={row.original.name} namespace={row.original.namespace} resourceKind="VirtualService">
+                            <button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer" style={{ background: 'transparent', border: 'none', textAlign: 'left' }}>
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+                    <DropdownMenuSeparator />
+                    <IfAllowed feature="virtualservices.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name} fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}>
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        ),
+    },
+]
 
 // Draggable row component
 function DraggableRow({ row }: { row: Row<z.infer<typeof virtualServiceSchema>> }) {
@@ -364,8 +350,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof virtualServiceSchema>> 
 }
 
 export function VirtualServicesDataTable() {
-	const { data: virtualServices, loading, error, refetch, isConnected } = useVirtualServicesWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: virtualServices, loading, error, refetch, isConnected } = useVirtualServicesWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -428,10 +415,10 @@ export function VirtualServicesDataTable() {
 	}, [virtualServices, statusFilter, globalFilter])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	const table = useReactTable({
 		data: filteredData,

@@ -480,7 +480,8 @@ export interface DashboardIngress {
 export async function getIngresses(namespace?: string): Promise<Ingress[]> {
 	try {
 		const query = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
-		const response = await apiClient.get<{ data: { items: Ingress[] }; status: string }>(`/api/v1/ingresses${query}`);
+		// apiClient already prefixes with /api/v1
+		const response = await apiClient.get<{ data: { items: Ingress[] }; status: string }>(`/ingresses${query}`);
 		return response.data?.items || [];
 	} catch (error) {
 		console.error('Failed to fetch ingresses:', error);
@@ -520,5 +521,4 @@ export function transformIngressesToUI(ingresses: Ingress[]): DashboardIngress[]
 		};
 	});
 }
-
 

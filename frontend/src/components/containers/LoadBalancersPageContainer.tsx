@@ -5,15 +5,27 @@ import { LoadBalancersDataTable } from "@/components/data_tables/LoadBalancersDa
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useLoadBalancersWithWebSocket } from "@/hooks/useLoadBalancersWithWebSocket"
 import {
-	getReplicaStatusBadge,
-	getResourceIcon,
-	getHealthTrendBadge
+    getReplicaStatusBadge,
+    getResourceIcon,
+    getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function LoadBalancersContent() {
-	const { data: loadBalancers, loading: isLoading, error, isConnected } = useLoadBalancersWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: loadBalancers, loading: isLoading, error, isConnected } = useLoadBalancersWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'services.get',
+            'services.patch',
+            'services.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when load balancers change
 	React.useEffect(() => {
@@ -139,5 +151,9 @@ function LoadBalancersContent() {
 }
 
 export function LoadBalancersPageContainer() {
-	return <LoadBalancersContent />
+    return (
+        <RouteGuard requiredCapabilities={["services.list"]}>
+            <LoadBalancersContent />
+        </RouteGuard>
+    )
 }

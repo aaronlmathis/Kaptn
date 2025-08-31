@@ -14,6 +14,8 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNetworkPolicyDetails } from "@/hooks/use-resource-details"
 import { networkPolicySchema } from "@/lib/schemas/networkpolicy"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 interface NetworkPolicyDetailDrawerProps {
 	item: z.infer<typeof networkPolicySchema>
@@ -26,11 +28,12 @@ export function NetworkPolicyDetailDrawer({
 	open,
 	onOpenChange,
 }: NetworkPolicyDetailDrawerProps) {
-	const { data: details, loading, error } = useNetworkPolicyDetails(
-		item.name,
-		item.namespace,
-		open
-	)
+    const { data: details, loading, error } = useNetworkPolicyDetails(
+        item.name,
+        item.namespace,
+        open
+    )
+    const { clusterId } = useCluster()
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -194,15 +197,17 @@ export function NetworkPolicyDetailDrawer({
 
 						{/* Actions */}
 						<div className="flex gap-2 pt-4 border-t">
-							<ResourceYamlEditor
-								resourceName={item.name}
-								namespace={item.namespace}
-								resourceKind="NetworkPolicy"
-							>
-								<Button variant="outline" size="sm">
-									Edit YAML
-								</Button>
-							</ResourceYamlEditor>
+                        <IfAllowed feature="networkpolicies.patch" cluster={clusterId} namespace={item.namespace} resourceName={item.name}>
+                            <ResourceYamlEditor
+                                resourceName={item.name}
+                                namespace={item.namespace}
+                                resourceKind="NetworkPolicy"
+                            >
+                                <Button variant="outline" size="sm">
+                                    Edit YAML
+                                </Button>
+                            </ResourceYamlEditor>
+                        </IfAllowed>
 						</div>
 					</div>
 				)}

@@ -5,15 +5,27 @@ import { NetworkPoliciesDataTable } from "@/components/data_tables/NetworkPolici
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useNetworkPoliciesWithWebSocket } from "@/hooks/useNetworkPoliciesWithWebSocket"
 import {
-	getReplicaStatusBadge,
-	getResourceIcon,
-	getHealthTrendBadge
+    getReplicaStatusBadge,
+    getResourceIcon,
+    getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function NetworkPoliciesContent() {
-	const { data: networkPolicies, loading: isLoading, error, isConnected } = useNetworkPoliciesWithWebSocket(true)
-	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { data: networkPolicies, loading: isLoading, error, isConnected } = useNetworkPoliciesWithWebSocket(true)
+    const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'networkpolicies.get',
+            'networkpolicies.patch',
+            'networkpolicies.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when network policies change
 	React.useEffect(() => {
@@ -137,5 +149,9 @@ function NetworkPoliciesContent() {
 }
 
 export function NetworkPoliciesPageContainer() {
-	return <NetworkPoliciesContent />
+    return (
+        <RouteGuard requiredCapabilities={["networkpolicies.list"]}>
+            <NetworkPoliciesContent />
+        </RouteGuard>
+    )
 }
