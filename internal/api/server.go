@@ -47,6 +47,7 @@ type Server struct {
 	wsHub                *ws.Hub
 	actionsService       *actions.NodeActionsService
 	applyService         *actions.ApplyService
+	actionCoordinator    *actions.ActionCoordinator
 	logsService          *logs.StreamManager
 	execService          *exec.ExecManager
 	metricsService       *metrics.MetricsService
@@ -149,6 +150,24 @@ func (s *Server) initKubernetesClient() error {
 		s.clientFactory.DynamicClient(),
 		s.clientFactory.DiscoveryClient(),
 		s.logger,
+	)
+
+	// Initialize enhanced actions system
+	// Determine if this is production environment (simplified check)
+	isProduction := s.config.Security.AuthMode != "none"
+
+	safetyGuard := actions.NewSafetyGuard(s.logger, isProduction)
+	auditLogger := actions.NewAuditLogger(s.logger)
+	ssarHelper := k8s.NewSSARHelper(s.logger)
+
+	s.actionCoordinator = actions.NewActionCoordinator(
+		s.logger,
+		safetyGuard,
+		auditLogger,
+		ssarHelper,
+		s.actionsService,
+		s.applyService,
+		s.impersonationMgr,
 	)
 
 	// Initialize logs service
@@ -987,6 +1006,17 @@ func (s *Server) setupRoutes() {
 			r.Post("/nodes/{nodeName}/cordon", s.handleCordonNode)
 			r.Post("/nodes/{nodeName}/uncordon", s.handleUncordonNode)
 			r.Post("/nodes/{nodeName}/drain", s.handleDrainNode)
+
+			// Enhanced bulk actions endpoints
+			r.Post("/actions/validate", s.handleValidateAction)
+			r.Post("/actions/bulk", s.handleBulkAction)
+
+			// Resource-specific bulk actions
+			r.Post("/actions/pods", s.handlePodsBulkAction)
+			r.Post("/actions/deployments", s.handleDeploymentsBulkAction)
+			r.Post("/actions/services", s.handleServicesBulkAction)
+			r.Post("/actions/configmaps", s.handleConfigMapsBulkAction)
+			r.Post("/actions/secrets", s.handleSecretsBulkAction)
 
 			// M5: Advanced write endpoints
 			r.Post("/scale", s.handleScaleResource)
