@@ -5,14 +5,14 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/aaronlmathis/kaptn/internal/api/utils"
+	"github.com/aaronlmathis/kaptn/internal/api/v1/dto"
+	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/aaronlmathis/kaptn/internal/api/utils"
-	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 )
 
 func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
@@ -22,10 +22,11 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 	if namespace == "" || name == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":  "namespace and name are required",
-			"status": "error",
-		})
+		errorResponse := dto.ErrorResponse{
+			Status: "error",
+			Error:  "namespace and name are required",
+		}
+		json.NewEncoder(w).Encode(errorResponse)
 		return
 	}
 
@@ -117,10 +118,11 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"data":   fullDetails,
-		"status": "success",
-	})
+	successResponse := dto.APIResponse{
+		Status: "success",
+		Data:   fullDetails,
+	}
+	json.NewEncoder(w).Encode(successResponse)
 }
 
 func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
@@ -250,14 +252,19 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 		items = append(items, summary)
 	}
 
-	// Prepare response with pagination metadata
-	paginationData := utils.CreatePaginatedResponse(items, utils.CreatePaginationResponse(page, pageSize, totalBeforeFilter))
+	// Create paginated response (consistent with other handlers)
 	response := map[string]interface{}{
-		"data":   paginationData,
+		"data": map[string]interface{}{
+			"items":    items,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
 		"status": "success",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
 

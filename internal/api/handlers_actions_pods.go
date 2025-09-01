@@ -5,46 +5,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/aaronlmathis/kaptn/internal/api/v1/dto"
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
-// BulkActionRequest represents a bulk action request from the frontend
-type BulkActionRequest struct {
-	Action       string                 `json:"action"`  // e.g., "restart-pods", "delete-deployments"
-	Targets      []BulkActionTarget     `json:"targets"` // Resources to act upon
-	Params       map[string]interface{} `json:"params,omitempty"`
-	DryRun       bool                   `json:"dry_run"`
-	ForceConfirm bool                   `json:"force_confirm"` // User confirmed destructive action
-}
-
-// BulkActionTarget represents a target resource for bulk actions
-type BulkActionTarget struct {
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-}
-
-// BulkActionResponse represents the response to a bulk action
-type BulkActionResponse struct {
-	Success              bool                      `json:"success"`
-	RequestID            string                    `json:"request_id"`
-	Message              string                    `json:"message"`
-	ResourcesAffected    int                       `json:"resources_affected"`
-	ResourcesTotal       int                       `json:"resources_total"`
-	Details              map[string]interface{}    `json:"details,omitempty"`
-	RequiresConfirmation bool                      `json:"requires_confirmation,omitempty"`
-	SafetyViolations     []actions.SafetyViolation `json:"safety_violations,omitempty"`
-	Warnings             []string                  `json:"warnings,omitempty"`
-}
-
 // handlePodsBulkAction handles bulk actions for pods
 func (s *Server) handlePodsBulkAction(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetReqID(r.Context())
 
 	// Parse the bulk action request
-	var req BulkActionRequest
+	var req dto.BulkActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.logger.Error("Failed to decode bulk action request", zap.Error(err))
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -105,7 +78,7 @@ func (s *Server) handlePodsBulkAction(w http.ResponseWriter, r *http.Request) {
 }
 
 // convertBulkToActionRequest converts a bulk action request to an ActionRequest
-func (s *Server) convertBulkToActionRequest(req *BulkActionRequest, user *auth.User, requestID string) *actions.ActionRequest {
+func (s *Server) convertBulkToActionRequest(req *dto.BulkActionRequest, user *auth.User, requestID string) *actions.ActionRequest {
 	// Convert targets to TargetResource format
 	var targets []actions.TargetResource
 	for _, target := range req.Targets {
@@ -138,8 +111,8 @@ func (s *Server) convertBulkToActionRequest(req *BulkActionRequest, user *auth.U
 }
 
 // convertActionResultToResponse converts an ActionResult to BulkActionResponse
-func (s *Server) convertActionResultToResponse(result *actions.ActionResult, err error, requestID string, totalTargets int) *BulkActionResponse {
-	response := &BulkActionResponse{
+func (s *Server) convertActionResultToResponse(result *actions.ActionResult, err error, requestID string, totalTargets int) *dto.BulkActionResponse {
+	response := &dto.BulkActionResponse{
 		RequestID:      requestID,
 		ResourcesTotal: totalTargets,
 	}

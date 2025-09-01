@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/aaronlmathis/kaptn/internal/api/v1/dto"
 	"go.uber.org/zap"
 )
 
@@ -12,7 +13,7 @@ func (s *Server) handleDeploymentsBulkAction(w http.ResponseWriter, r *http.Requ
 	s.logger.Info("Handling deployments bulk action")
 
 	// Parse the bulk action request
-	var req BulkActionRequest
+	var req dto.BulkActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.logger.Error("Failed to decode bulk action request", zap.Error(err))
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -37,7 +38,7 @@ func (s *Server) handleServicesBulkAction(w http.ResponseWriter, r *http.Request
 	s.logger.Info("Handling services bulk action")
 
 	// Parse the bulk action request
-	var req BulkActionRequest
+	var req dto.BulkActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.logger.Error("Failed to decode bulk action request", zap.Error(err))
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -62,7 +63,7 @@ func (s *Server) handleConfigMapsBulkAction(w http.ResponseWriter, r *http.Reque
 	s.logger.Info("Handling configmaps bulk action")
 
 	// Parse the bulk action request
-	var req BulkActionRequest
+	var req dto.BulkActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.logger.Error("Failed to decode bulk action request", zap.Error(err))
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -87,7 +88,7 @@ func (s *Server) handleSecretsBulkAction(w http.ResponseWriter, r *http.Request)
 	s.logger.Info("Handling secrets bulk action")
 
 	// Parse the bulk action request
-	var req BulkActionRequest
+	var req dto.BulkActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.logger.Error("Failed to decode bulk action request", zap.Error(err))
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
