@@ -2,25 +2,25 @@ package dto
 
 import (
 	"time"
-	
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PodSummary represents a summary view of a pod for list views
 type PodSummary struct {
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	Namespace         string            `json:"namespace"`
-	Phase             string            `json:"phase"`
-	Ready             string            `json:"ready"`
-	Status            string            `json:"status"`
-	Restarts          int32             `json:"restarts"`
-	Age               string            `json:"age"`
-	Node              string            `json:"node"`
-	PodIP             string            `json:"podIP"`
-	CreationTimestamp time.Time         `json:"creationTimestamp"`
-	Labels            map[string]string `json:"labels"`
-	Annotations       map[string]string `json:"annotations"`
+	ID                string                  `json:"id"`
+	Name              string                  `json:"name"`
+	Namespace         string                  `json:"namespace"`
+	Phase             string                  `json:"phase"`
+	Ready             string                  `json:"ready"`
+	Status            string                  `json:"status"`
+	Restarts          int32                   `json:"restarts"`
+	Age               string                  `json:"age"`
+	Node              string                  `json:"node"`
+	PodIP             string                  `json:"podIP"`
+	CreationTimestamp time.Time               `json:"creationTimestamp"`
+	Labels            map[string]string       `json:"labels"`
+	Annotations       map[string]string       `json:"annotations"`
 	OwnerReferences   []metav1.OwnerReference `json:"ownerReferences,omitempty"`
 }
 
@@ -73,17 +73,17 @@ type DaemonSetSummary struct {
 
 // ReplicaSetSummary represents a summary view of a replicaset for list views
 type ReplicaSetSummary struct {
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	Namespace         string            `json:"namespace"`
-	Desired           int32             `json:"desired"`
-	Current           int32             `json:"current"`
-	Ready             int32             `json:"ready"`
-	Age               string            `json:"age"`
-	Images            []string          `json:"images"`
-	CreationTimestamp time.Time         `json:"creationTimestamp"`
-	Labels            map[string]string `json:"labels"`
-	Annotations       map[string]string `json:"annotations"`
+	ID                string                  `json:"id"`
+	Name              string                  `json:"name"`
+	Namespace         string                  `json:"namespace"`
+	Desired           int32                   `json:"desired"`
+	Current           int32                   `json:"current"`
+	Ready             int32                   `json:"ready"`
+	Age               string                  `json:"age"`
+	Images            []string                `json:"images"`
+	CreationTimestamp time.Time               `json:"creationTimestamp"`
+	Labels            map[string]string       `json:"labels"`
+	Annotations       map[string]string       `json:"annotations"`
 	OwnerReferences   []metav1.OwnerReference `json:"ownerReferences,omitempty"`
 }
 

@@ -21,15 +21,15 @@ type PaginationResponse struct {
 
 // ListOptions represents common options for list operations
 type ListOptions struct {
-	Namespace      string            `json:"namespace,omitempty"`
-	Search         string            `json:"search,omitempty"`
-	LabelSelector  string            `json:"labelSelector,omitempty"`
-	FieldSelector  string            `json:"fieldSelector,omitempty"`
-	Sort           string            `json:"sort,omitempty"`
-	Order          string            `json:"order,omitempty"`
-	Pagination     PaginationRequest `json:"pagination"`
-	IncludeData    bool              `json:"includeData,omitempty"`    // For secrets, configmaps
-	ShowManagedFields bool           `json:"showManagedFields,omitempty"`
+	Namespace         string            `json:"namespace,omitempty"`
+	Search            string            `json:"search,omitempty"`
+	LabelSelector     string            `json:"labelSelector,omitempty"`
+	FieldSelector     string            `json:"fieldSelector,omitempty"`
+	Sort              string            `json:"sort,omitempty"`
+	Order             string            `json:"order,omitempty"`
+	Pagination        PaginationRequest `json:"pagination"`
+	IncludeData       bool              `json:"includeData,omitempty"` // For secrets, configmaps
+	ShowManagedFields bool              `json:"showManagedFields,omitempty"`
 }
 
 // APIResponse represents a standard API response structure
@@ -59,11 +59,11 @@ type ResourceMetadata struct {
 
 // ListResponse represents a standard paginated list response
 type ListResponse struct {
-	Items      interface{}        `json:"items"`
-	Page       int                `json:"page"`
-	PageSize   int                `json:"pageSize"`
-	Total      int                `json:"total"`
-	Status     string             `json:"status"`
+	Items    interface{} `json:"items"`
+	Page     int         `json:"page"`
+	PageSize int         `json:"pageSize"`
+	Total    int         `json:"total"`
+	Status   string      `json:"status"`
 }
 
 // ResourceLink represents a related resource link

@@ -37,17 +37,17 @@ type IngressSummary struct {
 
 // IngressClassSummary represents a summary view of an ingress class for list views
 type IngressClassSummary struct {
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	Controller        string            `json:"controller"`
-	IsDefault         bool              `json:"isDefault"`
+	ID                string                 `json:"id"`
+	Name              string                 `json:"name"`
+	Controller        string                 `json:"controller"`
+	IsDefault         bool                   `json:"isDefault"`
 	Parameters        map[string]interface{} `json:"parameters,omitempty"`
-	ParametersKind    string            `json:"parametersKind,omitempty"`
-	ParametersName    string            `json:"parametersName,omitempty"`
-	Age               string            `json:"age"`
-	CreationTimestamp time.Time         `json:"creationTimestamp"`
-	Labels            map[string]string `json:"labels"`
-	Annotations       map[string]string `json:"annotations"`
+	ParametersKind    string                 `json:"parametersKind,omitempty"`
+	ParametersName    string                 `json:"parametersName,omitempty"`
+	Age               string                 `json:"age"`
+	CreationTimestamp time.Time              `json:"creationTimestamp"`
+	Labels            map[string]string      `json:"labels"`
+	Annotations       map[string]string      `json:"annotations"`
 }
 
 // NetworkPolicySummary represents a summary view of a network policy for list views

@@ -8,8 +8,8 @@ type RoleSummary struct {
 	Name              string            `json:"name"`
 	Namespace         string            `json:"namespace"`
 	Age               string            `json:"age"`
-	Rules             int               `json:"rules"`             // Frontend expects 'rules', not 'ruleCount'
-	RulesDisplay      string            `json:"rulesDisplay"`      // Frontend expects this field
+	Rules             int               `json:"rules"`        // Frontend expects 'rules', not 'ruleCount'
+	RulesDisplay      string            `json:"rulesDisplay"` // Frontend expects this field
 	VerbCount         int               `json:"verbCount"`
 	ResourceCount     int               `json:"resourceCount"`
 	CreationTimestamp time.Time         `json:"creationTimestamp"`
@@ -25,10 +25,10 @@ type RoleBindingSummary struct {
 	Age                 string            `json:"age"`
 	RoleName            string            `json:"roleName"`
 	RoleKind            string            `json:"roleKind"`
-	RoleRef             string            `json:"roleRef"`             // Frontend expects this field
-	Subjects            int               `json:"subjects"`            // Frontend expects 'subjects', not 'subjectCount'
-	SubjectsDisplay     string            `json:"subjectsDisplay"`     // Frontend expects this field
-	SubjectCount        int               `json:"subjectCount"`        // Keep for backward compatibility
+	RoleRef             string            `json:"roleRef"`         // Frontend expects this field
+	Subjects            int               `json:"subjects"`        // Frontend expects 'subjects', not 'subjectCount'
+	SubjectsDisplay     string            `json:"subjectsDisplay"` // Frontend expects this field
+	SubjectCount        int               `json:"subjectCount"`    // Keep for backward compatibility
 	UserCount           int               `json:"userCount"`
 	GroupCount          int               `json:"groupCount"`
 	ServiceAccountCount int               `json:"serviceAccountCount"`
@@ -74,15 +74,15 @@ type ClusterRoleBindingSummary struct {
 
 // RBACBuilderRequest represents a request to build RBAC resources
 type RBACBuilderRequest struct {
-	Type        string                 `json:"type"`        // "role", "clusterrole", "rolebinding", "clusterrolebinding"
-	Name        string                 `json:"name"`
-	Namespace   string                 `json:"namespace,omitempty"`
-	Rules       []RBACRule            `json:"rules,omitempty"`
-	Subjects    []RBACSubject         `json:"subjects,omitempty"`
-	RoleRef     *RBACRoleRef          `json:"roleRef,omitempty"`
-	Labels      map[string]string     `json:"labels,omitempty"`
-	Annotations map[string]string     `json:"annotations,omitempty"`
-	DryRun      bool                  `json:"dryRun"`
+	Type        string            `json:"type"` // "role", "clusterrole", "rolebinding", "clusterrolebinding"
+	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace,omitempty"`
+	Rules       []RBACRule        `json:"rules,omitempty"`
+	Subjects    []RBACSubject     `json:"subjects,omitempty"`
+	RoleRef     *RBACRoleRef      `json:"roleRef,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	DryRun      bool              `json:"dryRun"`
 }
 
 // RBACRule represents a rule in an RBAC policy
