@@ -33,11 +33,11 @@ func CalculateAge(creationTime time.Time) string {
 // FormatConditions converts Kubernetes conditions to a standard response format
 func FormatConditions(conditions interface{}) []map[string]string {
 	var result []map[string]string
-	
+
 	// This is a placeholder for condition formatting logic
 	// Each domain formatter can use this or implement its own version
 	// depending on the specific condition structure
-	
+
 	return result
 }
 
@@ -49,7 +49,7 @@ func FormatLabelsCount(labels map[string]string) int {
 	return len(labels)
 }
 
-// FormatAnnotationsCount returns the count of annotations in a map  
+// FormatAnnotationsCount returns the count of annotations in a map
 func FormatAnnotationsCount(annotations map[string]string) int {
 	if annotations == nil {
 		return 0

@@ -6,13 +6,13 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestStorageFormatter_PersistentVolumeToResponse(t *testing.T) {
 	formatter := &StorageFormatter{}
-	
+
 	pv := &corev1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pv",
@@ -45,15 +45,15 @@ func TestStorageFormatter_PersistentVolumeToResponse(t *testing.T) {
 	if result["name"] != "test-pv" {
 		t.Errorf("Expected name 'test-pv', got %v", result["name"])
 	}
-	
+
 	if result["storageClass"] != "local-storage" {
 		t.Errorf("Expected storageClass 'local-storage', got %v", result["storageClass"])
 	}
-	
+
 	if result["status"] != "Available" {
 		t.Errorf("Expected status 'Available', got %v", result["status"])
 	}
-	
+
 	// Check capacity
 	if result["capacity"] != "10Gi" {
 		t.Errorf("Expected capacity '10Gi', got %v", result["capacity"])
@@ -62,7 +62,7 @@ func TestStorageFormatter_PersistentVolumeToResponse(t *testing.T) {
 
 func TestStorageFormatter_PersistentVolumeClaimToResponse(t *testing.T) {
 	formatter := &StorageFormatter{}
-	
+
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pvc",
@@ -93,15 +93,15 @@ func TestStorageFormatter_PersistentVolumeClaimToResponse(t *testing.T) {
 	if result["name"] != "test-pvc" {
 		t.Errorf("Expected name 'test-pvc', got %v", result["name"])
 	}
-	
+
 	if result["namespace"] != "default" {
 		t.Errorf("Expected namespace 'default', got %v", result["namespace"])
 	}
-	
+
 	if result["status"] != "Bound" {
 		t.Errorf("Expected status 'Bound', got %v", result["status"])
 	}
-	
+
 	if result["storageClass"] != "fast-ssd" {
 		t.Errorf("Expected storageClass 'fast-ssd', got %v", result["storageClass"])
 	}
@@ -109,11 +109,11 @@ func TestStorageFormatter_PersistentVolumeClaimToResponse(t *testing.T) {
 
 func TestStorageFormatter_StorageClassToResponse(t *testing.T) {
 	formatter := &StorageFormatter{}
-	
+
 	allowVolumeExpansion := true
 	reclaimPolicy := corev1.PersistentVolumeReclaimDelete
 	volumeBindingMode := storagev1.VolumeBindingImmediate
-	
+
 	sc := &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "fast-ssd",
@@ -137,19 +137,19 @@ func TestStorageFormatter_StorageClassToResponse(t *testing.T) {
 	if result["name"] != "fast-ssd" {
 		t.Errorf("Expected name 'fast-ssd', got %v", result["name"])
 	}
-	
+
 	if result["provisioner"] != "kubernetes.io/aws-ebs" {
 		t.Errorf("Expected provisioner 'kubernetes.io/aws-ebs', got %v", result["provisioner"])
 	}
-	
+
 	if result["reclaimPolicy"] != "Delete" {
 		t.Errorf("Expected reclaimPolicy 'Delete', got %v", result["reclaimPolicy"])
 	}
-	
+
 	if result["volumeBindingMode"] != "Immediate" {
 		t.Errorf("Expected volumeBindingMode 'Immediate', got %v", result["volumeBindingMode"])
 	}
-	
+
 	// Check parameters
 	params, ok := result["parameters"].(map[string]string)
 	if !ok {

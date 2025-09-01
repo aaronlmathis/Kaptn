@@ -13,7 +13,7 @@ func NewRBACFormatter() *RBACFormatter {
 // TODO: Add RBAC-specific formatting functions when RBAC handlers are migrated
 // This includes:
 // - RoleToResponse
-// - RoleBindingToResponse  
+// - RoleBindingToResponse
 // - ClusterRoleToResponse
 // - ClusterRoleBindingToResponse
 // - ServiceAccountToResponse

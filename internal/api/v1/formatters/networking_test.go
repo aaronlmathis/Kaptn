@@ -11,7 +11,7 @@ import (
 
 func TestNetworkingFormatter_ServiceToResponse(t *testing.T) {
 	formatter := &NetworkingFormatter{}
-	
+
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-service",
@@ -22,13 +22,13 @@ func TestNetworkingFormatter_ServiceToResponse(t *testing.T) {
 			CreationTimestamp: metav1.Time{Time: time.Now().Add(-24 * time.Hour)},
 		},
 		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeClusterIP,
+			Type:      corev1.ServiceTypeClusterIP,
 			ClusterIP: "10.96.0.1",
 			Ports: []corev1.ServicePort{
 				{
-					Name:     "http",
-					Protocol: corev1.ProtocolTCP,
-					Port:     80,
+					Name:       "http",
+					Protocol:   corev1.ProtocolTCP,
+					Port:       80,
 					TargetPort: intstr.FromInt(8080),
 				},
 			},
@@ -43,15 +43,15 @@ func TestNetworkingFormatter_ServiceToResponse(t *testing.T) {
 	if result["name"] != "test-service" {
 		t.Errorf("Expected name 'test-service', got %v", result["name"])
 	}
-	
+
 	if result["namespace"] != "default" {
 		t.Errorf("Expected namespace 'default', got %v", result["namespace"])
 	}
-	
+
 	if result["type"] != "ClusterIP" {
 		t.Errorf("Expected type 'ClusterIP', got %v", result["type"])
 	}
-	
+
 	if result["clusterIP"] != "10.96.0.1" {
 		t.Errorf("Expected clusterIP '10.96.0.1', got %v", result["clusterIP"])
 	}
@@ -59,7 +59,7 @@ func TestNetworkingFormatter_ServiceToResponse(t *testing.T) {
 
 func TestNetworkingFormatter_IngressToResponse(t *testing.T) {
 	formatter := &NetworkingFormatter{}
-	
+
 	// Create unstructured ingress object as the method expects
 	ingress := map[string]interface{}{
 		"metadata": map[string]interface{}{
@@ -100,11 +100,11 @@ func TestNetworkingFormatter_IngressToResponse(t *testing.T) {
 	if result["name"] != "test-ingress" {
 		t.Errorf("Expected name 'test-ingress', got %v", result["name"])
 	}
-	
+
 	if result["namespace"] != "default" {
 		t.Errorf("Expected namespace 'default', got %v", result["namespace"])
 	}
-	
+
 	// Check that hosts array exists and contains expected host
 	hosts, ok := result["hosts"].([]string)
 	if !ok || len(hosts) != 1 {
@@ -114,7 +114,7 @@ func TestNetworkingFormatter_IngressToResponse(t *testing.T) {
 			t.Errorf("Expected host 'example.com', got %v", hosts[0])
 		}
 	}
-	
+
 	// Check that paths array exists
 	paths, ok := result["paths"].([]string)
 	if !ok || len(paths) != 1 {
@@ -127,11 +127,11 @@ func TestNetworkingFormatter_IngressToResponse(t *testing.T) {
 }
 
 func TestNetworkingFormatter_EndpointsToResponse(t *testing.T) {
-	
+
 	endpoints := &corev1.Endpoints{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-endpoints",
-			Namespace: "default",
+			Name:              "test-endpoints",
+			Namespace:         "default",
 			CreationTimestamp: metav1.Time{Time: time.Now().Add(-6 * time.Hour)},
 		},
 		Subsets: []corev1.EndpointSubset{
@@ -145,7 +145,7 @@ func TestNetworkingFormatter_EndpointsToResponse(t *testing.T) {
 						},
 					},
 					{
-						IP: "192.168.1.11", 
+						IP: "192.168.1.11",
 						TargetRef: &corev1.ObjectReference{
 							Kind: "Pod",
 							Name: "test-pod-2",
@@ -169,17 +169,17 @@ func TestNetworkingFormatter_EndpointsToResponse(t *testing.T) {
 	if result["name"] != "test-endpoints" {
 		t.Errorf("Expected name 'test-endpoints', got %v", result["name"])
 	}
-	
+
 	if result["namespace"] != "default" {
 		t.Errorf("Expected namespace 'default', got %v", result["namespace"])
 	}
-	
+
 	// Check that subsets count is correct
 	subsetsCount, ok := result["subsets"].(int)
 	if !ok || subsetsCount != 1 {
 		t.Errorf("Expected 1 subset, got %v", result["subsets"])
 	}
-	
+
 	// Check addresses array (flat string array)
 	addresses, ok := result["addresses"].([]string)
 	if !ok || len(addresses) != 2 {
@@ -192,7 +192,7 @@ func TestNetworkingFormatter_EndpointsToResponse(t *testing.T) {
 			t.Errorf("Expected second IP '192.168.1.11', got %v", addresses[1])
 		}
 	}
-	
+
 	// Check ports array (flat string array)
 	ports, ok := result["ports"].([]string)
 	if !ok || len(ports) != 1 {
