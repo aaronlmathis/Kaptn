@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/aaronlmathis/kaptn/internal/api/utils"
-	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/aaronlmathis/kaptn/internal/api/utils"
+	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 )
 
 func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {

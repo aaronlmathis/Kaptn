@@ -13,7 +13,7 @@ LDFLAGS := -X github.com/aaronlmathis/kaptn/internal/version.Version=$(VERSION) 
            -X github.com/aaronlmathis/kaptn/internal/version.GitCommit=$(GIT_COMMIT) \
            -X github.com/aaronlmathis/kaptn/internal/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: all dev fmt lint test frontend build docker docker-debug kind-up kind-down clean help push push-debug run
+.PHONY: all dev fmt lint lint-go test frontend build docker docker-debug kind-up kind-down clean help push push-debug run
 
 all: build ## Build everything
 
@@ -35,6 +35,11 @@ lint: ## Lint code
 	@go vet ./...
 	@echo "Linting frontend code..."
 	@cd frontend && npm run lint 2>/dev/null || echo "No lint script found"
+
+lint-go: ## Lint Go code
+	@echo "Linting Go code..."
+	@go vet ./...
+
 
 lint-fix: ## Fix linting issues
 	@echo "Fixing Go formatting..."
