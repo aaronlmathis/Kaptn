@@ -26,32 +26,32 @@ type TimeSeriesPoint struct {
 
 // MetricsRequest represents a request for metrics data
 type MetricsRequest struct {
-	Query      string            `json:"query"`
-	StartTime  *time.Time        `json:"startTime,omitempty"`
-	EndTime    *time.Time        `json:"endTime,omitempty"`
-	Step       string            `json:"step,omitempty"`
-	Namespace  string            `json:"namespace,omitempty"`
-	Resource   string            `json:"resource,omitempty"`
-	Labels     map[string]string `json:"labels,omitempty"`
+	Query     string            `json:"query"`
+	StartTime *time.Time        `json:"startTime,omitempty"`
+	EndTime   *time.Time        `json:"endTime,omitempty"`
+	Step      string            `json:"step,omitempty"`
+	Namespace string            `json:"namespace,omitempty"`
+	Resource  string            `json:"resource,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
 }
 
 // MetricsResponse represents a response containing metrics data
 type MetricsResponse struct {
-	Status string                 `json:"status"`
-	Data   MetricsResponseData    `json:"data"`
+	Status string              `json:"status"`
+	Data   MetricsResponseData `json:"data"`
 }
 
 // MetricsResponseData contains the actual metrics data
 type MetricsResponseData struct {
-	ResultType string        `json:"resultType"`
+	ResultType string         `json:"resultType"`
 	Result     []MetricResult `json:"result"`
 }
 
 // MetricResult represents a single metric result
 type MetricResult struct {
-	Metric map[string]string    `json:"metric"`
-	Values [][]interface{}     `json:"values,omitempty"`
-	Value  []interface{}       `json:"value,omitempty"`
+	Metric map[string]string `json:"metric"`
+	Values [][]interface{}   `json:"values,omitempty"`
+	Value  []interface{}     `json:"value,omitempty"`
 }
 
 // HealthCheckResponse represents the response for health checks
@@ -65,8 +65,8 @@ type HealthCheckResponse struct {
 
 // Health represents the health status of a component
 type Health struct {
-	Status  string    `json:"status"`
-	Message string    `json:"message,omitempty"`
+	Status      string    `json:"status"`
+	Message     string    `json:"message,omitempty"`
 	LastChecked time.Time `json:"lastChecked"`
 	Duration    string    `json:"duration,omitempty"`
 }
@@ -81,10 +81,10 @@ type AnalyticsRequest struct {
 
 // AnalyticsResponse represents a response containing analytics data
 type AnalyticsResponse struct {
-	Type        string                 `json:"type"`
-	TimeRange   string                 `json:"timeRange"`
-	Data        []AnalyticsDataPoint   `json:"data"`
-	Summary     AnalyticsSummary       `json:"summary"`
+	Type         string                 `json:"type"`
+	TimeRange    string                 `json:"timeRange"`
+	Data         []AnalyticsDataPoint   `json:"data"`
+	Summary      AnalyticsSummary       `json:"summary"`
 	Aggregations map[string]interface{} `json:"aggregations,omitempty"`
 }
 

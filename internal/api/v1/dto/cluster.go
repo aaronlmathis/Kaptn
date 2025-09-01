@@ -69,14 +69,14 @@ type APIResourceSummary struct {
 
 // ClusterOverviewResponse represents cluster overview information
 type ClusterOverviewResponse struct {
-	Status       string                 `json:"status"`
-	Version      string                 `json:"version"`
-	Nodes        ClusterNodesInfo       `json:"nodes"`
-	Namespaces   ClusterNamespacesInfo  `json:"namespaces"`
-	Workloads    ClusterWorkloadsInfo   `json:"workloads"`
-	Resources    ClusterResourcesInfo   `json:"resources"`
-	Health       ClusterHealthInfo      `json:"health"`
-	Capabilities map[string]bool        `json:"capabilities"`
+	Status       string                `json:"status"`
+	Version      string                `json:"version"`
+	Nodes        ClusterNodesInfo      `json:"nodes"`
+	Namespaces   ClusterNamespacesInfo `json:"namespaces"`
+	Workloads    ClusterWorkloadsInfo  `json:"workloads"`
+	Resources    ClusterResourcesInfo  `json:"resources"`
+	Health       ClusterHealthInfo     `json:"health"`
+	Capabilities map[string]bool       `json:"capabilities"`
 }
 
 // ClusterNodesInfo represents information about cluster nodes
@@ -105,11 +105,11 @@ type ClusterWorkloadsInfo struct {
 
 // ClusterResourcesInfo represents information about cluster resources
 type ClusterResourcesInfo struct {
-	Services           int `json:"services"`
-	ConfigMaps         int `json:"configMaps"`
-	Secrets            int `json:"secrets"`
-	PersistentVolumes  int `json:"persistentVolumes"`
-	StorageClasses     int `json:"storageClasses"`
+	Services          int `json:"services"`
+	ConfigMaps        int `json:"configMaps"`
+	Secrets           int `json:"secrets"`
+	PersistentVolumes int `json:"persistentVolumes"`
+	StorageClasses    int `json:"storageClasses"`
 }
 
 // ClusterHealthInfo represents cluster health information

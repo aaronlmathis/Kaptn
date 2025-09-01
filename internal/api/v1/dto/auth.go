@@ -75,15 +75,15 @@ type RefreshTokenResponse struct {
 
 // UserProfileResponse represents user profile information
 type UserProfileResponse struct {
-	Sub               string    `json:"sub"`
-	Email             string    `json:"email"`
-	EmailVerified     bool      `json:"email_verified"`
-	Name              string    `json:"name"`
-	GivenName         string    `json:"given_name,omitempty"`
-	FamilyName        string    `json:"family_name,omitempty"`
-	Picture           string    `json:"picture,omitempty"`
-	Groups            []string  `json:"groups,omitempty"`
-	Capabilities      []string  `json:"capabilities,omitempty"`
-	LastLogin         time.Time `json:"last_login,omitempty"`
-	SessionExpiresAt  time.Time `json:"session_expires_at,omitempty"`
+	Sub              string    `json:"sub"`
+	Email            string    `json:"email"`
+	EmailVerified    bool      `json:"email_verified"`
+	Name             string    `json:"name"`
+	GivenName        string    `json:"given_name,omitempty"`
+	FamilyName       string    `json:"family_name,omitempty"`
+	Picture          string    `json:"picture,omitempty"`
+	Groups           []string  `json:"groups,omitempty"`
+	Capabilities     []string  `json:"capabilities,omitempty"`
+	LastLogin        time.Time `json:"last_login,omitempty"`
+	SessionExpiresAt time.Time `json:"session_expires_at,omitempty"`
 }
