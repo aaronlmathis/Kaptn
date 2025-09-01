@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aaronlmathis/kaptn/internal/api/utils"
 	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -488,36 +489,40 @@ func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
 		sortBy = "name"
 	}
 
-	page := 1
-	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
+	// Parse pagination parameters using utility function
+	pageStr := r.URL.Query().Get("page")
+	pageSizeStr := r.URL.Query().Get("pageSize")
+	
+	// Use default pageSize of 50 to match original behavior
+	pagination := utils.ParsePaginationParams(pageStr, pageSizeStr)
+	page := pagination.Page
+	pageSize := pagination.PageSize
+	
+	// Override default pageSize for services (original was 50, not 25)
+	if pageSizeStr == "" {
+		pageSize = 50
 	}
-
-	pageSize := 50
-	if pageSizeStr := r.URL.Query().Get("pageSize"); pageSizeStr != "" {
-		if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 100 {
-			pageSize = ps
-		}
+	// Apply max pageSize limit as in original
+	if pageSize > 100 {
+		pageSize = 100
 	}
 
 	// List services from all namespaces (or specific namespace if provided)
 	services, err := s.resourceManager.ListServices(r.Context(), namespace)
 	if err != nil {
 		s.logger.Error("Failed to list services", zap.Error(err))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"data": map[string]interface{}{
-				"items":    []interface{}{},
-				"total":    0,
-				"page":     page,
-				"pageSize": pageSize,
-			},
+		
+		// Create error response with empty pagination data
+		emptyPaginationData := utils.CreatePaginatedResponse([]interface{}{}, utils.CreatePaginationResponse(page, pageSize, 0))
+		errorResponse := map[string]interface{}{
+			"data":   emptyPaginationData,
 			"status": "error",
 			"error":  err.Error(),
-		})
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(errorResponse)
 		return
 	}
 
@@ -546,14 +551,10 @@ func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
 		responseItems = append(responseItems, s.serviceToResponse(service))
 	}
 
+	paginationData := utils.CreatePaginatedResponse(responseItems, utils.CreatePaginationResponse(page, pageSize, totalBeforeFilter))
 	response := map[string]interface{}{
 		"status": "success",
-		"data": map[string]interface{}{
-			"items":    responseItems,
-			"total":    totalBeforeFilter,
-			"page":     page,
-			"pageSize": pageSize,
-		},
+		"data":   paginationData,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
