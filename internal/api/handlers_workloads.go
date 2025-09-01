@@ -252,23 +252,20 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 		items = append(items, summary)
 	}
 
-	// Prepare response with pagination metadata using DTO
-	paginationResponse := dto.PaginationResponse{
-		Page:     page,
-		PageSize: pageSize,
-		Total:    totalBeforeFilter,
-	}
-	
-	listResponse := dto.ListResponse{
-		Items:    items,
-		Page:     paginationResponse.Page,
-		PageSize: paginationResponse.PageSize,
-		Total:    paginationResponse.Total,
-		Status:   "success",
+	// Create paginated response (consistent with other handlers)
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"items":    items,
+			"page":     page,
+			"pageSize": pageSize,
+			"total":    totalBeforeFilter,
+		},
+		"status": "success",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(listResponse)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }
 
 func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
