@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/aaronlmathis/kaptn/internal/api/v1/dto"
 	"go.uber.org/zap"
 )
 
@@ -12,7 +13,7 @@ func (s *Server) handleValidateAction(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("Validating action request")
 
 	// Parse the request
-	var req BulkActionRequest
+	var req dto.BulkActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.logger.Error("Failed to decode validation request", zap.Error(err))
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -36,7 +37,7 @@ func (s *Server) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("Handling generic bulk action")
 
 	// For now, redirect to resource-specific handlers based on action
-	var req BulkActionRequest
+	var req dto.BulkActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		s.logger.Error("Failed to decode bulk action request", zap.Error(err))
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
