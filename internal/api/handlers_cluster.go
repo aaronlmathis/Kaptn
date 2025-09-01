@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aaronlmathis/kaptn/internal/api/v1/formatters"
 	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -139,8 +140,9 @@ func (s *Server) handleGetNamespace(w http.ResponseWriter, r *http.Request) {
 		zap.String("namespace", name),
 		zap.String("status", string(namespace.Status.Phase)))
 
-	// Create namespace summary
-	summary := formatNamespaceSummary(namespace)
+	// Create namespace summary using the new formatter
+	clusterFormatter := formatters.NewClusterFormatter()
+	summary := clusterFormatter.NamespaceToResponse(namespace)
 
 	response := map[string]interface{}{
 		"data": map[string]interface{}{

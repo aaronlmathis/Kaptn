@@ -7,6 +7,7 @@ import (
 
 	"github.com/aaronlmathis/kaptn/internal/api/utils"
 	"github.com/aaronlmathis/kaptn/internal/api/v1/dto"
+	"github.com/aaronlmathis/kaptn/internal/api/v1/formatters"
 	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -95,16 +96,17 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 			key := podMetric.Namespace + "/" + podMetric.Name
 			if key == namespace+"/"+name {
 				podMetricsMap[key] = map[string]interface{}{
-					"cpu":    calculatePodCPUUsage(podMetric),
-					"memory": calculatePodMemoryUsage(podMetric),
+					"cpu":    formatters.CalculatePodCPUUsage(podMetric),
+					"memory": formatters.CalculatePodMemoryUsage(podMetric),
 				}
 				break
 			}
 		}
 	}
 
-	// Convert to enhanced summary with full details
-	summary := s.enhancedPodToSummary(pod, podMetricsMap)
+	// Create workloads formatter and convert to enhanced summary with full details
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
+	summary := workloadsFormatter.EnhancedPodToSummary(pod, podMetricsMap)
 
 	// Add full pod spec for detailed view
 	fullDetails := map[string]interface{}{
@@ -239,16 +241,17 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 		for _, podMetric := range metrics.PodMetrics {
 			key := podMetric.Namespace + "/" + podMetric.Name
 			podMetricsMap[key] = map[string]interface{}{
-				"cpu":    calculatePodCPUUsage(podMetric),
-				"memory": calculatePodMemoryUsage(podMetric),
+				"cpu":    formatters.CalculatePodCPUUsage(podMetric),
+				"memory": formatters.CalculatePodMemoryUsage(podMetric),
 			}
 		}
 	}
 
-	// Convert to enhanced summaries
+	// Convert to enhanced summaries using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
 	var items []map[string]interface{}
 	for _, pod := range filteredPods {
-		summary := s.enhancedPodToSummary(&pod, podMetricsMap)
+		summary := workloadsFormatter.EnhancedPodToSummary(&pod, podMetricsMap)
 		items = append(items, summary)
 	}
 
@@ -331,10 +334,11 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to response format
+	// Convert to response format using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
 	var responses []map[string]interface{}
 	for _, deployment := range filteredDeployments {
-		responses = append(responses, s.deploymentToResponse(deployment))
+		responses = append(responses, workloadsFormatter.DeploymentToResponse(deployment))
 	}
 
 	// Create paginated response
@@ -416,10 +420,11 @@ func (s *Server) handleListStatefulSets(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Convert to response format
+	// Convert to response format using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
 	var responses []map[string]interface{}
 	for _, statefulSet := range filteredStatefulSets {
-		responses = append(responses, s.statefulSetToResponse(statefulSet))
+		responses = append(responses, workloadsFormatter.StatefulSetToResponse(statefulSet))
 	}
 
 	// Create paginated response
@@ -501,10 +506,11 @@ func (s *Server) handleListReplicaSets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to response format
+	// Convert to response format using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
 	var responses []map[string]interface{}
 	for _, replicaSet := range filteredReplicaSets {
-		responses = append(responses, s.replicaSetToResponse(replicaSet))
+		responses = append(responses, workloadsFormatter.ReplicaSetToResponse(replicaSet))
 	}
 
 	// Create paginated response
@@ -586,10 +592,11 @@ func (s *Server) handleListDaemonSets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to response format
+	// Convert to response format using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
 	var responses []map[string]interface{}
 	for _, daemonSet := range filteredDaemonSets {
-		responses = append(responses, s.daemonSetToResponse(daemonSet))
+		responses = append(responses, workloadsFormatter.DaemonSetToResponse(daemonSet))
 	}
 
 	// Create paginated response
@@ -671,10 +678,11 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to response format
+	// Convert to response format using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
 	var responses []map[string]interface{}
 	for _, job := range filteredJobs {
-		responses = append(responses, s.jobToResponse(job))
+		responses = append(responses, workloadsFormatter.JobToResponse(job))
 	}
 
 	// Create paginated response
@@ -756,10 +764,11 @@ func (s *Server) handleListCronJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to response format
+	// Convert to response format using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
 	var responses []map[string]interface{}
 	for _, cronJob := range filteredCronJobs {
-		responses = append(responses, s.cronJobToResponse(cronJob))
+		responses = append(responses, workloadsFormatter.CronJobToResponse(cronJob))
 	}
 
 	// Create paginated response
@@ -808,8 +817,9 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to enhanced summary
-	summary := s.jobToResponse(*job)
+	// Convert to enhanced summary using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
+	summary := workloadsFormatter.JobToResponse(*job)
 
 	// Add full job spec for detailed view
 	fullDetails := map[string]interface{}{
@@ -859,8 +869,9 @@ func (s *Server) handleGetCronJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to enhanced summary
-	summary := s.cronJobToResponse(*cronJob)
+	// Convert to enhanced summary using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
+	summary := workloadsFormatter.CronJobToResponse(*cronJob)
 
 	// Add full cronjob spec for detailed view
 	fullDetails := map[string]interface{}{
@@ -910,8 +921,9 @@ func (s *Server) handleGetDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to enhanced summary
-	summary := s.deploymentToResponse(*deployment)
+	// Convert to enhanced summary using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
+	summary := workloadsFormatter.DeploymentToResponse(*deployment)
 
 	// Add full deployment spec for detailed view
 	fullDetails := map[string]interface{}{
@@ -961,8 +973,9 @@ func (s *Server) handleGetStatefulSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to enhanced summary
-	summary := s.statefulSetToResponse(*statefulSet)
+	// Convert to enhanced summary using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
+	summary := workloadsFormatter.StatefulSetToResponse(*statefulSet)
 
 	// Add full statefulset spec for detailed view
 	fullDetails := map[string]interface{}{
@@ -1012,8 +1025,9 @@ func (s *Server) handleGetDaemonSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to enhanced summary
-	summary := s.daemonSetToResponse(*daemonSet)
+	// Convert to enhanced summary using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
+	summary := workloadsFormatter.DaemonSetToResponse(*daemonSet)
 
 	// Add full daemonset spec for detailed view
 	fullDetails := map[string]interface{}{
@@ -1063,8 +1077,9 @@ func (s *Server) handleGetReplicaSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert to enhanced summary
-	summary := s.replicaSetToResponse(*replicaSet)
+	// Convert to enhanced summary using workloads formatter
+	workloadsFormatter := formatters.NewWorkloadsFormatter()
+	summary := workloadsFormatter.ReplicaSetToResponse(*replicaSet)
 
 	// Add full replicaset spec for detailed view
 	fullDetails := map[string]interface{}{
