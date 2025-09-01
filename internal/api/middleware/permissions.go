@@ -61,7 +61,7 @@ func (s *SSARPermissionChecker) Can(ctx context.Context, user *auth.User, verb, 
 			zap.String("namespace", namespace),
 			zap.String("name", name))
 		return &PermissionError{
-			Code:    "PERMISSION_CHECK_FAILED", 
+			Code:    "PERMISSION_CHECK_FAILED",
 			Message: "Failed to check permissions",
 			Status:  http.StatusInternalServerError,
 		}
@@ -80,10 +80,10 @@ func (s *SSARPermissionChecker) Can(ctx context.Context, user *auth.User, verb, 
 
 // PermissionMiddleware provides middleware for checking resource permissions.
 type PermissionMiddleware struct {
-	logger           *zap.Logger
-	config           *config.Config
-	checker          PermissionChecker
-	authExtractor    *AuthExtractor
+	logger        *zap.Logger
+	config        *config.Config
+	checker       PermissionChecker
+	authExtractor *AuthExtractor
 }
 
 // NewPermissionMiddleware creates a new permission middleware.

@@ -59,7 +59,7 @@ func (rl *RequestLogger) Middleware(next http.Handler) http.Handler {
 
 		// Log the request
 		duration := time.Since(start)
-		
+
 		fields := []zap.Field{
 			zap.String("method", r.Method),
 			zap.String("path", r.URL.Path),

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/analytics"
+	"github.com/aaronlmathis/kaptn/internal/api/middleware"
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/aaronlmathis/kaptn/internal/authz"
 	"github.com/aaronlmathis/kaptn/internal/cache"
@@ -24,7 +25,6 @@ import (
 	"github.com/aaronlmathis/kaptn/internal/k8s/summaries"
 	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
 	apimiddleware "github.com/aaronlmathis/kaptn/internal/middleware"
-	"github.com/aaronlmathis/kaptn/internal/api/middleware"
 	"github.com/aaronlmathis/kaptn/internal/timeseries"
 	"github.com/aaronlmathis/kaptn/internal/timeseries/aggregator"
 	"github.com/go-chi/chi/v5"
@@ -67,7 +67,7 @@ type Server struct {
 	timeSeriesAggregator *aggregator.Aggregator
 	timeSeriesWSManager  *TimeSeriesWSManager
 	capabilityService    *authz.CapabilityService
-	
+
 	// New middleware components (PR 2)
 	permissionMiddleware    *middleware.PermissionMiddleware
 	impersonationMiddleware *middleware.ImpersonationMiddleware
@@ -889,7 +889,7 @@ func (s *Server) setupRoutes() {
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)
-			
+
 			// Pods endpoints with new permission middleware (PR 2 test)
 			r.Group(func(r chi.Router) {
 				// Use new permission middleware for pods listing
@@ -899,7 +899,7 @@ func (s *Server) setupRoutes() {
 				}))
 				r.Get("/pods", s.handleListPods)
 			})
-			
+
 			r.Get("/pods/{namespace}/{name}", s.handleGetPod)
 			r.Get("/deployments", s.handleListDeployments)
 			r.Get("/deployments/{namespace}/{name}", s.handleGetDeployment)
