@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/api/v1/dto"
+	actionparser "github.com/aaronlmathis/kaptn/internal/api/v1/handlers/actions"
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
 	"github.com/go-chi/chi/v5/middleware"
@@ -89,7 +90,8 @@ func (s *Server) convertBulkToActionRequest(req *dto.BulkActionRequest, user *au
 	}
 
 	// Determine the resource type and verb from action
-	resource, verb := parseAction(req.Action)
+	parser := actionparser.NewDefaultParser()
+	resource, verb := parser.Parse(req.Action)
 
 	return &actions.ActionRequest{
 		ID:           requestID,
@@ -138,49 +140,4 @@ func (s *Server) convertActionResultToResponse(result *actions.ActionResult, err
 	}
 
 	return response
-}
-
-// parseAction extracts resource and verb from action string
-func parseAction(action string) (resource, verb string) {
-	// Map action strings to resource types and verbs
-	switch action {
-	case "restart-pods":
-		return "pods", "update"
-	case "delete-pods":
-		return "pods", "delete"
-	case "get-logs":
-		return "pods", "get"
-	case "describe-pods":
-		return "pods", "get"
-	case "export-yaml":
-		return "pods", "get"
-	case "restart-deployments":
-		return "deployments", "update"
-	case "scale-deployments":
-		return "deployments", "update"
-	case "delete-deployments":
-		return "deployments", "delete"
-	case "describe-deployments":
-		return "deployments", "get"
-	case "delete-services":
-		return "services", "delete"
-	case "describe-services":
-		return "services", "get"
-	case "delete-configmaps":
-		return "configmaps", "delete"
-	case "edit-configmaps":
-		return "configmaps", "update"
-	case "describe-configmaps":
-		return "configmaps", "get"
-	case "delete-secrets":
-		return "secrets", "delete"
-	case "edit-secrets":
-		return "secrets", "update"
-	case "view-secrets":
-		return "secrets", "get"
-	case "describe-secrets":
-		return "secrets", "get"
-	default:
-		return "unknown", "unknown"
-	}
 }
