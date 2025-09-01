@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/aaronlmathis/kaptn/internal/api/utils"
 	"github.com/aaronlmathis/kaptn/internal/k8s/selectors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -134,16 +135,10 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 	pageStr := r.URL.Query().Get("page")
 	pageSizeStr := r.URL.Query().Get("pageSize")
 
-	page, _ := strconv.Atoi(pageStr)
-	pageSize, _ := strconv.Atoi(pageSizeStr)
-
-	// Default page size if not specified
-	if pageSize <= 0 {
-		pageSize = 25
-	}
-	if page <= 0 {
-		page = 1
-	}
+	// Parse pagination parameters using utility function
+	pagination := utils.ParsePaginationParams(pageStr, pageSizeStr)
+	page := pagination.Page
+	pageSize := pagination.PageSize
 
 	// Only apply Phase 7 security checks if auth mode is not 'none'
 	if s.config.Security.AuthMode != "none" {
@@ -255,13 +250,9 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prepare response with pagination metadata
+	paginationData := utils.CreatePaginatedResponse(items, utils.CreatePaginationResponse(page, pageSize, totalBeforeFilter))
 	response := map[string]interface{}{
-		"data": map[string]interface{}{
-			"items":    items,
-			"page":     page,
-			"pageSize": pageSize,
-			"total":    totalBeforeFilter,
-		},
+		"data":   paginationData,
 		"status": "success",
 	}
 
