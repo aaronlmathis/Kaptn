@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/analytics"
+	"github.com/aaronlmathis/kaptn/internal/api/middleware"
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/aaronlmathis/kaptn/internal/authz"
 	"github.com/aaronlmathis/kaptn/internal/cache"
@@ -27,7 +28,7 @@ import (
 	"github.com/aaronlmathis/kaptn/internal/timeseries"
 	"github.com/aaronlmathis/kaptn/internal/timeseries/aggregator"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"k8s.io/client-go/dynamic"
@@ -66,6 +67,10 @@ type Server struct {
 	timeSeriesAggregator *aggregator.Aggregator
 	timeSeriesWSManager  *TimeSeriesWSManager
 	capabilityService    *authz.CapabilityService
+
+	// New middleware components (PR 2)
+	permissionMiddleware    *middleware.PermissionMiddleware
+	impersonationMiddleware *middleware.ImpersonationMiddleware
 }
 
 // NewServer creates a new API server
@@ -416,6 +421,11 @@ func (s *Server) initAuth() error {
 	// Set authentication middleware on WebSocket hub
 	s.wsHub.SetAuthMiddleware(s.authMiddleware)
 
+	// Initialize new middleware components (PR 2)
+	permissionChecker := middleware.NewSSARPermissionChecker(s.logger, s.config, s.impersonationMgr)
+	s.permissionMiddleware = middleware.NewPermissionMiddleware(s.logger, s.config, permissionChecker)
+	s.impersonationMiddleware = middleware.NewImpersonationMiddleware(s.logger, s.config, s.impersonationMgr, s.authMiddleware)
+
 	return nil
 }
 
@@ -683,18 +693,18 @@ func (s *Server) webSocketAwareTimeout(timeout time.Duration) func(http.Handler)
 			}
 
 			// Apply normal timeout for all other requests
-			middleware.Timeout(timeout)(next).ServeHTTP(w, r)
+			chimiddleware.Timeout(timeout)(next).ServeHTTP(w, r)
 		})
 	}
 }
 
 func (s *Server) setupMiddleware() {
-	s.router.Use(middleware.RequestID)
+	s.router.Use(chimiddleware.RequestID)
 	s.router.Use(apimiddleware.RequestIDResponseMiddleware) // Add request ID to response headers
 	s.router.Use(s.requestContextMiddleware)                // Add request to context for audit logging
-	s.router.Use(middleware.RealIP)
-	s.router.Use(middleware.Logger)
-	s.router.Use(middleware.Recoverer)
+	s.router.Use(chimiddleware.RealIP)
+	s.router.Use(chimiddleware.Logger)
+	s.router.Use(chimiddleware.Recoverer)
 	s.router.Use(s.webSocketAwareTimeout(60 * time.Second))
 
 	// Prometheus metrics middleware
@@ -879,7 +889,17 @@ func (s *Server) setupRoutes() {
 
 			r.Get("/nodes", s.handleListNodes)
 			r.Get("/nodes/{name}", s.handleGetNode)
-			r.Get("/pods", s.handleListPods)
+
+			// Pods endpoints with new permission middleware (PR 2 test)
+			r.Group(func(r chi.Router) {
+				// Use new permission middleware for pods listing
+				r.Use(s.permissionMiddleware.RequirePermission(middleware.ResourcePermission{
+					Verb:     "list",
+					Resource: "pods",
+				}))
+				r.Get("/pods", s.handleListPods)
+			})
+
 			r.Get("/pods/{namespace}/{name}", s.handleGetPod)
 			r.Get("/deployments", s.handleListDeployments)
 			r.Get("/deployments/{namespace}/{name}", s.handleGetDeployment)

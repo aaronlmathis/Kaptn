@@ -492,12 +492,12 @@ func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
 	// Parse pagination parameters using utility function
 	pageStr := r.URL.Query().Get("page")
 	pageSizeStr := r.URL.Query().Get("pageSize")
-	
+
 	// Use default pageSize of 50 to match original behavior
 	pagination := utils.ParsePaginationParams(pageStr, pageSizeStr)
 	page := pagination.Page
 	pageSize := pagination.PageSize
-	
+
 	// Override default pageSize for services (original was 50, not 25)
 	if pageSizeStr == "" {
 		pageSize = 50
@@ -511,7 +511,7 @@ func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
 	services, err := s.resourceManager.ListServices(r.Context(), namespace)
 	if err != nil {
 		s.logger.Error("Failed to list services", zap.Error(err))
-		
+
 		// Create error response with empty pagination data
 		emptyPaginationData := utils.CreatePaginatedResponse([]interface{}{}, utils.CreatePaginationResponse(page, pageSize, 0))
 		errorResponse := map[string]interface{}{
@@ -519,7 +519,7 @@ func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) {
 			"status": "error",
 			"error":  err.Error(),
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(errorResponse)

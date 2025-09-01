@@ -59,7 +59,7 @@ func TestContainsIgnoreCase(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ContainsIgnoreCase(tt.text, tt.search)
 			if result != tt.expected {
-				t.Errorf("ContainsIgnoreCase(%q, %q) = %v, expected %v", 
+				t.Errorf("ContainsIgnoreCase(%q, %q) = %v, expected %v",
 					tt.text, tt.search, result, tt.expected)
 			}
 		})
@@ -121,7 +121,7 @@ func TestMatchesSearch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := MatchesSearch(tt.search, tt.fields...)
 			if result != tt.expected {
-				t.Errorf("MatchesSearch(%q, %v) = %v, expected %v", 
+				t.Errorf("MatchesSearch(%q, %v) = %v, expected %v",
 					tt.search, tt.fields, result, tt.expected)
 			}
 		})
@@ -134,7 +134,7 @@ func TestFilterBySearch(t *testing.T) {
 		name      string
 		namespace string
 	}
-	
+
 	items := []testItem{
 		{name: "pod-1", namespace: "default"},
 		{name: "pod-2", namespace: "kube-system"},
@@ -197,9 +197,9 @@ func TestFilterBySearch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := FilterBySearch(items, tt.search, searchFunc)
-			
+
 			if len(result) != len(tt.expected) {
-				t.Errorf("FilterBySearch() returned %d items, expected %d", 
+				t.Errorf("FilterBySearch() returned %d items, expected %d",
 					len(result), len(tt.expected))
 				return
 			}
