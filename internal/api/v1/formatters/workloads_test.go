@@ -12,7 +12,7 @@ import (
 
 func TestWorkloadsFormatter_PodToSummary(t *testing.T) {
 	formatter := NewWorkloadsFormatter()
-	
+
 	// Create a test pod
 	creationTime := time.Now().Add(-5 * time.Minute)
 	pod := &v1.Pod{
@@ -33,8 +33,8 @@ func TestWorkloadsFormatter_PodToSummary(t *testing.T) {
 			RestartPolicy: v1.RestartPolicyAlways,
 		},
 		Status: v1.PodStatus{
-			Phase: v1.PodRunning,
-			PodIP: "10.0.0.1",
+			Phase:  v1.PodRunning,
+			PodIP:  "10.0.0.1",
 			HostIP: "192.168.1.1",
 			Conditions: []v1.PodCondition{
 				{
@@ -74,7 +74,7 @@ func TestWorkloadsFormatter_PodToSummary(t *testing.T) {
 
 func TestWorkloadsFormatter_EnhancedPodToSummary(t *testing.T) {
 	formatter := NewWorkloadsFormatter()
-	
+
 	// Create a test pod
 	creationTime := time.Now().Add(-5 * time.Minute)
 	pod := &v1.Pod{
@@ -121,13 +121,13 @@ func TestWorkloadsFormatter_EnhancedPodToSummary(t *testing.T) {
 	if result["restartCount"] != int32(3) {
 		t.Errorf("Expected restartCount 3, got %v", result["restartCount"])
 	}
-	
+
 	// Check metrics
 	cpu := result["cpu"].(map[string]interface{})
 	if cpu["milli"] != 100 {
 		t.Errorf("Expected CPU milli 100, got %v", cpu["milli"])
 	}
-	
+
 	memory := result["memory"].(map[string]interface{})
 	if memory["bytes"] != 1024 {
 		t.Errorf("Expected memory bytes 1024, got %v", memory["bytes"])
@@ -136,7 +136,7 @@ func TestWorkloadsFormatter_EnhancedPodToSummary(t *testing.T) {
 
 func TestWorkloadsFormatter_DeploymentToResponse(t *testing.T) {
 	formatter := NewWorkloadsFormatter()
-	
+
 	// Create a test deployment
 	replicas := int32(3)
 	deployment := appsv1.Deployment{
@@ -169,7 +169,7 @@ func TestWorkloadsFormatter_DeploymentToResponse(t *testing.T) {
 	if result["name"] != "test-deployment" {
 		t.Errorf("Expected name 'test-deployment', got %v", result["name"])
 	}
-	
+
 	replicasData := result["replicas"].(map[string]int32)
 	if replicasData["desired"] != 3 {
 		t.Errorf("Expected desired replicas 3, got %v", replicasData["desired"])
@@ -200,7 +200,7 @@ func TestCalculatePodCPUUsage(t *testing.T) {
 	}
 
 	result := CalculatePodCPUUsage(podMetric)
-	
+
 	if result["milli"] != int64(300) {
 		t.Errorf("Expected total CPU milli 300, got %v", result["milli"])
 	}
@@ -227,7 +227,7 @@ func TestCalculatePodMemoryUsage(t *testing.T) {
 	}
 
 	result := CalculatePodMemoryUsage(podMetric)
-	
+
 	if result["bytes"] != int64(3072) {
 		t.Errorf("Expected total memory bytes 3072, got %v", result["bytes"])
 	}

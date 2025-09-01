@@ -5,15 +5,15 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/aaronlmathis/kaptn/internal/k8s/resources"
 )
 
 func TestClusterFormatter_NamespaceToResponse(t *testing.T) {
 	formatter := &ClusterFormatter{}
-	
+
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-namespace",
@@ -36,19 +36,19 @@ func TestClusterFormatter_NamespaceToResponse(t *testing.T) {
 	if result["name"] != "test-namespace" {
 		t.Errorf("Expected name 'test-namespace', got %v", result["name"])
 	}
-	
+
 	if result["status"] != "Active" {
 		t.Errorf("Expected status 'Active', got %v", result["status"])
 	}
-	
+
 	if result["labelsCount"] != 2 {
 		t.Errorf("Expected labelsCount 2, got %v", result["labelsCount"])
 	}
-	
+
 	if result["annotationsCount"] != 1 {
 		t.Errorf("Expected annotationsCount 1, got %v", result["annotationsCount"])
 	}
-	
+
 	// Check that age is not "unknown"
 	if result["age"] == "unknown" {
 		t.Errorf("Expected age to be calculated, got 'unknown'")
@@ -57,12 +57,12 @@ func TestClusterFormatter_NamespaceToResponse(t *testing.T) {
 
 func TestClusterFormatter_NodeToSummary(t *testing.T) {
 	formatter := &ClusterFormatter{}
-	
+
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "worker-node-1",
 			Labels: map[string]string{
-				"kubernetes.io/hostname": "worker-node-1",
+				"kubernetes.io/hostname":         "worker-node-1",
 				"node-role.kubernetes.io/worker": "",
 			},
 			CreationTimestamp: metav1.Time{Time: time.Now().Add(-7 * 24 * time.Hour)},
@@ -97,15 +97,15 @@ func TestClusterFormatter_NodeToSummary(t *testing.T) {
 	if result["name"] != "worker-node-1" {
 		t.Errorf("Expected name 'worker-node-1', got %v", result["name"])
 	}
-	
+
 	if result["ready"] != true {
 		t.Errorf("Expected ready true, got %v", result["ready"])
 	}
-	
+
 	if result["kubeletVersion"] != "v1.28.0" {
 		t.Errorf("Expected kubeletVersion 'v1.28.0', got %v", result["kubeletVersion"])
 	}
-	
+
 	// Check capacity (ResourceList)
 	capacity, ok := result["capacity"].(corev1.ResourceList)
 	if !ok {
@@ -124,7 +124,7 @@ func TestClusterFormatter_NodeToSummary(t *testing.T) {
 
 func TestClusterFormatter_APIResourceToResponse(t *testing.T) {
 	formatter := &ClusterFormatter{}
-	
+
 	apiResource := resources.APIResource{
 		Name:         "pods",
 		SingularName: "pod",
@@ -142,15 +142,15 @@ func TestClusterFormatter_APIResourceToResponse(t *testing.T) {
 	if result["name"] != "pods" {
 		t.Errorf("Expected name 'pods', got %v", result["name"])
 	}
-	
+
 	if result["kind"] != "Pod" {
 		t.Errorf("Expected kind 'Pod', got %v", result["kind"])
 	}
-	
+
 	if result["namespaced"] != "true" {
 		t.Errorf("Expected namespaced 'true', got %v", result["namespaced"])
 	}
-	
+
 	// Check shortNames (string format)
 	shortNames, ok := result["shortNames"].(string)
 	if !ok {
