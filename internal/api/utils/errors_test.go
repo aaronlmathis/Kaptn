@@ -34,7 +34,7 @@ func TestWriteJSONResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			
+
 			err := WriteJSONResponse(w, tt.statusCode, tt.response)
 			if err != nil {
 				t.Errorf("WriteJSONResponse() error = %v", err)
@@ -128,7 +128,7 @@ func TestWriteErrorResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			
+
 			err := WriteErrorResponse(w, tt.statusCode, tt.errorMsg)
 			if err != nil {
 				t.Errorf("WriteErrorResponse() error = %v", err)
@@ -214,21 +214,21 @@ func TestWriteNotFoundError(t *testing.T) {
 func TestCreatePaginatedResponse(t *testing.T) {
 	items := []string{"item1", "item2", "item3"}
 	pagination := CreatePaginationResponse(1, 10, 3)
-	
+
 	result := CreatePaginatedResponse(items, pagination)
-	
+
 	if result["items"] == nil {
 		t.Error("CreatePaginatedResponse() items is nil")
 	}
-	
+
 	if result["page"] != 1 {
 		t.Errorf("CreatePaginatedResponse() page = %v, want 1", result["page"])
 	}
-	
+
 	if result["pageSize"] != 10 {
 		t.Errorf("CreatePaginatedResponse() pageSize = %v, want 10", result["pageSize"])
 	}
-	
+
 	if result["total"] != 3 {
 		t.Errorf("CreatePaginatedResponse() total = %v, want 3", result["total"])
 	}

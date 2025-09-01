@@ -23,14 +23,14 @@ func MatchesSearch(search string, fields ...string) bool {
 	if search == "" {
 		return true
 	}
-	
+
 	searchLower := strings.ToLower(search)
 	for _, field := range fields {
 		if strings.Contains(strings.ToLower(field), searchLower) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -39,13 +39,13 @@ func FilterBySearch[T any](items []T, search string, searchFunc func(T, string) 
 	if search == "" {
 		return items
 	}
-	
+
 	filtered := make([]T, 0, len(items))
 	for _, item := range items {
 		if searchFunc(item, search) {
 			filtered = append(filtered, item)
 		}
 	}
-	
+
 	return filtered
 }

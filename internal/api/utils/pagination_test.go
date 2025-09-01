@@ -61,11 +61,11 @@ func TestParsePage(t *testing.T) {
 
 func TestParsePageSize(t *testing.T) {
 	tests := []struct {
-		name          string
-		pageSizeStr   string
-		defaultValue  int
-		maxValue      int
-		expected      int
+		name         string
+		pageSizeStr  string
+		defaultValue int
+		maxValue     int
+		expected     int
 	}{
 		{
 			name:         "empty string returns default",
@@ -122,7 +122,7 @@ func TestParsePageSize(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ParsePageSize(tt.pageSizeStr, tt.defaultValue, tt.maxValue)
 			if result != tt.expected {
-				t.Errorf("ParsePageSize(%q, %d, %d) = %d, expected %d", 
+				t.Errorf("ParsePageSize(%q, %d, %d) = %d, expected %d",
 					tt.pageSizeStr, tt.defaultValue, tt.maxValue, result, tt.expected)
 			}
 		})
@@ -166,7 +166,7 @@ func TestParsePaginationParams(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ParsePaginationParams(tt.pageStr, tt.pageSizeStr)
 			if result != tt.expected {
-				t.Errorf("ParsePaginationParams(%q, %q) = %+v, expected %+v", 
+				t.Errorf("ParsePaginationParams(%q, %q) = %+v, expected %+v",
 					tt.pageStr, tt.pageSizeStr, result, tt.expected)
 			}
 		})
@@ -178,75 +178,75 @@ func TestApplyPagination(t *testing.T) {
 	items := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
 
 	tests := []struct {
-		name         string
-		items        []string
-		page         int
-		pageSize     int
-		expectedLen  int
-		expectedData []string
+		name          string
+		items         []string
+		page          int
+		pageSize      int
+		expectedLen   int
+		expectedData  []string
 		expectedTotal int
 	}{
 		{
-			name:         "first page",
-			items:        items,
-			page:         1,
-			pageSize:     3,
-			expectedLen:  3,
-			expectedData: []string{"a", "b", "c"},
+			name:          "first page",
+			items:         items,
+			page:          1,
+			pageSize:      3,
+			expectedLen:   3,
+			expectedData:  []string{"a", "b", "c"},
 			expectedTotal: 10,
 		},
 		{
-			name:         "middle page",
-			items:        items,
-			page:         2,
-			pageSize:     3,
-			expectedLen:  3,
-			expectedData: []string{"d", "e", "f"},
+			name:          "middle page",
+			items:         items,
+			page:          2,
+			pageSize:      3,
+			expectedLen:   3,
+			expectedData:  []string{"d", "e", "f"},
 			expectedTotal: 10,
 		},
 		{
-			name:         "last page partial",
-			items:        items,
-			page:         4,
-			pageSize:     3,
-			expectedLen:  1,
-			expectedData: []string{"j"},
+			name:          "last page partial",
+			items:         items,
+			page:          4,
+			pageSize:      3,
+			expectedLen:   1,
+			expectedData:  []string{"j"},
 			expectedTotal: 10,
 		},
 		{
-			name:         "page beyond range",
-			items:        items,
-			page:         5,
-			pageSize:     3,
-			expectedLen:  0,
-			expectedData: []string{},
+			name:          "page beyond range",
+			items:         items,
+			page:          5,
+			pageSize:      3,
+			expectedLen:   0,
+			expectedData:  []string{},
 			expectedTotal: 10,
 		},
 		{
-			name:         "zero page",
-			items:        items,
-			page:         0,
-			pageSize:     3,
-			expectedLen:  10,
-			expectedData: items,
+			name:          "zero page",
+			items:         items,
+			page:          0,
+			pageSize:      3,
+			expectedLen:   10,
+			expectedData:  items,
 			expectedTotal: 10,
 		},
 		{
-			name:         "zero page size",
-			items:        items,
-			page:         1,
-			pageSize:     0,
-			expectedLen:  10,
-			expectedData: items,
+			name:          "zero page size",
+			items:         items,
+			page:          1,
+			pageSize:      0,
+			expectedLen:   10,
+			expectedData:  items,
 			expectedTotal: 10,
 		},
 		{
-			name:         "empty slice",
-			items:        []string{},
-			page:         1,
-			pageSize:     5,
-			expectedLen:  0,
-			expectedData: []string{},
+			name:          "empty slice",
+			items:         []string{},
+			page:          1,
+			pageSize:      5,
+			expectedLen:   0,
+			expectedData:  []string{},
 			expectedTotal: 0,
 		},
 	}
@@ -254,11 +254,11 @@ func TestApplyPagination(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, total := ApplyPagination(tt.items, tt.page, tt.pageSize)
-			
+
 			if len(result) != tt.expectedLen {
 				t.Errorf("ApplyPagination() returned %d items, expected %d", len(result), tt.expectedLen)
 			}
-			
+
 			if total != tt.expectedTotal {
 				t.Errorf("ApplyPagination() returned total %d, expected %d", total, tt.expectedTotal)
 			}
@@ -277,13 +277,13 @@ func TestApplyPagination(t *testing.T) {
 
 func TestCreatePaginationResponse(t *testing.T) {
 	result := CreatePaginationResponse(2, 25, 100)
-	
+
 	expected := PaginationResponse{
 		Page:     2,
 		PageSize: 25,
 		Total:    100,
 	}
-	
+
 	if result != expected {
 		t.Errorf("CreatePaginationResponse(2, 25, 100) = %+v, expected %+v", result, expected)
 	}
