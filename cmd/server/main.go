@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aaronlmathis/kaptn/internal/api"
+	"github.com/aaronlmathis/kaptn/internal/api/routes"
 	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/logging"
+	"github.com/aaronlmathis/kaptn/internal/server"
 	"github.com/aaronlmathis/kaptn/internal/version"
+	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
@@ -78,10 +80,18 @@ func main() {
 	)
 
 	// Create API server
-	apiServer, err := api.NewServer(logger, cfg)
+	apiServer, err := server.New(logger, cfg)
 	if err != nil {
 		logger.Fatal("Failed to create API server", zap.Error(err))
 	}
+
+	// Mount routes using the contract-based approach
+	tiers := routes.Tiers{
+		Public: apiServer,
+		Admin:  apiServer,
+		System: apiServer,
+	}
+	routes.MountAll(apiServer.Handler().(*chi.Mux), tiers)
 
 	// Start server components
 	ctx, cancel := context.WithCancel(context.Background())
