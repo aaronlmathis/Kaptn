@@ -1,17 +1,18 @@
 package server
 
 import (
-	"context"
-	"fmt"
-	"net/http"
+    "context"
+    "fmt"
+    "net/http"
 
-	"time"
+    "time"
 
-	"github.com/aaronlmathis/kaptn/internal/analytics"
-	"github.com/aaronlmathis/kaptn/internal/api/middleware"
-	"github.com/aaronlmathis/kaptn/internal/auth"
-	"github.com/aaronlmathis/kaptn/internal/authz"
-	"github.com/aaronlmathis/kaptn/internal/cache"
+    "github.com/aaronlmathis/kaptn/internal/analytics"
+    "github.com/aaronlmathis/kaptn/internal/api/middleware"
+    "github.com/aaronlmathis/kaptn/internal/api/routes"
+    "github.com/aaronlmathis/kaptn/internal/auth"
+    "github.com/aaronlmathis/kaptn/internal/authz"
+    "github.com/aaronlmathis/kaptn/internal/cache"
 	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/k8s"
 	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
@@ -120,7 +121,7 @@ func New(logger *zap.Logger, cfg *config.Config) (*Server, error) {
 	}
 
 	s.setupMiddleware()
-	s.setupRoutes()
+	// Note: SetupRoutes() is called explicitly from main.go to avoid duplicate mounting
 
 	return s, nil
 }
@@ -196,19 +197,25 @@ func (s *Server) Handler() http.Handler {
 	return s.router
 }
 
-// SetupRoutes sets up the API routes using direct mounting to avoid circular imports
-func (s *Server) setupRoutes() {
-	// We can't import the routes package from here due to circular imports
-	// Instead, we'll set up the routes directly using the same pattern
-	// The actual mounting will be done when the server is passed to routes.MountAll
-	
-	// For now, set up basic routes directly
-	s.router.Get("/health", s.HandleHealth)
-	s.router.Get("/healthz", s.HandleHealth)
-	s.router.Get("/readyz", s.HandleReady)
-	s.router.Get("/version", s.HandleVersion)
-	
-	// API routes will be mounted externally by calling routes.MountAll(router, server)
+// SetupRoutes sets up all API routes using the contract-based architecture
+func (s *Server) SetupRoutes() {
+	// Create the tiers structure with the server implementing all interfaces
+	tiers := routes.Tiers{
+		Public: s, // Server implements PublicHandlers
+		Admin:  s, // Server implements AdminHandlers
+		Read:   s, // Server implements ReadHandlers
+		Write:  s, // Server implements WriteHandlers
+		Apply:  s, // Server implements ApplyHandlers
+		System: s, // Server implements SystemHandlers
+		Static: s, // Server implements StaticHandlers
+		MW: routes.Middlewares{
+			RequireAuth:          s.authMiddleware.RequireAuth,
+			RequireImpersonation: s.RequireImpersonation,
+		},
+	}
+
+	// Mount all routes using the contracts-based approach
+	routes.MountAll(s.router, tiers)
 }
 
 // All the missing initialization methods that were in the api package
@@ -772,209 +779,6 @@ func (s *Server) setupMiddleware() {
 	})
 }
 
-// // ImpersonationMiddleware is an adapter method to call the new middleware
-// func (s *Server) ImpersonationMiddleware(next http.Handler) http.Handler {
-// 	return s.impersonationMiddleware.Middleware(next)
-// }
-
-// Types and methods for TimeSeries WebSocket support
-
-// // TimeSeriesPoint represents a single time series data point for API responses
-// type TimeSeriesPoint struct {
-// 	T      int64       `json:"t"`      // Unix timestamp in milliseconds
-// 	V      float64     `json:"v"`      // Value
-// 	Entity interface{} `json:"entity"` // Entity metadata (node, pod, namespace info)
-// }
-
-// // LiveTimeSeriesMessage represents a WebSocket message for live time series updates
-// type LiveTimeSeriesMessage struct {
-// 	Type  string           `json:"type"`            // "append" for new data points
-// 	Key   string           `json:"key"`             // Time series key
-// 	Point *TimeSeriesPoint `json:"point,omitempty"` // Data point for append messages
-// }
-
-// type TimeSeriesAppendMessage struct {
-// 	Type  string          `json:"type"`  // Always "append"
-// 	Key   string          `json:"key"`   // Series key
-// 	Point TimeSeriesPoint `json:"point"` // New data point
-// }
-
-// type TimeSeriesSubscription struct {
-// 	Since  time.Duration
-// 	Series []string
-// }
-
-// type TimeSeriesWSClient struct {
-// 	ID            string
-// 	Conn          interface{} // WebSocket connection (will be properly typed in handlers)
-// 	Subscriptions []TimeSeriesSubscription
-// }
-
-// // Global client manager for the new timeseries WebSocket endpoint
-// type TimeSeriesWSManager struct {
-// 	clients map[string]*TimeSeriesWSClient
-// 	mu      sync.RWMutex
-// }
-
-// func newTimeSeriesWSManager() *TimeSeriesWSManager {
-// 	return &TimeSeriesWSManager{
-// 		clients: make(map[string]*TimeSeriesWSClient),
-// 	}
-// }
-
-// func (m *TimeSeriesWSManager) addClient(client *TimeSeriesWSClient) {
-// 	m.mu.Lock()
-// 	defer m.mu.Unlock()
-// 	m.clients[client.ID] = client
-// }
-
-// func (m *TimeSeriesWSManager) removeClient(clientID string) {
-// 	m.mu.Lock()
-// 	defer m.mu.Unlock()
-// 	delete(m.clients, clientID)
-// }
-
-// func (m *TimeSeriesWSManager) broadcastToSubscribers(key string, point TimeSeriesPoint) {
-// 	m.mu.RLock()
-// 	defer m.mu.RUnlock()
-
-// 	message := TimeSeriesAppendMessage{
-// 		Type:  "append",
-// 		Key:   key,
-// 		Point: point,
-// 	}
-
-// 	for _, client := range m.clients {
-// 		// Check if client is subscribed to this series
-// 		isSubscribed := false
-// 		for _, subscription := range client.Subscriptions {
-// 			for _, seriesKey := range subscription.Series {
-// 				if seriesKey == key {
-// 					isSubscribed = true
-// 					break
-// 				}
-// 			}
-// 			if isSubscribed {
-// 				break
-// 			}
-// 		}
-
-// 		// Send message to subscribed clients (implementation will be in handlers)
-// 		if isSubscribed {
-// 			// TODO: Send message via WebSocket connection
-// 			_ = message // Use the message when implementing WebSocket send
-// 		}
-// 	}
-// }
-
-// // startTimeSeriesWebSocketBroadcaster starts a background goroutine that broadcasts
-// // timeseries updates to WebSocket clients
-// func (s *Server) startTimeSeriesWebSocketBroadcaster() {
-// 	go func() {
-// 		// Track last broadcast time for each series to implement coalescing
-// 		lastBroadcast := make(map[string]time.Time)
-
-// 		ticker := time.NewTicker(time.Second) // Check for broadcasts every second
-// 		defer ticker.Stop()
-
-// 		for {
-// 			select {
-// 			case <-ticker.C:
-// 				// Check if we have timeseries data to broadcast
-// 				if s.timeSeriesStore == nil {
-// 					continue
-// 				}
-
-// 				// Update WebSocket client count in health metrics
-// 				if health := s.timeSeriesStore.GetHealth(); health != nil {
-// 					clientCount := int64(s.wsHub.ClientCount())
-// 					health.SetWSClientCount(clientCount)
-// 				}
-
-// 				// Check each series for new data - use ALL keys in store, not just cluster keys
-// 				allKeys := s.timeSeriesStore.Keys() // This gets ALL series keys including nodes, pods, namespaces
-// 				for _, key := range allKeys {
-// 					series, exists := s.timeSeriesStore.Get(key)
-// 					if !exists {
-// 						continue
-// 					}
-
-// 					// Get the latest point (last minute of hi-res data)
-// 					points := series.GetSince(time.Now().Add(-time.Minute), timeseries.Hi)
-// 					if len(points) == 0 {
-// 						continue
-// 					}
-
-// 					// Get the most recent point
-// 					latestPoint := points[len(points)-1]
-
-// 					// Check if we should broadcast (coalesce to max 1 per second per key)
-// 					lastTime, exists := lastBroadcast[key]
-// 					if exists && time.Since(lastTime) < time.Second {
-// 						continue // Skip broadcast for this key
-// 					}
-
-// 					// Convert to API format
-// 					apiPoint := TimeSeriesPoint{
-// 						T:      latestPoint.T.UnixMilli(),
-// 						V:      latestPoint.V,
-// 						Entity: latestPoint.Entity, // Include entity metadata for nodes/pods/namespaces
-// 					}
-
-// 					// Broadcast to new unified WebSocket clients
-// 					if s.timeSeriesWSManager != nil {
-// 						s.timeSeriesWSManager.broadcastToSubscribers(key, apiPoint)
-// 					}
-
-// 					// Create broadcast message for legacy clients
-// 					message := LiveTimeSeriesMessage{
-// 						Type:  "append",
-// 						Key:   key,
-// 						Point: &apiPoint,
-// 					}
-
-// 					// Record WebSocket message in health metrics
-// 					if health := s.timeSeriesStore.GetHealth(); health != nil {
-// 						health.RecordWSMessage()
-// 					}
-
-// 					// Find all rooms that should receive this key's updates
-// 					// Simple approach: broadcast to rooms that contain this key
-// 					// In production, you might want more sophisticated room management
-// 					s.broadcastToTimeSeriesRooms(key, message)
-
-// 					// Update last broadcast time
-// 					lastBroadcast[key] = time.Now()
-// 				}
-// 			}
-// 		}
-// 	}()
-// }
-
-// // broadcastToTimeSeriesRooms broadcasts a message to all timeseries WebSocket rooms
-// // that are interested in the given series key
-// func (s *Server) broadcastToTimeSeriesRooms(seriesKey string, message LiveTimeSeriesMessage) {
-// 	// Get all connected clients and check their rooms
-// 	// This is a simplified approach - room management could be more sophisticated
-
-// 	// For now, we'll broadcast to all timeseries rooms and let clients filter
-// 	// In the future, you could maintain a mapping of rooms to interested keys
-
-// 	// Broadcast to rooms that might be interested
-// 	// Simple pattern matching for room names containing the series key
-// 	s.wsHub.BroadcastToRoom("timeseries:cluster", "timeseries_update", message)
-
-// 	// Also broadcast to rooms with specific series combinations
-// 	// This could be optimized with better room management
-// 	// Use string literals instead of constants for now to avoid import issues
-// 	if seriesKey == "cluster.cpu.used_cores" || seriesKey == "cluster.cpu.capacity_cores" {
-// 		s.wsHub.BroadcastToRoom("timeseries:cluster:cpu", "timeseries_update", message)
-// 	}
-// 	if seriesKey == "cluster.memory.used_bytes" || seriesKey == "cluster.memory.capacity_bytes" {
-// 		s.wsHub.BroadcastToRoom("timeseries:cluster:memory", "timeseries_update", message)
-// 	}
-// }
-
 // Adapter methods to provide lowercase method names for compatibility with existing routes
 // These delegate to the exported HandleXxx methods
 
@@ -1047,8 +851,13 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 
 // Static handler method for routes compatibility
 func (s *Server) GetStaticHandler() http.Handler {
-	// For now return a simple handler - this can be implemented later
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	})
+    // Serve static files with session injection into HTML shell
+    files := http.Dir("frontend/dist")
+    return NewSessionInjectionHandler(
+        s.logger,
+        files,
+        s.config.Security.AuthMode,
+        s.sessionManager,
+        s.authMiddleware,
+    )
 }

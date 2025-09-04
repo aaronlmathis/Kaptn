@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/aaronlmathis/kaptn/internal/api"
 	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/logging"
+	"github.com/aaronlmathis/kaptn/internal/server"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -23,7 +23,7 @@ func main() {
 		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
 	}
 
-	s, err := api.NewServer(logger, cfg)
+	s, err := server.New(logger, cfg)
 	if err != nil {
 		panic(err)
 	}

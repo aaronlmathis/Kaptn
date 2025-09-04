@@ -1,4 +1,4 @@
-package server
+package future_do_not_use
 
 // Read handlers (Read tier)
 // These will include handlers for listing/getting resources like:
@@ -11,7 +11,7 @@ package server
 
 // TODO: Move handlers from the following files:
 // - handlers_cluster.go (get/list operations)
-// - handlers_workloads.go (get/list operations)  
+// - handlers_workloads.go (get/list operations)
 // - handlers_events.go
 // - handlers_analytics.go
 // - handlers_metrics.go

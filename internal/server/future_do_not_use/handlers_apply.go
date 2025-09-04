@@ -1,4 +1,4 @@
-package server
+package future_do_not_use
 
 // Apply handlers (Apply tier)
 // These will include handlers for applying YAML configurations and complex operations
