@@ -11,7 +11,7 @@ export function LoginPage() {
 					Kaptn Dashboard
 				</a> */}
 				<div className="self-center">
-				<AppLogo size={28} />
+					<AppLogo size={28} />
 				</div>
 				<LoginForm />
 			</div>

@@ -44,21 +44,33 @@ func (s *Server) HandleListPersistentVolumeClaims(w http.ResponseWriter, r *http
 		page = 1
 	}
 
-	var pvcs *v1.PersistentVolumeClaimList
-	var err error
+    var pvcs *v1.PersistentVolumeClaimList
+    var err error
 
-	// Get PVCs from Kubernetes API - either all namespaces or specific namespace
-	if namespace == "" || namespace == "all" {
-		pvcs, err = s.kubeClient.CoreV1().PersistentVolumeClaims("").List(
-			r.Context(),
-			metav1.ListOptions{},
-		)
-	} else {
-		pvcs, err = s.kubeClient.CoreV1().PersistentVolumeClaims(namespace).List(
-			r.Context(),
-			metav1.ListOptions{},
-		)
-	}
+    // Use impersonated Kubernetes client (fallback to base client in authMode=none)
+    kc, kcErr := s.GetImpersonatedClient(r)
+    if kcErr != nil {
+        if s.config.Security.AuthMode == "none" && s.kubeClient != nil {
+            kc = s.kubeClient
+        } else {
+            s.logger.Error("Impersonated client unavailable for PVC list", zap.Error(kcErr))
+            http.Error(w, "Authentication required", http.StatusUnauthorized)
+            return
+        }
+    }
+
+    // Get PVCs from Kubernetes API - either all namespaces or specific namespace
+    if namespace == "" || namespace == "all" {
+        pvcs, err = kc.CoreV1().PersistentVolumeClaims("").List(
+            r.Context(),
+            metav1.ListOptions{},
+        )
+    } else {
+        pvcs, err = kc.CoreV1().PersistentVolumeClaims(namespace).List(
+            r.Context(),
+            metav1.ListOptions{},
+        )
+    }
 
 	if err != nil {
 		s.logger.Error("Failed to list persistent volume claims", zap.Error(err))
@@ -150,8 +162,23 @@ func (s *Server) HandleGetPersistentVolumeClaim(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Get PVC from Kubernetes API
-	pvc, err := s.kubeClient.CoreV1().PersistentVolumeClaims(namespace).Get(r.Context(), name, metav1.GetOptions{})
+    // Use impersonated Kubernetes client (fallback to base client in authMode=none)
+    kc, kcErr := s.GetImpersonatedClient(r)
+    if kcErr != nil {
+        if s.config.Security.AuthMode == "none" && s.kubeClient != nil {
+            kc = s.kubeClient
+        } else {
+            s.logger.Error("Impersonated client unavailable for PVC get",
+                zap.Error(kcErr),
+                zap.String("namespace", namespace),
+                zap.String("name", name))
+            http.Error(w, "Authentication required", http.StatusUnauthorized)
+            return
+        }
+    }
+
+    // Get PVC from Kubernetes API
+    pvc, err := kc.CoreV1().PersistentVolumeClaims(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get persistent volume claim",
 			zap.String("namespace", namespace),
@@ -1042,11 +1069,23 @@ func (s *Server) HandleListPersistentVolumes(w http.ResponseWriter, r *http.Requ
 		page = 1
 	}
 
-	// Get PVs from Kubernetes API
-	pvs, err := s.kubeClient.CoreV1().PersistentVolumes().List(
-		r.Context(),
-		metav1.ListOptions{},
-	)
+    // Use impersonated Kubernetes client (fallback to base client in authMode=none)
+    kc, kcErr := s.GetImpersonatedClient(r)
+    if kcErr != nil {
+        if s.config.Security.AuthMode == "none" && s.kubeClient != nil {
+            kc = s.kubeClient
+        } else {
+            s.logger.Error("Impersonated client unavailable for PV list", zap.Error(kcErr))
+            http.Error(w, "Authentication required", http.StatusUnauthorized)
+            return
+        }
+    }
+
+    // Get PVs from Kubernetes API
+    pvs, err := kc.CoreV1().PersistentVolumes().List(
+        r.Context(),
+        metav1.ListOptions{},
+    )
 	if err != nil {
 		s.logger.Error("Failed to list persistent volumes", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
@@ -1134,8 +1173,22 @@ func (s *Server) HandleGetPersistentVolume(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Get PV from Kubernetes API
-	pv, err := s.kubeClient.CoreV1().PersistentVolumes().Get(r.Context(), name, metav1.GetOptions{})
+    // Use impersonated Kubernetes client (fallback to base client in authMode=none)
+    kc, kcErr := s.GetImpersonatedClient(r)
+    if kcErr != nil {
+        if s.config.Security.AuthMode == "none" && s.kubeClient != nil {
+            kc = s.kubeClient
+        } else {
+            s.logger.Error("Impersonated client unavailable for PV get",
+                zap.Error(kcErr),
+                zap.String("name", name))
+            http.Error(w, "Authentication required", http.StatusUnauthorized)
+            return
+        }
+    }
+
+    // Get PV from Kubernetes API
+    pv, err := kc.CoreV1().PersistentVolumes().Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get persistent volume",
 			zap.String("name", name),

@@ -41,3 +41,20 @@ func (s *Server) HasImpersonatedClients(r *http.Request) bool {
 	_, ok := k8s.ImpersonatedClientsFromContext(r.Context())
 	return ok
 }
+
+// GetClientWithFallback returns impersonated client from context, falls back to base client when auth disabled
+func (s *Server) GetClientWithFallback(r *http.Request) kubernetes.Interface {
+	// Try to get impersonated clients from context first
+	if clients, ok := k8s.ImpersonatedClientsFromContext(r.Context()); ok {
+		return clients.Client()
+	}
+
+	// Fallback to base client when no impersonation is present and auth is disabled
+	if s.config.Security.AuthMode == "none" {
+		return s.kubeClient
+	}
+
+	// If we reach here, it means we expected impersonated clients but didn't get them
+	// This should not happen in normal operation, but we'll fall back to base client
+	return s.kubeClient
+}

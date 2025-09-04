@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -128,7 +127,7 @@ func (s *Server) HandleDryRunRBAC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Perform dry run
-	result, err := s.dryRunRBACConfiguration(r.Context(), &formData)
+	result, err := s.dryRunRBACConfiguration(r, &formData)
 	if err != nil {
 		s.logger.Error("Failed to perform dry run", zap.Error(err))
 		result = &ApplyResult{
@@ -179,7 +178,7 @@ func (s *Server) HandleApplyRBAC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply to cluster
-	result, err := s.applyRBACConfiguration(r.Context(), &formData)
+	result, err := s.applyRBACConfiguration(r, &formData)
 	if err != nil {
 		s.logger.Error("Failed to apply RBAC configuration", zap.Error(err))
 		result = &ApplyResult{
@@ -363,7 +362,9 @@ func (s *Server) convertPermissionRules(permissions []RBACPermissionRule) []rbac
 }
 
 // dryRunRBACConfiguration validates the configuration without applying to cluster
-func (s *Server) dryRunRBACConfiguration(ctx context.Context, formData *RBACFormData) (*ApplyResult, error) {
+func (s *Server) dryRunRBACConfiguration(r *http.Request, formData *RBACFormData) (*ApplyResult, error) {
+	ctx := r.Context()
+	
 	// Generate the YAML to validate structure
 	_, err := s.generateRBACYAMLFromForm(formData)
 	if err != nil {
@@ -373,10 +374,13 @@ func (s *Server) dryRunRBACConfiguration(ctx context.Context, formData *RBACForm
 		}, nil
 	}
 
+	// Get client with impersonation fallback
+	client := s.GetClientWithFallback(r)
+
 	// Check if resources already exist
 	if formData.Scope == "Cluster" {
 		// Check ClusterRole
-		_, err = s.kubeClient.RbacV1().ClusterRoles().Get(ctx, formData.RoleName, metav1.GetOptions{})
+		_, err = client.RbacV1().ClusterRoles().Get(ctx, formData.RoleName, metav1.GetOptions{})
 		if err == nil {
 			return &ApplyResult{
 				Success: false,
@@ -385,7 +389,7 @@ func (s *Server) dryRunRBACConfiguration(ctx context.Context, formData *RBACForm
 		}
 
 		// Check ClusterRoleBinding
-		_, err = s.kubeClient.RbacV1().ClusterRoleBindings().Get(ctx, formData.RoleName+"-binding", metav1.GetOptions{})
+		_, err = client.RbacV1().ClusterRoleBindings().Get(ctx, formData.RoleName+"-binding", metav1.GetOptions{})
 		if err == nil {
 			return &ApplyResult{
 				Success: false,
@@ -394,7 +398,7 @@ func (s *Server) dryRunRBACConfiguration(ctx context.Context, formData *RBACForm
 		}
 	} else {
 		// Check Role
-		_, err = s.kubeClient.RbacV1().Roles(formData.Namespace).Get(ctx, formData.RoleName, metav1.GetOptions{})
+		_, err = client.RbacV1().Roles(formData.Namespace).Get(ctx, formData.RoleName, metav1.GetOptions{})
 		if err == nil {
 			return &ApplyResult{
 				Success: false,
@@ -403,7 +407,7 @@ func (s *Server) dryRunRBACConfiguration(ctx context.Context, formData *RBACForm
 		}
 
 		// Check RoleBinding
-		_, err = s.kubeClient.RbacV1().RoleBindings(formData.Namespace).Get(ctx, formData.RoleName+"-binding", metav1.GetOptions{})
+		_, err = client.RbacV1().RoleBindings(formData.Namespace).Get(ctx, formData.RoleName+"-binding", metav1.GetOptions{})
 		if err == nil {
 			return &ApplyResult{
 				Success: false,
@@ -419,12 +423,17 @@ func (s *Server) dryRunRBACConfiguration(ctx context.Context, formData *RBACForm
 }
 
 // applyRBACConfiguration applies the configuration to the cluster
-func (s *Server) applyRBACConfiguration(ctx context.Context, formData *RBACFormData) (*ApplyResult, error) {
+func (s *Server) applyRBACConfiguration(r *http.Request, formData *RBACFormData) (*ApplyResult, error) {
+	ctx := r.Context()
+	
 	// First perform dry run to validate
-	dryRunResult, err := s.dryRunRBACConfiguration(ctx, formData)
+	dryRunResult, err := s.dryRunRBACConfiguration(r, formData)
 	if err != nil || !dryRunResult.Success {
 		return dryRunResult, err
 	}
+
+	// Get client with impersonation fallback
+	client := s.GetClientWithFallback(r)
 
 	if formData.Scope == "Cluster" {
 		// Create ClusterRole
@@ -437,7 +446,7 @@ func (s *Server) applyRBACConfiguration(ctx context.Context, formData *RBACFormD
 			Rules: s.convertPermissionRules(formData.Permissions),
 		}
 
-		_, err = s.kubeClient.RbacV1().ClusterRoles().Create(ctx, clusterRole, metav1.CreateOptions{})
+		_, err = client.RbacV1().ClusterRoles().Create(ctx, clusterRole, metav1.CreateOptions{})
 		if err != nil {
 			return &ApplyResult{
 				Success: false,
@@ -465,10 +474,10 @@ func (s *Server) applyRBACConfiguration(ctx context.Context, formData *RBACFormD
 			},
 		}
 
-		_, err = s.kubeClient.RbacV1().ClusterRoleBindings().Create(ctx, clusterRoleBinding, metav1.CreateOptions{})
+		_, err = client.RbacV1().ClusterRoleBindings().Create(ctx, clusterRoleBinding, metav1.CreateOptions{})
 		if err != nil {
 			// Try to cleanup the role if binding creation fails
-			s.kubeClient.RbacV1().ClusterRoles().Delete(ctx, formData.RoleName, metav1.DeleteOptions{})
+			client.RbacV1().ClusterRoles().Delete(ctx, formData.RoleName, metav1.DeleteOptions{})
 			return &ApplyResult{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to create ClusterRoleBinding: %v", err),
@@ -491,7 +500,7 @@ func (s *Server) applyRBACConfiguration(ctx context.Context, formData *RBACFormD
 			Rules: s.convertPermissionRules(formData.Permissions),
 		}
 
-		_, err = s.kubeClient.RbacV1().Roles(formData.Namespace).Create(ctx, role, metav1.CreateOptions{})
+		_, err = client.RbacV1().Roles(formData.Namespace).Create(ctx, role, metav1.CreateOptions{})
 		if err != nil {
 			return &ApplyResult{
 				Success: false,
@@ -521,10 +530,10 @@ func (s *Server) applyRBACConfiguration(ctx context.Context, formData *RBACFormD
 			},
 		}
 
-		_, err = s.kubeClient.RbacV1().RoleBindings(formData.Namespace).Create(ctx, roleBinding, metav1.CreateOptions{})
+		_, err = client.RbacV1().RoleBindings(formData.Namespace).Create(ctx, roleBinding, metav1.CreateOptions{})
 		if err != nil {
 			// Try to cleanup the role if binding creation fails
-			s.kubeClient.RbacV1().Roles(formData.Namespace).Delete(ctx, formData.RoleName, metav1.DeleteOptions{})
+			client.RbacV1().Roles(formData.Namespace).Delete(ctx, formData.RoleName, metav1.DeleteOptions{})
 			return &ApplyResult{
 				Success: false,
 				Error:   fmt.Sprintf("Failed to create RoleBinding: %v", err),

@@ -1,18 +1,18 @@
 package server
 
 import (
-    "context"
-    "fmt"
-    "net/http"
+	"context"
+	"fmt"
+	"net/http"
 
-    "time"
+	"time"
 
-    "github.com/aaronlmathis/kaptn/internal/analytics"
-    "github.com/aaronlmathis/kaptn/internal/api/middleware"
-    "github.com/aaronlmathis/kaptn/internal/api/routes"
-    "github.com/aaronlmathis/kaptn/internal/auth"
-    "github.com/aaronlmathis/kaptn/internal/authz"
-    "github.com/aaronlmathis/kaptn/internal/cache"
+	"github.com/aaronlmathis/kaptn/internal/analytics"
+	"github.com/aaronlmathis/kaptn/internal/api/middleware"
+	"github.com/aaronlmathis/kaptn/internal/api/routes"
+	"github.com/aaronlmathis/kaptn/internal/auth"
+	"github.com/aaronlmathis/kaptn/internal/authz"
+	"github.com/aaronlmathis/kaptn/internal/cache"
 	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/k8s"
 	"github.com/aaronlmathis/kaptn/internal/k8s/actions"
@@ -210,7 +210,7 @@ func (s *Server) SetupRoutes() {
 		Static: s, // Server implements StaticHandlers
 		MW: routes.Middlewares{
 			RequireAuth:          s.authMiddleware.RequireAuth,
-			RequireImpersonation: s.RequireImpersonation,
+			RequireImpersonation: s.impersonationMiddleware.RequireImpersonation,
 		},
 	}
 
@@ -740,7 +740,7 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(s.authMiddleware.Authenticate)
 
 	// Impersonation middleware (adds impersonated K8s clients to context)
-	s.router.Use(s.ImpersonationMiddleware)
+	s.router.Use(s.impersonationMiddleware.Middleware)
 
 	// ETag middleware for cacheable GET requests
 	etagMiddleware := apimiddleware.NewETagMiddleware(s.logger)
@@ -851,13 +851,13 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 
 // Static handler method for routes compatibility
 func (s *Server) GetStaticHandler() http.Handler {
-    // Serve static files with session injection into HTML shell
-    files := http.Dir("frontend/dist")
-    return NewSessionInjectionHandler(
-        s.logger,
-        files,
-        s.config.Security.AuthMode,
-        s.sessionManager,
-        s.authMiddleware,
-    )
+	// Serve static files with session injection into HTML shell
+	files := http.Dir("frontend/dist")
+	return NewSessionInjectionHandler(
+		s.logger,
+		files,
+		s.config.Security.AuthMode,
+		s.sessionManager,
+		s.authMiddleware,
+	)
 }

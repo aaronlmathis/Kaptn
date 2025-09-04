@@ -41,7 +41,8 @@ func (s *Server) HandleGetService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get service from Kubernetes API
-	service, err := s.kubeClient.CoreV1().Services(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	client := s.GetClientWithFallback(r)
+	service, err := client.CoreV1().Services(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get service",
 			zap.String("namespace", namespace),
@@ -103,7 +104,8 @@ func (s *Server) HandleGetEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get endpoints from Kubernetes API
-	endpoint, err := s.kubeClient.CoreV1().Endpoints(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	client := s.GetClientWithFallback(r)
+	endpoint, err := client.CoreV1().Endpoints(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get endpoints",
 			zap.String("namespace", namespace),
@@ -431,7 +433,8 @@ func (s *Server) HandleGetNetworkPolicy(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get network policy from Kubernetes API
-	networkPolicy, err := s.kubeClient.NetworkingV1().NetworkPolicies(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	client := s.GetClientWithFallback(r)
+	networkPolicy, err := client.NetworkingV1().NetworkPolicies(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get network policy",
 			zap.String("namespace", namespace),
@@ -660,7 +663,8 @@ func (s *Server) HandleListAllIngresses(w http.ResponseWriter, r *http.Request) 
 	} else {
 		// Get ingresses from all namespaces
 		// First get all namespaces
-		namespaces, err := s.kubeClient.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
+		client := s.GetClientWithFallback(r)
+		namespaces, err := client.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
 		if err != nil {
 			s.logger.Error("Failed to list namespaces for ingresses", zap.Error(err))
 			w.Header().Set("Content-Type", "application/json")

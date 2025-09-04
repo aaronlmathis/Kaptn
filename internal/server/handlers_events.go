@@ -40,8 +40,9 @@ func (s *Server) HandleGetEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get event from Kubernetes API
-	event, err := s.kubeClient.CoreV1().Events(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get event from Kubernetes API using impersonated client with fallback
+	client := s.GetClientWithFallback(r)
+	event, err := client.CoreV1().Events(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get event",
 			zap.String("namespace", namespace),

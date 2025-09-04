@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 func (s *Server) HandleGetPod(w http.ResponseWriter, r *http.Request) {
@@ -31,38 +30,34 @@ func (s *Server) HandleGetPod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only apply Phase 7 security checks if auth mode is not 'none'
-	var kubeClient kubernetes.Interface
+	// Get client with impersonation fallback
+	client := s.GetClientWithFallback(r)
+
+	// Check permissions when auth is enabled
 	if s.config.Security.AuthMode != "none" {
-		// Phase 7: Get security context with impersonated client
-		secCtx, err := s.getSecurityContext(r)
+		clients, err := s.GetImpersonatedClients(r)
 		if err != nil {
-			if secErr, ok := err.(*SecurityError); ok {
-				s.writeSecurityError(w, secErr, nil)
-			} else {
-				http.Error(w, "Security context error", http.StatusInternalServerError)
-			}
+			s.logger.Error("Failed to get impersonated clients", zap.Error(err))
+			http.Error(w, "Authentication required", http.StatusUnauthorized)
 			return
 		}
 
-		// Phase 7: Check permission to get this specific pod
-		if err := s.checkResourcePermission(r.Context(), secCtx, "get", "pods", namespace, name); err != nil {
-			if secErr, ok := err.(*SecurityError); ok {
-				s.writeSecurityError(w, secErr, secCtx.User)
-			} else {
-				http.Error(w, "Permission check failed", http.StatusInternalServerError)
-			}
+		// Check permission to get this specific pod
+		permissionHelper := s.impersonationMgr.PermissionHelper()
+		allowed, err := permissionHelper.Can(r.Context(), clients.Client(), "get", "pods", namespace, name)
+		if err != nil {
+			s.logger.Error("Failed to check permission", zap.Error(err))
+			http.Error(w, "Failed to check permissions", http.StatusInternalServerError)
 			return
 		}
-
-		kubeClient = secCtx.Client
-	} else {
-		// Use default client when auth is disabled
-		kubeClient = s.kubeClient
+		if !allowed {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 	}
 
-	// Get pod from Kubernetes API using appropriate client
-	pod, err := kubeClient.CoreV1().Pods(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get pod from Kubernetes API using client
+	pod, err := client.CoreV1().Pods(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get pod",
 			zap.String("namespace", namespace),
@@ -801,8 +796,9 @@ func (s *Server) HandleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get job from Kubernetes API
-	job, err := s.kubeClient.BatchV1().Jobs(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get job from Kubernetes API using impersonated client with fallback
+	client := s.GetClientWithFallback(r)
+	job, err := client.BatchV1().Jobs(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get job",
 			zap.String("namespace", namespace),
@@ -853,8 +849,9 @@ func (s *Server) HandleGetCronJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get cronjob from Kubernetes API
-	cronJob, err := s.kubeClient.BatchV1().CronJobs(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get cronjob from Kubernetes API using impersonated client with fallback
+	client := s.GetClientWithFallback(r)
+	cronJob, err := client.BatchV1().CronJobs(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get cronjob",
 			zap.String("namespace", namespace),
@@ -905,8 +902,9 @@ func (s *Server) HandleGetDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get deployment from Kubernetes API
-	deployment, err := s.kubeClient.AppsV1().Deployments(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get deployment from Kubernetes API using impersonated client with fallback
+	client := s.GetClientWithFallback(r)
+	deployment, err := client.AppsV1().Deployments(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get deployment",
 			zap.String("namespace", namespace),
@@ -957,8 +955,9 @@ func (s *Server) HandleGetStatefulSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get statefulset from Kubernetes API
-	statefulSet, err := s.kubeClient.AppsV1().StatefulSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get statefulset from Kubernetes API using impersonated client with fallback
+	client := s.GetClientWithFallback(r)
+	statefulSet, err := client.AppsV1().StatefulSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get statefulset",
 			zap.String("namespace", namespace),
@@ -1009,8 +1008,9 @@ func (s *Server) HandleGetDaemonSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get daemonset from Kubernetes API
-	daemonSet, err := s.kubeClient.AppsV1().DaemonSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get daemonset from Kubernetes API using impersonated client with fallback
+	client := s.GetClientWithFallback(r)
+	daemonSet, err := client.AppsV1().DaemonSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get daemonset",
 			zap.String("namespace", namespace),
@@ -1061,8 +1061,9 @@ func (s *Server) HandleGetReplicaSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get replicaset from Kubernetes API
-	replicaSet, err := s.kubeClient.AppsV1().ReplicaSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	// Get replicaset from Kubernetes API using impersonated client with fallback
+	client := s.GetClientWithFallback(r)
+	replicaSet, err := client.AppsV1().ReplicaSets(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get replicaset",
 			zap.String("namespace", namespace),

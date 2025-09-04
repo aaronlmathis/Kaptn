@@ -52,7 +52,8 @@ func (s *Server) HandleGetOverview(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /api/v1/namespaces [get]
 func (s *Server) HandleListNamespaces(w http.ResponseWriter, r *http.Request) {
-	namespaces, err := s.kubeClient.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
+	client := s.GetClientWithFallback(r)
+	namespaces, err := client.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
 	if err != nil {
 		s.logger.Error("Failed to list namespaces", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
@@ -277,7 +278,8 @@ func (s *Server) HandleGetNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get node from Kubernetes API
-	node, err := s.kubeClient.CoreV1().Nodes().Get(r.Context(), name, metav1.GetOptions{})
+	client := s.GetClientWithFallback(r)
+	node, err := client.CoreV1().Nodes().Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get node",
 			zap.String("name", name),
@@ -440,7 +442,8 @@ func (s *Server) HandleGetResourceQuota(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get resource quota from Kubernetes API
-	resourceQuota, err := s.kubeClient.CoreV1().ResourceQuotas(namespace).Get(r.Context(), name, metav1.GetOptions{})
+	client := s.GetClientWithFallback(r)
+	resourceQuota, err := client.CoreV1().ResourceQuotas(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		s.logger.Error("Failed to get resource quota",
 			zap.String("namespace", namespace),
