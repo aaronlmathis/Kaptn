@@ -528,6 +528,8 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
                     'networkpolicies.list', 'networkpolicies.get',
                     'virtualservices.list', 'virtualservices.get',
                     'gateways.list', 'gateways.get',
+                    // Workloads: CronJobs
+                    'cronjobs.list', 'cronjobs.get',
                     'services.list', 'services.get',
                     'configmaps.list', 'secrets.list',
                     // Quotas

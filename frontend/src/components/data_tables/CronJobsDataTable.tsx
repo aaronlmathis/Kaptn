@@ -363,6 +363,80 @@ export function CronJobsDataTable() {
         [handleViewDetails, clusterId]
     )
 
+    // Capability-aware bulk actions (depends on table, so declare after table)
+
+    // Create filter options for cronjobs based on suspend status
+    const cronJobStatuses: FilterOption[] = React.useMemo(() => {
+		const statuses = new Set<string>()
+		cronJobs.forEach(cronJob => {
+			// Create status based on suspend field
+			if (cronJob.suspend) {
+				statuses.add("Suspended")
+			} else {
+				statuses.add("Active")
+			}
+		})
+		return Array.from(statuses).sort().map(status => ({
+			value: status,
+			label: status,
+			badge: (
+				<Badge variant="outline" className={status === "Active" ? "text-green-600 border-border bg-transparent px-1.5" : "text-yellow-600 border-border bg-transparent px-1.5"}>
+					{status === "Active" ? <IconPlayerPlay className="size-3 mr-1" /> : <IconPlayerPause className="size-3 mr-1" />}
+					{status}
+				</Badge>
+			)
+		}))
+	}, [cronJobs])
+
+	// Filter data based on global filter and status filter
+	const filteredData = React.useMemo(() => {
+		let filtered = cronJobs
+
+		// Apply category filter (status)
+		if (statusFilter !== "all") {
+			filtered = filtered.filter(cronJob => {
+				// Determine status for this cronjob
+				const status = cronJob.suspend ? "Suspended" : "Active"
+				return status === statusFilter
+			})
+		}
+
+		// Apply global filter (search)
+		if (globalFilter) {
+			const searchTerm = globalFilter.toLowerCase()
+			filtered = filtered.filter(cronJob =>
+				cronJob.name.toLowerCase().includes(searchTerm) ||
+				cronJob.namespace.toLowerCase().includes(searchTerm) ||
+				cronJob.schedule.toLowerCase().includes(searchTerm) ||
+				cronJob.image.toLowerCase().includes(searchTerm) ||
+				cronJob.age.toLowerCase().includes(searchTerm)
+			)
+		}
+
+		return filtered
+	}, [cronJobs, statusFilter, globalFilter])
+
+    const table = useReactTable({
+        data: filteredData,
+        columns,
+		onSortingChange: setSorting,
+		onColumnFiltersChange: setColumnFilters,
+		getCoreRowModel: getCoreRowModel(),
+		getPaginationRowModel: getPaginationRowModel(),
+		getSortedRowModel: getSortedRowModel(),
+		getFilteredRowModel: getFilteredRowModel(),
+		onColumnVisibilityChange: setColumnVisibility,
+		onRowSelectionChange: setRowSelection,
+		getFacetedRowModel: getFacetedRowModel(),
+		getFacetedUniqueValues: getFacetedUniqueValues(),
+		state: {
+			sorting,
+			columnFilters,
+			columnVisibility,
+			rowSelection,
+		},
+    })
+
     // Capability-aware bulk actions
     const { isAllowed } = useAuthzCapabilitiesInContext(['cronjobs.get','cronjobs.patch','cronjobs.delete','jobs.create'])
 
@@ -441,78 +515,6 @@ export function CronJobsDataTable() {
         return actions
     }, [table, isAllowed])
 
-    // Create filter options for cronjobs based on suspend status
-    const cronJobStatuses: FilterOption[] = React.useMemo(() => {
-		const statuses = new Set<string>()
-		cronJobs.forEach(cronJob => {
-			// Create status based on suspend field
-			if (cronJob.suspend) {
-				statuses.add("Suspended")
-			} else {
-				statuses.add("Active")
-			}
-		})
-		return Array.from(statuses).sort().map(status => ({
-			value: status,
-			label: status,
-			badge: (
-				<Badge variant="outline" className={status === "Active" ? "text-green-600 border-border bg-transparent px-1.5" : "text-yellow-600 border-border bg-transparent px-1.5"}>
-					{status === "Active" ? <IconPlayerPlay className="size-3 mr-1" /> : <IconPlayerPause className="size-3 mr-1" />}
-					{status}
-				</Badge>
-			)
-		}))
-	}, [cronJobs])
-
-	// Filter data based on global filter and status filter
-	const filteredData = React.useMemo(() => {
-		let filtered = cronJobs
-
-		// Apply category filter (status)
-		if (statusFilter !== "all") {
-			filtered = filtered.filter(cronJob => {
-				// Determine status for this cronjob
-				const status = cronJob.suspend ? "Suspended" : "Active"
-				return status === statusFilter
-			})
-		}
-
-		// Apply global filter (search)
-		if (globalFilter) {
-			const searchTerm = globalFilter.toLowerCase()
-			filtered = filtered.filter(cronJob =>
-				cronJob.name.toLowerCase().includes(searchTerm) ||
-				cronJob.namespace.toLowerCase().includes(searchTerm) ||
-				cronJob.schedule.toLowerCase().includes(searchTerm) ||
-				cronJob.image.toLowerCase().includes(searchTerm) ||
-				cronJob.age.toLowerCase().includes(searchTerm)
-			)
-		}
-
-		return filtered
-	}, [cronJobs, statusFilter, globalFilter])
-
-	const table = useReactTable({
-		data: filteredData,
-		columns,
-		onSortingChange: setSorting,
-		onColumnFiltersChange: setColumnFilters,
-		getCoreRowModel: getCoreRowModel(),
-		getPaginationRowModel: getPaginationRowModel(),
-		getSortedRowModel: getSortedRowModel(),
-		getFilteredRowModel: getFilteredRowModel(),
-		onColumnVisibilityChange: setColumnVisibility,
-		onRowSelectionChange: setRowSelection,
-		getFacetedRowModel: getFacetedRowModel(),
-		getFacetedUniqueValues: getFacetedUniqueValues(),
-		state: {
-			sorting,
-			columnFilters,
-			columnVisibility,
-			rowSelection,
-		},
-	})
-
 
 
 	// Drag and drop setup
@@ -541,16 +543,16 @@ export function CronJobsDataTable() {
 		}
 	}
 
-	if (loading) {
-		return (
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-center py-10">
-					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading cronjobs...</span>
-				</div>
-			</div>
-		)
-	}
+    if (loading && cronJobs.length === 0) {
+        return (
+            <div className="px-4 lg:px-6">
+                <div className="flex items-center justify-center py-10">
+                    <IconLoader className="size-6 animate-spin" />
+                    <span className="ml-2">Loading cronjobs...</span>
+                </div>
+            </div>
+        )
+    }
 
 	if (error) {
 		return (

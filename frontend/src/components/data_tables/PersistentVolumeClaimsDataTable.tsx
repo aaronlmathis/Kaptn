@@ -80,6 +80,7 @@ import { useNamespace } from "@/contexts/namespace-context"
 import { persistentVolumeClaimSchema } from "@/lib/schemas/persistent-volume-claim"
 import { useCluster } from "@/hooks/useCluster"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
 
 // Drag handle component
 function DragHandle({ id }: { id: string }) {
@@ -496,7 +497,7 @@ export function PersistentVolumeClaimsDataTable() {
 		}
 	}
 
-	if (loading) {
+	if (loading && filteredData.length === 0) {
 		return (
 			<div className="px-4 lg:px-6">
 				<div className="flex items-center justify-center py-10">

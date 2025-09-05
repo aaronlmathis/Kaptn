@@ -415,3 +415,4 @@ CLAUDE.md
 .gocache
 unused/
 AGENTS.md
+*.old
