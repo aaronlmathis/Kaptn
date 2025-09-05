@@ -142,9 +142,10 @@ function getNodeStatusBadge(status: string) {
 
 // Column definitions for nodes table
 const createColumns = (
-	onViewDetails: (node: z.infer<typeof nodeSchema>) => void,
-	onCordonNode: (node: z.infer<typeof nodeSchema>) => void,
-	onDrainNode: (node: z.infer<typeof nodeSchema>) => void
+    onViewDetails: (node: z.infer<typeof nodeSchema>) => void,
+    onCordonNode: (node: z.infer<typeof nodeSchema>) => void,
+    onDrainNode: (node: z.infer<typeof nodeSchema>) => void,
+    clusterId: string,
 ): ColumnDef<z.infer<typeof nodeSchema>>[] => [
 		{
 			id: "drag",
@@ -391,10 +392,10 @@ export function NodesDataTable() {
 	}, [])
 
 	// Create columns with the callbacks
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleCordonNode, handleDrainNode),
-		[handleViewDetails, handleCordonNode, handleDrainNode]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, handleCordonNode, handleDrainNode, clusterId),
+        [handleViewDetails, handleCordonNode, handleDrainNode, clusterId]
+    )
 
 	// Create filter options for node statuses
 	const nodeStatuses = React.useMemo(() => {
@@ -477,16 +478,16 @@ export function NodesDataTable() {
 		}
 	}
 
-	if (loading) {
-		return (
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-center py-10">
-					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading nodes...</span>
-				</div>
-			</div>
-		)
-	}
+    if (loading && filteredData.length === 0) {
+        return (
+            <div className="px-4 lg:px-6">
+                <div className="flex items-center justify-center py-10">
+                    <IconLoader className="size-6 animate-spin" />
+                    <span className="ml-2">Loading nodes...</span>
+                </div>
+            </div>
+        )
+    }
 
 	if (error) {
 		return (

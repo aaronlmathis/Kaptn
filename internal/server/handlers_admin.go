@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Phase 8: Admin Utilities & Observability
+//  Admin Utilities & Observability
 
 // handleBindingsReload forces a reload of the user bindings store (if applicable)
 func (s *Server) HandleBindingsReload(w http.ResponseWriter, r *http.Request) {

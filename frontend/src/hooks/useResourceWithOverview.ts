@@ -191,9 +191,11 @@ export function useResourceWithOverview<T>(
 
     // Ensure minimal capabilities for this resource (fast-path defaults are conservative)
     useEffect(() => {
+        // Normalize resource to capability key form (e.g., resource_quotas -> resourcequotas)
+        const capResource = resource.replace(/_/g, '');
         const baseCaps = [
-            `${resource}.list`,
-            `${resource}.watch`,
+            `${capResource}.list`,
+            `${capResource}.watch`,
         ];
         // Fire-and-forget; backend will ignore unknown keys
         fetchAdditional(baseCaps).catch(() => { /* noop */ });

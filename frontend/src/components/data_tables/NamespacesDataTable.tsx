@@ -158,8 +158,9 @@ async function deleteNamespace(name: string): Promise<boolean> {
 
 // Column definitions for namespaces table
 const createColumns = (
-	onViewDetails: (namespace: z.infer<typeof namespaceSchema>) => void,
-	onDelete?: (namespace: z.infer<typeof namespaceSchema>) => void
+    onViewDetails: (namespace: z.infer<typeof namespaceSchema>) => void,
+    onDelete: ((namespace: z.infer<typeof namespaceSchema>) => void) | undefined,
+    clusterId: string,
 ): ColumnDef<z.infer<typeof namespaceSchema>>[] => [
 		{
 			id: "drag",
@@ -352,8 +353,8 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof namespaceSchema>> }) {
 }
 
 export function NamespacesDataTable() {
-	const { data: namespaces, loading, error, refetch, isConnected } = useNamespacesWithWebSocket(true)
-	const { clusterId } = useCluster()
+    const { data: namespaces, loading, error, refetch, isConnected } = useNamespacesWithWebSocket(true)
+    const { clusterId } = useCluster()
 
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [statusFilter, setStatusFilter] = React.useState<string>("all")
@@ -384,10 +385,10 @@ export function NamespacesDataTable() {
 	}, [refetch])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleDeleteNamespace),
-		[handleViewDetails, handleDeleteNamespace]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, handleDeleteNamespace, clusterId),
+        [handleViewDetails, handleDeleteNamespace, clusterId]
+    )
 
 	// Create filter options for namespace statuses
 	const namespaceStatuses = React.useMemo(() => {
@@ -468,16 +469,16 @@ export function NamespacesDataTable() {
 		}
 	}
 
-	if (loading) {
-		return (
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-center py-10">
-					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading namespaces...</span>
-				</div>
-			</div>
-		)
-	}
+    if (loading && filteredData.length === 0) {
+        return (
+            <div className="px-4 lg:px-6">
+                <div className="flex items-center justify-center py-10">
+                    <IconLoader className="size-6 animate-spin" />
+                    <span className="ml-2">Loading namespaces...</span>
+                </div>
+            </div>
+        )
+    }
 
 	if (error) {
 		return (
