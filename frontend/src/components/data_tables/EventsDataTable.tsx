@@ -75,6 +75,8 @@ import { DataTableFilters, type FilterOption, type BulkAction } from "@/componen
 import { useEventsWithWebSocket } from "@/hooks/useEventsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Event schema for TypeScript types
 const eventSchema = z.object({
@@ -144,7 +146,8 @@ function getEventLevelBadge(level: string, type: string) {
 
 // Column definitions for events table
 const createColumns = (
-	onViewDetails: (event: Event) => void
+    onViewDetails: (event: Event) => void,
+    clusterId: string
 ): ColumnDef<Event>[] => [
 		{
 			id: "drag",
@@ -180,16 +183,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Event Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						<div className="max-w-[200px] truncate">{row.original.name}</div>
-					</button>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="events.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<div className="max-w-[200px] truncate">{row.original.name}</div>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        <div className="max-w-[200px] truncate">{row.original.name}</div>
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -278,13 +289,13 @@ const createColumns = (
 							<span className="sr-only">Open menu</span>
 						</Button>
 					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-40">
+                    <IfAllowed feature="events.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem onClick={() => {
 							// Copy event details to clipboard
@@ -331,6 +342,7 @@ function DraggableRow({ row }: { row: Row<Event> }) {
 }
 
 export function EventsDataTable() {
+    const { clusterId } = useCluster()
 	const { selectedNamespace } = useNamespace()
 	const {
 		data: events,
@@ -347,13 +359,13 @@ export function EventsDataTable() {
 	const [selectedEvent, setSelectedEvent] = React.useState<Event | null>(null)
 	const [isDetailDrawerOpen, setIsDetailDrawerOpen] = React.useState(false)
 
-	const columns = React.useMemo(
-		() => createColumns((event) => {
-			setSelectedEvent(event)
-			setIsDetailDrawerOpen(true)
-		}),
-		[]
-	)
+    const columns = React.useMemo(
+        () => createColumns((event) => {
+            setSelectedEvent(event)
+            setIsDetailDrawerOpen(true)
+        }, clusterId),
+        [clusterId]
+    )
 
 	const table = useReactTable({
 		data: events || [],

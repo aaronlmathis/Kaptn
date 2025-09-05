@@ -79,6 +79,8 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useVolumeSnapshotClassesWithWebSocket } from "@/hooks/useVolumeSnapshotClassesWithWebSocket"
 import { volumeSnapshotClassSchema } from "@/lib/schemas/volume-snapshot-class"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: string }) {
@@ -102,7 +104,8 @@ function DragHandle({ id }: { id: string }) {
 
 // Column definitions for volume snapshot classes table
 const createColumns = (
-	onViewDetails: (volumeSnapshotClass: z.infer<typeof volumeSnapshotClassSchema>) => void
+    onViewDetails: (volumeSnapshotClass: z.infer<typeof volumeSnapshotClassSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof volumeSnapshotClassSchema>>[] => [
 		{
 			id: "drag",
@@ -143,12 +146,20 @@ const createColumns = (
 			header: "Name",
 			cell: ({ row }) => {
 				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
+					<IfAllowed
+						feature="volumesnapshotclasses.get"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={<span>{row.original.name}</span>}
 					>
-						{row.original.name}
-					</button>
+						<button
+							onClick={() => onViewDetails(row.original)}
+							className="text-left hover:underline focus:underline focus:outline-none"
+						>
+							{row.original.name}
+						</button>
+					</IfAllowed>
 				)
 			},
 			enableHiding: false,
@@ -212,33 +223,45 @@ const createColumns = (
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
+						<IfAllowed feature="volumesnapshotclasses.get" cluster={clusterId} namespace="" resourceName={row.original.name}>
+							<DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+								<IconEye className="size-4 mr-2" />
+								View Details
+							</DropdownMenuItem>
+						</IfAllowed>
+						<IfAllowed
+							feature="volumesnapshotclasses.patch"
+							cluster={clusterId}
+							namespace=""
 							resourceName={row.original.name}
-							namespace="" // VolumeSnapshotClass is cluster-scoped
-							resourceKind="VolumeSnapshotClass"
+							fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
 						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
+							<ResourceYamlEditor
+								resourceName={row.original.name}
+								namespace=""
+								resourceKind="VolumeSnapshotClass"
 							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem className="text-red-600 hover:text-red-700 hover:bg-red-50">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
+								<button
+									className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+									style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+								>
+									<IconEdit className="size-4" />
+									Edit YAML
+								</button>
+							</ResourceYamlEditor>
+						</IfAllowed>
+						<IfAllowed
+							feature="volumesnapshotclasses.delete"
+							cluster={clusterId}
+							namespace=""
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+						>
+							<DropdownMenuItem className="text-red-600 hover:text-red-700 hover:bg-red-50">
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -279,6 +302,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof volumeSnapshotClassSche
 
 export function VolumeSnapshotClassesDataTable() {
 	const { data: volumeSnapshotClasses, loading, error, refetch, isConnected } = useVolumeSnapshotClassesWithWebSocket(true)
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -333,8 +357,8 @@ export function VolumeSnapshotClassesDataTable() {
 
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
+		() => createColumns(handleViewDetails, clusterId),
+		[handleViewDetails, clusterId]
 	)
 
 	const table = useReactTable({

@@ -9,10 +9,23 @@ import {
 	getPersistentVolumeStatusBadge,
 	getResourceIcon
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 function PersistentVolumesContent() {
 	const { data: persistentVolumes, loading: isLoading, error, isConnected } = usePersistentVolumesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'persistentvolumes.get',
+			'persistentvolumes.patch',
+			'persistentvolumes.delete',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when persistent volumes change
 	React.useEffect(() => {
@@ -110,5 +123,9 @@ function PersistentVolumesContent() {
 
 
 export function PersistentVolumesPageContainer() {
-	return <PersistentVolumesContent />
+	return (
+		<RouteGuard requiredCapabilities={["persistentvolumes.list"]} requireAll={false}>
+			<PersistentVolumesContent />
+		</RouteGuard>
+	)
 }

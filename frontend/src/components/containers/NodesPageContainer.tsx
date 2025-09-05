@@ -8,11 +8,25 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function NodesContent() {
 	const { data: nodes, loading: isLoading, error, isConnected } = useNodesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+	const { fetchAdditional } = useCapabilities()
+
+	// Ensure node-specific action capabilities are requested (cluster-scoped)
+	React.useEffect(() => {
+		fetchAdditional([
+			'nodes.get',
+			'nodes.patch',
+			'nodes.update',
+			'nodes.delete',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when nodes change
 	React.useEffect(() => {
@@ -139,5 +153,9 @@ function NodesContent() {
 }
 
 export function NodesPageContainer() {
-	return <NodesContent />
+	return (
+		<RouteGuard requiredCapabilities={["nodes.list"]} requireAll={false}>
+			<NodesContent />
+		</RouteGuard>
+	)
 }

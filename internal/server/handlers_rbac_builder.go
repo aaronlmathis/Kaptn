@@ -364,7 +364,7 @@ func (s *Server) convertPermissionRules(permissions []RBACPermissionRule) []rbac
 // dryRunRBACConfiguration validates the configuration without applying to cluster
 func (s *Server) dryRunRBACConfiguration(r *http.Request, formData *RBACFormData) (*ApplyResult, error) {
 	ctx := r.Context()
-	
+
 	// Generate the YAML to validate structure
 	_, err := s.generateRBACYAMLFromForm(formData)
 	if err != nil {
@@ -425,7 +425,7 @@ func (s *Server) dryRunRBACConfiguration(r *http.Request, formData *RBACFormData
 // applyRBACConfiguration applies the configuration to the cluster
 func (s *Server) applyRBACConfiguration(r *http.Request, formData *RBACFormData) (*ApplyResult, error) {
 	ctx := r.Context()
-	
+
 	// First perform dry run to validate
 	dryRunResult, err := s.dryRunRBACConfiguration(r, formData)
 	if err != nil || !dryRunResult.Success {

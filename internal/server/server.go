@@ -239,9 +239,17 @@ func (s *Server) initKubernetesClient() error {
 	s.impersonationMgr = k8s.NewImpersonationManager(impersonatedFactory, s.logger)
 	s.logger.Info("Impersonation manager initialized")
 
-	// Initialize capability service
-	s.capabilityService = authz.NewCapabilityService(s.logger, 30*time.Second)
-	s.logger.Info("Capability service initialized")
+    // Initialize capability service with TTL from config (fallback to 30s)
+    capTTL := 30 * time.Second
+    if ttlStr := s.config.Caching.SummaryTTL; ttlStr != "" {
+        if parsed, err := time.ParseDuration(ttlStr); err == nil {
+            capTTL = parsed
+        } else {
+            s.logger.Warn("Invalid capability cache TTL, using default", zap.String("ttl", ttlStr), zap.Error(err))
+        }
+    }
+    s.capabilityService = authz.NewCapabilityService(s.logger, capTTL)
+    s.logger.Info("Capability service initialized", zap.Duration("ttl", capTTL))
 
 	// Initialize apply service
 	s.applyService = actions.NewApplyService(
@@ -779,75 +787,8 @@ func (s *Server) setupMiddleware() {
 	})
 }
 
-// Adapter methods to provide lowercase method names for compatibility with existing routes
-// These delegate to the exported HandleXxx methods
-
-// Auth handlers
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	s.HandleLogin(w, r)
-}
-
-func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
-	s.HandleAuthCallback(w, r)
-}
-
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	s.HandleLogout(w, r)
-}
-
-func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	s.HandleRefresh(w, r)
-}
-
-func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	s.HandleMe(w, r)
-}
-
-func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
-	s.HandleJWKS(w, r)
-}
-
-func (s *Server) handleDebugUser(w http.ResponseWriter, r *http.Request) {
-	s.HandleDebugUser(w, r)
-}
-
-func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
-	s.HandlePublicConfig(w, r)
-}
-
-// Admin handlers
-func (s *Server) handleAuthzPreview(w http.ResponseWriter, r *http.Request) {
-	s.HandleAuthzPreview(w, r)
-}
-
-func (s *Server) handlePermissionsCheck(w http.ResponseWriter, r *http.Request) {
-	s.HandlePermissionsCheck(w, r)
-}
-
-func (s *Server) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request) {
-	s.HandleRevokeUserSessions(w, r)
-}
-
-func (s *Server) handleBindingsReload(w http.ResponseWriter, r *http.Request) {
-	s.HandleBindingsReload(w, r)
-}
-
-func (s *Server) handleGenericSAR(w http.ResponseWriter, r *http.Request) {
-	s.HandleGenericSAR(w, r)
-}
-
-// System handlers
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	s.HandleHealth(w, r)
-}
-
-func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
-	s.HandleReady(w, r)
-}
-
-func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
-	s.HandleVersion(w, r)
-}
+// (Removed) Lowercase adapter methods that duplicated exported HandleXxx methods
+// Routes directly bind to exported handlers via contracts in internal/api/routes.
 
 // Static handler method for routes compatibility
 func (s *Server) GetStaticHandler() http.Handler {

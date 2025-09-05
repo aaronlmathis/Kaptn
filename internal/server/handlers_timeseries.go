@@ -1010,18 +1010,23 @@ func getTotalPoints(seriesData map[string][]TimeSeriesPoint) int {
 
 // handleGetTimeSeriesNodes returns available nodes for timeseries subscription
 func (s *Server) HandleGetTimeSeriesNodes(w http.ResponseWriter, r *http.Request) {
-	// Check if we have access to Kubernetes client
-	if s.kubeClient == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Kubernetes client not available",
-		})
-		return
-	}
+    // Resolve Kubernetes client: prefer impersonated, fallback to base client in dev mode
+    kc, kcErr := s.GetImpersonatedClient(r)
+    if kcErr != nil {
+        if s.config.Security.AuthMode == "none" && s.kubeClient != nil {
+            kc = s.kubeClient
+        } else {
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusUnauthorized)
+            json.NewEncoder(w).Encode(map[string]string{
+                "error": "Authentication required",
+            })
+            return
+        }
+    }
 
-	// Get all nodes
-	nodeList, err := s.kubeClient.CoreV1().Nodes().List(r.Context(), metav1.ListOptions{})
+    // Get all nodes
+    nodeList, err := kc.CoreV1().Nodes().List(r.Context(), metav1.ListOptions{})
 	if err != nil {
 		s.logger.Error("Failed to list nodes for timeseries entities", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
@@ -1063,18 +1068,23 @@ func (s *Server) HandleGetTimeSeriesNodes(w http.ResponseWriter, r *http.Request
 
 // handleGetTimeSeriesNamespaces returns available namespaces for timeseries subscription
 func (s *Server) HandleGetTimeSeriesNamespaces(w http.ResponseWriter, r *http.Request) {
-	// Check if we have access to Kubernetes client
-	if s.kubeClient == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Kubernetes client not available",
-		})
-		return
-	}
+    // Resolve Kubernetes client: prefer impersonated, fallback to base client in dev mode
+    kc, kcErr := s.GetImpersonatedClient(r)
+    if kcErr != nil {
+        if s.config.Security.AuthMode == "none" && s.kubeClient != nil {
+            kc = s.kubeClient
+        } else {
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusUnauthorized)
+            json.NewEncoder(w).Encode(map[string]string{
+                "error": "Authentication required",
+            })
+            return
+        }
+    }
 
-	// Get all namespaces
-	namespaceList, err := s.kubeClient.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
+    // Get all namespaces
+    namespaceList, err := kc.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
 	if err != nil {
 		s.logger.Error("Failed to list namespaces for timeseries entities", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
@@ -1106,15 +1116,20 @@ func (s *Server) HandleGetTimeSeriesNamespaces(w http.ResponseWriter, r *http.Re
 
 // handleGetTimeSeriesPods returns available pods for timeseries subscription
 func (s *Server) HandleGetTimeSeriesPods(w http.ResponseWriter, r *http.Request) {
-	// Check if we have access to Kubernetes client
-	if s.kubeClient == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Kubernetes client not available",
-		})
-		return
-	}
+    // Resolve Kubernetes client: prefer impersonated, fallback to base client in dev mode
+    kc, kcErr := s.GetImpersonatedClient(r)
+    if kcErr != nil {
+        if s.config.Security.AuthMode == "none" && s.kubeClient != nil {
+            kc = s.kubeClient
+        } else {
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusUnauthorized)
+            json.NewEncoder(w).Encode(map[string]string{
+                "error": "Authentication required",
+            })
+            return
+        }
+    }
 
 	// Get query parameters for filtering
 	namespaceFilter := r.URL.Query().Get("namespace")
@@ -1133,15 +1148,15 @@ func (s *Server) HandleGetTimeSeriesPods(w http.ResponseWriter, r *http.Request)
 	var podList *corev1.PodList
 	var err error
 
-	if namespaceFilter != "" {
-		podList, err = s.kubeClient.CoreV1().Pods(namespaceFilter).List(r.Context(), metav1.ListOptions{
-			Limit: int64(limit),
-		})
-	} else {
-		podList, err = s.kubeClient.CoreV1().Pods("").List(r.Context(), metav1.ListOptions{
-			Limit: int64(limit),
-		})
-	}
+    if namespaceFilter != "" {
+        podList, err = kc.CoreV1().Pods(namespaceFilter).List(r.Context(), metav1.ListOptions{
+            Limit: int64(limit),
+        })
+    } else {
+        podList, err = kc.CoreV1().Pods("").List(r.Context(), metav1.ListOptions{
+            Limit: int64(limit),
+        })
+    }
 
 	if err != nil {
 		s.logger.Error("Failed to list pods for timeseries entities", zap.Error(err))

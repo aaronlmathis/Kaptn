@@ -30,16 +30,17 @@ type ResourceCacheItem struct {
 
 // ResourceCache manages in-memory cache of Kubernetes resources
 type ResourceCache struct {
-	mu            sync.RWMutex
-	logger        *zap.Logger
-	kubeClient    kubernetes.Interface
-	resources     map[string]*ResourceCacheItem // key: resourceType:namespace:name
-	lastRefresh   time.Time
-	refreshTTL    time.Duration
-	maxSize       int
-	enabledTypes  map[string]bool
-	stopCh        chan struct{}
-	refreshTicker *time.Ticker
+    mu            sync.RWMutex
+    logger        *zap.Logger
+    kubeClient    kubernetes.Interface
+    resources     map[string]*ResourceCacheItem // key: resourceType:namespace:name
+    lastRefresh   time.Time
+    refreshTTL    time.Duration
+    maxSize       int
+    enabledTypes  map[string]bool
+    stopCh        chan struct{}
+    refreshTicker *time.Ticker
+    stopOnce      sync.Once
 }
 
 // CacheConfig represents configuration for the resource cache
@@ -127,11 +128,13 @@ func (rc *ResourceCache) Start(ctx context.Context) error {
 
 // Stop stops the background refresh process
 func (rc *ResourceCache) Stop() {
-	rc.logger.Info("Stopping resource cache")
-	if rc.refreshTicker != nil {
-		rc.refreshTicker.Stop()
-	}
-	close(rc.stopCh)
+    rc.stopOnce.Do(func() {
+        rc.logger.Info("Stopping resource cache")
+        if rc.refreshTicker != nil {
+            rc.refreshTicker.Stop()
+        }
+        close(rc.stopCh)
+    })
 }
 
 // backgroundRefresh runs the periodic refresh in a goroutine

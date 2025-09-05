@@ -525,14 +525,14 @@ func (s *Server) getRBACInfo(ctx context.Context, r *http.Request, username stri
 	// Groups to use for analysis - start with the passed-in groups
 	effectiveGroups := groups
 
-	// Check user bindings if auth middleware is available and has an authz resolver
-	if s.authMiddleware != nil {
-		if binding, err := s.getAuthzBinding(ctx, username); err == nil {
-			rbacInfo["user_bindings"] = map[string]interface{}{
-				"found":      true,
-				"lookup_key": username,
-				"groups":     binding.Groups,
-			}
+    // Check user bindings only when authz.mode == "user_bindings"
+    if s.authMiddleware != nil && s.config.Authz.Mode == "user_bindings" {
+        if binding, err := s.getAuthzBinding(ctx, username); err == nil {
+            rbacInfo["user_bindings"] = map[string]interface{}{
+                "found":      true,
+                "lookup_key": username,
+                "groups":     binding.Groups,
+            }
 
 			// Add hash key information for debugging
 			hasher := sha256.New()
@@ -542,20 +542,20 @@ func (s *Server) getRBACInfo(ctx context.Context, r *http.Request, username stri
 
 			// Use the groups from the ConfigMap binding instead of the passed-in groups
 			effectiveGroups = binding.Groups
-		} else {
-			rbacInfo["user_bindings"] = map[string]interface{}{
-				"found":      false,
-				"lookup_key": username,
-				"error":      err.Error(),
-			}
+        } else {
+            rbacInfo["user_bindings"] = map[string]interface{}{
+                "found":      false,
+                "lookup_key": username,
+                "error":      err.Error(),
+            }
 
 			// Add hash key information for debugging even when lookup fails
 			hasher := sha256.New()
 			hasher.Write([]byte(username))
 			hashKey := hex.EncodeToString(hasher.Sum(nil))
 			rbacInfo["user_bindings"].(map[string]interface{})["hash_key"] = hashKey
-		}
-	}
+        }
+    }
 
 	// Check namespace permissions if kubeClient is available
 	if s.kubeClient != nil {

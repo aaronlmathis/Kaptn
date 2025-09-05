@@ -8,11 +8,24 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function VolumeSnapshotsContent() {
 	const { data: volumeSnapshots, loading: isLoading, error, isConnected } = useVolumeSnapshotsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'volumesnapshots.get',
+			'volumesnapshots.patch',
+			'volumesnapshots.delete',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when volumeSnapshots change
 	React.useEffect(() => {
@@ -107,5 +120,9 @@ function VolumeSnapshotsContent() {
 }
 
 export function VolumeSnapshotsPageContainer() {
-	return <VolumeSnapshotsContent />
+	return (
+		<RouteGuard requiredCapabilities={["volumesnapshots.list"]} requireAll={false}>
+			<VolumeSnapshotsContent />
+		</RouteGuard>
+	)
 }

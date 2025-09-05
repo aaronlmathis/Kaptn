@@ -527,6 +527,12 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
                     'gateways.list', 'gateways.get',
                     'services.list', 'services.get',
                     'configmaps.list', 'secrets.list',
+                    // Storage core lists so RouteGuard doesn't stall
+                    'persistentvolumes.list',
+                    'persistentvolumeclaims.list',
+                    'storageclasses.list',
+                    'volumesnapshots.list',
+                    'volumesnapshotclasses.list',
                     'namespaces.list', 'events.list', 'nodes.list',
 
                     // Basic management capabilities  
@@ -612,9 +618,17 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 
             if (response.ok) {
                 const data = await response.json()
+                // Ensure all requested features are defined; default unknown to false
+                const returnedCaps: Record<string, boolean> = data.caps || {}
+                const normalizedCaps: Record<string, boolean> = { ...returnedCaps }
+                for (const feat of featuresToRequest) {
+                    if (normalizedCaps[feat] === undefined) {
+                        normalizedCaps[feat] = false
+                    }
+                }
                 setState(prev => ({
                     ...prev,
-                    capabilities: { ...prev.capabilities, ...(data.caps || {}) },
+                    capabilities: { ...prev.capabilities, ...normalizedCaps },
                     lastFetched: Date.now(),
                 }))
             } else {

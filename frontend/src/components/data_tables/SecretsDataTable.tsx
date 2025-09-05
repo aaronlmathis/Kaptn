@@ -200,7 +200,7 @@ const createColumns = (
             return (
                 <div className="flex items-center gap-2">
                     <IfAllowed
-                        feature="secrets.get"
+                        feature="secrets.read"
                         cluster={clusterId}
                         namespace={row.original.namespace}
                         resourceName={row.original.name}
@@ -318,7 +318,7 @@ const createColumns = (
 						</Button>
 					</DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
-                    <IfAllowed feature="secrets.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                    <IfAllowed feature="secrets.read" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
                         <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
                             <IconEye className="size-4 mr-2" />
                             View Details
@@ -555,11 +555,11 @@ export function SecretsDataTable(props: SecretsDataTableProps) {
 
 	// Bulk actions for secrets
     const { isAllowed } = useAuthzCapabilitiesInContext([
-        'secrets.get', 'secrets.delete', 'secrets.update', 'secrets.patch', 'secrets.create'
+        'secrets.read', 'secrets.delete', 'secrets.update', 'secrets.patch', 'secrets.create'
     ])
     const secretBulkActions: BulkAction[] = React.useMemo(() => {
         const actions: BulkAction[] = []
-        if (isAllowed('secrets.get')) {
+        if (isAllowed('secrets.read')) {
             actions.push({
                 id: "export-yaml",
                 label: "Export Selected as YAML",

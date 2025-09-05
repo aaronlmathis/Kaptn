@@ -1,3 +1,5 @@
+"use client"
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { IconLoader2 } from '@tabler/icons-react';

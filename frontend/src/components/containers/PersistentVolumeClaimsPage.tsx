@@ -8,10 +8,22 @@ import {
 	getPersistentVolumeClaimStatusBadge,
 	getResourceIcon
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 function PersistentVolumeClaimsContent() {
 	const { data: persistentVolumeClaims, loading: isLoading, error, isConnected } = usePersistentVolumeClaimsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'persistentvolumeclaims.get',
+			'persistentvolumeclaims.patch',
+			'persistentvolumeclaims.delete',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when persistent volume claims change
 	React.useEffect(() => {
@@ -108,5 +120,9 @@ function PersistentVolumeClaimsContent() {
 }
 
 export function PersistentVolumeClaimsPageContainer() {
-	return <PersistentVolumeClaimsContent />
+	return (
+		<RouteGuard requiredCapabilities={["persistentvolumeclaims.list"]} requireAll={false}>
+			<PersistentVolumeClaimsContent />
+		</RouteGuard>
+	)
 }

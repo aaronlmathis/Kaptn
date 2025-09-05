@@ -9,11 +9,24 @@ import {
 	getHealthTrendBadge,
 	getReplicaStatusBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function ResourceQuotasContent() {
 	const { data: resourceQuotas, loading: isLoading, error, isConnected } = useResourceQuotasWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'resourcequotas.get',
+			'resourcequotas.patch',
+			'resourcequotas.delete',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when resource quotas change
 	React.useEffect(() => {
@@ -119,5 +132,9 @@ function ResourceQuotasContent() {
 }
 
 export function ResourceQuotasPageContainer() {
-	return <ResourceQuotasContent />
+	return (
+		<RouteGuard requiredCapabilities={["resourcequotas.list"]} requireAll={false}>
+			<ResourceQuotasContent />
+		</RouteGuard>
+	)
 }

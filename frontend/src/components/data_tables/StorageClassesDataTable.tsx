@@ -81,6 +81,8 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useStorageClassesWithWebSocket } from "@/hooks/useStorageClassesWithWebSocket"
 import { storageClassSchema } from "@/lib/schemas/storage-class"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: string }) {
@@ -151,7 +153,8 @@ function getVolumeBindingModeBadge(volumeBindingMode: string) {
 
 // Column definitions for storage classes table
 const createColumns = (
-	onViewDetails: (storageClass: z.infer<typeof storageClassSchema>) => void
+    onViewDetails: (storageClass: z.infer<typeof storageClassSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof storageClassSchema>>[] => [
 		{
 			id: "drag",
@@ -187,24 +190,32 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Storage Class Name",
-			cell: ({ row }) => {
-				return (
-					<div className="flex items-center gap-2">
-						<button
-							onClick={() => onViewDetails(row.original)}
-							className="text-left hover:underline focus:underline focus:outline-none"
-						>
-							{row.original.name}
-						</button>
-						{row.original.isDefault && (
-							<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
-								<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
-								Default
-							</Badge>
-						)}
-					</div>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <div className="flex items-center gap-2">
+                    <IfAllowed
+                        feature="storageclasses.get"
+                        cluster={clusterId}
+                        namespace=""
+                        resourceName={row.original.name}
+                        fallback={<span>{row.original.name}</span>}
+                    >
+                        <button
+                            onClick={() => onViewDetails(row.original)}
+                            className="text-left hover:underline focus:underline focus:outline-none"
+                        >
+                            {row.original.name}
+                        </button>
+                    </IfAllowed>
+                    {row.original.isDefault && (
+                        <Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+                            <IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+                            Default
+                        </Badge>
+                    )}
+                </div>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -261,35 +272,47 @@ const createColumns = (
 							<span className="sr-only">Open menu</span>
 						</Button>
 					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace=""
-							resourceKind="StorageClass"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuItem className="text-red-600 hover:text-red-700 hover:bg-red-50">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
+        <DropdownMenuContent align="end" className="w-40">
+            <IfAllowed feature="storageclasses.get" cluster={clusterId} namespace="" resourceName={row.original.name}>
+                <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                    <IconEye className="size-4 mr-2" />
+                    View Details
+                </DropdownMenuItem>
+            </IfAllowed>
+            <IfAllowed
+                feature="storageclasses.patch"
+                cluster={clusterId}
+                namespace=""
+                resourceName={row.original.name}
+                fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
+            >
+                <ResourceYamlEditor
+                    resourceName={row.original.name}
+                    namespace=""
+                    resourceKind="StorageClass"
+                >
+                    <button
+                        className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                        style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                    >
+                        <IconEdit className="size-4" />
+                        Edit YAML
+                    </button>
+                </ResourceYamlEditor>
+            </IfAllowed>
+            <IfAllowed
+                feature="storageclasses.delete"
+                cluster={clusterId}
+                namespace=""
+                resourceName={row.original.name}
+                fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+            >
+                <DropdownMenuItem className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                    <IconTrash className="size-4 mr-2" />
+                    Delete
+                </DropdownMenuItem>
+            </IfAllowed>
+        </DropdownMenuContent>
 				</DropdownMenu>
 			),
 		},
@@ -329,6 +352,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof storageClassSchema>> })
 
 export function StorageClassesDataTable() {
 	const { data: storageClasses, loading, error, refetch, isConnected } = useStorageClassesWithWebSocket()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -382,8 +406,8 @@ export function StorageClassesDataTable() {
 
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
+		() => createColumns(handleViewDetails, clusterId),
+		[handleViewDetails, clusterId]
 	)
 
 	const table = useReactTable({

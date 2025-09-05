@@ -44,7 +44,10 @@ type Hub struct {
 	maxConnections    int
 	maxRoomSize       int
 	broadcastTimeout  time.Duration
-	clientSendTimeout time.Duration
+    clientSendTimeout time.Duration
+
+    // ensure Stop is idempotent
+    stopOnce sync.Once
 }
 
 // Client represents a WebSocket client
@@ -252,7 +255,35 @@ func (h *Hub) removeClient(client *Client) {
 
 // Stop stops the hub
 func (h *Hub) Stop() {
-	h.cancel()
+    h.stopOnce.Do(func() {
+        h.logger.Info("Stopping WebSocket hub")
+
+        // First, close client connections to trigger their goroutines to exit
+        h.mu.RLock()
+        clients := make([]*Client, 0, len(h.clients))
+        for c := range h.clients {
+            clients = append(clients, c)
+        }
+        h.mu.RUnlock()
+
+        for _, c := range clients {
+            // Best-effort close; readPump/writePump will unwind and
+            // unregister via channel which Run() will process.
+            _ = c.conn.Close()
+        }
+
+        // Briefly wait for unregisters to drain to avoid goroutine leaks
+        deadline := time.Now().Add(500 * time.Millisecond)
+        for time.Now().Before(deadline) {
+            if h.ClientCount() == 0 {
+                break
+            }
+            time.Sleep(20 * time.Millisecond)
+        }
+
+        // Now cancel the hub context to stop the Run() loop
+        h.cancel()
+    })
 }
 
 // ClientCount returns the number of connected clients

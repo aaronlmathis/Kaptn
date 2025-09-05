@@ -242,70 +242,70 @@ export interface DashboardCSIDriver {
 // ConfigMap operations
 export async function getConfigMaps(namespace?: string): Promise<ConfigMap[]> {
 	const query = namespace ? `?namespace=${namespace}` : '';
-	const response = await apiClient.get<{ data: { items: ConfigMap[] }; status: string }>(`/config-maps${query}`);
+    const response = await apiClient.get<{ data: { items: ConfigMap[] }; status: string }>(`/config-maps${query}`);
 	return response.data?.items || [];
 }
 
 export async function getConfigMap(namespace: string, name: string): Promise<{ summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-	const response = await apiClient.get<{ data: { summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/config-maps/${namespace}/${name}`);
+    const response = await apiClient.get<{ data: { summary: ConfigMap; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/config-maps/${namespace}/${name}`);
 	return response.data;
 }
 
 // PersistentVolume operations
 export async function getPersistentVolumes(): Promise<PersistentVolume[]> {
-	const response = await apiClient.get<{ data: { items: PersistentVolume[] }; status: string }>(`/persistent-volumes`);
-	return response.data?.items || [];
+    const response = await apiClient.get<{ data: { items: PersistentVolume[] }; status: string }>(`/persistent-volumes`);
+    return response.data?.items || [];
 }
 
 export async function getPersistentVolume(name: string): Promise<{ summary: PersistentVolume; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-	const response = await apiClient.get<{ data: { summary: PersistentVolume; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volumes/${name}`);
-	return response.data;
+    const response = await apiClient.get<{ data: { summary: PersistentVolume; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volumes/${name}`);
+    return response.data;
 }
 
 // PersistentVolumeClaim operations
 export async function getPersistentVolumeClaims(namespace?: string): Promise<PersistentVolumeClaim[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
-	const response = await apiClient.get<{ data: { items: PersistentVolumeClaim[] }; status: string }>(`/persistent-volume-claims${query}`);
-	return response.data?.items || [];
+    const query = namespace ? `?namespace=${namespace}` : '';
+    const response = await apiClient.get<{ data: { items: PersistentVolumeClaim[] }; status: string }>(`/persistent-volume-claims${query}`);
+    return response.data?.items || [];
 }
 
 export async function getPersistentVolumeClaim(namespace: string, name: string): Promise<{ summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-	const response = await apiClient.get<{ data: { summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volume-claims/${namespace}/${name}`);
-	return response.data;
+    const response = await apiClient.get<{ data: { summary: PersistentVolumeClaim; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/persistent-volume-claims/${namespace}/${name}`);
+    return response.data;
 }
 
 // StorageClass operations
 export async function getStorageClasses(): Promise<StorageClass[]> {
-	const response = await apiClient.get<{ data: { items: StorageClass[] }; status: string }>(`/storage-classes`);
-	return response.data?.items || [];
+    const response = await apiClient.get<{ data: { items: StorageClass[] }; status: string }>(`/storage-classes`);
+    return response.data?.items || [];
 }
 
 export async function getStorageClass(name: string): Promise<{ summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-	const response = await apiClient.get<{ data: { summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/storage-classes/${name}`);
-	return response.data;
+    const response = await apiClient.get<{ data: { summary: StorageClass; parameters: Record<string, string>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/storage-classes/${name}`);
+    return response.data;
 }
 
 // VolumeSnapshot operations
 export async function getVolumeSnapshots(namespace?: string): Promise<VolumeSnapshot[]> {
-	const query = namespace ? `?namespace=${namespace}` : '';
-	const response = await apiClient.get<{ data: { items: VolumeSnapshot[] }; status: string }>(`/volume-snapshots${query}`);
-	return response.data?.items || [];
+    const query = namespace ? `?namespace=${namespace}` : '';
+    const response = await apiClient.get<{ data: { items: VolumeSnapshot[] }; status: string }>(`/volume-snapshots${query}`);
+    return response.data?.items || [];
 }
 
 export async function getVolumeSnapshot(namespace: string, name: string): Promise<{ summary: VolumeSnapshot; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-	const response = await apiClient.get<{ data: { summary: VolumeSnapshot; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/volume-snapshots/${namespace}/${name}`);
-	return response.data;
+    const response = await apiClient.get<{ data: { summary: VolumeSnapshot; spec: Record<string, unknown>; status: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/volume-snapshots/${namespace}/${name}`);
+    return response.data;
 }
 
 // VolumeSnapshotClass operations
 export async function getVolumeSnapshotClasses(): Promise<VolumeSnapshotClass[]> {
-	const response = await apiClient.get<{ data: { items: VolumeSnapshotClass[] }; status: string }>(`/volume-snapshot-classes`);
-	return response.data?.items || [];
+    const response = await apiClient.get<{ data: { items: VolumeSnapshotClass[] }; status: string }>(`/volume-snapshot-classes`);
+    return response.data?.items || [];
 }
 
 export async function getVolumeSnapshotClass(name: string): Promise<{ summary: VolumeSnapshotClass; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }> {
-	const response = await apiClient.get<{ data: { summary: VolumeSnapshotClass; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/volume-snapshot-classes/${name}`);
-	return response.data;
+    const response = await apiClient.get<{ data: { summary: VolumeSnapshotClass; spec: Record<string, unknown>; metadata: Record<string, unknown>; kind: string; apiVersion: string }; status: string }>(`/volume-snapshot-classes/${name}`);
+    return response.data;
 }
 
 // CSIDriver operations

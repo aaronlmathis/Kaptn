@@ -82,10 +82,11 @@ func main() {
 	// Start background components (if any)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := kaptnServer.Start(ctx); err != nil {
-		logger.Fatal("Failed to start server components", zap.Error(err))
-	}
-	defer kaptnServer.Stop()
+    if err := kaptnServer.Start(ctx); err != nil {
+        logger.Fatal("Failed to start server components", zap.Error(err))
+    }
+    // Note: Do not defer Stop(); we explicitly stop components during
+    // signal handling to avoid double-stop and ensure correct shutdown order.
 
 	httpServer := &http.Server{
 		Addr:    cfg.Server.Addr,
@@ -101,16 +102,27 @@ func main() {
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	logger.Info("Server shutting down...")
+    <-quit
+    logger.Info("Server shutting down...")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		logger.Error("Server forced to shutdown", zap.Error(err))
-		os.Exit(1)
-	}
-	logger.Info("Server exited")
+    // Cancel background context to notify long-running goroutines
+    cancel()
+
+    // First stop background components to unblock any long-running requests
+    // (streams, watches, websockets) so HTTP shutdown can complete promptly.
+    kaptnServer.Stop()
+
+    // Disable keep-alives to prevent new requests during shutdown
+    httpServer.SetKeepAlivesEnabled(false)
+
+    // Gracefully shut down HTTP server with timeout
+    shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer shutdownCancel()
+    if err := httpServer.Shutdown(shutdownCtx); err != nil {
+        logger.Error("Server forced to shutdown", zap.Error(err))
+        os.Exit(1)
+    }
+    logger.Info("Server exited")
 }
 
 func performHealthCheck(addr string) {

@@ -82,6 +82,8 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useVolumeSnapshotsWithWebSocket } from "@/hooks/useVolumeSnapshotsWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { z } from "zod"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // VolumeSnapshot schema
 export const volumeSnapshotSchema = z.object({
@@ -141,7 +143,8 @@ function getReadyStatusBadge(readyToUse: boolean) {
 
 // Column definitions for volume snapshots table
 const createColumns = (
-	onViewDetails: (volumeSnapshot: z.infer<typeof volumeSnapshotSchema>) => void
+    onViewDetails: (volumeSnapshot: z.infer<typeof volumeSnapshotSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof volumeSnapshotSchema>>[] => [
 		{
 			id: "drag",
@@ -180,16 +183,24 @@ const createColumns = (
 		{
 			accessorKey: "name",
 			header: "Volume Snapshot Name",
-			cell: ({ row }) => {
-				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
-					>
-						{row.original.name}
-					</button>
-				)
-			},
+        cell: ({ row }) => {
+            return (
+                <IfAllowed
+                    feature="volumesnapshots.get"
+                    cluster={clusterId}
+                    namespace={row.original.namespace}
+                    resourceName={row.original.name}
+                    fallback={<span>{row.original.name}</span>}
+                >
+                    <button
+                        onClick={() => onViewDetails(row.original)}
+                        className="text-left hover:underline focus:underline focus:outline-none"
+                    >
+                        {row.original.name}
+                    </button>
+                </IfAllowed>
+            )
+        },
 			enableHiding: false,
 		},
 		{
@@ -248,36 +259,48 @@ const createColumns = (
 							<span className="sr-only">Open menu</span>
 						</Button>
 					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
-							namespace={row.original.namespace}
-							resourceKind="VolumeSnapshot"
-						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
-							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
-					</DropdownMenuContent>
+                <DropdownMenuContent align="end" className="w-40">
+                    <IfAllowed feature="volumesnapshots.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+                        <DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+                            <IconEye className="size-4 mr-2" />
+                            View Details
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                    <IfAllowed
+                        feature="volumesnapshots.patch"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
+                    >
+                        <ResourceYamlEditor
+                            resourceName={row.original.name}
+                            namespace={row.original.namespace}
+                            resourceKind="VolumeSnapshot"
+                        >
+                            <button
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+                                style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+                            >
+                                <IconEdit className="size-4" />
+                                Edit YAML
+                            </button>
+                        </ResourceYamlEditor>
+                    </IfAllowed>
+                    <DropdownMenuSeparator />
+                    <IfAllowed
+                        feature="volumesnapshots.delete"
+                        cluster={clusterId}
+                        namespace={row.original.namespace}
+                        resourceName={row.original.name}
+                        fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+                    >
+                        <DropdownMenuItem className="text-red-600">
+                            <IconTrash className="size-4 mr-2" />
+                            Delete
+                        </DropdownMenuItem>
+                    </IfAllowed>
+                </DropdownMenuContent>
 				</DropdownMenu>
 			),
 		},
@@ -316,8 +339,9 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof volumeSnapshotSchema>> 
 }
 
 export function VolumeSnapshotsDataTable() {
-	const { data: volumeSnapshots, loading, error, refetch, isConnected } = useVolumeSnapshotsWithWebSocket(true)
-	const { selectedNamespace } = useNamespace()
+    const { data: volumeSnapshots, loading, error, refetch, isConnected } = useVolumeSnapshotsWithWebSocket(true)
+    const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -377,10 +401,10 @@ export function VolumeSnapshotsDataTable() {
 	}, [volumeSnapshots, statusFilter, globalFilter])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, clusterId),
+        [handleViewDetails, clusterId]
+    )
 
 	const table = useReactTable({
 		data: filteredData,

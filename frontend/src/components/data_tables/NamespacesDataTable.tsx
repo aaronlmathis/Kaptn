@@ -76,6 +76,8 @@ import { DataTableFilters } from "@/components/ui/data-table-filters"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNamespacesWithWebSocket } from "@/hooks/useNamespacesWithWebSocket"
 import { NamespaceDetailDrawer } from "@/components/viewers/NamespaceDetailDrawer"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Namespace schema
 export const namespaceSchema = z.object({
@@ -195,12 +197,20 @@ const createColumns = (
 			header: "Namespace Name",
 			cell: ({ row }) => {
 				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
+					<IfAllowed
+						feature="namespaces.get"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={<span>{row.original.name}</span>}
 					>
-						{row.original.name}
-					</button>
+						<button
+							onClick={() => onViewDetails(row.original)}
+							className="text-left hover:underline focus:underline focus:outline-none"
+						>
+							{row.original.name}
+						</button>
+					</IfAllowed>
 				)
 			},
 			enableHiding: false,
@@ -252,6 +262,18 @@ const createColumns = (
 							<IconEye className="size-4 mr-2" />
 							View Details
 						</DropdownMenuItem>
+					<IfAllowed
+						feature="namespaces.patch"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={
+							<DropdownMenuItem disabled>
+								<IconEdit className="size-4 mr-2" />
+								Edit YAML
+							</DropdownMenuItem>
+						}
+					>
 						<ResourceYamlEditor
 							resourceName={row.original.name}
 							namespace=""
@@ -269,7 +291,20 @@ const createColumns = (
 								Edit YAML
 							</button>
 						</ResourceYamlEditor>
+					</IfAllowed>
 						<DropdownMenuSeparator />
+					<IfAllowed
+						feature="namespaces.delete"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={
+							<DropdownMenuItem disabled className="text-muted-foreground">
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						}
+					>
 						<DropdownMenuItem
 							className="text-red-600"
 							onClick={() => onDelete?.(row.original)}
@@ -277,6 +312,7 @@ const createColumns = (
 							<IconTrash className="size-4 mr-2" />
 							Delete
 						</DropdownMenuItem>
+					</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -317,6 +353,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof namespaceSchema>> }) {
 
 export function NamespacesDataTable() {
 	const { data: namespaces, loading, error, refetch, isConnected } = useNamespacesWithWebSocket(true)
+	const { clusterId } = useCluster()
 
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [statusFilter, setStatusFilter] = React.useState<string>("all")

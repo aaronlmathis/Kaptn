@@ -36,6 +36,7 @@ import {
 	IconDownload,
 	IconCopy,
 } from "@tabler/icons-react"
+import { IfAllowed } from "@/components/authz/IfAllowed"
 
 import {
 	flexRender,
@@ -79,6 +80,7 @@ import { DataTableFilters, type FilterOption, type BulkAction } from "@/componen
 import { usePersistentVolumesWithWebSocket } from "@/hooks/usePersistentVolumesWithWebSocket"
 import { persistentVolumeSchema } from "@/lib/schemas/persistent-volume"
 import { z } from "zod"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: string }) {
@@ -142,7 +144,8 @@ function getStatusBadge(status: string) {
 
 // Column definitions for persistent volumes table
 const createColumns = (
-	onViewDetails: (pv: z.infer<typeof persistentVolumeSchema>) => void
+    onViewDetails: (pv: z.infer<typeof persistentVolumeSchema>) => void,
+    clusterId: string
 ): ColumnDef<z.infer<typeof persistentVolumeSchema>>[] => [
 		{
 			id: "pv-drag",
@@ -181,12 +184,20 @@ const createColumns = (
 			header: "Name",
 			cell: ({ row }) => {
 				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
+					<IfAllowed
+						feature="persistentvolumes.get"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={<span>{row.original.name}</span>}
 					>
-						{row.original.name}
-					</button>
+						<button
+							onClick={() => onViewDetails(row.original)}
+							className="text-left hover:underline focus:underline focus:outline-none"
+						>
+							{row.original.name}
+						</button>
+					</IfAllowed>
 				)
 			},
 			enableHiding: false,
@@ -274,28 +285,44 @@ const createColumns = (
 							<IconEye className="size-4 mr-2" />
 							View Details
 						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
+						<IfAllowed
+							feature="persistentvolumes.patch"
+							cluster={clusterId}
 							namespace=""
-							resourceKind="PersistentVolume"
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
 						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
+							<ResourceYamlEditor
+								resourceName={row.original.name}
+								namespace=""
+								resourceKind="PersistentVolume"
 							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
+								<button
+									className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+									style={{
+										background: 'transparent',
+										border: 'none',
+										textAlign: 'left'
+									}}
+								>
+									<IconEdit className="size-4" />
+									Edit YAML
+								</button>
+							</ResourceYamlEditor>
+						</IfAllowed>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
+						<IfAllowed
+							feature="persistentvolumes.delete"
+							cluster={clusterId}
+							namespace=""
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+						>
+							<DropdownMenuItem className="text-red-600">
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -336,6 +363,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof persistentVolumeSchema>
 
 export function PersistentVolumesDataTable() {
 	const { data: persistentVolumes, loading, error, refetch, isConnected } = usePersistentVolumesWithWebSocket(true)
+	const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -353,9 +381,9 @@ export function PersistentVolumesDataTable() {
 	}, [])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
+    const columns = React.useMemo(
+		() => createColumns(handleViewDetails, clusterId),
+		[handleViewDetails, clusterId]
 	)
 
 	// Filter options for PV statuses

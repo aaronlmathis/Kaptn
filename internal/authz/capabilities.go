@@ -179,6 +179,23 @@ var Registry = map[string]CapabilityCheck{
 	"storageclasses.patch":  {Group: "storage.k8s.io", Resource: "storageclasses", Verb: "patch", Namespaced: false},
 	"storageclasses.watch":  {Group: "storage.k8s.io", Resource: "storageclasses", Verb: "watch", Namespaced: false},
 
+	// Snapshot operations (snapshot.storage.k8s.io)
+	"volumesnapshots.get":    {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshots", Verb: "get", Namespaced: true},
+	"volumesnapshots.list":   {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshots", Verb: "list", Namespaced: true},
+	"volumesnapshots.create": {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshots", Verb: "create", Namespaced: true},
+	"volumesnapshots.update": {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshots", Verb: "update", Namespaced: true},
+	"volumesnapshots.delete": {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshots", Verb: "delete", Namespaced: true},
+	"volumesnapshots.patch":  {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshots", Verb: "patch", Namespaced: true},
+	"volumesnapshots.watch":  {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshots", Verb: "watch", Namespaced: true},
+
+	"volumesnapshotclasses.get":    {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshotclasses", Verb: "get", Namespaced: false},
+	"volumesnapshotclasses.list":   {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshotclasses", Verb: "list", Namespaced: false},
+	"volumesnapshotclasses.create": {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshotclasses", Verb: "create", Namespaced: false},
+	"volumesnapshotclasses.update": {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshotclasses", Verb: "update", Namespaced: false},
+	"volumesnapshotclasses.delete": {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshotclasses", Verb: "delete", Namespaced: false},
+	"volumesnapshotclasses.patch":  {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshotclasses", Verb: "patch", Namespaced: false},
+	"volumesnapshotclasses.watch":  {Group: "snapshot.storage.k8s.io", Resource: "volumesnapshotclasses", Verb: "watch", Namespaced: false},
+
 	// Ingress operations
 	"ingresses.get":    {Group: "networking.k8s.io", Resource: "ingresses", Verb: "get", Namespaced: true},
 	"ingresses.list":   {Group: "networking.k8s.io", Resource: "ingresses", Verb: "list", Namespaced: true},

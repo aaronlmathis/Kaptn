@@ -49,21 +49,22 @@ func (im *ImpersonationMiddleware) Middleware(next http.Handler) http.Handler {
 			username = strings.ReplaceAll(username, "{name}", user.Name)
 		}
 
-		// Try to get resolved groups from auth middleware (ConfigMap)
-		effectiveGroups := user.Groups // fallback to original groups
-		if im.authMiddleware != nil {
-			if binding, err := im.authMiddleware.GetUserBinding(r.Context(), username); err == nil {
-				effectiveGroups = binding.Groups
-				im.logger.Debug("Using resolved groups from ConfigMap for impersonation",
-					zap.String("username", username),
-					zap.Strings("original_groups", user.Groups),
-					zap.Strings("resolved_groups", effectiveGroups))
-			} else {
-				im.logger.Debug("Could not resolve groups from ConfigMap, using original groups",
-					zap.String("username", username),
-					zap.Error(err))
-			}
-		}
+    // Try to get resolved groups from user bindings only when authz.mode == "user_bindings"
+    effectiveGroups := user.Groups // default to original groups from IdP
+    if im.authMiddleware != nil && im.config != nil && im.config.Authz.Mode == "user_bindings" {
+        if binding, err := im.authMiddleware.GetUserBinding(r.Context(), username); err == nil {
+            effectiveGroups = binding.Groups
+            im.logger.Debug("Using resolved groups from ConfigMap for impersonation",
+                zap.String("username", username),
+                zap.Strings("original_groups", user.Groups),
+                zap.Strings("resolved_groups", effectiveGroups))
+        } else {
+            // In user_bindings mode, a missing binding is expected for unknown users; keep it debug-level
+            im.logger.Debug("Could not resolve groups from ConfigMap, using original groups",
+                zap.String("username", username),
+                zap.Error(err))
+        }
+    }
 
 		// Build impersonated clients with the correct groups
 		clients, err := im.impersonationMgr.BuildClientsFromUserWithGroups(user, im.config.Security.UsernameFormat, effectiveGroups)
