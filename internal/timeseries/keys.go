@@ -121,6 +121,14 @@ const (
 	ContainerLogsUsedBase      = "ctr.logs.used.bytes"
 )
 
+// HPA-level metric base keys (combined with namespace and HPA name)
+const (
+    HPADesiredReplicasBase   = "hpa.desired.replicas"
+    HPACurrentReplicasBase   = "hpa.current.replicas"
+    HPAScaleEventsUpBase     = "hpa.scale.events.up"
+    HPAScaleEventsDownBase   = "hpa.scale.events.down"
+)
+
 // Legacy constants for backward compatibility - DEPRECATED
 // Deprecated since v1.2.0. These constants will be removed in v2.0.0.
 // Please migrate to the corresponding *Base constants above.

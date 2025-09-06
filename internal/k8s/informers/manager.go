@@ -47,6 +47,9 @@ type Manager struct {
 	PersistentVolumeClaimsInformer cache.SharedIndexInformer
 	StorageClassesInformer         cache.SharedIndexInformer
 
+	// Autoscaling
+	HorizontalPodAutoscalersInformer cache.SharedIndexInformer
+
 	// Tier 3: Optional Resources (Consider for future implementation)
 	IngressesInformer       cache.SharedIndexInformer
 	IngressClassesInformer  cache.SharedIndexInformer
@@ -144,6 +147,9 @@ func NewManager(logger *zap.Logger, client kubernetes.Interface, dynamicClient d
 		PersistentVolumeClaimsInformer: factory.Core().V1().PersistentVolumeClaims().Informer(),
 		StorageClassesInformer:         factory.Storage().V1().StorageClasses().Informer(),
 
+		// Autoscaling
+		HorizontalPodAutoscalersInformer: factory.Autoscaling().V2().HorizontalPodAutoscalers().Informer(),
+
 		// Tier 3: Optional Resources
 		IngressesInformer:       factory.Networking().V1().Ingresses().Informer(),
 		IngressClassesInformer:  factory.Networking().V1().IngressClasses().Informer(),
@@ -220,6 +226,9 @@ func (m *Manager) Start() error {
 		m.PersistentVolumesInformer.HasSynced,
 		m.PersistentVolumeClaimsInformer.HasSynced,
 		m.StorageClassesInformer.HasSynced,
+
+		// Autoscaling
+		m.HorizontalPodAutoscalersInformer.HasSynced,
 
 		// Tier 3: Optional Resources
 		m.IngressesInformer.HasSynced,
@@ -327,7 +336,12 @@ func (m *Manager) AddEndpointEventHandler(handler cache.ResourceEventHandler) {
 
 // AddJobEventHandler adds an event handler for job events
 func (m *Manager) AddJobEventHandler(handler cache.ResourceEventHandler) {
-	m.JobsInformer.AddEventHandler(handler)
+    m.JobsInformer.AddEventHandler(handler)
+}
+
+// AddHPAEventHandler adds an event handler for HorizontalPodAutoscalers
+func (m *Manager) AddHPAEventHandler(handler cache.ResourceEventHandler) {
+    m.HorizontalPodAutoscalersInformer.AddEventHandler(handler)
 }
 
 // AddCustomResourceDefinitionEventHandler adds an event handler for CRD events
@@ -498,7 +512,12 @@ func (m *Manager) GetEndpointLister() cache.Indexer {
 
 // GetJobLister returns a lister for jobs
 func (m *Manager) GetJobLister() cache.Indexer {
-	return m.JobsInformer.GetIndexer()
+    return m.JobsInformer.GetIndexer()
+}
+
+// GetHPALister returns a lister for HPAs
+func (m *Manager) GetHPALister() cache.Indexer {
+    return m.HorizontalPodAutoscalersInformer.GetIndexer()
 }
 
 // GetCronJobLister returns a lister for cronjobs

@@ -332,6 +332,10 @@ func (s *Server) initInformers() error {
 	podHandler := informers.NewPodEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddPodEventHandler(podHandler)
 
+	// HorizontalPodAutoscalers
+	hpaHandler := informers.NewHPAEventHandler(s.logger, s.wsHub, s.timeSeriesStore)
+	s.informerManager.AddHPAEventHandler(hpaHandler)
+
 	serviceHandler := informers.NewServiceEventHandler(s.logger, s.wsHub)
 	s.informerManager.AddServiceEventHandler(serviceHandler)
 

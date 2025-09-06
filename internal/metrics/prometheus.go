@@ -187,6 +187,22 @@ var (
 			Help: "Current rate of points being added to ring buffers",
 		},
 	)
+
+	// HPA metrics
+	hpaEventsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "kaptn_hpa_events_total",
+			Help: "Total number of HPA events processed",
+		},
+		[]string{"type"}, // add|update|delete
+	)
+
+	hpaCachedTotal = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "kaptn_hpa_cached_total",
+			Help: "Current number of HPAs cached by informer",
+		},
+	)
 )
 
 // RecordHTTPRequest records metrics for HTTP requests
@@ -286,3 +302,17 @@ func UpdateRingBufferMetrics(seriesCount int64, pointsPerSec int64, droppedPoint
 		ringBufferDroppedPointsTotal.Add(float64(droppedPoints))
 	}
 }
+
+// RecordHPAEvent increments the event counter for HPAs
+func RecordHPAEvent(eventType string) {
+	hpaEventsTotal.With(prometheus.Labels{"type": eventType}).Inc()
+}
+
+// IncHPACached increments the HPA cached gauge
+func IncHPACached() { hpaCachedTotal.Inc() }
+
+// DecHPACached decrements the HPA cached gauge
+func DecHPACached() { hpaCachedTotal.Dec() }
+
+// SetHPACached sets the current HPA cached gauge to an absolute value
+func SetHPACached(val int) { hpaCachedTotal.Set(float64(val)) }

@@ -59,6 +59,12 @@ type ReadHandlers interface {
 	HandleGetNamespacesTimeSeries(w http.ResponseWriter, r *http.Request)
 	HandleGetNamespaceTimeSeries(w http.ResponseWriter, r *http.Request)
 
+	// HPAs
+	HandleListHPAs(w http.ResponseWriter, r *http.Request)
+	HandleGetHPA(w http.ResponseWriter, r *http.Request)
+	HandleGetHPATimeseries(w http.ResponseWriter, r *http.Request)
+	HandleHPAsWebSocket(w http.ResponseWriter, r *http.Request)
+
 	// Core K8s Resources (Read)
 	HandleListNodes(w http.ResponseWriter, r *http.Request)
 	HandleGetNode(w http.ResponseWriter, r *http.Request)

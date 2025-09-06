@@ -532,6 +532,8 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
                     'cronjobs.list', 'cronjobs.get',
                     'services.list', 'services.get',
                     'configmaps.list', 'secrets.list',
+                    // HPAs (to support HPA pages and menus)
+                    'horizontalpodautoscalers.list', 'horizontalpodautoscalers.get', 'horizontalpodautoscalers.patch', 'horizontalpodautoscalers.delete',
                     // Quotas
                     'resourcequotas.list', 'resourcequotas.get',
                     // Storage core lists so RouteGuard doesn't stall

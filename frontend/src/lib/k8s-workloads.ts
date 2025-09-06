@@ -15,6 +15,7 @@
 
 import { apiClient } from './api-client';
 import { formatMemory, getImageFromLabels } from './k8s-common';
+import type { HPAView, DashboardHPA } from '@/types/hpa';
 
 // Pod interfaces based on the actual backend API response
 export interface Pod {
@@ -256,6 +257,41 @@ export interface DashboardCronJob {
 	lastSchedule: string;
 	age: string;
 	image: string;
+}
+
+// HPA operations
+export async function getHPAs(namespace?: string): Promise<HPAView[]> {
+	const nsParam = namespace ? `?namespace=${namespace}&pageSize=1000` : '?pageSize=1000';
+	const response = await apiClient.get<{ data: { items: HPAView[] }; status: string }>(`/hpas${nsParam}`);
+	return response.data?.items || [];
+}
+
+export async function getHPA(namespace: string, name: string): Promise<HPAView> {
+	return apiClient.get<HPAView>(`/hpas/${namespace}/${name}`);
+}
+
+export function transformHPAsToUI(items: HPAView[]): DashboardHPA[] {
+	if (!items || !Array.isArray(items)) return [];
+	return items.map((hpa, idx) => {
+		const status: DashboardHPA['status'] = hpa.signals.atMax
+			? 'atMax'
+			: hpa.signals.limited
+				? 'limited'
+				: (hpa.desiredReplicas !== hpa.currentReplicas ? 'active' : 'none');
+
+		return {
+			id: idx,
+			name: hpa.name,
+			namespace: hpa.namespace,
+			target: `${hpa.targetKind}/${hpa.targetName}`,
+			min: hpa.minReplicas ?? 0,
+			max: hpa.maxReplicas,
+			desired: hpa.desiredReplicas,
+			current: hpa.currentReplicas,
+			status,
+			lastScale: hpa.lastScaleTime,
+		};
+	});
 }
 
 /**
@@ -521,4 +557,3 @@ export function transformIngressesToUI(ingresses: Ingress[]): DashboardIngress[]
 		};
 	});
 }
-

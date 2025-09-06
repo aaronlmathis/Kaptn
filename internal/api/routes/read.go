@@ -46,6 +46,11 @@ func MountRead(r chi.Router, h ReadHandlers) {
 	r.Get("/timeseries/namespaces", h.HandleGetNamespacesTimeSeries)
 	r.Get("/timeseries/namespaces/{namespace}", h.HandleGetNamespaceTimeSeries)
 
+	// HPAs
+	r.Get("/hpas", h.HandleListHPAs)
+	r.Get("/hpas/{namespace}/{name}", h.HandleGetHPA)
+	r.Get("/timeseries/hpas", h.HandleGetHPATimeseries)
+
 	// --- Core K8s Resources (Read) ---
 	r.Get("/nodes", h.HandleListNodes)
 	r.Get("/nodes/{name}", h.HandleGetNode)
@@ -188,6 +193,8 @@ func MountRead(r chi.Router, h ReadHandlers) {
 	r.Get("/stream/overview", h.HandleOverviewWebSocket)
 	r.Get("/stream/jobs/{jobId}", h.HandleJobWebSocket)
 	r.Get("/stream/logs/{streamId}", h.HandleLogsWebSocket)
+	// HPA stream
+	r.Get("/stream/hpas", h.HandleHPAsWebSocket)
 
 	// TimeSeries live streams
 	r.Get("/timeseries/live", h.HandleTimeSeriesLiveWebSocket)

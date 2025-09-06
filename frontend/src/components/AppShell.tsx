@@ -36,6 +36,8 @@ async function resolvePageComponent(pathname: string): Promise<PageComponent | n
         return (await import("@/components/containers/DebugTimeSeriesContainer")).DebugTimeSeriesContainer;
       case "/deployments":
         return (await import("@/components/containers/DeploymentsPageContainer")).DeploymentsPageContainer;
+      case "/hpas":
+        return (await import("@/components/containers/HPAsPageContainer")).HPAsPageContainer;
       case "/endpoints":
         return (await import("@/components/containers/EndpointsPageContainer")).EndpointsPageContainer;
       case "/endpoint-slices":
