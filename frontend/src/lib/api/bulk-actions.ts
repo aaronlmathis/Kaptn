@@ -30,35 +30,23 @@ export interface BulkActionResponse {
   warnings?: string[]
 }
 
+import { apiClient } from '../api-client'
+
 class BulkActionsApi {
   private baseUrl = '/api/v1/actions'
 
   async executeBulkAction(resource: string, request: BulkActionRequest): Promise<BulkActionResponse> {
     const generic = this.toGenericRequest(resource, request)
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    const csrf = this.getCSRFToken()
-    if (csrf) headers['X-CSRF-Token'] = csrf
-    const response = await fetch(`${this.baseUrl}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(generic),
-      credentials: 'same-origin',
-    })
-    return this.fromGenericResponse(response)
+    // Route through shared ApiClient for consistent cookies, CSRF, and 401 refresh
+    const data = await apiClient.post<any>(`/actions`, generic)
+    return this.fromGenericData(data)
   }
 
   async validateAction(resource: string, request: BulkActionRequest): Promise<BulkActionResponse> {
     const generic = this.toGenericRequest(resource, request)
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    const csrf = this.getCSRFToken()
-    if (csrf) headers['X-CSRF-Token'] = csrf
-    const response = await fetch(`${this.baseUrl}/validate`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(generic),
-      credentials: 'same-origin',
-    })
-    return this.fromGenericResponse(response)
+    // Route through shared ApiClient for consistent cookies, CSRF, and 401 refresh
+    const data = await apiClient.post<any>(`/actions/validate`, generic)
+    return this.fromGenericData(data)
   }
 
   // Map legacy request to generic single-endpoint request
@@ -77,16 +65,7 @@ class BulkActionsApi {
   }
 
   // Convert new generic response into legacy BulkActionResponse for minimal UI changes
-  private async fromGenericResponse(resp: Response): Promise<BulkActionResponse> {
-    if (!resp.ok) {
-      try {
-        const errorData = await resp.json()
-        throw new Error(errorData.message || `HTTP ${resp.status}: ${resp.statusText}`)
-      } catch {
-        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
-      }
-    }
-    const data = await resp.json()
+  private fromGenericData(data: any): BulkActionResponse {
     const total = data?.summary?.total ?? (Array.isArray(data?.results) ? data.results.length : 0)
     const affected = data?.summary?.ok ?? 0
     const warnings: string[] = Array.isArray(data?.results)
