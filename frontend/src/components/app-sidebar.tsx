@@ -72,6 +72,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           { title: "ReplicaSets", url: "/replicasets" },
           { title: "StatefulSets", url: "/statefulsets" },
           { title: "DaemonSets", url: "/daemonsets" },
+          { title: "HPAs", url: "/hpas" },
           { title: "Jobs", url: "/jobs" },
           { title: "CronJobs", url: "/cronjobs" },
         ],

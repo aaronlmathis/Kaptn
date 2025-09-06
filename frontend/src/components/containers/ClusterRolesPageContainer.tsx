@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { IconShield, IconUsers, IconLink } from "@tabler/icons-react"
 import { ClusterRolesDataTable } from "@/components/data_tables/ClusterRolesDataTable"
 import { ClusterRoleBindingsDataTable } from "@/components/data_tables/ClusterRoleBindingsDataTable"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function ClusterRolesContent() {
@@ -16,6 +18,17 @@ function ClusterRolesContent() {
 	const { data: clusterRoleBindings = [], loading: bindingsLoading, error: bindingsError, isConnected: bindingsConnected } = useClusterRoleBindingsWithWebSocket()
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const [activeTab, setActiveTab] = React.useState("cluster-roles")
+
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'clusterroles.get','clusterroles.patch','clusterroles.delete',
+			'clusterrolebindings.get','clusterrolebindings.patch','clusterrolebindings.delete',
+			'rbac.clusterroles.bind'
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	const loading = rolesLoading || bindingsLoading
 	const error = rolesError || bindingsError
@@ -176,5 +189,9 @@ function ClusterRolesContent() {
 }
 
 export function ClusterRolesPageContainer() {
-	return <ClusterRolesContent />
+	return (
+		<RouteGuard requiredCapabilities={["clusterroles.list","clusterrolebindings.list"]} requireAll={false}>
+			<ClusterRolesContent />
+		</RouteGuard>
+	)
 }

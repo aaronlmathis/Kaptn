@@ -6,7 +6,7 @@ import { RouteGuard } from "@/components/authz"
 export function ApiResourcesPageContainer() {
 	return (
 		<RouteGuard
-			requiredCapabilities={['.list']}
+			requiredCapabilities={["pods.list"]}
 			requireAll={false}
 		>
 			<div className="px-4 lg:px-6">

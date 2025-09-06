@@ -1,3 +1,5 @@
+"use client"
+
 // Authorization components for frontend capability checking
 export { IfAllowed } from "./IfAllowed";
 export { Require } from "./Require";

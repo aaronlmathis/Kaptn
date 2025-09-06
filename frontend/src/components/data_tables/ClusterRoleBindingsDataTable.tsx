@@ -80,6 +80,8 @@ import { DataTableFilters, type BulkAction } from "@/components/ui/data-table-fi
 import { useClusterRoleBindingsWithWebSocket } from "@/hooks/useClusterRoleBindingsWithWebSocket"
 import { type DashboardClusterRoleBinding } from "@/lib/k8s-cluster-rbac"
 import { ClusterRoleBindingDetailDrawer } from "@/components/viewers/ClusterRoleBindingDetailDrawer"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -129,7 +131,8 @@ function getClusterRoleBindingSubjectsBadge(subjectsCount: number) {
 
 // Column definitions for cluster role bindings table
 const createColumns = (
-	onViewDetails: (clusterRoleBinding: DashboardClusterRoleBinding) => void
+    onViewDetails: (clusterRoleBinding: DashboardClusterRoleBinding) => void,
+    clusterId: string
 ): ColumnDef<DashboardClusterRoleBinding>[] => [
 		{
 			id: "drag",
@@ -167,12 +170,20 @@ const createColumns = (
 			header: "ClusterRoleBinding Name",
 			cell: ({ row }) => {
 				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
+					<IfAllowed
+						feature="clusterrolebindings.get"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={<span>{row.original.name}</span>}
 					>
-						{row.original.name}
-					</button>
+						<button
+							onClick={() => onViewDetails(row.original)}
+							className="text-left hover:underline focus:underline focus:outline-none"
+						>
+							{row.original.name}
+						</button>
+					</IfAllowed>
 				)
 			},
 			enableHiding: false,
@@ -223,34 +234,46 @@ const createColumns = (
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
+						<IfAllowed feature="clusterrolebindings.get" cluster={clusterId} namespace="" resourceName={row.original.name}>
+							<DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+								<IconEye className="size-4 mr-2" />
+								View Details
+							</DropdownMenuItem>
+						</IfAllowed>
+						<IfAllowed
+							feature="clusterrolebindings.patch"
+							cluster={clusterId}
 							namespace=""
-							resourceKind="ClusterRoleBinding"
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
 						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
+							<ResourceYamlEditor
+								resourceName={row.original.name}
+								namespace=""
+								resourceKind="ClusterRoleBinding"
 							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
+								<button
+									className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+									style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+								>
+									<IconEdit className="size-4" />
+									Edit YAML
+								</button>
+							</ResourceYamlEditor>
+						</IfAllowed>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
+						<IfAllowed
+							feature="clusterrolebindings.delete"
+							cluster={clusterId}
+							namespace=""
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+						>
+							<DropdownMenuItem className="text-red-600">
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -291,6 +314,7 @@ function DraggableRow({ row }: { row: Row<DashboardClusterRoleBinding> }) {
 
 export function ClusterRoleBindingsDataTable() {
 	const { data: clusterRoleBindings, loading, error, refetch, isConnected } = useClusterRoleBindingsWithWebSocket(true)
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -308,8 +332,8 @@ export function ClusterRoleBindingsDataTable() {
 
 	// Create columns with the onViewDetails callback
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails),
-		[handleViewDetails]
+		() => createColumns(handleViewDetails, clusterId),
+		[handleViewDetails, clusterId]
 	)
 
 	// Filter data based on global filter

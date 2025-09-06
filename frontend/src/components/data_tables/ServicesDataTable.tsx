@@ -501,16 +501,16 @@ export function ServicesDataTable() {
 		}
 	}
 
-	if (loading) {
-		return (
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-center py-10">
-					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading services...</span>
-				</div>
-			</div>
-		)
-	}
+    if (loading && filteredData.length === 0) {
+        return (
+            <div className="px-4 lg:px-6">
+                <div className="flex items-center justify-center py-10">
+                    <IconLoader className="size-6 animate-spin" />
+                    <span className="ml-2">Loading services...</span>
+                </div>
+            </div>
+        )
+    }
 
 	if (error) {
 		return (

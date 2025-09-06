@@ -10,11 +10,24 @@ import {
 	getCRDScopeBadge,
 	getCRDEstablishedBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function CRDsContent() {
 	const { data: crds, loading: isLoading, error, isConnected } = useCRDsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'customresourcedefinitions.get',
+			'customresourcedefinitions.patch',
+			'customresourcedefinitions.delete',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when CRDs change
 	React.useEffect(() => {
@@ -130,5 +143,9 @@ function CRDsContent() {
 }
 
 export function CRDsPageContainer() {
-	return <CRDsContent />
+	return (
+		<RouteGuard requiredCapabilities={["customresourcedefinitions.list"]} requireAll={false}>
+			<CRDsContent />
+		</RouteGuard>
+	)
 }

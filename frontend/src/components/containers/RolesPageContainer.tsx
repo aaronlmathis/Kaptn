@@ -9,6 +9,8 @@ import { useRoleBindingsWithWebSocket } from "@/hooks/useRoleBindingsWithWebSock
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { IconShield, IconUsers, IconLink } from "@tabler/icons-react"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function RolesContent() {
@@ -16,6 +18,17 @@ function RolesContent() {
 	const { data: roleBindings, loading: roleBindingsLoading, error: roleBindingsError, isConnected: roleBindingsConnected } = useRoleBindingsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const [activeTab, setActiveTab] = React.useState("roles")
+
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'roles.get','roles.patch','roles.delete',
+			'rolebindings.get','rolebindings.patch','rolebindings.delete',
+			'rbac.roles.bind'
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	const loading = rolesLoading || roleBindingsLoading
 	const error = rolesError || roleBindingsError
@@ -177,6 +190,8 @@ function RolesContent() {
 
 export function RolesPageContainer() {
 	return (
-		<RolesContent />
+		<RouteGuard requiredCapabilities={["roles.list","rolebindings.list"]} requireAll={false}>
+			<RolesContent />
+		</RouteGuard>
 	)
 }

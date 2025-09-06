@@ -78,6 +78,8 @@ import { DataTableFilters, type FilterOption, type BulkAction } from "@/componen
 import { useResourceQuotasWithWebSocket } from "@/hooks/useResourceQuotasWithWebSocket"
 import { useNamespace } from "@/contexts/namespace-context"
 import { type DashboardResourceQuota } from "@/lib/k8s-cluster"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: string }) {
@@ -101,8 +103,9 @@ function DragHandle({ id }: { id: string }) {
 
 // Column definitions for resource quotas table
 const createColumns = (
-	onViewDetails: (resourceQuota: DashboardResourceQuota) => void,
-	onDelete?: (resourceQuota: DashboardResourceQuota) => void
+    onViewDetails: (resourceQuota: DashboardResourceQuota) => void,
+    onDelete: (resourceQuota: DashboardResourceQuota) => void,
+    clusterId: string
 ): ColumnDef<DashboardResourceQuota>[] => [
 		{
 			id: "rq-drag",
@@ -141,12 +144,20 @@ const createColumns = (
 			header: "Resource Quota Name",
 			cell: ({ row }) => {
 				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
+					<IfAllowed
+						feature="resourcequotas.get"
+						cluster={clusterId}
+						namespace={row.original.namespace}
+						resourceName={row.original.name}
+						fallback={<span>{row.original.name}</span>}
 					>
-						{row.original.name}
-					</button>
+						<button
+							onClick={() => onViewDetails(row.original)}
+							className="text-left hover:underline focus:underline focus:outline-none"
+						>
+							{row.original.name}
+						</button>
+					</IfAllowed>
 				)
 			},
 			enableHiding: false,
@@ -201,37 +212,49 @@ const createColumns = (
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="w-40">
-						<DropdownMenuItem
-							onClick={() => onViewDetails(row.original)}
-						>
-							<IconEye className="size-4 mr-2" />
-							View Details
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
+						<IfAllowed feature="resourcequotas.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}>
+							<DropdownMenuItem onClick={() => onViewDetails(row.original)}>
+								<IconEye className="size-4 mr-2" />
+								View Details
+							</DropdownMenuItem>
+						</IfAllowed>
+						<IfAllowed
+							feature="resourcequotas.patch"
+							cluster={clusterId}
 							namespace={row.original.namespace}
-							resourceKind="ResourceQuota"
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
 						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
+							<ResourceYamlEditor
+								resourceName={row.original.name}
+								namespace={row.original.namespace}
+								resourceKind="ResourceQuota"
 							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
+								<button
+									className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+									style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+								>
+									<IconEdit className="size-4" />
+									Edit YAML
+								</button>
+							</ResourceYamlEditor>
+						</IfAllowed>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem
-							className="text-red-600"
-							onClick={() => onDelete?.(row.original)}
+						<IfAllowed
+							feature="resourcequotas.delete"
+							cluster={clusterId}
+							namespace={row.original.namespace}
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
+							<DropdownMenuItem
+								className="text-red-600"
+								onClick={() => onDelete(row.original)}
+							>
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -275,6 +298,7 @@ export function ResourceQuotasDataTable() {
 	// Use WebSocket-enabled hook instead of regular hook
 	const { data: resourceQuotas, loading, error, refetch, isConnected } = useResourceQuotasWithWebSocket()
 	const { selectedNamespace } = useNamespace()
+    const { clusterId } = useCluster()
 
 	const [sorting, setSorting] = React.useState<SortingState>([])
 	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -299,8 +323,8 @@ export function ResourceQuotasDataTable() {
 
 	// Create columns with the callbacks
 	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleDelete),
-		[handleViewDetails, handleDelete]
+		() => createColumns(handleViewDetails, handleDelete, clusterId),
+		[handleViewDetails, handleDelete, clusterId]
 	)
 
 	// Filter options for resource types based on hard limits
@@ -442,16 +466,16 @@ export function ResourceQuotasDataTable() {
 		}
 	}
 
-	if (loading) {
-		return (
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-center py-10">
-					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading resource quotas...</span>
-				</div>
-			</div>
-		)
-	}
+    if (loading && filteredData.length === 0) {
+        return (
+            <div className="px-4 lg:px-6">
+                <div className="flex items-center justify-center py-10">
+                    <IconLoader className="size-6 animate-spin" />
+                    <span className="ml-2">Loading resource quotas...</span>
+                </div>
+            </div>
+        )
+    }
 
 	if (error) {
 		return (

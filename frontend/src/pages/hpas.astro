@@ -1,0 +1,15 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { AppShell } from "@/components/AppShell";
+import { HPAsPageContainer } from "@/components/containers/HPAsPageContainer";
+
+const title = "Horizontal Pod Autoscalers";
+---
+
+<Layout title={title}>
+  <AppShell client:load>
+    <HPAsPageContainer />
+  </AppShell>
+  
+</Layout>
+

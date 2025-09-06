@@ -8,11 +8,22 @@ import {
 	getServiceStatusBadge,
 	getResourceIcon
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function EventsContent() {
 	const { data: events, loading: isLoading, error, isConnected } = useEventsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'events.get',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when events change
 	React.useEffect(() => {
@@ -141,5 +152,9 @@ function EventsContent() {
 }
 
 export function EventsPageContainer() {
-	return <EventsContent />
+	return (
+		<RouteGuard requiredCapabilities={["events.list"]} requireAll={false}>
+			<EventsContent />
+		</RouteGuard>
+	)
 }

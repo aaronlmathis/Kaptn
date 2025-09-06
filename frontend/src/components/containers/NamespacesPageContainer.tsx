@@ -10,11 +10,24 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context
 function NamespacesContent() {
 	const { data: namespaces, loading: isLoading, error, isConnected } = useNamespacesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+	const { fetchAdditional } = useCapabilities()
+
+	// Ensure namespace-specific capabilities are requested (cluster-scoped)
+	React.useEffect(() => {
+		fetchAdditional([
+			'namespaces.get',
+			'namespaces.patch',
+			'namespaces.delete',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when namespaces change
 	React.useEffect(() => {
@@ -114,5 +127,9 @@ function NamespacesContent() {
 }
 
 export function NamespacesPageContainer() {
-	return <NamespacesContent />
+	return (
+		<RouteGuard requiredCapabilities={["namespaces.list"]} requireAll={false}>
+			<NamespacesContent />
+		</RouteGuard>
+	)
 }

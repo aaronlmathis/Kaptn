@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useAuth } from "./auth-context"
 import type { CapabilityKey } from "@/lib/authz"
+import { useCluster } from "@/hooks/useCluster"
 
 interface CapabilitiesState {
 	capabilities: Record<string, boolean>
@@ -476,7 +477,9 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 		}
 	})
 
-	const fetchCapabilities = React.useCallback(async () => {
+    const { clusterId } = useCluster()
+
+    const fetchCapabilities = React.useCallback(async () => {
 		// Skip API calls during SSR/build time
 		if (typeof window === 'undefined') {
 			return
@@ -510,7 +513,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 			// Create a smaller, focused request body for faster loading
 			// Only request the most commonly needed capabilities initially
             const requestBody = {
-                cluster: "default",
+                cluster: clusterId || "default",
                 features: [
                     // Core viewing capabilities - most pages need these
                     'pods.list', 'pods.get',
@@ -525,8 +528,20 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
                     'networkpolicies.list', 'networkpolicies.get',
                     'virtualservices.list', 'virtualservices.get',
                     'gateways.list', 'gateways.get',
+                    // Workloads: CronJobs
+                    'cronjobs.list', 'cronjobs.get',
                     'services.list', 'services.get',
                     'configmaps.list', 'secrets.list',
+                    // HPAs (to support HPA pages and menus)
+                    'horizontalpodautoscalers.list', 'horizontalpodautoscalers.get', 'horizontalpodautoscalers.patch', 'horizontalpodautoscalers.delete',
+                    // Quotas
+                    'resourcequotas.list', 'resourcequotas.get',
+                    // Storage core lists so RouteGuard doesn't stall
+                    'persistentvolumes.list',
+                    'persistentvolumeclaims.list',
+                    'storageclasses.list',
+                    'volumesnapshots.list',
+                    'volumesnapshotclasses.list',
                     'namespaces.list', 'events.list', 'nodes.list',
 
                     // Basic management capabilities  
@@ -541,13 +556,13 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 
 			devLog('[capabilities] Fetching core capabilities (fast load)')
 
-			const response = await fetchWithAuth('/api/v1/authz/capabilities', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-				},
-				body: JSON.stringify(requestBody),
-			})
+            const response = await fetchWithAuth('/api/v1/authz/capabilities', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+            })
 
 			devLog('[capabilities] Response status:', response.status, response.statusText)
 
@@ -557,16 +572,18 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				throw new Error(`Failed to fetch capabilities: ${response.statusText} - ${errorText}`)
 			}
 
-			const data = await response.json()
-			devLog('[capabilities] Response received')
+            const data = await response.json()
+            devLog('[capabilities] Response received')
 
-			devLog('[capabilities] Setting capabilities state')
-			setState({
-				capabilities: data.caps || {},
-				isLoading: false,
-				error: null,
-				lastFetched: Date.now(),
-			})
+            devLog('[capabilities] Setting capabilities state (merge)')
+            setState(prev => ({
+                ...prev,
+                // Merge to avoid wiping capabilities fetched via fetchAdditional
+                capabilities: { ...prev.capabilities, ...(data.caps || {}) },
+                isLoading: false,
+                error: null,
+                lastFetched: Date.now(),
+            }))
 		} catch (error) {
 			devError('[capabilities] Failed to fetch capabilities')
 			setState(prev => ({
@@ -575,7 +592,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				error: error instanceof Error ? error.message : 'Failed to fetch capabilities',
 			}))
 		}
-	}, [isAuthenticated, authMode, fetchWithAuth])
+    }, [isAuthenticated, authMode, fetchWithAuth, clusterId])
 
     // Track features we've already requested in this session to avoid duplicate POSTs
     const inFlightRef = React.useRef<Set<string>>(new Set());
@@ -600,7 +617,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 
         try {
             const requestBody = {
-                cluster: "default",
+                cluster: clusterId || "default",
                 features: featuresToRequest,
             }
 
@@ -612,9 +629,17 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 
             if (response.ok) {
                 const data = await response.json()
+                // Ensure all requested features are defined; default unknown to false
+                const returnedCaps: Record<string, boolean> = data.caps || {}
+                const normalizedCaps: Record<string, boolean> = { ...returnedCaps }
+                for (const feat of featuresToRequest) {
+                    if (normalizedCaps[feat] === undefined) {
+                        normalizedCaps[feat] = false
+                    }
+                }
                 setState(prev => ({
                     ...prev,
-                    capabilities: { ...prev.capabilities, ...(data.caps || {}) },
+                    capabilities: { ...prev.capabilities, ...normalizedCaps },
                     lastFetched: Date.now(),
                 }))
             } else {
@@ -626,7 +651,7 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
             // Clear in-flight flags so future attempts can retry
             featuresToRequest.forEach(f => inFlightRef.current.delete(f))
         }
-    }, [isAuthenticated, authMode, fetchWithAuth, state.capabilities])
+    }, [isAuthenticated, authMode, fetchWithAuth, state.capabilities, clusterId])
 
 	// Fetch capabilities on mount and when auth state changes
 	React.useEffect(() => {

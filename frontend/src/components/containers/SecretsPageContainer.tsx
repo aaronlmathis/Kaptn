@@ -37,7 +37,7 @@ function SecretsContent() {
 
     React.useEffect(() => {
         fetchAdditional([
-            'secrets.get',
+            'secrets.read',
             'secrets.update',
             'secrets.patch',
             'secrets.delete',

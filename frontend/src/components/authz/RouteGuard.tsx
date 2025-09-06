@@ -56,8 +56,10 @@ export function RouteGuard({
     [requiredCapabilities, capabilities]
   );
 
-  // Show loading state while auth is initializing OR capabilities are loading
-  if (authLoading || capabilitiesLoading || hasUnknownRequiredCaps) {
+  // Show loading state while auth is initializing, or while required caps are unknown.
+  // Do NOT block rendering just because capabilities are fetching in background
+  // if we already know the required caps for this route. This avoids UI flicker.
+  if (authLoading || (isAuthenticated && hasUnknownRequiredCaps)) {
     return loading ? (
       <>{loading}</>
     ) : (

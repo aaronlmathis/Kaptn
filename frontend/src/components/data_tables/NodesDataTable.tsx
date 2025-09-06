@@ -38,6 +38,7 @@ import {
 	IconDownload,
 	IconCopy,
 } from "@tabler/icons-react"
+import { IfAllowed } from "@/components/authz/IfAllowed"
 
 import {
 	flexRender,
@@ -82,6 +83,7 @@ import { useNodesWithWebSocket } from "@/hooks/useNodesWithWebSocket"
 import { k8sService } from "@/lib/k8s-service"
 import { nodeSchema } from "@/lib/schemas/node"
 import { z } from "zod"
+import { useCluster } from "@/hooks/useCluster"
 
 // Drag handle component
 function DragHandle({ id }: { id: number }) {
@@ -140,9 +142,10 @@ function getNodeStatusBadge(status: string) {
 
 // Column definitions for nodes table
 const createColumns = (
-	onViewDetails: (node: z.infer<typeof nodeSchema>) => void,
-	onCordonNode: (node: z.infer<typeof nodeSchema>) => void,
-	onDrainNode: (node: z.infer<typeof nodeSchema>) => void
+    onViewDetails: (node: z.infer<typeof nodeSchema>) => void,
+    onCordonNode: (node: z.infer<typeof nodeSchema>) => void,
+    onDrainNode: (node: z.infer<typeof nodeSchema>) => void,
+    clusterId: string,
 ): ColumnDef<z.infer<typeof nodeSchema>>[] => [
 		{
 			id: "drag",
@@ -180,12 +183,20 @@ const createColumns = (
 			header: "Node Name",
 			cell: ({ row }) => {
 				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none font-medium"
+					<IfAllowed
+						feature="nodes.get"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={<span className="font-medium">{row.original.name}</span>}
 					>
-						{row.original.name}
-					</button>
+						<button
+							onClick={() => onViewDetails(row.original)}
+							className="text-left hover:underline focus:underline focus:outline-none font-medium"
+						>
+							{row.original.name}
+						</button>
+					</IfAllowed>
 				)
 			},
 			enableHiding: false,
@@ -237,40 +248,68 @@ const createColumns = (
 							<IconEye className="size-4 mr-2" />
 							View Details
 						</DropdownMenuItem>
-						<DropdownMenuItem
-							onClick={() => onCordonNode(row.original)}
-						>
-							<IconPlayerPause className="size-4 mr-2" />
-							Cordon
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							onClick={() => onDrainNode(row.original)}
-						>
-							<IconDroplets className="size-4 mr-2" />
-							Drain
-						</DropdownMenuItem>
-						<ResourceYamlEditor
-							resourceName={row.original.name}
+						<IfAllowed
+							feature="nodes.update"
+							cluster={clusterId}
 							namespace=""
-							resourceKind="Node"
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled><IconPlayerPause className="size-4 mr-2" />Cordon</DropdownMenuItem>}
 						>
-							<button
-								className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-								style={{
-									background: 'transparent',
-									border: 'none',
-									textAlign: 'left'
-								}}
+							<DropdownMenuItem onClick={() => onCordonNode(row.original)}>
+								<IconPlayerPause className="size-4 mr-2" />
+								Cordon
+							</DropdownMenuItem>
+						</IfAllowed>
+						<IfAllowed
+							feature="nodes.update"
+							cluster={clusterId}
+							namespace=""
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled><IconDroplets className="size-4 mr-2" />Drain</DropdownMenuItem>}
+						>
+							<DropdownMenuItem onClick={() => onDrainNode(row.original)}>
+								<IconDroplets className="size-4 mr-2" />
+								Drain
+							</DropdownMenuItem>
+						</IfAllowed>
+						<IfAllowed
+							feature="nodes.patch"
+							cluster={clusterId}
+							namespace=""
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
+						>
+							<ResourceYamlEditor
+								resourceName={row.original.name}
+								namespace=""
+								resourceKind="Node"
 							>
-								<IconEdit className="size-4" />
-								Edit YAML
-							</button>
-						</ResourceYamlEditor>
+								<button
+									className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
+									style={{
+										background: 'transparent',
+										border: 'none',
+										textAlign: 'left'
+									}}
+								>
+									<IconEdit className="size-4" />
+									Edit YAML
+								</button>
+							</ResourceYamlEditor>
+						</IfAllowed>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-red-600">
-							<IconTrash className="size-4 mr-2" />
-							Delete
-						</DropdownMenuItem>
+						<IfAllowed
+							feature="nodes.delete"
+							cluster={clusterId}
+							namespace=""
+							resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+						>
+							<DropdownMenuItem className="text-red-600">
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -311,6 +350,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof nodeSchema>> }) {
 
 export function NodesDataTable() {
 	const { data: nodes, loading, error, refetch, isConnected } = useNodesWithWebSocket(true)
+    const { clusterId } = useCluster()
 
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [statusFilter, setStatusFilter] = React.useState<string>("all")
@@ -352,10 +392,10 @@ export function NodesDataTable() {
 	}, [])
 
 	// Create columns with the callbacks
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleCordonNode, handleDrainNode),
-		[handleViewDetails, handleCordonNode, handleDrainNode]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, handleCordonNode, handleDrainNode, clusterId),
+        [handleViewDetails, handleCordonNode, handleDrainNode, clusterId]
+    )
 
 	// Create filter options for node statuses
 	const nodeStatuses = React.useMemo(() => {
@@ -438,16 +478,16 @@ export function NodesDataTable() {
 		}
 	}
 
-	if (loading) {
-		return (
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-center py-10">
-					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading nodes...</span>
-				</div>
-			</div>
-		)
-	}
+    if (loading && filteredData.length === 0) {
+        return (
+            <div className="px-4 lg:px-6">
+                <div className="flex items-center justify-center py-10">
+                    <IconLoader className="size-6 animate-spin" />
+                    <span className="ml-2">Loading nodes...</span>
+                </div>
+            </div>
+        )
+    }
 
 	if (error) {
 		return (

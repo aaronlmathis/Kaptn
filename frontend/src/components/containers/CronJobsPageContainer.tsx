@@ -10,7 +10,7 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
-import { RouteGuard } from "@/components/authz"
+import { RouteGuard } from "@/components/authz/RouteGuard"
 import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the namespace context

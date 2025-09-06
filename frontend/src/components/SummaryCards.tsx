@@ -35,10 +35,12 @@ export function SummaryCards({
 	lastUpdated = null,
 	noPadding = false
 }: SummaryCardsProps) {
-	if (loading) {
-		return (
-			<div
-				className={`
+    // Show skeleton only on initial load or when no cards to display.
+    // Avoid flashing skeleton during background refresh when data already present.
+    if (loading && (!cards || cards.length === 0)) {
+        return (
+            <div
+                className={`
 		        /* slot‐based card styles */
 		        [data-slot=card]:bg-gradient-to-t
 		        [data-slot=card]:from-primary/5

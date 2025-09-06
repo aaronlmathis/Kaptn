@@ -9,10 +9,21 @@ import {
 	getStorageClassProvisionerBadge,
 	getResourceIcon
 } from "@/lib/summary-card-utils"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 export function StorageClassesContainer() {
 	const { data: storageClasses, loading: isLoading, error, isConnected } = useStorageClassesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+    const { fetchAdditional } = useCapabilities()
+
+    React.useEffect(() => {
+        fetchAdditional([
+            'storageclasses.get',
+            'storageclasses.patch',
+            'storageclasses.delete',
+        ]).catch(() => { /* noop */ })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 	// Update lastUpdated when storage classes change
 	React.useEffect(() => {

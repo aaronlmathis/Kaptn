@@ -76,6 +76,8 @@ import { DataTableFilters } from "@/components/ui/data-table-filters"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNamespacesWithWebSocket } from "@/hooks/useNamespacesWithWebSocket"
 import { NamespaceDetailDrawer } from "@/components/viewers/NamespaceDetailDrawer"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useCluster } from "@/hooks/useCluster"
 
 // Namespace schema
 export const namespaceSchema = z.object({
@@ -156,8 +158,9 @@ async function deleteNamespace(name: string): Promise<boolean> {
 
 // Column definitions for namespaces table
 const createColumns = (
-	onViewDetails: (namespace: z.infer<typeof namespaceSchema>) => void,
-	onDelete?: (namespace: z.infer<typeof namespaceSchema>) => void
+    onViewDetails: (namespace: z.infer<typeof namespaceSchema>) => void,
+    onDelete: ((namespace: z.infer<typeof namespaceSchema>) => void) | undefined,
+    clusterId: string,
 ): ColumnDef<z.infer<typeof namespaceSchema>>[] => [
 		{
 			id: "drag",
@@ -195,12 +198,20 @@ const createColumns = (
 			header: "Namespace Name",
 			cell: ({ row }) => {
 				return (
-					<button
-						onClick={() => onViewDetails(row.original)}
-						className="text-left hover:underline focus:underline focus:outline-none"
+					<IfAllowed
+						feature="namespaces.get"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={<span>{row.original.name}</span>}
 					>
-						{row.original.name}
-					</button>
+						<button
+							onClick={() => onViewDetails(row.original)}
+							className="text-left hover:underline focus:underline focus:outline-none"
+						>
+							{row.original.name}
+						</button>
+					</IfAllowed>
 				)
 			},
 			enableHiding: false,
@@ -252,6 +263,18 @@ const createColumns = (
 							<IconEye className="size-4 mr-2" />
 							View Details
 						</DropdownMenuItem>
+					<IfAllowed
+						feature="namespaces.patch"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={
+							<DropdownMenuItem disabled>
+								<IconEdit className="size-4 mr-2" />
+								Edit YAML
+							</DropdownMenuItem>
+						}
+					>
 						<ResourceYamlEditor
 							resourceName={row.original.name}
 							namespace=""
@@ -269,7 +292,20 @@ const createColumns = (
 								Edit YAML
 							</button>
 						</ResourceYamlEditor>
+					</IfAllowed>
 						<DropdownMenuSeparator />
+					<IfAllowed
+						feature="namespaces.delete"
+						cluster={clusterId}
+						namespace=""
+						resourceName={row.original.name}
+						fallback={
+							<DropdownMenuItem disabled className="text-muted-foreground">
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						}
+					>
 						<DropdownMenuItem
 							className="text-red-600"
 							onClick={() => onDelete?.(row.original)}
@@ -277,6 +313,7 @@ const createColumns = (
 							<IconTrash className="size-4 mr-2" />
 							Delete
 						</DropdownMenuItem>
+					</IfAllowed>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			),
@@ -316,7 +353,8 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof namespaceSchema>> }) {
 }
 
 export function NamespacesDataTable() {
-	const { data: namespaces, loading, error, refetch, isConnected } = useNamespacesWithWebSocket(true)
+    const { data: namespaces, loading, error, refetch, isConnected } = useNamespacesWithWebSocket(true)
+    const { clusterId } = useCluster()
 
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [statusFilter, setStatusFilter] = React.useState<string>("all")
@@ -347,10 +385,10 @@ export function NamespacesDataTable() {
 	}, [refetch])
 
 	// Create columns with the onViewDetails callback
-	const columns = React.useMemo(
-		() => createColumns(handleViewDetails, handleDeleteNamespace),
-		[handleViewDetails, handleDeleteNamespace]
-	)
+    const columns = React.useMemo(
+        () => createColumns(handleViewDetails, handleDeleteNamespace, clusterId),
+        [handleViewDetails, handleDeleteNamespace, clusterId]
+    )
 
 	// Create filter options for namespace statuses
 	const namespaceStatuses = React.useMemo(() => {
@@ -431,16 +469,16 @@ export function NamespacesDataTable() {
 		}
 	}
 
-	if (loading) {
-		return (
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-center py-10">
-					<IconLoader className="size-6 animate-spin" />
-					<span className="ml-2">Loading namespaces...</span>
-				</div>
-			</div>
-		)
-	}
+    if (loading && filteredData.length === 0) {
+        return (
+            <div className="px-4 lg:px-6">
+                <div className="flex items-center justify-center py-10">
+                    <IconLoader className="size-6 animate-spin" />
+                    <span className="ml-2">Loading namespaces...</span>
+                </div>
+            </div>
+        )
+    }
 
 	if (error) {
 		return (

@@ -8,11 +8,24 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
+import { RouteGuard } from "@/components/authz"
+import { useCapabilities } from "@/hooks/use-capabilities"
 
 // Inner component that can access the WebSocket data
 function VolumeSnapshotClassesContent() {
 	const { data: volumeSnapshotClasses, loading: isLoading, error, isConnected } = useVolumeSnapshotClassesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+
+	const { fetchAdditional } = useCapabilities()
+
+	React.useEffect(() => {
+		fetchAdditional([
+			'volumesnapshotclasses.get',
+			'volumesnapshotclasses.patch',
+			'volumesnapshotclasses.delete',
+		]).catch(() => { /* noop */ })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
 
 	// Update lastUpdated when volumeSnapshotClasses change
 	React.useEffect(() => {
@@ -105,6 +118,8 @@ function VolumeSnapshotClassesContent() {
 
 export function VolumeSnapshotClassesPageContainer() {
 	return (
-		<VolumeSnapshotClassesContent />
+		<RouteGuard requiredCapabilities={["volumesnapshotclasses.list"]} requireAll={false}>
+			<VolumeSnapshotClassesContent />
+		</RouteGuard>
 	)
 } 

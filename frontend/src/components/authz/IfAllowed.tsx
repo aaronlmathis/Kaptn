@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react";
 import { useAuthzCapability } from "@/hooks/useAuthzCapabilitiesSimple";
 import type { CapabilityKey } from "@/lib/authz";

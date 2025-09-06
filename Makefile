@@ -13,7 +13,7 @@ LDFLAGS := -X github.com/aaronlmathis/kaptn/internal/version.Version=$(VERSION) 
            -X github.com/aaronlmathis/kaptn/internal/version.GitCommit=$(GIT_COMMIT) \
            -X github.com/aaronlmathis/kaptn/internal/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: all dev fmt lint lint-go test frontend build docker docker-debug kind-up kind-down clean help push push-debug run
+.PHONY: all dev fmt lint lint-go test frontend backend build docker docker-debug kind-up kind-down clean help push push-debug run
 
 all: build ## Build everything
 
@@ -84,6 +84,12 @@ frontend: ## Build frontend
 	@echo "Building frontend..."
 	@cd frontend && npm ci && KAPTN_BUILD_AUTH_MODE=none npm run build
 	@echo "Frontend built successfully"
+
+backend: ## Build backend binary
+	@echo "Building backend..."
+	@mkdir -p $(BUILD_DIR)
+	@CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+	@echo "Backend binary built: $(BUILD_DIR)/$(BINARY_NAME)"
 
 build: frontend ## Build backend binary (embeds frontend)
 	@echo "Building $(BINARY_NAME)..."

@@ -57,19 +57,19 @@ const devError = (...args: unknown[]) => { if (IS_DEV) console.error(...args) }
 
 // Helper function to get injected session data (client-side only)
 function getInjectedSession(): InjectedSession | null {
-    if (typeof window === 'undefined') return null
+	if (typeof window === 'undefined') return null
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const injected = (window as any).__KAPTN_SESSION__ || null
 
-    if (injected) {
-        // Avoid logging the session payload; only note presence in dev
-        devLog('[auth] Injected session present')
-        return injected
-    }
+	if (injected) {
+		// Avoid logging the session payload; only note presence in dev
+		devLog('[auth] Injected session present')
+		return injected
+	}
 
-    devLog('[auth] No injected session found')
-    return null
+	devLog('[auth] No injected session found')
+	return null
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -90,14 +90,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 		let response = await fetch(url, defaultOptions)
 
-        if (response.status === 401 && !url.includes('/auth/refresh')) {
-            devLog('[auth] 401 received; attempting token refresh')
+		if (response.status === 401 && !url.includes('/auth/refresh')) {
+			devLog('[auth] 401 received; attempting token refresh')
 
 			const injectedSession = getInjectedSession()
-            if (injectedSession?.authMode === 'none') {
-                devLog('[auth] Auth mode is none; skip token refresh on 401')
-                throw new Error('Unauthorized - auth disabled')
-            }
+			if (injectedSession?.authMode === 'none') {
+				devLog('[auth] Auth mode is none; skip token refresh on 401')
+				throw new Error('Unauthorized - auth disabled')
+			}
 
 			try {
 				const refreshResponse = await fetch('/api/v1/auth/refresh', {
@@ -105,45 +105,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					credentials: 'include',
 				})
 
-                if (refreshResponse.ok) {
-                    devLog('[auth] Token refresh successful; retrying request')
-                    response = await fetch(url, defaultOptions)
-                } else {
-                    devLog('[auth] Token refresh failed; redirecting to login')
-                    const injectedSession = getInjectedSession()
-                    if (injectedSession?.authMode === 'none') {
-                        devLog('[auth] Auth mode is none; skipping redirect on refresh failure')
-                        throw new Error('Refresh failed but auth disabled')
-                    }
-                    window.location.href = '/login'
-                    throw new Error('Authentication session expired')
-                }
-            } catch (refreshError) {
-                devError('[auth] Refresh attempt failed')
-                const injectedSession = getInjectedSession()
-                if (injectedSession?.authMode === 'none') {
-                    devLog('[auth] Auth mode is none; skipping redirect on error')
-                    throw new Error('Auth error but auth disabled')
-                }
-                window.location.href = '/login'
-                throw new Error('Authentication session expired')
-            }
-        }
+				if (refreshResponse.ok) {
+					devLog('[auth] Token refresh successful; retrying request')
+					response = await fetch(url, defaultOptions)
+				} else {
+					devLog('[auth] Token refresh failed; redirecting to login')
+					const injectedSession = getInjectedSession()
+					if (injectedSession?.authMode === 'none') {
+						devLog('[auth] Auth mode is none; skipping redirect on refresh failure')
+						throw new Error('Refresh failed but auth disabled')
+					}
+					window.location.href = '/login'
+					throw new Error('Authentication session expired')
+				}
+			} catch (refreshError) {
+				devError('[auth] Refresh attempt failed')
+				const injectedSession = getInjectedSession()
+				if (injectedSession?.authMode === 'none') {
+					devLog('[auth] Auth mode is none; skipping redirect on error')
+					throw new Error('Auth error but auth disabled')
+				}
+				window.location.href = '/login'
+				throw new Error('Authentication session expired')
+			}
+		}
 
 		return response
 	}
 
 	const initializeAuth = async () => {
 		try {
-				devLog('[auth] Initializing auth')
+			devLog('[auth] Initializing auth')
 
-            const injectedSession = getInjectedSession()
-            devLog('[auth] Using injected session:', Boolean(injectedSession))
+			const injectedSession = getInjectedSession()
+			devLog('[auth] Using injected session:', Boolean(injectedSession))
 
-            if (injectedSession) {
-                devLog('[auth] authMode:', injectedSession.authMode)
-                setAuthState({
-                    isAuthenticated: injectedSession.isAuthenticated,
+			if (injectedSession) {
+				devLog('[auth] authMode:', injectedSession.authMode)
+				setAuthState({
+					isAuthenticated: injectedSession.isAuthenticated,
 					isLoading: false,
 					user: injectedSession.isAuthenticated ? {
 						id: injectedSession.id || '',
@@ -159,42 +159,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				return
 			}
 
-            devWarn('[auth] No injected session data found')
-            setAuthState({
-                isAuthenticated: false,
-                isLoading: false,
-                user: null,
-                error: 'No session data available',
-                authMode: null,
-            });
-        } catch (error) {
-            devError('[auth] Initialization error')
-            setAuthState({
-                isAuthenticated: false,
-                isLoading: false,
-                user: null,
-                error: error instanceof Error ? error.message : 'Unknown error',
-                authMode: null,
-            });
-        }
-    }
+			devWarn('[auth] No injected session data found')
+			setAuthState({
+				isAuthenticated: false,
+				isLoading: false,
+				user: null,
+				error: 'No session data available',
+				authMode: null,
+			});
+		} catch (error) {
+			devError('[auth] Initialization error')
+			setAuthState({
+				isAuthenticated: false,
+				isLoading: false,
+				user: null,
+				error: error instanceof Error ? error.message : 'Unknown error',
+				authMode: null,
+			});
+		}
+	}
 
 	const login = () => {
 		window.location.href = '/login'
 	}
 
-    const logout = async () => {
-        try {
-            await fetch('/api/v1/auth/logout', {
-                method: 'POST',
-                credentials: 'include',
-            })
-        } catch (error) {
-            devError('[auth] Logout error')
-        } finally {
-            window.location.href = '/login'
-        }
-    }
+	const logout = async () => {
+		try {
+			await fetch('/api/v1/auth/logout', {
+				method: 'POST',
+				credentials: 'include',
+			})
+		} catch (error) {
+			devError('[auth] Logout error')
+		} finally {
+			window.location.href = '/login'
+		}
+	}
 
 	const refreshAuth = async (): Promise<boolean> => {
 		try {
@@ -215,16 +215,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				}));
 				return false
 			}
-        } catch (error) {
-            devError('[auth] Manual refresh failed')
-            setAuthState(prev => ({
-                ...prev,
-                isAuthenticated: false,
-                user: null,
-            }));
-            return false
-        }
-    }
+		} catch (error) {
+			devError('[auth] Manual refresh failed')
+			setAuthState(prev => ({
+				...prev,
+				isAuthenticated: false,
+				user: null,
+			}));
+			return false
+		}
+	}
 
 	const refetchAuth = async () => {
 		// For injected session mode, we need to reload the page
