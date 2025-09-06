@@ -53,15 +53,42 @@ func (h *SessionInjectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
         upath = upath + "index.html"
     }
 
-    // Convert to file system path
-    fsPath := string(h.filesDir) + upath
+    // Convert to safe file system path rooted at h.filesDir
+    baseDir := string(h.filesDir)
+    baseAbs, err := filepath.Abs(baseDir)
+    if err != nil {
+        h.logger.Error("Failed to resolve base static dir", zap.String("base", baseDir), zap.Error(err))
+        http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+        return
+    }
+
+    // Join and clean the requested path against the base directory
+    // Trim leading slash to avoid filepath.Join ignoring the base
+    cleanReq := strings.TrimPrefix(upath, "/")
+    candidate := filepath.Join(baseDir, filepath.FromSlash(cleanReq))
+    targetAbs, err := filepath.Abs(candidate)
+    if err != nil {
+        h.logger.Warn("Failed to resolve target path", zap.String("candidate", candidate), zap.Error(err))
+        http.Error(w, "Bad Request", http.StatusBadRequest)
+        return
+    }
+
+    // Ensure the resolved path is within the base directory
+    rel, err := filepath.Rel(baseAbs, targetAbs)
+    if err != nil || strings.HasPrefix(rel, "..") {
+        h.logger.Warn("Path escapes static root", zap.String("path", upath), zap.String("target", targetAbs), zap.String("base", baseAbs), zap.Error(err))
+        http.Error(w, "Bad Request", http.StatusBadRequest)
+        return
+    }
+
+    fsPath := targetAbs
 
     // Check if file exists
     info, err := os.Stat(fsPath)
     if err != nil {
         // If file doesn't exist and it's not an HTML file, try index.html for SPA routing
         if !strings.HasSuffix(upath, ".html") && !strings.Contains(upath, ".") {
-            h.serveWithSessionInjection(w, r, string(h.filesDir)+"/index.html")
+            h.serveWithSessionInjection(w, r, filepath.Join(baseAbs, "index.html"))
             return
         }
         http.NotFound(w, r)

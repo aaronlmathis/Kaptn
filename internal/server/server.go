@@ -263,19 +263,34 @@ func (s *Server) initKubernetesClient() error {
 	// Determine if this is production environment (simplified check)
 	isProduction := s.config.Security.AuthMode != "none"
 
-	safetyGuard := actions.NewSafetyGuard(s.logger, isProduction)
+    safetyGuard := actions.NewSafetyGuard(s.logger, isProduction)
+    // Apply safety guard config (namespaces/labels)
+    if len(s.config.Actions.DeniedNamespaces) > 0 || len(s.config.Actions.DeniedLabels) > 0 {
+        safetyGuard.UpdateSafetyConfig(s.config.Actions.DeniedNamespaces, s.config.Actions.DeniedLabels)
+    }
+    // Apply action allow/deny lists
+    if len(s.config.Actions.ActionAllowlist) > 0 || len(s.config.Actions.ActionDenylist) > 0 {
+        safetyGuard.UpdateActionPolicies(s.config.Actions.ActionAllowlist, s.config.Actions.ActionDenylist)
+    }
 	auditLogger := actions.NewAuditLogger(s.logger)
 	ssarHelper := k8s.NewSSARHelper(s.logger)
 
-	s.actionCoordinator = actions.NewActionCoordinator(
-		s.logger,
-		safetyGuard,
-		auditLogger,
-		ssarHelper,
-		s.actionsService,
-		s.applyService,
-		s.impersonationMgr,
-	)
+    // Action coordinator options from config
+    acOpts := &actions.CoordinatorOptions{}
+    if dur, err := time.ParseDuration(s.config.Actions.IdempotencyTTL); err == nil { acOpts.IdempotencyTTL = dur } else { s.logger.Warn("Invalid actions idempotency TTL, using default", zap.String("ttl", s.config.Actions.IdempotencyTTL), zap.Error(err)) }
+    acOpts.DefaultConcurrency = s.config.Actions.DefaultConcurrency
+    acOpts.MaxConcurrency = s.config.Actions.MaxConcurrency
+
+    s.actionCoordinator = actions.NewActionCoordinator(
+        s.logger,
+        safetyGuard,
+        auditLogger,
+        ssarHelper,
+        s.actionsService,
+        s.applyService,
+        s.impersonationMgr,
+        acOpts,
+    )
 
 	// Initialize logs service
 	s.logsService = logs.NewStreamManager(s.logger, s.kubeClient)

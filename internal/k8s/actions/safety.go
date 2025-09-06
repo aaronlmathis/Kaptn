@@ -11,10 +11,12 @@ import (
 
 // SafetyGuard provides safety validation for actions
 type SafetyGuard struct {
-	logger           *zap.Logger
-	deniedNamespaces map[string]bool
-	deniedLabels     map[string]string
-	isProduction     bool
+    logger           *zap.Logger
+    deniedNamespaces map[string]bool
+    deniedLabels     map[string]string
+    isProduction     bool
+    actionAllow      map[string]bool
+    actionDeny       map[string]bool
 }
 
 // SafetyViolation represents a safety rule violation
@@ -65,21 +67,23 @@ func NewSafetyGuard(logger *zap.Logger, isProduction bool) *SafetyGuard {
 		"app.kubernetes.io/part-of":    "kube-system",
 	}
 
-	return &SafetyGuard{
-		logger:           logger,
-		deniedNamespaces: deniedNamespaces,
-		deniedLabels:     deniedLabels,
-		isProduction:     isProduction,
-	}
+    return &SafetyGuard{
+        logger:           logger,
+        deniedNamespaces: deniedNamespaces,
+        deniedLabels:     deniedLabels,
+        isProduction:     isProduction,
+        actionAllow:      map[string]bool{},
+        actionDeny:       map[string]bool{},
+    }
 }
 
 // ValidateAction validates an action request against safety rules
 func (sg *SafetyGuard) ValidateAction(ctx context.Context, client kubernetes.Interface, action, verb, resource, namespace, name string, labels map[string]string) (*SafetyResult, error) {
-	result := &SafetyResult{
-		Allowed:    true,
-		Violations: []SafetyViolation{},
-		Warnings:   []string{},
-	}
+    result := &SafetyResult{
+        Allowed:    true,
+        Violations: []SafetyViolation{},
+        Warnings:   []string{},
+    }
 
 	sg.logger.Debug("Validating action safety",
 		zap.String("action", action),
@@ -109,6 +113,31 @@ func (sg *SafetyGuard) ValidateAction(ctx context.Context, client kubernetes.Int
 				result.Allowed = false
 			}
 		}
+	}
+
+	// Check action allow/deny policies if configured
+	pair := fmt.Sprintf("%s:%s", strings.ToLower(action), strings.ToLower(resource))
+	if len(sg.actionAllow) > 0 {
+		if !sg.actionAllow[pair] {
+			result.Violations = append(result.Violations, SafetyViolation{
+				Rule:        "action_policy_not_allowed",
+				Description: fmt.Sprintf("Action '%s' on resource '%s' is not in allowlist", action, resource),
+				Severity:    "error",
+				Namespace:   namespace,
+				Resource:    fmt.Sprintf("%s/%s", resource, name),
+			})
+			result.Allowed = false
+		}
+	}
+	if sg.actionDeny[pair] {
+		result.Violations = append(result.Violations, SafetyViolation{
+			Rule:        "action_policy_denied",
+			Description: fmt.Sprintf("Action '%s' on resource '%s' is denied by policy", action, resource),
+			Severity:    "error",
+			Namespace:   namespace,
+			Resource:    fmt.Sprintf("%s/%s", resource, name),
+		})
+		result.Allowed = false
 	}
 
 	// Check destructive action protections
@@ -333,10 +362,10 @@ func (sg *SafetyGuard) GetSafetyConfig() map[string]interface{} {
 
 // UpdateSafetyConfig allows runtime updates to safety configuration
 func (sg *SafetyGuard) UpdateSafetyConfig(deniedNamespaces []string, deniedLabels map[string]string) {
-	sg.deniedNamespaces = make(map[string]bool)
-	for _, ns := range deniedNamespaces {
-		sg.deniedNamespaces[ns] = true
-	}
+    sg.deniedNamespaces = make(map[string]bool)
+    for _, ns := range deniedNamespaces {
+        sg.deniedNamespaces[ns] = true
+    }
 
 	if deniedLabels != nil {
 		sg.deniedLabels = deniedLabels
@@ -345,4 +374,15 @@ func (sg *SafetyGuard) UpdateSafetyConfig(deniedNamespaces []string, deniedLabel
 	sg.logger.Info("Safety configuration updated",
 		zap.Strings("denied_namespaces", deniedNamespaces),
 		zap.Any("denied_labels", sg.deniedLabels))
+}
+
+// UpdateActionPolicies configures allow/deny action policies (pairs of action:resource)
+func (sg *SafetyGuard) UpdateActionPolicies(allow, deny []string) {
+    sg.actionAllow = make(map[string]bool)
+    for _, a := range allow { sg.actionAllow[strings.ToLower(a)] = true }
+    sg.actionDeny = make(map[string]bool)
+    for _, d := range deny { sg.actionDeny[strings.ToLower(d)] = true }
+    sg.logger.Info("Safety action policies updated",
+        zap.Int("allow_count", len(sg.actionAllow)),
+        zap.Int("deny_count", len(sg.actionDeny)))
 }

@@ -12,7 +12,7 @@ import (
 
 // SSARHelper provides SelfSubjectAccessReview functionality
 type SSARHelper struct {
-	logger *zap.Logger
+    logger *zap.Logger
 }
 
 // NewSSARHelper creates a new SSAR helper
@@ -24,18 +24,24 @@ func NewSSARHelper(logger *zap.Logger) *SSARHelper {
 
 // CanPerformAction checks if the user (via impersonated client) can perform the specified action
 func (s *SSARHelper) CanPerformAction(ctx context.Context, client kubernetes.Interface, verb, group, resource, namespace, name string) (bool, error) {
+    return s.CanPerformActionWithSubresource(ctx, client, verb, group, resource, "", namespace, name)
+}
+
+// CanPerformActionWithSubresource checks permission including a subresource (e.g., deployments/scale)
+func (s *SSARHelper) CanPerformActionWithSubresource(ctx context.Context, client kubernetes.Interface, verb, group, resource, subresource, namespace, name string) (bool, error) {
 	// Create SelfSubjectAccessReview request
 	sar := &authorizationv1.SelfSubjectAccessReview{
 		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
-			ResourceAttributes: &authorizationv1.ResourceAttributes{
-				Verb:      verb,
-				Group:     group,
-				Resource:  resource,
-				Namespace: namespace,
-				Name:      name,
-			},
-		},
-	}
+            ResourceAttributes: &authorizationv1.ResourceAttributes{
+                Verb:        verb,
+                Group:       group,
+                Resource:    resource,
+                Subresource: subresource,
+                Namespace:   namespace,
+                Name:        name,
+            },
+        },
+    }
 
 	// Execute the review
 	result, err := client.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
@@ -45,7 +51,7 @@ func (s *SSARHelper) CanPerformAction(ctx context.Context, client kubernetes.Int
 			zap.String("verb", verb),
 			zap.String("resource", resource),
 			zap.String("namespace", namespace))
-		return false, fmt.Errorf("failed to perform access review: %w", err)
+        return false, fmt.Errorf("failed to perform access review: %w", err)
 	}
 
 	// s.logger.Debug("SelfSubjectAccessReview completed",

@@ -20,6 +20,8 @@ import { usePodsWithWebSocket } from "@/hooks/usePodsWithWebSocket"
 import { useCapabilities } from "@/hooks/use-capabilities"
 import { Badge } from "@/components/ui/badge"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 import {
 	getPodStatusBadge,
 	getPodPhaseBadge,
@@ -38,7 +40,10 @@ function PodsContent() {
 	const [selectedPodForDetails, setSelectedPodForDetails] = React.useState<DashboardPod | null>(null)
   const { openShell } = useShell()
   const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
+  const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+  const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
   const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete'|'restart', pods: DashboardPod[] }>(null)
+  const [alert, setAlert] = React.useState<null | { variant: 'success'|'error', title: string, description?: string }>(null)
 
 	// Ensure pod-specific action capabilities are requested (default is conservative)
 	React.useEffect(() => {
@@ -303,7 +308,7 @@ function PodsContent() {
 						<IfAllowed feature="pods.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconRefresh className="size-4 mr-2" />Restart</DropdownMenuItem>}
 						>
-							<DropdownMenuItem onClick={() => console.log('Restart pod', row.original.namespace, row.original.name)}>
+							<DropdownMenuItem onClick={() => { setPendingAction({ type: 'restart', pods: [row.original] }); setConfirmDialogOpen(true); validatePodsAction('restart', [row.original]) }}>
 								<IconRefresh className="size-4 mr-2" />
 								Restart
 							</DropdownMenuItem>
@@ -312,7 +317,7 @@ function PodsContent() {
 						<IfAllowed feature="pods.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => deleteSelectedPods([row.original])}>
+							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', pods: [row.original] }); setConfirmDialogOpen(true); validatePodsAction('delete', [row.original]) }}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -323,44 +328,50 @@ function PodsContent() {
 		}
 	]), [clusterId])
 
-	// Bulk actions
-	const getCSRF = React.useCallback(() => {
-		if (typeof document === 'undefined') return null
-		const name = 'kaptn_csrf='
-		const cookies = decodeURIComponent(document.cookie).split(';')
-		for (let c of cookies) { c = c.trim(); if (c.indexOf(name) === 0) return c.substring(name.length) }
-		return null
+	// Bulk actions: preflight validate to show warnings in confirmation dialog
+	const validatePodsAction = React.useCallback(async (type: 'delete'|'restart', rows: DashboardPod[]) => {
+		try {
+			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
+			const legacyAction = type === 'delete' ? 'delete-pods' : 'restart-pods'
+			const resp = await bulkActionsApi.validateAction('pods', { action: legacyAction, targets })
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
 	}, [])
-
-	const deleteSelectedPods = React.useCallback(async (rows: DashboardPod[]) => {
-		const csrf = getCSRF()
-		const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-		if (csrf) headers['X-CSRF-Token'] = csrf
-		await Promise.all(rows.map(row => fetch('/api/v1/resources', {
-			method: 'DELETE', credentials: 'include', headers,
-			body: JSON.stringify({ namespace: row.namespace, name: row.name, kind: 'Pod', deletePods: true })
-		})))
-	}, [getCSRF])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardPod[]) => void | Promise<void> }[] = []
 		actions.push({ id: 'copy-names', label: 'Copy Pod Names', icon: <IconCopy className="size-4" />, requiresSelection: true, action: (rows) => navigator.clipboard.writeText(rows.map(r => r.name).join('\n')) })
-		if (isAllowed('pods.logs')) actions.push({ id: 'get-logs', label: 'Get Logs', icon: <IconFileText className="size-4" />, requiresSelection: true, action: (rows) => console.log('Get logs bulk', rows) })
-    if (isAllowed('pods.delete')) actions.push({ id: 'delete-pods', label: 'Delete Selected Pods', icon: <IconTrash className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'delete', pods: rows }); setConfirmDialogOpen(true) } })
+    if (isAllowed('pods.logs')) actions.push({ id: 'get-logs', label: 'Get Logs', icon: <IconFileText className="size-4" />, requiresSelection: true, action: (rows) => console.log('Get logs bulk', rows) })
+    if (isAllowed('pods.patch')) actions.push({ id: 'restart-pods', label: 'Restart Selected Pods', icon: <IconRefresh className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'restart', pods: rows }); setConfirmDialogOpen(true); validatePodsAction('restart', rows) } })
+    if (isAllowed('pods.delete')) actions.push({ id: 'delete-pods', label: 'Delete Selected Pods', icon: <IconTrash className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'delete', pods: rows }); setConfirmDialogOpen(true); validatePodsAction('delete', rows) } })
     return actions
-  }, [isAllowed, deleteSelectedPods])
+  }, [isAllowed, validatePodsAction])
 
   const handleConfirmAction = React.useCallback(async () => {
     if (!pendingAction) return
+    setIsConfirmExecuting(true)
     try {
-      if (pendingAction.type === 'delete') {
-        await deleteSelectedPods(pendingAction.pods)
-      }
+      const targets = pendingAction.pods.map(p => ({ namespace: p.namespace, name: p.name }))
+      const legacyAction = pendingAction.type === 'delete' ? 'delete-pods' : 'restart-pods'
+      const resp = await bulkActionsApi.executeBulkAction('pods', { action: legacyAction, targets })
+      const success = resp?.success
+      const total = resp?.resources_total ?? 0
+      const affected = resp?.resources_affected ?? 0
+      setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} pods processed` : `Errors: ${total - affected} failed`, description: resp?.message })
+    } catch (e: any) {
+      setAlert({ variant: 'error', title: 'Action failed', description: e?.message ?? String(e) })
     } finally {
+      setIsConfirmExecuting(false)
       setConfirmDialogOpen(false)
       setPendingAction(null)
     }
-  }, [pendingAction, deleteSelectedPods])
+  }, [pendingAction])
 
 	return (
 		<div className="space-y-6">
@@ -413,7 +424,18 @@ function PodsContent() {
 				lastUpdated={lastUpdated}
 			/>
 
-			<div className="px-4 lg:px-6">
+			<div className="px-4 lg:px-6 space-y-3">
+        {alert && (
+          <Alert
+            className={alert.variant === 'success'
+              ? 'bg-transparent border-green-600 text-green-700'
+              : 'bg-transparent border-red-600 text-red-700'}
+            variant='default'
+          >
+            <AlertTitle>{alert.title}</AlertTitle>
+            {alert.description && <AlertDescription>{alert.description}</AlertDescription>}
+          </Alert>
+        )}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}

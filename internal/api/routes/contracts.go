@@ -207,21 +207,14 @@ type ReadHandlers interface {
 
 // WriteHandlers defines the contract for write tier handlers (authentication + write permissions required)
 type WriteHandlers interface {
-	// Node management
-	HandleCordonNode(w http.ResponseWriter, r *http.Request)
-	HandleUncordonNode(w http.ResponseWriter, r *http.Request)
-	HandleDrainNode(w http.ResponseWriter, r *http.Request)
+    // Node management
+    HandleCordonNode(w http.ResponseWriter, r *http.Request)
+    HandleUncordonNode(w http.ResponseWriter, r *http.Request)
+    HandleDrainNode(w http.ResponseWriter, r *http.Request)
 
-	// Action validation and bulk operations
-	HandleValidateAction(w http.ResponseWriter, r *http.Request)
-	HandleBulkAction(w http.ResponseWriter, r *http.Request)
-
-	// Resource-specific bulk actions
-	HandlePodsBulkAction(w http.ResponseWriter, r *http.Request)
-	HandleDeploymentsBulkAction(w http.ResponseWriter, r *http.Request)
-	HandleServicesBulkAction(w http.ResponseWriter, r *http.Request)
-	HandleConfigMapsBulkAction(w http.ResponseWriter, r *http.Request)
-	HandleSecretsBulkAction(w http.ResponseWriter, r *http.Request)
+    // Generic actions
+    HandleExecuteActions(w http.ResponseWriter, r *http.Request)
+    HandleValidateGenericActions(w http.ResponseWriter, r *http.Request)
 
 	// Resource management
 	HandleScaleResource(w http.ResponseWriter, r *http.Request)

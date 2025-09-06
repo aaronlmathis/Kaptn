@@ -13,16 +13,9 @@ func MountWrite(r chi.Router, h WriteHandlers) {
 	r.Post("/nodes/{nodeName}/uncordon", h.HandleUncordonNode)
 	r.Post("/nodes/{nodeName}/drain", h.HandleDrainNode)
 
-	// Enhanced bulk actions endpoints
-	r.Post("/actions/validate", h.HandleValidateAction)
-	r.Post("/actions/bulk", h.HandleBulkAction)
-
-	// Resource-specific bulk actions
-	r.Post("/actions/pods", h.HandlePodsBulkAction)
-	r.Post("/actions/deployments", h.HandleDeploymentsBulkAction)
-	r.Post("/actions/services", h.HandleServicesBulkAction)
-	r.Post("/actions/configmaps", h.HandleConfigMapsBulkAction)
-	r.Post("/actions/secrets", h.HandleSecretsBulkAction)
+    // Generic action endpoints
+    r.Post("/actions", h.HandleExecuteActions)
+    r.Post("/actions/validate", h.HandleValidateGenericActions)
 
 	// Advanced write endpoints
 	r.Post("/scale", h.HandleScaleResource)
