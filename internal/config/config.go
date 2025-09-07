@@ -11,19 +11,19 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-    Server       ServerConfig       `yaml:"server"`
-    Security     SecurityConfig     `yaml:"security"`
-    Authz        AuthzConfig        `yaml:"authz"`
-    Bindings     BindingsConfig     `yaml:"bindings"`
-    Kubernetes   KubernetesConfig   `yaml:"kubernetes"`
-    Features     FeaturesConfig     `yaml:"features"`
-    RateLimits   RateLimitsConfig   `yaml:"rate_limits"`
-    Logging      LoggingConfig      `yaml:"logging"`
-    Integrations IntegrationsConfig `yaml:"integrations"`
-    Caching      CachingConfig      `yaml:"caching"`
-    Jobs         JobsConfig         `yaml:"jobs"`
-    Timeseries   TimeseriesConfig   `yaml:"timeseries"`
-    Actions      ActionsConfig      `yaml:"actions"`
+	Server       ServerConfig       `yaml:"server"`
+	Security     SecurityConfig     `yaml:"security"`
+	Authz        AuthzConfig        `yaml:"authz"`
+	Bindings     BindingsConfig     `yaml:"bindings"`
+	Kubernetes   KubernetesConfig   `yaml:"kubernetes"`
+	Features     FeaturesConfig     `yaml:"features"`
+	RateLimits   RateLimitsConfig   `yaml:"rate_limits"`
+	Logging      LoggingConfig      `yaml:"logging"`
+	Integrations IntegrationsConfig `yaml:"integrations"`
+	Caching      CachingConfig      `yaml:"caching"`
+	Jobs         JobsConfig         `yaml:"jobs"`
+	Timeseries   TimeseriesConfig   `yaml:"timeseries"`
+	Actions      ActionsConfig      `yaml:"actions"`
 }
 
 // ServerConfig represents the server configuration
@@ -143,6 +143,13 @@ type CachingConfig struct {
 	SummaryTTL     string `yaml:"summary_ttl"`
 	SearchCacheTTL string `yaml:"search_cache_ttl"`
 	SearchMaxSize  int    `yaml:"search_cache_max_size"`
+
+	// Logs cache configuration
+	LogsTTL            string `yaml:"logs_ttl"`
+	LogsMaxGlobal      int    `yaml:"logs_max_global"`
+	LogsMaxPerScope    int    `yaml:"logs_max_per_scope"`
+	LogsMaxSubscribers int    `yaml:"logs_max_subscribers"`
+	LogsBufferSize     int    `yaml:"logs_buffer_size"`
 }
 
 // JobsConfig represents job management configuration
@@ -179,14 +186,14 @@ type TimeseriesConfig struct {
 
 // ActionsConfig configures action execution behavior
 type ActionsConfig struct {
-    IdempotencyTTL     string `yaml:"idempotency_ttl"`
-    DefaultConcurrency int    `yaml:"default_concurrency"`
-    MaxConcurrency     int    `yaml:"max_concurrency"`
-    // Safety + policy tuning
-    DeniedNamespaces []string          `yaml:"denied_namespaces"`
-    DeniedLabels     map[string]string `yaml:"denied_labels"`
-    ActionAllowlist  []string          `yaml:"action_allowlist"`  // entries like "delete:customresourcedefinitions"
-    ActionDenylist   []string          `yaml:"action_denylist"`   // entries like "delete:namespaces"
+	IdempotencyTTL     string `yaml:"idempotency_ttl"`
+	DefaultConcurrency int    `yaml:"default_concurrency"`
+	MaxConcurrency     int    `yaml:"max_concurrency"`
+	// Safety + policy tuning
+	DeniedNamespaces []string          `yaml:"denied_namespaces"`
+	DeniedLabels     map[string]string `yaml:"denied_labels"`
+	ActionAllowlist  []string          `yaml:"action_allowlist"` // entries like "delete:customresourcedefinitions"
+	ActionDenylist   []string          `yaml:"action_denylist"`  // entries like "delete:namespaces"
 }
 
 // Load loads the configuration from environment variables and defaults
@@ -201,7 +208,7 @@ func LoadFromFile(configPath string) (*Config, error) {
 
 // loadWithDefaults loads configuration with defaults, optionally from a file
 func loadWithDefaults(configPath string) (*Config, error) {
-    cfg := &Config{
+	cfg := &Config{
 		Server: ServerConfig{
 			Addr:         getEnv("KAPTN_SERVER_ADDR", "0.0.0.0:8080"),
 			BasePath:     getEnv("KAPTN_BASE_PATH", "/"),
@@ -280,6 +287,13 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			SummaryTTL:     getEnv("KAPTN_SUMMARY_TTL", "30s"),
 			SearchCacheTTL: getEnv("KAPTN_SEARCH_CACHE_TTL", "30s"),
 			SearchMaxSize:  getEnvInt("KAPTN_SEARCH_MAX_SIZE", 10000),
+
+			// Logs cache defaults
+			LogsTTL:            getEnv("KAPTN_LOGS_TTL", "10m"),
+			LogsMaxGlobal:      getEnvInt("KAPTN_LOGS_MAX_GLOBAL", 250000),
+			LogsMaxPerScope:    getEnvInt("KAPTN_LOGS_MAX_PER_SCOPE", 20000),
+			LogsMaxSubscribers: getEnvInt("KAPTN_LOGS_MAX_SUBSCRIBERS", 200),
+			LogsBufferSize:     getEnvInt("KAPTN_LOGS_BUFFER_SIZE", 100),
 		},
 		Jobs: JobsConfig{
 			PersistenceEnabled: getEnvBool("KAPTN_JOBS_PERSISTENCE_ENABLED", true),
@@ -287,7 +301,7 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			CleanupInterval:    getEnv("KAPTN_JOBS_CLEANUP_INTERVAL", "1h"),
 			MaxAge:             getEnv("KAPTN_JOBS_MAX_AGE", "24h"),
 		},
-        Timeseries: TimeseriesConfig{
+		Timeseries: TimeseriesConfig{
 			Enabled:                 getEnvBool("KAPTN_TIMESERIES_ENABLED", true),
 			Window:                  getEnv("KAPTN_TIMESERIES_WINDOW", "60m"),
 			TickInterval:            getEnv("KAPTN_TIMESERIES_TICK_INTERVAL", "1s"),
@@ -308,17 +322,17 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			WSReadLimit:                 getEnvInt("KAPTN_TIMESERIES_WS_READ_LIMIT", 4096),
 			WSWriteBufferSize:           getEnvInt("KAPTN_TIMESERIES_WS_WRITE_BUFFER_SIZE", 1024),
 			DisableNetworkIfUnavailable: getEnvBool("KAPTN_TIMESERIES_DISABLE_NETWORK_IF_UNAVAILABLE", true),
-        },
-        Actions: ActionsConfig{
-            IdempotencyTTL:     getEnv("KAPTN_ACTIONS_IDEMPOTENCY_TTL", "10m"),
-            DefaultConcurrency: getEnvInt("KAPTN_ACTIONS_DEFAULT_CONCURRENCY", 8),
-            MaxConcurrency:     getEnvInt("KAPTN_ACTIONS_MAX_CONCURRENCY", 32),
-            DeniedNamespaces:   []string{},
-            DeniedLabels:       map[string]string{},
-            ActionAllowlist:    []string{},
-            ActionDenylist:     []string{},
-        },
-    }
+		},
+		Actions: ActionsConfig{
+			IdempotencyTTL:     getEnv("KAPTN_ACTIONS_IDEMPOTENCY_TTL", "10m"),
+			DefaultConcurrency: getEnvInt("KAPTN_ACTIONS_DEFAULT_CONCURRENCY", 8),
+			MaxConcurrency:     getEnvInt("KAPTN_ACTIONS_MAX_CONCURRENCY", 32),
+			DeniedNamespaces:   []string{},
+			DeniedLabels:       map[string]string{},
+			ActionAllowlist:    []string{},
+			ActionDenylist:     []string{},
+		},
+	}
 
 	// If a config file path is provided, load and merge it
 	if configPath != "" {

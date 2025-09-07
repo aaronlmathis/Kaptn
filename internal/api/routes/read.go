@@ -168,6 +168,10 @@ func MountRead(r chi.Router, h ReadHandlers) {
 	// Pod logs
 	r.Get("/pods/{namespace}/{podName}/logs", h.HandleGetPodLogs)
 
+	// Logs cache (replay-only)
+	r.Get("/logs", h.HandleGetLogs)
+	r.Get("/logs/export", h.HandleExportLogs)
+
 	// Analytics
 	r.Get("/analytics/visitors", h.HandleGetVisitors)
 

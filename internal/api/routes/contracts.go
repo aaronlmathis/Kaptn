@@ -174,6 +174,10 @@ type ReadHandlers interface {
 	// Pod logs
 	HandleGetPodLogs(w http.ResponseWriter, r *http.Request)
 
+	// Logs cache (replay-only)
+	HandleGetLogs(w http.ResponseWriter, r *http.Request)
+	HandleExportLogs(w http.ResponseWriter, r *http.Request)
+
 	// Analytics
 	HandleGetVisitors(w http.ResponseWriter, r *http.Request)
 
@@ -207,14 +211,14 @@ type ReadHandlers interface {
 
 // WriteHandlers defines the contract for write tier handlers (authentication + write permissions required)
 type WriteHandlers interface {
-    // Node management
-    HandleCordonNode(w http.ResponseWriter, r *http.Request)
-    HandleUncordonNode(w http.ResponseWriter, r *http.Request)
-    HandleDrainNode(w http.ResponseWriter, r *http.Request)
+	// Node management
+	HandleCordonNode(w http.ResponseWriter, r *http.Request)
+	HandleUncordonNode(w http.ResponseWriter, r *http.Request)
+	HandleDrainNode(w http.ResponseWriter, r *http.Request)
 
-    // Generic actions
-    HandleExecuteActions(w http.ResponseWriter, r *http.Request)
-    HandleValidateGenericActions(w http.ResponseWriter, r *http.Request)
+	// Generic actions
+	HandleExecuteActions(w http.ResponseWriter, r *http.Request)
+	HandleValidateGenericActions(w http.ResponseWriter, r *http.Request)
 
 	// Resource management
 	HandleScaleResource(w http.ResponseWriter, r *http.Request)
@@ -262,23 +266,23 @@ type StaticHandlers interface {
 
 // Tiers combines all handler interfaces for easy mounting
 type Tiers struct {
-    Public PublicHandlers
-    Admin  AdminHandlers
-    Read   ReadHandlers
-    Write  WriteHandlers
-    Apply  ApplyHandlers
-    System SystemHandlers
-    Static StaticHandlers
+	Public PublicHandlers
+	Admin  AdminHandlers
+	Read   ReadHandlers
+	Write  WriteHandlers
+	Apply  ApplyHandlers
+	System SystemHandlers
+	Static StaticHandlers
 
-    // Optional middlewares to be applied per tier (provided by server)
-    MW Middlewares
+	// Optional middlewares to be applied per tier (provided by server)
+	MW Middlewares
 }
 
 // Middlewares provides optional HTTP middlewares for route groups
 // Each field is a standard chi-compatible middleware function.
 type Middlewares struct {
-    // RequireAuth enforces that a request has an authenticated user
-    RequireAuth func(http.Handler) http.Handler
-    // RequireImpersonation ensures impersonated Kubernetes clients are present in context
-    RequireImpersonation func(http.Handler) http.Handler
+	// RequireAuth enforces that a request has an authenticated user
+	RequireAuth func(http.Handler) http.Handler
+	// RequireImpersonation ensures impersonated Kubernetes clients are present in context
+	RequireImpersonation func(http.Handler) http.Handler
 }
