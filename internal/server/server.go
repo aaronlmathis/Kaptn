@@ -310,6 +310,10 @@ func (s *Server) initKubernetesClient() error {
 		s.impersonationMgr,
 		acOpts,
 	)
+	s.logger.Info("Action coordinator initialized",
+		zap.Int("default_concurrency", acOpts.DefaultConcurrency),
+		zap.Int("max_concurrency", acOpts.MaxConcurrency),
+		zap.Duration("idempotency_ttl", acOpts.IdempotencyTTL))
 
 	// Initialize logs service
 	s.logsService = k8slogs.NewStreamManager(s.logger, s.kubeClient)

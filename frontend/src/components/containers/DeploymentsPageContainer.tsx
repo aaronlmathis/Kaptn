@@ -20,6 +20,7 @@ import { useCapabilities } from "@/hooks/use-capabilities"
 import { Badge } from "@/components/ui/badge"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 import {
 	getDeploymentStatusBadge,
 	getReplicaStatusBadge,
@@ -169,10 +170,19 @@ function DeploymentsContent() {
 	}, [deployments, globalFilter, statusFilter])
 
 	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validateDeploymentsAction = React.useCallback(async (_type: 'delete' | 'restart' | 'scale', _rows: DashboardDeployment[]) => {
-		// For now, just set empty warnings since we don't have bulk actions API yet
-		// TODO: Implement validation similar to pods when bulk actions API is ready
-		setConfirmWarnings([])
+	const validateDeploymentsAction = React.useCallback(async (type: 'delete' | 'restart' | 'scale', rows: DashboardDeployment[]) => {
+		try {
+			const targets = rows.map(d => ({ namespace: d.namespace, name: d.name }))
+			const legacyAction = type === 'delete' ? 'delete-deployments' : type === 'restart' ? 'restart-deployments' : 'scale-deployments'
+			const resp = await bulkActionsApi.validateAction('deployments', { action: legacyAction, targets })
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
 	}, [])
 
 	// Build table columns with status badge functions
@@ -336,10 +346,13 @@ function DeploymentsContent() {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			const names = pendingAction.deployments.map(d => d.name).join(', ')
-			// TODO: Implement actual bulk actions API calls for deployments
-			console.log(`${pendingAction.type} deployments:`, names)
-			setAlert({ variant: 'success', title: `Success: ${pendingAction.type} operation completed`, description: `Processed ${pendingAction.deployments.length} deployment(s)` })
+			const targets = pendingAction.deployments.map(d => ({ namespace: d.namespace, name: d.name }))
+			const legacyAction = pendingAction.type === 'delete' ? 'delete-deployments' : pendingAction.type === 'restart' ? 'restart-deployments' : 'scale-deployments'
+			const resp = await bulkActionsApi.executeBulkAction('deployments', { action: legacyAction, targets })
+			const success = resp?.success
+			const total = resp?.resources_total ?? 0
+			const affected = resp?.resources_affected ?? 0
+			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} deployments processed` : `Errors: ${total - affected} failed`, description: resp?.message })
 		} catch (e: unknown) {
 			setAlert({ variant: 'error', title: 'Action failed', description: e instanceof Error ? e.message : String(e) })
 		} finally {
