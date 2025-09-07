@@ -549,8 +549,16 @@ export function PodsDataTable() {
 				icon: <IconFileText className="size-4" />,
 				action: () => {
 					const selectedPods = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-					console.log('Get logs for pods:', selectedPods.map(p => `${p.name} in ${p.namespace}`))
-					// TODO: Implement bulk log retrieval
+					const first = selectedPods[0]
+					if (!first) return
+					const sameNS = selectedPods.every(p => p.namespace === first.namespace)
+					if (selectedPods.length === 1) {
+						window.location.href = `/logs?namespace=${encodeURIComponent(first.namespace)}&pod=${encodeURIComponent(first.name)}&since=15m`
+					} else if (sameNS) {
+						window.location.href = `/logs?namespace=${encodeURIComponent(first.namespace)}&since=15m`
+					} else {
+						window.location.href = `/logs?since=15m`
+					}
 				},
 				requiresSelection: true,
 			})

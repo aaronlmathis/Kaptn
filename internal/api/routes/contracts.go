@@ -21,6 +21,12 @@ type AdminHandlers interface {
 	HandleRevokeUserSessions(w http.ResponseWriter, r *http.Request)
 	HandleBindingsReload(w http.ResponseWriter, r *http.Request)
 	HandleGenericSAR(w http.ResponseWriter, r *http.Request)
+
+	// Phase 10: Logs Cache Administrative Endpoints
+	HandleLogsCacheClearRings(w http.ResponseWriter, r *http.Request)
+	HandleLogsCacheDumpStats(w http.ResponseWriter, r *http.Request)
+	HandleLogsCacheListStreams(w http.ResponseWriter, r *http.Request)
+	HandleLogsCacheSetLimits(w http.ResponseWriter, r *http.Request)
 }
 
 // ReadHandlers defines the contract for read tier handlers (authentication required)

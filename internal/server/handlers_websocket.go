@@ -56,9 +56,7 @@ func (s *Server) HandleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement RBAC validation for the stream scope
-	// For each namespace/pod in the stream selector, verify user has 'get' permission on 'pods/log'
-	// This should use SSARHelper.CanPerformActionWithSubresource
+	// Validate RBAC permissions for the stream scope
 	if err := s.validateLogStreamAccess(r, selector); err != nil {
 		s.logger.Error("Log stream access denied",
 			zap.String("streamID", streamID),
@@ -66,6 +64,15 @@ func (s *Server) HandleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Access denied", http.StatusForbidden)
 		return
 	}
+
+	// Set RBAC context for ongoing per-pod authorization checks
+	secCtx, err := s.getSecurityContext(r)
+	if err != nil {
+		s.logger.Error("Failed to get security context", zap.Error(err))
+		http.Error(w, "Authorization failed", http.StatusInternalServerError)
+		return
+	}
+	s.logsCoordinator.SetRBACContext(secCtx.SSARHelper, secCtx.Client, secCtx.User)
 
 	// Create log filter from query parameters for initial replay
 	logFilter := s.buildLogFilterFromRequest(r, selector)
@@ -94,13 +101,21 @@ func (s *Server) HandleStartLogStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement RBAC validation for the requested scope
 	// Validate user has 'get' permission on 'pods/log' for requested namespaces
 	if err := s.validateLogStreamAccess(r, req.Selector); err != nil {
 		s.logger.Error("Log stream access denied", zap.Error(err))
 		http.Error(w, "Access denied", http.StatusForbidden)
 		return
 	}
+
+	// Set RBAC context for per-pod authorization checks
+	secCtx, err := s.getSecurityContext(r)
+	if err != nil {
+		s.logger.Error("Failed to get security context", zap.Error(err))
+		http.Error(w, "Authorization failed", http.StatusInternalServerError)
+		return
+	}
+	s.logsCoordinator.SetRBACContext(secCtx.SSARHelper, secCtx.Client, secCtx.User)
 
 	// Generate unique stream ID
 	streamID := uuid.New().String()
@@ -119,7 +134,7 @@ func (s *Server) HandleStartLogStream(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
-	err := s.logsCoordinator.StartCoordinatedStream(ctx, streamID, req.Selector, k8sFilter)
+	err = s.logsCoordinator.StartCoordinatedStream(ctx, streamID, req.Selector, k8sFilter)
 	if err != nil {
 		s.logger.Error("Failed to start coordinated log stream",
 			zap.Error(err),
@@ -301,13 +316,26 @@ func (s *Server) validateLogStreamAccess(r *http.Request, selector k8slogs.PodSe
 		// No specific namespace - check if user has cluster-wide pod log access
 		// This is more restrictive - they need cluster-wide permissions
 		if err := s.checkResourcePermission(r.Context(), secCtx, "list", "pods", "", ""); err != nil {
+			s.logAuditEvent(r, secCtx.User, "list", "pods", "", "", "DENIED", err)
 			return &SecurityError{
 				Code:    "FORBIDDEN",
 				Message: "Insufficient permissions to access logs across all namespaces",
 				Status:  http.StatusForbidden,
 			}
 		}
+
+		// Additionally check cluster-wide pod log subresource access
+		if err := s.checkResourcePermissionWithSubresource(r.Context(), secCtx, "get", "pods", "log", "", ""); err != nil {
+			s.logAuditEvent(r, secCtx.User, "get", "pods/log", "", "", "DENIED", err)
+			return &SecurityError{
+				Code:    "FORBIDDEN",
+				Message: "Insufficient permissions to access pod logs at cluster scope",
+				Status:  http.StatusForbidden,
+			}
+		}
+
 		// If they have cluster-wide access, allow the stream
+		s.logAuditEvent(r, secCtx.User, "get", "pods/log", "", "", "ALLOWED", nil)
 		return nil
 	}
 
@@ -315,6 +343,7 @@ func (s *Server) validateLogStreamAccess(r *http.Request, selector k8slogs.PodSe
 	for _, namespace := range namespacesToCheck {
 		// Check if user can list pods in this namespace
 		if err := s.checkResourcePermission(r.Context(), secCtx, "list", "pods", namespace, ""); err != nil {
+			s.logAuditEvent(r, secCtx.User, "list", "pods", namespace, "", "DENIED", err)
 			return &SecurityError{
 				Code:    "FORBIDDEN",
 				Message: fmt.Sprintf("Insufficient permissions to list pods in namespace %s", namespace),
@@ -324,6 +353,7 @@ func (s *Server) validateLogStreamAccess(r *http.Request, selector k8slogs.PodSe
 
 		// Check if user can access pod logs in this namespace
 		if err := s.checkResourcePermissionWithSubresource(r.Context(), secCtx, "get", "pods", "log", namespace, ""); err != nil {
+			s.logAuditEvent(r, secCtx.User, "get", "pods/log", namespace, "", "DENIED", err)
 			return &SecurityError{
 				Code:    "FORBIDDEN",
 				Message: fmt.Sprintf("Insufficient permissions to access pod logs in namespace %s", namespace),
@@ -442,6 +472,10 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 	degraded := false
 	backpressureThreshold := 50 // If we can't send for this many messages, go degraded
 	droppedCount := 0
+	batchBuffer := make([]logs.LogEntry, 0, 20)    // Buffer for batching in degraded mode
+	batchTicker := time.NewTicker(2 * time.Second) // Batch interval for degraded mode
+	defer batchTicker.Stop()
+	batchTicker.Stop() // Start stopped, will start when entering degraded mode
 
 	// Main message loop
 	done := make(chan struct{})
@@ -463,59 +497,107 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 	for {
 		select {
 		case <-done:
+			// Send any remaining batch before closing
+			if len(batchBuffer) > 0 {
+				s.sendBatchedLogs(conn, batchBuffer, room)
+			}
 			s.logger.Info("WebSocket connection closed", zap.String("room", room))
 			return
 
 		case <-ctx.Done():
+			// Send any remaining batch before closing
+			if len(batchBuffer) > 0 {
+				s.sendBatchedLogs(conn, batchBuffer, room)
+			}
 			s.logger.Info("WebSocket context cancelled", zap.String("room", room))
 			return
 
+		case <-batchTicker.C:
+			// Send batched logs in degraded mode
+			if degraded && len(batchBuffer) > 0 {
+				s.sendBatchedLogs(conn, batchBuffer, room)
+				batchBuffer = batchBuffer[:0] // Clear buffer but keep capacity
+			}
+
 		case entry := <-streamCh:
-			// Try to send the log entry
-			msg := map[string]interface{}{
-				"type": "logs",
-				"data": entry,
-			}
-
 			if degraded {
-				msg["degraded"] = true
-			}
+				// In degraded mode, buffer entries for batching
+				batchBuffer = append(batchBuffer, entry)
 
-			// Set a write timeout
-			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			err := conn.WriteJSON(msg)
-
-			if err != nil {
-				droppedCount++
-				s.logger.Warn("Failed to send log entry",
-					zap.Error(err),
-					zap.String("room", room),
-					zap.Int("droppedCount", droppedCount))
-
-				// Check if we should go into degraded mode
-				if droppedCount >= backpressureThreshold {
-					if !degraded {
-						degraded = true
-						s.logger.Warn("Entering degraded mode due to backpressure",
-							zap.String("room", room),
-							zap.Int("droppedCount", droppedCount))
-					}
-				}
-
-				// If we can't write, client is probably gone
-				if websocket.IsCloseError(err, websocket.CloseAbnormalClosure, websocket.CloseGoingAway) {
-					return
+				// If buffer is full, send immediately
+				if len(batchBuffer) >= cap(batchBuffer) {
+					s.sendBatchedLogs(conn, batchBuffer, room)
+					batchBuffer = batchBuffer[:0] // Clear buffer but keep capacity
 				}
 			} else {
-				// Successfully sent, reset dropped count
-				if droppedCount > 0 {
-					droppedCount = 0
+				// Normal mode - send immediately
+				msg := map[string]interface{}{
+					"type": "logs",
+					"data": entry,
 				}
 
-				// Exit degraded mode if we're sending successfully
-				if degraded {
-					degraded = false
-					s.logger.Info("Exiting degraded mode", zap.String("room", room))
+				// Set a write timeout
+				conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				err := conn.WriteJSON(msg)
+
+				if err != nil {
+					droppedCount++
+					s.logger.Warn("Failed to send log entry",
+						zap.Error(err),
+						zap.String("room", room),
+						zap.Int("droppedCount", droppedCount))
+
+					// Check if we should go into degraded mode
+					if droppedCount >= backpressureThreshold {
+						if !degraded {
+							degraded = true
+							batchTicker.Reset(2 * time.Second) // Start batching
+							s.logger.Warn("Entering degraded mode due to backpressure",
+								zap.String("room", room),
+								zap.Int("droppedCount", droppedCount))
+
+							// Send degraded mode notification to client
+							degradedMsg := map[string]interface{}{
+								"type": "logs.degraded",
+								"data": map[string]interface{}{
+									"reason":     "backpressure",
+									"intervalMs": 2000, // Switch to 2-second batches
+								},
+							}
+							conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+							conn.WriteJSON(degradedMsg)
+
+							// Add current entry to batch buffer
+							batchBuffer = append(batchBuffer, entry)
+						}
+					}
+
+					// If we can't write, client is probably gone
+					if websocket.IsCloseError(err, websocket.CloseAbnormalClosure, websocket.CloseGoingAway) {
+						return
+					}
+				} else {
+					// Successfully sent, reset dropped count
+					if droppedCount > 0 {
+						droppedCount = 0
+					}
+
+					// Exit degraded mode if we're sending successfully
+					if degraded {
+						degraded = false
+						batchTicker.Stop() // Stop batching
+						s.logger.Info("Exiting degraded mode", zap.String("room", room))
+
+						// Send normal mode notification to client
+						normalMsg := map[string]interface{}{
+							"type": "logs.normal",
+							"data": map[string]interface{}{
+								"reason": "backpressure_resolved",
+							},
+						}
+						conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+						conn.WriteJSON(normalMsg)
+					}
 				}
 			}
 
@@ -527,5 +609,31 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 				return
 			}
 		}
+	}
+}
+
+// sendBatchedLogs sends a batch of log entries as a single WebSocket message
+func (s *Server) sendBatchedLogs(conn *websocket.Conn, entries []logs.LogEntry, room string) {
+	if len(entries) == 0 {
+		return
+	}
+
+	msg := map[string]interface{}{
+		"type":     "logs.batch",
+		"data":     entries,
+		"count":    len(entries),
+		"degraded": true,
+	}
+
+	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if err := conn.WriteJSON(msg); err != nil {
+		s.logger.Error("Failed to send batched logs",
+			zap.Error(err),
+			zap.String("room", room),
+			zap.Int("batch_size", len(entries)))
+	} else {
+		s.logger.Debug("Sent batched logs",
+			zap.String("room", room),
+			zap.Int("batch_size", len(entries)))
 	}
 }

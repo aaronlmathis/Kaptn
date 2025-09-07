@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -98,6 +99,7 @@ type KubernetesConfig struct {
 	Mode             string  `yaml:"mode"`
 	KubeconfigPath   string  `yaml:"kubeconfig_path"`
 	NamespaceDefault string  `yaml:"namespace_default"`
+	ClusterName      string  `yaml:"cluster_name"`
 	InsecureTLS      bool    `yaml:"insecure_tls"` // Skip TLS verification for development environments
 	QPS              float32 `yaml:"qps"`          // Queries per second allowed to API server
 	Burst            int     `yaml:"burst"`        // Maximum burst for throttle
@@ -145,11 +147,30 @@ type CachingConfig struct {
 	SearchMaxSize  int    `yaml:"search_cache_max_size"`
 
 	// Logs cache configuration
-	LogsTTL            string `yaml:"logs_ttl"`
-	LogsMaxGlobal      int    `yaml:"logs_max_global"`
-	LogsMaxPerScope    int    `yaml:"logs_max_per_scope"`
-	LogsMaxSubscribers int    `yaml:"logs_max_subscribers"`
-	LogsBufferSize     int    `yaml:"logs_buffer_size"`
+	LogsCache LogsCacheConfig `yaml:"logs_cache"`
+}
+
+// LogsCacheConfig represents the logs cache configuration
+type LogsCacheConfig struct {
+	// Basic cache settings
+	TTL            string `yaml:"ttl"`
+	MaxGlobal      int    `yaml:"max_global"`
+	MaxPerScope    int    `yaml:"max_per_scope"`
+	MaxSubscribers int    `yaml:"max_subscribers"`
+	BufferSize     int    `yaml:"buffer_size"`
+
+	// Cleanup intervals
+	EvictionInterval string `yaml:"eviction_interval"`
+	CleanupInterval  string `yaml:"cleanup_interval"`
+
+	// Operational limits (Phase 10)
+	MaxStreamsPerUser     int    `yaml:"max_streams_per_user"`
+	MaxQueryLimit         int    `yaml:"max_query_limit"`
+	MaxExportSize         int64  `yaml:"max_export_size"`
+	MaxConcurrentQueries  int    `yaml:"max_concurrent_queries"`
+	RateLimitPerSecond    int    `yaml:"rate_limit_per_second"`
+	BackpressureThreshold int    `yaml:"backpressure_threshold"`
+	DegradedModeTimeout   string `yaml:"degraded_mode_timeout"`
 }
 
 // JobsConfig represents job management configuration
@@ -255,6 +276,7 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			Mode:             getEnv("KAPTN_KUBE_MODE", "kubeconfig"),
 			KubeconfigPath:   getEnv("KUBECONFIG", ""),
 			NamespaceDefault: getEnv("KAPTN_NAMESPACE_DEFAULT", "default"),
+			ClusterName:      getEnv("KAPTN_CLUSTER_NAME", "default"),
 			InsecureTLS:      getEnvBool("KAPTN_KUBE_INSECURE_TLS", false),
 			QPS:              float32(getEnvInt("KAPTN_KUBE_QPS", 100)), // Default 100 QPS
 			Burst:            getEnvInt("KAPTN_KUBE_BURST", 200),        // Default 200 burst
@@ -288,12 +310,22 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			SearchCacheTTL: getEnv("KAPTN_SEARCH_CACHE_TTL", "30s"),
 			SearchMaxSize:  getEnvInt("KAPTN_SEARCH_MAX_SIZE", 10000),
 
-			// Logs cache defaults
-			LogsTTL:            getEnv("KAPTN_LOGS_TTL", "10m"),
-			LogsMaxGlobal:      getEnvInt("KAPTN_LOGS_MAX_GLOBAL", 250000),
-			LogsMaxPerScope:    getEnvInt("KAPTN_LOGS_MAX_PER_SCOPE", 20000),
-			LogsMaxSubscribers: getEnvInt("KAPTN_LOGS_MAX_SUBSCRIBERS", 200),
-			LogsBufferSize:     getEnvInt("KAPTN_LOGS_BUFFER_SIZE", 100),
+			LogsCache: LogsCacheConfig{
+				TTL:                   getEnv("KAPTN_LOGS_TTL", "10m"),
+				MaxGlobal:             getEnvInt("KAPTN_LOGS_MAX_GLOBAL", 250000),
+				MaxPerScope:           getEnvInt("KAPTN_LOGS_MAX_PER_SCOPE", 20000),
+				MaxSubscribers:        getEnvInt("KAPTN_LOGS_MAX_SUBSCRIBERS", 200),
+				BufferSize:            getEnvInt("KAPTN_LOGS_BUFFER_SIZE", 100),
+				EvictionInterval:      getEnv("KAPTN_LOGS_EVICTION_INTERVAL", "30s"),
+				CleanupInterval:       getEnv("KAPTN_LOGS_CLEANUP_INTERVAL", "5m"),
+				MaxStreamsPerUser:     getEnvInt("KAPTN_LOGS_MAX_STREAMS_PER_USER", 50),
+				MaxQueryLimit:         getEnvInt("KAPTN_LOGS_MAX_QUERY_LIMIT", 10000),
+				MaxExportSize:         int64(getEnvInt("KAPTN_LOGS_MAX_EXPORT_SIZE", 100*1024*1024)), // 100MB
+				MaxConcurrentQueries:  getEnvInt("KAPTN_LOGS_MAX_CONCURRENT_QUERIES", 20),
+				RateLimitPerSecond:    getEnvInt("KAPTN_LOGS_RATE_LIMIT_PER_SECOND", 1000),
+				BackpressureThreshold: getEnvInt("KAPTN_LOGS_BACKPRESSURE_THRESHOLD", 80),
+				DegradedModeTimeout:   getEnv("KAPTN_LOGS_DEGRADED_MODE_TIMEOUT", "5m"),
+			},
 		},
 		Jobs: JobsConfig{
 			PersistenceEnabled: getEnvBool("KAPTN_JOBS_PERSISTENCE_ENABLED", true),
@@ -440,6 +472,9 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	}
 	if envValue := os.Getenv("KAPTN_NAMESPACE_DEFAULT"); envValue != "" {
 		result.Kubernetes.NamespaceDefault = envValue
+	}
+	if envValue := os.Getenv("KAPTN_CLUSTER_NAME"); envValue != "" {
+		result.Kubernetes.ClusterName = envValue
 	}
 	if envValue := os.Getenv("KAPTN_KUBE_INSECURE_TLS"); envValue != "" {
 		if parsed, err := strconv.ParseBool(envValue); err == nil {
@@ -689,4 +724,77 @@ func (c *Config) GetSummaryConfig() map[string]interface{} {
 		"background_refresh": true,
 		"default_ttl":        c.Caching.SummaryTTL,
 	}
+}
+
+// LogsServiceConfig represents the service configuration for logs cache
+// This matches the structure expected by the logs package
+type LogsServiceConfig struct {
+	// Global ring configuration
+	GlobalMaxEntries int           `yaml:"global_max_entries"`
+	GlobalMaxAge     time.Duration `yaml:"global_max_age"`
+
+	// Per-scope ring configuration
+	ScopeMaxEntries int           `yaml:"scope_max_entries"`
+	ScopeMaxAge     time.Duration `yaml:"scope_max_age"`
+
+	// Pub/sub configuration
+	MaxSubscribers int `yaml:"max_subscribers"`
+	BufferSize     int `yaml:"buffer_size"`
+
+	// Cleanup intervals
+	EvictionInterval time.Duration `yaml:"eviction_interval"`
+	CleanupInterval  time.Duration `yaml:"cleanup_interval"`
+
+	// Phase 10: Operational guardrails
+	MaxStreamsPerUser     int           `yaml:"max_streams_per_user"`
+	MaxQueryLimit         int           `yaml:"max_query_limit"`
+	MaxExportSize         int64         `yaml:"max_export_size"`
+	MaxConcurrentQueries  int           `yaml:"max_concurrent_queries"`
+	RateLimitPerSecond    int           `yaml:"rate_limit_per_second"`
+	BackpressureThreshold int           `yaml:"backpressure_threshold"`
+	DegradedModeTimeout   time.Duration `yaml:"degraded_mode_timeout"`
+}
+
+// GetLogsServiceConfig converts the config to a logs service config
+func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
+	// Parse duration strings
+	globalMaxAge, err := time.ParseDuration(c.Caching.LogsCache.TTL)
+	if err != nil {
+		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache TTL: %w", err)
+	}
+
+	evictionInterval, err := time.ParseDuration(c.Caching.LogsCache.EvictionInterval)
+	if err != nil {
+		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache eviction interval: %w", err)
+	}
+
+	cleanupInterval, err := time.ParseDuration(c.Caching.LogsCache.CleanupInterval)
+	if err != nil {
+		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache cleanup interval: %w", err)
+	}
+
+	degradedModeTimeout, err := time.ParseDuration(c.Caching.LogsCache.DegradedModeTimeout)
+	if err != nil {
+		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache degraded mode timeout: %w", err)
+	}
+
+	return LogsServiceConfig{
+		GlobalMaxEntries: c.Caching.LogsCache.MaxGlobal,
+		GlobalMaxAge:     globalMaxAge,
+		ScopeMaxEntries:  c.Caching.LogsCache.MaxPerScope,
+		ScopeMaxAge:      globalMaxAge, // Use same TTL for scoped rings
+		MaxSubscribers:   c.Caching.LogsCache.MaxSubscribers,
+		BufferSize:       c.Caching.LogsCache.BufferSize,
+		EvictionInterval: evictionInterval,
+		CleanupInterval:  cleanupInterval,
+
+		// Phase 10: Operational guardrails
+		MaxStreamsPerUser:     c.Caching.LogsCache.MaxStreamsPerUser,
+		MaxQueryLimit:         c.Caching.LogsCache.MaxQueryLimit,
+		MaxExportSize:         c.Caching.LogsCache.MaxExportSize,
+		MaxConcurrentQueries:  c.Caching.LogsCache.MaxConcurrentQueries,
+		RateLimitPerSecond:    c.Caching.LogsCache.RateLimitPerSecond,
+		BackpressureThreshold: c.Caching.LogsCache.BackpressureThreshold,
+		DegradedModeTimeout:   degradedModeTimeout,
+	}, nil
 }

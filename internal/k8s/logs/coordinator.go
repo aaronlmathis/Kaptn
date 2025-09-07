@@ -13,6 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/aaronlmathis/kaptn/internal/auth"
+	"github.com/aaronlmathis/kaptn/internal/k8s"
 	"github.com/aaronlmathis/kaptn/internal/logs"
 )
 
@@ -43,6 +45,12 @@ type StreamCoordinator struct {
 
 	// Default cluster name for log entries
 	clusterName string
+
+	// RBAC components for per-pod authorization
+	ssarHelper         *k8s.SSARHelper
+	impersonatedClient kubernetes.Interface
+	user               *auth.User
+	enablePodRBAC      bool // Feature flag for per-pod RBAC checks
 }
 
 // CoordinatorStream represents a multi-pod log streaming session
@@ -73,6 +81,19 @@ func NewStreamCoordinator(logger *zap.Logger, kubeClient kubernetes.Interface, c
 		clusterName:   clusterName,
 		activeStreams: make(map[string]*CoordinatorStream),
 	}
+}
+
+// SetRBACContext sets the RBAC context for per-pod authorization checks
+func (sc *StreamCoordinator) SetRBACContext(ssarHelper *k8s.SSARHelper, impersonatedClient kubernetes.Interface, user *auth.User) {
+	sc.ssarHelper = ssarHelper
+	sc.impersonatedClient = impersonatedClient
+	sc.user = user
+	sc.enablePodRBAC = true // Enable per-pod RBAC checks by default
+}
+
+// SetPodRBACEnabled controls whether per-pod RBAC checks are performed
+func (sc *StreamCoordinator) SetPodRBACEnabled(enabled bool) {
+	sc.enablePodRBAC = enabled
 }
 
 // StartCoordinatedStream starts streaming logs from multiple pods matching the selector
@@ -234,6 +255,44 @@ func (sc *StreamCoordinator) startPodStream(coordStream *CoordinatorStream, pod 
 		existingStream.Cancel()
 	}
 
+	// Perform per-pod RBAC check for pod log access
+	// This ensures that even if the user has general permissions, they're checked per-pod
+	// This can be disabled via SetPodRBACEnabled(false) if needed for troubleshooting
+	if sc.enablePodRBAC && sc.ssarHelper != nil && sc.impersonatedClient != nil {
+		allowed, err := sc.ssarHelper.CanPerformActionWithSubresource(
+			coordStream.ctx,
+			sc.impersonatedClient,
+			"get",
+			"", // group - empty for core resources
+			"pods",
+			"log",
+			pod.Namespace,
+			pod.Name,
+		)
+
+		if err != nil {
+			sc.logger.Error("RBAC check failed for pod stream",
+				zap.Error(err),
+				zap.String("podKey", podKey),
+				zap.String("coordinatorID", coordStream.ID))
+			// Log audit DENIED for error case
+			sc.logAuditEvent("get", "pods/log", pod.Namespace, pod.Name, "ERROR", err)
+			return
+		}
+
+		if !allowed {
+			sc.logger.Info("RBAC denied for pod stream",
+				zap.String("podKey", podKey),
+				zap.String("coordinatorID", coordStream.ID))
+			// Log audit DENIED for permission denied
+			sc.logAuditEvent("get", "pods/log", pod.Namespace, pod.Name, "DENIED", nil)
+			return
+		}
+
+		// Log audit ALLOWED for successful check
+		sc.logAuditEvent("get", "pods/log", pod.Namespace, pod.Name, "ALLOWED", nil)
+	}
+
 	// Create stream manager for this pod
 	streamManager := NewStreamManager(sc.logger, sc.kubeClient)
 
@@ -300,12 +359,6 @@ func (sc *StreamCoordinator) bridgePodLogsToCache(coordStream *CoordinatorStream
 
 			// Ingest into cache service
 			sc.cacheService.Ingest(normalizedEntry)
-
-			// Broadcast to WebSocket room if hub is available
-			if sc.wsHub != nil {
-				roomName := "logs:" + coordStream.ID
-				sc.wsHub.BroadcastToRoom(roomName, "logs", normalizedEntry)
-			}
 
 		case err, ok := <-stream.Errors():
 			if !ok {
@@ -478,6 +531,42 @@ func (sc *StreamCoordinator) GetActiveStreams() map[string]PodSelector {
 		result[id] = stream.selector
 	}
 	return result
+}
+
+// logAuditEvent logs RBAC audit events for pod stream access
+func (sc *StreamCoordinator) logAuditEvent(verb, resource, namespace, name, decision string, err error) {
+	logFields := []zap.Field{
+		zap.String("event_type", "audit"),
+		zap.String("component", "stream_coordinator"),
+		zap.String("verb", verb),
+		zap.String("resource", resource),
+		zap.String("namespace", namespace),
+		zap.String("name", name),
+		zap.String("decision", decision),
+	}
+
+	if sc.user != nil {
+		logFields = append(logFields,
+			zap.String("user_sub", sc.user.Sub),
+			zap.String("user_email", sc.user.Email),
+			zap.Strings("user_groups", sc.user.Groups))
+	}
+
+	if err != nil {
+		logFields = append(logFields, zap.Error(err))
+	}
+
+	// Log at appropriate level based on decision
+	switch decision {
+	case "ALLOWED":
+		sc.logger.Info("Stream coordinator audit event", logFields...)
+	case "DENIED":
+		sc.logger.Warn("Stream coordinator audit event - access denied", logFields...)
+	case "ERROR":
+		sc.logger.Error("Stream coordinator audit event - error", logFields...)
+	default:
+		sc.logger.Info("Stream coordinator audit event", logFields...)
+	}
 }
 
 // GetStreamPodCount returns the number of pods being streamed for a coordinator

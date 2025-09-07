@@ -322,7 +322,10 @@ func (s *Server) initKubernetesClient() error {
 	s.logsCacheService = logs.NewService(logsCacheConfig)
 
 	// Initialize logs coordinator (multi-pod streaming)
-	clusterName := "default" // TODO: Add cluster name to config
+	clusterName := s.config.Kubernetes.ClusterName
+	if clusterName == "" {
+		clusterName = "default" // fallback if not configured
+	}
 	s.logsCoordinator = k8slogs.NewStreamCoordinator(s.logger, s.kubeClient, s.logsCacheService, s.wsHub, clusterName)
 
 	// Initialize exec service

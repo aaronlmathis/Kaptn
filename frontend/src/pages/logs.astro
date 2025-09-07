@@ -1,0 +1,15 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { LogsPageContainer } from "@/components/containers/LogsPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "Logs";
+---
+
+<Layout title={title}>
+  <AppShell client:load>
+    <LogsPageContainer />
+  </AppShell>
+  
+</Layout>
+

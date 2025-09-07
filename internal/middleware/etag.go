@@ -126,6 +126,18 @@ func (em *ETagMiddleware) shouldSkipETag(path string) bool {
 		}
 	}
 
+	// Skip exact matches for dynamic logs endpoints without trailing slash
+	exactSkipPaths := []string{
+		"/api/v1/logs",
+		"/api/v1/logs/export",
+	}
+
+	for _, exactPath := range exactSkipPaths {
+		if path == exactPath {
+			return true
+		}
+	}
+
 	// Skip for admin endpoints
 	if strings.Contains(path, "/admin/") {
 		return true
