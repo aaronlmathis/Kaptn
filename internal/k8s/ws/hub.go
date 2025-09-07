@@ -170,15 +170,25 @@ func (h *Hub) Run() {
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
+			clientsToRemove := make([]*Client, 0)
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
-					delete(h.clients, client)
-					close(client.send)
+					clientsToRemove = append(clientsToRemove, client)
 				}
 			}
 			h.mu.RUnlock()
+			
+			// Remove clients that couldn't receive the message
+			if len(clientsToRemove) > 0 {
+				h.mu.Lock()
+				for _, client := range clientsToRemove {
+					delete(h.clients, client)
+					close(client.send)
+				}
+				h.mu.Unlock()
+			}
 		}
 	}
 }

@@ -32,19 +32,25 @@ type Item = {
 
 export function NavMain({ items }: { items: Item[] }) {
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
-      <SidebarMenu>
-        {items.map((item) =>
-          item.items && item.items.length > 0 ? (
-            <NavGroupItem key={item.title} item={item} />
-          ) : (
-            <LeafItem key={item.title} item={item} />
-          )
-        )}
-      </SidebarMenu>
-    </SidebarGroup>
+    <>
+      <SidebarGroup>
+        <SidebarGroupLabel>Platform</SidebarGroupLabel>
+        <SidebarMenu>
+          {items.map((item) =>
+            item.items && item.items.length > 0 ? (
+              <NavGroupItem key={item.title} item={item} />
+            ) : (
+              <LeafItem key={item.title} item={item} />
+            )
+          )}
+        </SidebarMenu>
+      </SidebarGroup>
+      <SidebarGroup>
+        <SidebarGroupLabel>Observability</SidebarGroupLabel>
+      </SidebarGroup>
+    </>
   );
+
 }
 
 function LeafItem({ item }: { item: Item }) {
