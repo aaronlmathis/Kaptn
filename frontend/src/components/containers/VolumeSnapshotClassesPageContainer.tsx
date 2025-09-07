@@ -39,7 +39,7 @@ function VolumeSnapshotClassesContent() {
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
 	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', volumeSnapshotClasses: DashboardVolumeSnapshotClass[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success'|'error', title: string, description?: string }>(null)
+	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -345,13 +345,13 @@ function VolumeSnapshotClassesContent() {
 								categoryOptions={policyOptions}
 								selectedCount={selectedCount}
 								totalCount={totalCount}
-								bulkActions={bulkActions.map(a => ({ 
-									id: a.id, 
-									label: a.label, 
-									icon: a.icon || <></>, 
-									variant: a.variant === 'destructive' ? 'destructive' : 'default', 
-									requiresSelection: a.requiresSelection || false, 
-									action: () => a.action(table.getFilteredSelectedRowModel().rows.map((r: { original: DashboardVolumeSnapshotClass }) => r.original)) 
+								bulkActions={bulkActions.map(a => ({
+									id: a.id,
+									label: a.label,
+									icon: a.icon || <></>,
+									variant: a.variant === 'destructive' ? 'destructive' : 'default',
+									requiresSelection: a.requiresSelection || false,
+									action: () => a.action(table.getFilteredSelectedRowModel().rows.map((r: { original: DashboardVolumeSnapshotClass }) => r.original))
 								}))}
 								table={table}
 								showColumnToggle={true}
