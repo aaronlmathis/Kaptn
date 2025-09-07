@@ -25,10 +25,16 @@ Note: These screenshots are outdated. More to come soon.
 
 **Current Dashboard**
 
+Now featuring Live OpsView Dashboard
 
-Features live updates via kubernetes informer + websockets.
+![Kubernetes OpsView Dashboard Screenshot](images/Kaptn_Ops_View.gif)
 
-![Kubernetes Admin Dashboard Screenshot](images/kaptn_demo_1024.gif)
+- Cluster overview
+- Headroom Charts
+- Noisy Neighbor...
+- And more
+
+![Kubernetes Admin Dashboard Screenshot](images/Kaptn_Dashboard.gif)
 
 **Edit YAML / Pod Details**
 

@@ -146,8 +146,13 @@ func (m *TimeSeriesWSManager) removeClient(clientID string) {
 }
 
 func (m *TimeSeriesWSManager) broadcastToSubscribers(key string, point TimeSeriesPoint) {
+	// Copy clients map to avoid concurrent map iteration and write
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	clientsCopy := make([]*TimeSeriesWSClient, 0, len(m.clients))
+	for _, client := range m.clients {
+		clientsCopy = append(clientsCopy, client)
+	}
+	m.mu.RUnlock()
 
 	message := TimeSeriesAppendMessage{
 		Type:  "append",
@@ -155,7 +160,7 @@ func (m *TimeSeriesWSManager) broadcastToSubscribers(key string, point TimeSerie
 		Point: point,
 	}
 
-	for _, client := range m.clients {
+	for _, client := range clientsCopy {
 		// Check if client is subscribed to this series
 		isSubscribed := false
 		for _, subscription := range client.Subscriptions {
