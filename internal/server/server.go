@@ -19,12 +19,13 @@ import (
 	"github.com/aaronlmathis/kaptn/internal/k8s/client"
 	"github.com/aaronlmathis/kaptn/internal/k8s/exec"
 	"github.com/aaronlmathis/kaptn/internal/k8s/informers"
-	"github.com/aaronlmathis/kaptn/internal/k8s/logs"
+	k8slogs "github.com/aaronlmathis/kaptn/internal/k8s/logs"
 	"github.com/aaronlmathis/kaptn/internal/k8s/metrics"
 	"github.com/aaronlmathis/kaptn/internal/k8s/overview"
 	"github.com/aaronlmathis/kaptn/internal/k8s/resources"
 	"github.com/aaronlmathis/kaptn/internal/k8s/summaries"
 	"github.com/aaronlmathis/kaptn/internal/k8s/ws"
+	"github.com/aaronlmathis/kaptn/internal/logs"
 	apimiddleware "github.com/aaronlmathis/kaptn/internal/middleware"
 	"github.com/aaronlmathis/kaptn/internal/timeseries"
 	"github.com/aaronlmathis/kaptn/internal/timeseries/aggregator"
@@ -49,7 +50,9 @@ type Server struct {
 	actionsService       *actions.NodeActionsService
 	applyService         *actions.ApplyService
 	actionCoordinator    *actions.ActionCoordinator
-	logsService          *logs.StreamManager
+	logsService          *k8slogs.StreamManager     // Old streaming service
+	logsCacheService     *logs.Service              // New cache service
+	logsCoordinator      *k8slogs.StreamCoordinator // Multi-pod log coordinator
 	execService          *exec.ExecManager
 	metricsService       *metrics.MetricsService
 	overviewService      *overview.OverviewService
@@ -155,6 +158,14 @@ func (s *Server) Start(ctx context.Context) error {
 		s.startTimeSeriesWebSocketBroadcaster()
 	}
 
+	// Start logs cache service
+	if s.logsCacheService != nil {
+		if err := s.logsCacheService.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start logs cache service: %w", err)
+		}
+		s.logger.Info("Logs cache service started")
+	}
+
 	// Start informers
 	if err := s.informerManager.Start(); err != nil {
 		return err
@@ -181,6 +192,10 @@ func (s *Server) Stop() {
 
 	if s.timeSeriesAggregator != nil {
 		s.timeSeriesAggregator.Stop()
+	}
+
+	if s.logsCacheService != nil {
+		s.logsCacheService.Stop()
 	}
 
 	if s.informerManager != nil {
@@ -239,17 +254,17 @@ func (s *Server) initKubernetesClient() error {
 	s.impersonationMgr = k8s.NewImpersonationManager(impersonatedFactory, s.logger)
 	s.logger.Info("Impersonation manager initialized")
 
-    // Initialize capability service with TTL from config (fallback to 30s)
-    capTTL := 30 * time.Second
-    if ttlStr := s.config.Caching.SummaryTTL; ttlStr != "" {
-        if parsed, err := time.ParseDuration(ttlStr); err == nil {
-            capTTL = parsed
-        } else {
-            s.logger.Warn("Invalid capability cache TTL, using default", zap.String("ttl", ttlStr), zap.Error(err))
-        }
-    }
-    s.capabilityService = authz.NewCapabilityService(s.logger, capTTL)
-    s.logger.Info("Capability service initialized", zap.Duration("ttl", capTTL))
+	// Initialize capability service with TTL from config (fallback to 30s)
+	capTTL := 30 * time.Second
+	if ttlStr := s.config.Caching.SummaryTTL; ttlStr != "" {
+		if parsed, err := time.ParseDuration(ttlStr); err == nil {
+			capTTL = parsed
+		} else {
+			s.logger.Warn("Invalid capability cache TTL, using default", zap.String("ttl", ttlStr), zap.Error(err))
+		}
+	}
+	s.capabilityService = authz.NewCapabilityService(s.logger, capTTL)
+	s.logger.Info("Capability service initialized", zap.Duration("ttl", capTTL))
 
 	// Initialize apply service
 	s.applyService = actions.NewApplyService(
@@ -263,37 +278,55 @@ func (s *Server) initKubernetesClient() error {
 	// Determine if this is production environment (simplified check)
 	isProduction := s.config.Security.AuthMode != "none"
 
-    safetyGuard := actions.NewSafetyGuard(s.logger, isProduction)
-    // Apply safety guard config (namespaces/labels)
-    if len(s.config.Actions.DeniedNamespaces) > 0 || len(s.config.Actions.DeniedLabels) > 0 {
-        safetyGuard.UpdateSafetyConfig(s.config.Actions.DeniedNamespaces, s.config.Actions.DeniedLabels)
-    }
-    // Apply action allow/deny lists
-    if len(s.config.Actions.ActionAllowlist) > 0 || len(s.config.Actions.ActionDenylist) > 0 {
-        safetyGuard.UpdateActionPolicies(s.config.Actions.ActionAllowlist, s.config.Actions.ActionDenylist)
-    }
+	safetyGuard := actions.NewSafetyGuard(s.logger, isProduction)
+	// Apply safety guard config (namespaces/labels)
+	if len(s.config.Actions.DeniedNamespaces) > 0 || len(s.config.Actions.DeniedLabels) > 0 {
+		safetyGuard.UpdateSafetyConfig(s.config.Actions.DeniedNamespaces, s.config.Actions.DeniedLabels)
+	}
+	// Apply action allow/deny lists
+	if len(s.config.Actions.ActionAllowlist) > 0 || len(s.config.Actions.ActionDenylist) > 0 {
+		safetyGuard.UpdateActionPolicies(s.config.Actions.ActionAllowlist, s.config.Actions.ActionDenylist)
+	}
 	auditLogger := actions.NewAuditLogger(s.logger)
 	ssarHelper := k8s.NewSSARHelper(s.logger)
 
-    // Action coordinator options from config
-    acOpts := &actions.CoordinatorOptions{}
-    if dur, err := time.ParseDuration(s.config.Actions.IdempotencyTTL); err == nil { acOpts.IdempotencyTTL = dur } else { s.logger.Warn("Invalid actions idempotency TTL, using default", zap.String("ttl", s.config.Actions.IdempotencyTTL), zap.Error(err)) }
-    acOpts.DefaultConcurrency = s.config.Actions.DefaultConcurrency
-    acOpts.MaxConcurrency = s.config.Actions.MaxConcurrency
+	// Action coordinator options from config
+	acOpts := &actions.CoordinatorOptions{}
+	if dur, err := time.ParseDuration(s.config.Actions.IdempotencyTTL); err == nil {
+		acOpts.IdempotencyTTL = dur
+	} else {
+		s.logger.Warn("Invalid actions idempotency TTL, using default", zap.String("ttl", s.config.Actions.IdempotencyTTL), zap.Error(err))
+	}
+	acOpts.DefaultConcurrency = s.config.Actions.DefaultConcurrency
+	acOpts.MaxConcurrency = s.config.Actions.MaxConcurrency
 
-    s.actionCoordinator = actions.NewActionCoordinator(
-        s.logger,
-        safetyGuard,
-        auditLogger,
-        ssarHelper,
-        s.actionsService,
-        s.applyService,
-        s.impersonationMgr,
-        acOpts,
-    )
+	s.actionCoordinator = actions.NewActionCoordinator(
+		s.logger,
+		safetyGuard,
+		auditLogger,
+		ssarHelper,
+		s.actionsService,
+		s.applyService,
+		s.impersonationMgr,
+		acOpts,
+	)
 
 	// Initialize logs service
-	s.logsService = logs.NewStreamManager(s.logger, s.kubeClient)
+	s.logsService = k8slogs.NewStreamManager(s.logger, s.kubeClient)
+
+	// Initialize logs cache service
+	logsCacheConfig, err := logs.ServiceConfigFromConfig(s.config)
+	if err != nil {
+		return fmt.Errorf("failed to create logs cache config: %w", err)
+	}
+	s.logsCacheService = logs.NewService(logsCacheConfig)
+
+	// Initialize logs coordinator (multi-pod streaming)
+	clusterName := s.config.Kubernetes.ClusterName
+	if clusterName == "" {
+		clusterName = "default" // fallback if not configured
+	}
+	s.logsCoordinator = k8slogs.NewStreamCoordinator(s.logger, s.kubeClient, s.logsCacheService, s.wsHub, clusterName)
 
 	// Initialize exec service
 	s.execService = exec.NewExecManager(s.logger, s.kubeClient, s.clientFactory.RESTConfig())

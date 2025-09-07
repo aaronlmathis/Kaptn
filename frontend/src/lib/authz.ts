@@ -191,6 +191,24 @@ export type CapabilityKey =
   | "storageclasses.patch"
   | "storageclasses.watch"
 
+  // VolumeSnapshot operations
+  | "volumesnapshots.get"
+  | "volumesnapshots.list"
+  | "volumesnapshots.create"
+  | "volumesnapshots.update"
+  | "volumesnapshots.delete"
+  | "volumesnapshots.patch"
+  | "volumesnapshots.watch"
+
+  // VolumeSnapshotClass operations  
+  | "volumesnapshotclasses.get"
+  | "volumesnapshotclasses.list"
+  | "volumesnapshotclasses.create"
+  | "volumesnapshotclasses.update"
+  | "volumesnapshotclasses.delete"
+  | "volumesnapshotclasses.patch"
+  | "volumesnapshotclasses.watch"
+
   // Ingress operations
   | "ingresses.get"
   | "ingresses.list"

@@ -1,5 +1,4 @@
 import * as React from "react"
-import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { IconEdit, IconTrash, IconCircleCheckFilled } from "@tabler/icons-react"
@@ -16,9 +15,7 @@ import {
 import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-
-// Import the API resource schema from the main data table component
-import { apiResourceSchema } from "@/components/data_tables/ApiResourcesDataTable"
+import type { DashboardAPIResource } from "@/lib/k8s-cluster"
 
 function getNamespacedBadge(namespaced: string) {
 	if (namespaced === "Yes") {
@@ -38,7 +35,7 @@ function getNamespacedBadge(namespaced: string) {
 }
 
 interface ApiResourceDetailDrawerProps {
-	item: z.infer<typeof apiResourceSchema>
+	item: DashboardAPIResource
 	open: boolean
 	onOpenChange: (open: boolean) => void
 }

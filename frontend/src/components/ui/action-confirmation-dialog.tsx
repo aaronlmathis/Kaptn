@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { IconAlertTriangle, IconLoader } from "@tabler/icons-react"
+import { buttonVariants } from "@/components/ui/button"
 
 interface ActionConfirmationDialogProps {
 	open: boolean
@@ -61,7 +62,7 @@ export function ActionConfirmationDialog({
 
 	return (
 		<AlertDialog open={open} onOpenChange={onOpenChange}>
-			<AlertDialogContent className="max-w-md">
+			<AlertDialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
 				<AlertDialogHeader>
 					<AlertDialogTitle className="flex items-center gap-2">
 						{variant === "destructive" && (
@@ -98,9 +99,9 @@ export function ActionConfirmationDialog({
 							<div className="space-y-2">
 								<div className="text-sm font-medium text-yellow-600">Warnings:</div>
 								{warnings.map((warning, index) => (
-									<div key={index} className="flex items-start gap-2 text-xs bg-yellow-50 p-2 rounded border border-yellow-200">
-										<IconAlertTriangle className="size-3 text-yellow-600 mt-0.5 shrink-0" />
-										<span className="text-yellow-800">{warning}</span>
+									<div key={index} className="flex items-start gap-2 text-xs bg-transparent border border-yellow-600/20 p-2 rounded text-yellow-600">
+										<IconAlertTriangle className="size-3 mt-0.5 shrink-0" />
+										<span>{warning}</span>
 									</div>
 								))}
 							</div>
@@ -108,15 +109,15 @@ export function ActionConfirmationDialog({
 
 						{safetyViolations.length > 0 && (
 							<div className="space-y-2">
-								<div className="text-sm font-medium text-red-600">Safety Concerns:</div>
+								<div className="text-sm font-medium text-destructive">Safety Concerns:</div>
 								{safetyViolations.map((violation, index) => (
-									<div key={index} className="flex items-start gap-2 text-xs bg-red-50 p-2 rounded border border-red-200">
-										<IconAlertTriangle className={`size-3 mt-0.5 shrink-0 ${violation.severity === "critical" ? "text-red-600" :
-												violation.severity === "error" ? "text-red-500" : "text-yellow-600"
+									<div key={index} className="flex items-start gap-2 text-xs bg-transparent border border-destructive/20 p-2 rounded text-destructive">
+										<IconAlertTriangle className={`size-3 mt-0.5 shrink-0 ${violation.severity === "critical" ? "text-destructive" :
+											violation.severity === "error" ? "text-destructive" : "text-yellow-600"
 											}`} />
 										<div>
-											<div className="font-medium text-red-800">{violation.rule}</div>
-											<div className="text-red-700">{violation.description}</div>
+											<div className="font-medium">{violation.rule}</div>
+											<div className="opacity-90">{violation.description}</div>
 										</div>
 									</div>
 								))}
@@ -124,11 +125,11 @@ export function ActionConfirmationDialog({
 						)}
 
 						{variant === "destructive" && (
-							<div className="bg-red-50 p-3 rounded border border-red-200">
-								<div className="text-sm font-medium text-red-800 mb-1">
+							<div className="bg-transparent border border-destructive/20 p-3 rounded text-destructive">
+								<div className="text-sm font-medium mb-1">
 									This action cannot be undone
 								</div>
-								<div className="text-xs text-red-700">
+								<div className="text-xs opacity-90">
 									Please make sure you want to proceed with this destructive action.
 								</div>
 							</div>
@@ -142,7 +143,7 @@ export function ActionConfirmationDialog({
 					<AlertDialogAction
 						onClick={handleConfirm}
 						disabled={isExecuting || hasErrors}
-						className={variant === "destructive" ? "bg-red-600 hover:bg-red-700" : ""}
+						className={variant === "destructive" ? buttonVariants({ variant: "destructive" }) : ""}
 					>
 						{isExecuting ? (
 							<>

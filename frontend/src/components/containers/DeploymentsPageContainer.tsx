@@ -1,9 +1,25 @@
 "use client"
 
 import * as React from "react"
-import { DeploymentsDataTable } from "@/components/data_tables/DeploymentsDataTable"
+import { RouteGuard } from "@/components/authz"
+import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable"
+import { DataTableFilters, type FilterOption } from "@/components/ui/data-table-filters"
+import { IfAllowed } from "@/components/authz/IfAllowed"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
+import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { IconDotsVertical, IconEye, IconTrash, IconEdit, IconRefresh, IconScale, IconCopy, IconDownload, IconCircleCheckFilled, IconLoader, IconAlertTriangle } from "@tabler/icons-react"
+import { type ColumnDef } from "@/lib/table"
+import type { DashboardDeployment } from "@/lib/k8s-workloads"
+import { DeploymentDetailDrawer } from "@/components/viewers/DeploymentDetailDrawer"
+import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useDeploymentsWithWebSocket } from "@/hooks/useDeploymentsWithWebSocket"
+import { useCapabilities } from "@/hooks/use-capabilities"
+import { Badge } from "@/components/ui/badge"
+import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
 	getDeploymentStatusBadge,
 	getReplicaStatusBadge,
@@ -11,13 +27,20 @@ import {
 	getResourceIcon,
 	getHealthTrendBadge
 } from "@/lib/summary-card-utils"
-import { RouteGuard } from "@/components/authz"
-import { useCapabilities } from "@/hooks/use-capabilities"
 // Inner component that can access the namespace context
 function DeploymentsContent() {
 	const { data: deployments, loading: isLoading, error, isConnected } = useDeploymentsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
+	const { clusterId } = useCluster()
+	const { isAllowed } = useAuthzCapabilitiesInContext(['deployments.get', 'deployments.patch', 'deployments.delete', 'deployments.restart', 'deployments.scale.update'])
+	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
+	const [selectedDeploymentForDetails, setSelectedDeploymentForDetails] = React.useState<DashboardDeployment | null>(null)
+	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
+	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'restart' | 'scale', deployments: DashboardDeployment[] }>(null)
+	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
 	// Ensure deployment-specific action capabilities are requested (default is conservative)
 	React.useEffect(() => {
@@ -119,25 +142,241 @@ function DeploymentsContent() {
 		]
 	}, [deployments])
 
+	// Filters
+	const [globalFilter, setGlobalFilter] = React.useState("")
+	const [statusFilter, setStatusFilter] = React.useState<string>("all")
+
+	const statusOptions: FilterOption[] = React.useMemo(() => {
+		const statuses = Array.from(new Set(deployments.map(d => {
+			// Create status based on availability
+			return d.available > 0 ? "Available" : "Unavailable"
+		}))).filter(Boolean).sort()
+		return statuses.map(status => ({
+			value: status,
+			label: status,
+			badge: getStatusBadge(status)
+		}))
+	}, [deployments])
+
+	const filtered = React.useMemo(() => {
+		const q = globalFilter.trim().toLowerCase()
+		return deployments.filter(d => {
+			const matchesQuery = !q || d.name.toLowerCase().includes(q) || d.namespace.toLowerCase().includes(q) || d.image.toLowerCase().includes(q)
+			const status = d.available > 0 ? "Available" : "Unavailable"
+			const matchesStatus = statusFilter === 'all' || status === statusFilter
+			return matchesQuery && matchesStatus
+		})
+	}, [deployments, globalFilter, statusFilter])
+
+	// Bulk actions: preflight validate to show warnings in confirmation dialog
+	const validateDeploymentsAction = React.useCallback(async (_type: 'delete' | 'restart' | 'scale', _rows: DashboardDeployment[]) => {
+		// For now, just set empty warnings since we don't have bulk actions API yet
+		// TODO: Implement validation similar to pods when bulk actions API is ready
+		setConfirmWarnings([])
+	}, [])
+
+	// Build table columns with status badge functions
+	function getStatusBadge(status: string) {
+		switch (status) {
+			case 'Available':
+				return (
+					<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+						<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+						{status}
+					</Badge>
+				)
+			case 'Unavailable':
+				return (
+					<Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
+						<IconAlertTriangle className="size-3 text-red-600 mr-1" />
+						{status}
+					</Badge>
+				)
+			default:
+				return (
+					<Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
+						{status}
+					</Badge>
+				)
+		}
+	}
+
+	function getReadyBadge(ready: string) {
+		const parts = ready.split('/')
+		if (parts.length !== 2) {
+			return <div className="font-mono text-sm">{ready}</div>
+		}
+		const current = Number(parts[0])
+		const total = Number(parts[1])
+		const isReady = current === total && total > 0
+		const isPartial = current > 0 && current < total
+		if (isReady) {
+			return (
+				<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+					<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+					{ready}
+				</Badge>
+			)
+		} else if (isPartial) {
+			return (
+				<Badge variant="outline" className="text-yellow-600 border-border bg-transparent px-1.5">
+					<IconLoader className="size-3 text-yellow-600 mr-1" />
+					{ready}
+				</Badge>
+			)
+		}
+		return (
+			<Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
+				<IconAlertTriangle className="size-3 text-red-600 mr-1" />
+				{ready}
+			</Badge>
+		)
+	}
+
+	const columns: ColumnDef<DashboardDeployment>[] = React.useMemo(() => ([
+		{
+			accessorKey: 'name',
+			header: 'Deployment',
+			cell: ({ row }) => (
+				<IfAllowed
+					feature="deployments.get"
+					cluster={clusterId}
+					namespace={row.original.namespace}
+					resourceName={row.original.name}
+					fallback={<span>{row.original.name}</span>}
+				>
+					<button
+						onClick={() => { setSelectedDeploymentForDetails(row.original); setDetailDrawerOpen(true) }}
+						className="text-left hover:underline focus:underline focus:outline-none"
+					>
+						{row.original.name}
+					</button>
+				</IfAllowed>
+			),
+		},
+		{ accessorKey: 'namespace', header: 'Namespace', cell: ({ row }) => (<Badge variant="outline" className="text-muted-foreground px-1.5">{row.original.namespace}</Badge>) },
+		{ accessorKey: 'ready', header: 'Ready', cell: ({ row }) => getReadyBadge(row.original.ready) },
+		{ accessorKey: 'upToDate', header: 'Up-to-Date', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.upToDate}</div>) },
+		{ accessorKey: 'available', header: 'Available', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.available}</div>) },
+		{ accessorKey: 'age', header: 'Age', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.age}</div>) },
+		{ accessorKey: 'image', header: 'Image', cell: ({ row }) => (<div className="font-mono text-sm truncate max-w-48">{row.original.image}</div>) },
+		{
+			id: 'actions',
+			cell: ({ row }) => (
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button variant="ghost" size="icon" className="data-[state=open]:bg-muted text-muted-foreground flex size-8">
+							<IconDotsVertical />
+							<span className="sr-only">Open menu</span>
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="w-52">
+						<IfAllowed feature="deployments.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconEye className="size-4 mr-2" />View Details</DropdownMenuItem>}
+						>
+							<DropdownMenuItem onClick={() => { setSelectedDeploymentForDetails(row.original); setDetailDrawerOpen(true) }}>
+								<IconEye className="size-4 mr-2" />
+								View Details
+							</DropdownMenuItem>
+						</IfAllowed>
+						<IfAllowed feature="deployments.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
+						>
+							<ResourceYamlEditor resourceName={row.original.name} namespace={row.original.namespace} resourceKind="Deployment">
+								<button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer" style={{ background: 'transparent', border: 'none', textAlign: 'left' }}>
+									<IconEdit className="size-4" />
+									Edit YAML
+								</button>
+							</ResourceYamlEditor>
+						</IfAllowed>
+
+						<IfAllowed feature="deployments.scale.update" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconScale className="size-4 mr-2" />Scale</DropdownMenuItem>}
+						>
+							<DropdownMenuItem onClick={() => console.log('Scale deployment', row.original.namespace, row.original.name)}>
+								<IconScale className="size-4 mr-2" />
+								Scale
+							</DropdownMenuItem>
+						</IfAllowed>
+
+						<IfAllowed feature="deployments.restart" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconRefresh className="size-4 mr-2" />Restart</DropdownMenuItem>}
+						>
+							<DropdownMenuItem onClick={() => { setPendingAction({ type: 'restart', deployments: [row.original] }); setConfirmDialogOpen(true); validateDeploymentsAction('restart', [row.original]) }}>
+								<IconRefresh className="size-4 mr-2" />
+								Restart
+							</DropdownMenuItem>
+						</IfAllowed>
+						<DropdownMenuSeparator />
+						<IfAllowed feature="deployments.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
+							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
+						>
+							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', deployments: [row.original] }); setConfirmDialogOpen(true); validateDeploymentsAction('delete', [row.original]) }}>
+								<IconTrash className="size-4 mr-2" />
+								Delete
+							</DropdownMenuItem>
+						</IfAllowed>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			)
+		}
+	]), [clusterId, setSelectedDeploymentForDetails, setDetailDrawerOpen, setPendingAction, setConfirmDialogOpen, validateDeploymentsAction])
+
+	const bulkActions = React.useMemo(() => {
+		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardDeployment[]) => void | Promise<void> }[] = []
+		actions.push({ id: 'copy-names', label: 'Copy Deployment Names', icon: <IconCopy className="size-4" />, requiresSelection: true, action: (rows) => navigator.clipboard.writeText(rows.map(r => r.name).join('\n')) })
+		if (isAllowed('deployments.get')) actions.push({ id: 'export-yaml', label: 'Export Selected as YAML', icon: <IconDownload className="size-4" />, requiresSelection: true, action: (rows) => console.log('Export YAML bulk', rows) })
+		if (isAllowed('deployments.scale.update')) actions.push({ id: 'scale-deployments', label: 'Scale Selected Deployments', icon: <IconScale className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'scale', deployments: rows }); setConfirmDialogOpen(true); validateDeploymentsAction('scale', rows) } })
+		if (isAllowed('deployments.restart')) actions.push({ id: 'restart-deployments', label: 'Restart Selected Deployments', icon: <IconRefresh className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'restart', deployments: rows }); setConfirmDialogOpen(true); validateDeploymentsAction('restart', rows) } })
+		if (isAllowed('deployments.delete')) actions.push({ id: 'delete-deployments', label: 'Delete Selected Deployments', icon: <IconTrash className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'delete', deployments: rows }); setConfirmDialogOpen(true); validateDeploymentsAction('delete', rows) } })
+		return actions
+	}, [isAllowed, validateDeploymentsAction])
+
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const names = pendingAction.deployments.map(d => d.name).join(', ')
+			// TODO: Implement actual bulk actions API calls for deployments
+			console.log(`${pendingAction.type} deployments:`, names)
+			setAlert({ variant: 'success', title: `Success: ${pendingAction.type} operation completed`, description: `Processed ${pendingAction.deployments.length} deployment(s)` })
+		} catch (e: unknown) {
+			setAlert({ variant: 'error', title: 'Action failed', description: e instanceof Error ? e.message : String(e) })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
+
 	return (
-		<>
+		<div className="space-y-6">
+			{/* Header with connection status */}
 			<div className="px-4 lg:px-6">
-				<div className="space-y-2">
-					<div className="flex items-center justify-between">
-						<h1 className="text-2xl font-bold tracking-tight">Deployments</h1>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
+				<div className="flex items-center justify-between">
+					<div className="space-y-2">
+						<div className="flex items-center gap-2">
+							<h1 className="text-2xl font-bold tracking-tight">Deployments</h1>
+							{isConnected && (
+								<div className="flex items-center gap-1.5 text-xs text-green-600">
+									<div className="size-2 bg-green-500 rounded-full animate-pulse" />
+									Live
+								</div>
+							)}
+						</div>
+						<p className="text-muted-foreground">
+							Manage and monitor deployment resources in your Kubernetes cluster
+						</p>
 					</div>
-					<p className="text-muted-foreground">
-						Manage and monitor deployment resources in your Kubernetes cluster
-					</p>
+					{lastUpdated && (
+						<div className="text-sm text-muted-foreground">
+							<span suppressHydrationWarning>Last updated: {new Date(lastUpdated).toLocaleTimeString()}</span>
+						</div>
+					)}
 				</div>
 			</div>
 
+			{/* Summary Cards */}
 			<SummaryCards
 				cards={summaryData}
 				loading={isLoading}
@@ -145,8 +384,80 @@ function DeploymentsContent() {
 				lastUpdated={lastUpdated}
 			/>
 
-			<DeploymentsDataTable />
-		</>
+			<div className="px-4 lg:px-6 space-y-3">
+				{alert && (
+					<Alert
+						className={alert.variant === 'success'
+							? 'bg-transparent border-green-600 text-green-700'
+							: 'bg-transparent border-red-600 text-red-700'}
+						variant='default'
+					>
+						<AlertTitle>{alert.title}</AlertTitle>
+						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
+					</Alert>
+				)}
+				<UniversalDataTable
+					data={filtered}
+					columns={columns}
+					enableReorder={false}
+					enableRowSelection={true}
+					loading={isLoading}
+					error={error}
+					className="px-0 [&_tbody_tr]:bg-background/50"
+					renderFilters={({ table, selectedCount, totalCount }) => (
+						<div className="space-y-4">
+							<DataTableFilters
+								globalFilter={globalFilter}
+								onGlobalFilterChange={setGlobalFilter}
+								searchPlaceholder="Search deployments by name, namespace, or image..."
+								categoryFilter={statusFilter}
+								onCategoryFilterChange={setStatusFilter}
+								categoryLabel="Status"
+								categoryOptions={statusOptions}
+								selectedCount={selectedCount}
+								totalCount={totalCount}
+								bulkActions={bulkActions.map(a => ({
+									id: a.id,
+									label: a.label,
+									icon: a.icon || undefined,
+									variant: a.variant || 'default',
+									requiresSelection: a.requiresSelection,
+									action: () => a.action(table.getFilteredSelectedRowModel().rows.map(r => r.original as DashboardDeployment))
+								}))}
+								table={table}
+								showColumnToggle={true}
+							/>
+						</div>
+					)}
+				/>
+			</div>
+
+			{/* Bulk action confirmation dialog */}
+			<ActionConfirmationDialog
+				open={confirmDialogOpen}
+				onOpenChange={setConfirmDialogOpen}
+				title={pendingAction?.type === 'restart' ? 'Restart Deployments' : pendingAction?.type === 'scale' ? 'Scale Deployments' : 'Delete Deployments'}
+				description={pendingAction?.type === 'restart' ? 'Are you sure you want to restart the selected deployments? This will trigger a rolling update.' : pendingAction?.type === 'scale' ? 'Are you sure you want to scale the selected deployments?' : 'Are you sure you want to delete the selected deployments? This action cannot be undone.'}
+				actionLabel={pendingAction?.type === 'restart' ? 'Restart Deployments' : pendingAction?.type === 'scale' ? 'Scale Deployments' : 'Delete Deployments'}
+				variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
+				isExecuting={isConfirmExecuting}
+				onConfirm={handleConfirmAction}
+				resources={(pendingAction?.deployments || []).map(d => ({ name: d.name, namespace: d.namespace }))}
+				safetyViolations={[]}
+				warnings={confirmWarnings}
+			/>
+
+			{selectedDeploymentForDetails && (
+				<DeploymentDetailDrawer
+					item={selectedDeploymentForDetails}
+					open={detailDrawerOpen}
+					onOpenChange={(open) => {
+						setDetailDrawerOpen(open)
+						if (!open) setSelectedDeploymentForDetails(null)
+					}}
+				/>
+			)}
+		</div>
 	)
 }
 

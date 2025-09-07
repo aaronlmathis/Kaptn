@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -20,9 +21,16 @@ func (s *Server) HandleGetMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enhance response with logs cache health
+	response := map[string]interface{}{
+		"cluster":    metrics,
+		"timestamp":  time.Now(),
+		"logs_cache": s.getLogsCacheHealth(),
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(metrics)
+	json.NewEncoder(w).Encode(response)
 }
 
 func (s *Server) HandleGetNamespaceMetrics(w http.ResponseWriter, r *http.Request) {
@@ -48,4 +56,35 @@ func (s *Server) HandleGetNamespaceMetrics(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(metrics)
+}
+
+// getLogsCacheHealth returns logs cache health and statistics
+func (s *Server) getLogsCacheHealth() map[string]interface{} {
+	if s.logsCacheService == nil {
+		return map[string]interface{}{
+			"status":  "unavailable",
+			"message": "logs cache service not initialized",
+		}
+	}
+
+	// Get service statistics
+	stats := s.logsCacheService.Stats()
+	health := s.logsCacheService.Health()
+
+	return map[string]interface{}{
+		"status":  health.Status,
+		"started": health.Started,
+		"uptime":  health.Uptime.String(),
+		"checks":  health.Checks,
+		"statistics": map[string]interface{}{
+			"global_ring_size":      stats.GlobalRingSize,
+			"scoped_rings_count":    stats.ScopedRingsCount,
+			"total_subscribers":     stats.TotalSubscribers,
+			"ingest_rate":           stats.IngestRate,
+			"last_ingest_time":      stats.LastIngestTime,
+			"evictions_total":       stats.EvictionsTotal,
+			"dropped_entries_total": stats.DroppedEntriesTotal,
+		},
+		"prometheus_metrics_enabled": true,
+	}
 }

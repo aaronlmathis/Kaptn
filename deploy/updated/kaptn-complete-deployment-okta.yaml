@@ -275,7 +275,7 @@ data:
       default_groups: [""]
 
     kubernetes:
-      mode: "kubeconfig"        # or "incluster"
+      mode: "incluster"        # or "incluster"
       kubeconfig_path: ""       # used if mode=kubeconfig, defaults to $KUBECONFIG
       namespace_default: "default"
       insecure_tls: false       # skip TLS verification for development environments

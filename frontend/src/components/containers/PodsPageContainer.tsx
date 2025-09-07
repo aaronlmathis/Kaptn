@@ -291,7 +291,11 @@ function PodsContent() {
 						<IfAllowed feature="pods.logs" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconFileText className="size-4 mr-2" />Get Logs</DropdownMenuItem>}
 						>
-							<DropdownMenuItem onClick={() => console.log('Get logs for', row.original.namespace, row.original.name)}>
+							<DropdownMenuItem onClick={() => {
+								const ns = row.original.namespace
+								const pod = row.original.name
+								window.location.href = `/logs?namespace=${encodeURIComponent(ns)}&pod=${encodeURIComponent(pod)}&since=15m`
+							}}>
 								<IconFileText className="size-4 mr-2" />
 								Get Logs
 							</DropdownMenuItem>
@@ -347,7 +351,19 @@ function PodsContent() {
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardPod[]) => void | Promise<void> }[] = []
 		actions.push({ id: 'copy-names', label: 'Copy Pod Names', icon: <IconCopy className="size-4" />, requiresSelection: true, action: (rows) => navigator.clipboard.writeText(rows.map(r => r.name).join('\n')) })
-    if (isAllowed('pods.logs')) actions.push({ id: 'get-logs', label: 'Get Logs', icon: <IconFileText className="size-4" />, requiresSelection: true, action: (rows) => console.log('Get logs bulk', rows) })
+    if (isAllowed('pods.logs')) actions.push({ id: 'get-logs', label: 'Get Logs', icon: <IconFileText className="size-4" />, requiresSelection: true, action: (rows) => {
+      const first = rows[0]
+      if (!first) return
+      const sameNS = rows.every(r => r.namespace === first.namespace)
+      // If single selection, deep link to specific pod; else link by namespace
+      if (rows.length === 1) {
+        window.location.href = `/logs?namespace=${encodeURIComponent(first.namespace)}&pod=${encodeURIComponent(first.name)}&since=15m`
+      } else if (sameNS) {
+        window.location.href = `/logs?namespace=${encodeURIComponent(first.namespace)}&since=15m`
+      } else {
+        window.location.href = `/logs?since=15m`
+      }
+    } })
     if (isAllowed('pods.patch')) actions.push({ id: 'restart-pods', label: 'Restart Selected Pods', icon: <IconRefresh className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'restart', pods: rows }); setConfirmDialogOpen(true); validatePodsAction('restart', rows) } })
     if (isAllowed('pods.delete')) actions.push({ id: 'delete-pods', label: 'Delete Selected Pods', icon: <IconTrash className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'delete', pods: rows }); setConfirmDialogOpen(true); validatePodsAction('delete', rows) } })
     return actions

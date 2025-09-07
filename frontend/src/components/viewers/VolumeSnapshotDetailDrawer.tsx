@@ -1,5 +1,4 @@
 import * as React from "react"
-import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { IconEdit, IconCircleCheckFilled, IconLoader, IconTrash } from "@tabler/icons-react"
@@ -17,9 +16,7 @@ import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useVolumeSnapshotDetails } from "@/hooks/use-resource-details"
-
-// Import the volume snapshot schema from the data table
-import { volumeSnapshotSchema } from "@/components/data_tables/VolumeSnapshotsDataTable"
+import type { DashboardVolumeSnapshot } from "@/lib/k8s-storage"
 
 function getReadyStatusBadge(readyToUse: boolean) {
 	if (readyToUse) {
@@ -40,7 +37,7 @@ function getReadyStatusBadge(readyToUse: boolean) {
 }
 
 interface VolumeSnapshotDetailDrawerProps {
-	item: z.infer<typeof volumeSnapshotSchema>
+	item: DashboardVolumeSnapshot
 	open: boolean
 	onOpenChange: (open: boolean) => void
 }
@@ -79,42 +76,52 @@ export function VolumeSnapshotDetailDrawer({ item, open, onOpenChange }: VolumeS
 		const additionalRows: Array<[string, React.ReactNode]> = []
 
 		// Add additional details from the full volume snapshot spec and status
-		if (volumeSnapshotDetails.metadata?.labels) {
-			const labelCount = Object.keys(volumeSnapshotDetails.metadata.labels).length
-			additionalRows.push(["Labels", <div className="text-sm">{labelCount} label(s)</div>])
+		if (volumeSnapshotDetails.metadata && typeof volumeSnapshotDetails.metadata === 'object') {
+			const metadata = volumeSnapshotDetails.metadata as Record<string, unknown>
+			if (metadata.labels && typeof metadata.labels === 'object') {
+				const labelCount = Object.keys(metadata.labels as Record<string, unknown>).length
+				additionalRows.push(["Labels", <div className="text-sm">{labelCount} label(s)</div>])
+			}
+
+			if (metadata.annotations && typeof metadata.annotations === 'object') {
+				const annotationCount = Object.keys(metadata.annotations as Record<string, unknown>).length
+				additionalRows.push(["Annotations", <div className="text-sm">{annotationCount} annotation(s)</div>])
+			}
+
+			if (metadata.uid && typeof metadata.uid === 'string') {
+				additionalRows.push(["UID", <div className="font-mono text-xs break-all">{metadata.uid}</div>])
+			}
 		}
 
-		if (volumeSnapshotDetails.metadata?.annotations) {
-			const annotationCount = Object.keys(volumeSnapshotDetails.metadata.annotations).length
-			additionalRows.push(["Annotations", <div className="text-sm">{annotationCount} annotation(s)</div>])
+		if (volumeSnapshotDetails.spec && typeof volumeSnapshotDetails.spec === 'object') {
+			const spec = volumeSnapshotDetails.spec as Record<string, unknown>
+			if (spec.volumeSnapshotClassName && typeof spec.volumeSnapshotClassName === 'string') {
+				additionalRows.push(["Volume Snapshot Class", <div className="font-mono text-sm">{spec.volumeSnapshotClassName}</div>])
+			}
 		}
 
-		if (volumeSnapshotDetails.metadata?.uid) {
-			additionalRows.push(["UID", <div className="font-mono text-xs break-all">{volumeSnapshotDetails.metadata.uid}</div>])
-		}
+		if (volumeSnapshotDetails.status && typeof volumeSnapshotDetails.status === 'object') {
+			const status = volumeSnapshotDetails.status as Record<string, unknown>
+			if (status.boundVolumeSnapshotContentName && typeof status.boundVolumeSnapshotContentName === 'string') {
+				additionalRows.push(["Bound Snapshot Content", <div className="font-mono text-sm break-all">{status.boundVolumeSnapshotContentName}</div>])
+			}
 
-		if (volumeSnapshotDetails.spec?.volumeSnapshotClassName) {
-			additionalRows.push(["Volume Snapshot Class", <div className="font-mono text-sm">{volumeSnapshotDetails.spec.volumeSnapshotClassName}</div>])
-		}
+			if (status.creationTime && typeof status.creationTime === 'string') {
+				additionalRows.push(["Creation Timestamp", <div className="font-mono text-sm">{status.creationTime}</div>])
+			}
 
-		if (volumeSnapshotDetails.status?.boundVolumeSnapshotContentName) {
-			additionalRows.push(["Bound Snapshot Content", <div className="font-mono text-sm break-all">{volumeSnapshotDetails.status.boundVolumeSnapshotContentName}</div>])
-		}
+			if (status.restoreSize && typeof status.restoreSize === 'string') {
+				additionalRows.push(["Restore Size (Status)", <div className="font-mono text-sm">{status.restoreSize}</div>])
+			}
 
-		if (volumeSnapshotDetails.status?.creationTime) {
-			additionalRows.push(["Creation Timestamp", <div className="font-mono text-sm">{volumeSnapshotDetails.status.creationTime}</div>])
-		}
-
-		if (volumeSnapshotDetails.status?.restoreSize) {
-			additionalRows.push(["Restore Size (Status)", <div className="font-mono text-sm">{volumeSnapshotDetails.status.restoreSize}</div>])
-		}
-
-		if (volumeSnapshotDetails.status?.error) {
-			additionalRows.push(["Error", (
-				<div className="text-red-600 text-sm">
-					{volumeSnapshotDetails.status.error.message || "Unknown error"}
-				</div>
-			)])
+			if (status.error && typeof status.error === 'object') {
+				const error = status.error as Record<string, unknown>
+				additionalRows.push(["Error", (
+					<div className="text-red-600 text-sm">
+						{(error.message as string) || "Unknown error"}
+					</div>
+				)])
+			}
 		}
 
 		return additionalRows

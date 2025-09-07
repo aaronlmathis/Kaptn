@@ -15,4 +15,10 @@ func MountAdmin(r chi.Router, handlers AdminHandlers) {
 	// Phase 8: Admin Utilities & Observability
 	r.Post("/admin/authz/reload", handlers.HandleBindingsReload)
 	r.Get("/admin/authz/sar", handlers.HandleGenericSAR)
+
+	// Phase 10: Logs Cache Operational Guardrails
+	r.Post("/admin/logs/clear-rings", handlers.HandleLogsCacheClearRings)
+	r.Get("/admin/logs/stats", handlers.HandleLogsCacheDumpStats)
+	r.Get("/admin/logs/streams", handlers.HandleLogsCacheListStreams)
+	r.Post("/admin/logs/limits", handlers.HandleLogsCacheSetLimits)
 }
