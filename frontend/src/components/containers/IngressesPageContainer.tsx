@@ -20,6 +20,7 @@ import { useCapabilities } from "@/hooks/use-capabilities"
 import { Badge } from "@/components/ui/badge"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 import {
     getResourceIcon,
     getReplicaStatusBadge
@@ -36,8 +37,25 @@ function IngressesContent() {
     const [selectedIngressForDetails, setSelectedIngressForDetails] = React.useState<DashboardIngress | null>(null)
     const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
     const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+    const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
     const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', ingresses: DashboardIngress[] }>(null)
     const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+    // Bulk actions: preflight validate to show warnings in confirmation dialog
+    const validateIngressesAction = React.useCallback(async (type: 'delete', rows: DashboardIngress[]) => {
+        try {
+            const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
+            const legacyAction = 'delete-ingresses'
+            const resp = await bulkActionsApi.validateAction('ingresses', { action: legacyAction, targets })
+            const details: any = resp?.details
+            const warnings: string[] = Array.isArray(details?.results)
+                ? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+                : []
+            setConfirmWarnings(warnings)
+        } catch {
+            setConfirmWarnings([])
+        }
+    }, [])
 
     // Ensure ingress-specific action capabilities are requested
     React.useEffect(() => {

@@ -434,8 +434,19 @@ function PersistentVolumesContent() {
 				error={error}
 				lastUpdated={lastUpdated}
 			/>
-			{/* Data Table */}
-			<div className="px-4 lg:px-6">
+
+			<div className="px-4 lg:px-6 space-y-3">
+				{alert && (
+					<Alert
+						className={alert.variant === 'success'
+							? 'bg-transparent border-green-600 text-green-700'
+							: 'bg-transparent border-red-600 text-red-700'}
+						variant='default'
+					>
+						<AlertTitle>{alert.title}</AlertTitle>
+						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
+					</Alert>
+				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -501,14 +512,7 @@ function PersistentVolumesContent() {
 				warnings={confirmWarnings}
 			/>
 
-			{/* Alert */}
-			{alert && (
-				<Alert className={`mb-4 ${alert.variant === 'error' ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
-					<IconAlertTriangle className="h-4 w-4" />
-					<AlertTitle>{alert.title}</AlertTitle>
-					{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-				</Alert>
-			)}
+
 		</div>
 	)
 }

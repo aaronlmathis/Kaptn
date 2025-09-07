@@ -486,16 +486,6 @@ function ConfigMapsContent() {
 				</div>
 			</div>
 
-			{/* Alert for action results */}
-			{alert && (
-				<div className="px-4 lg:px-6">
-					<Alert variant={alert.variant === 'error' ? 'destructive' : 'default'}>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				</div>
-			)}
-
 			<SummaryCards
 				cards={summaryData}
 				loading={isLoading}
@@ -503,7 +493,18 @@ function ConfigMapsContent() {
 				lastUpdated={lastUpdated}
 			/>
 
-			<div className="px-4 lg:px-6">
+			<div className="px-4 lg:px-6 space-y-3">
+				{alert && (
+					<Alert
+						className={alert.variant === 'success'
+							? 'bg-transparent border-green-600 text-green-700'
+							: 'bg-transparent border-red-600 text-red-700'}
+						variant='default'
+					>
+						<AlertTitle>{alert.title}</AlertTitle>
+						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
+					</Alert>
+				)}
 				<UniversalDataTable
 					data={filteredData}
 					columns={columns}

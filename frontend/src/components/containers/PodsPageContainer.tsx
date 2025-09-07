@@ -38,12 +38,12 @@ function PodsContent() {
 	const { isAllowed } = useAuthzCapabilitiesInContext(['pods.get', 'pods.logs', 'pods.exec', 'pods.delete', 'pods.patch'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedPodForDetails, setSelectedPodForDetails] = React.useState<DashboardPod | null>(null)
-  const { openShell } = useShell()
-  const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
-  const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-  const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-  const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete'|'restart', pods: DashboardPod[] }>(null)
-  const [alert, setAlert] = React.useState<null | { variant: 'success'|'error', title: string, description?: string }>(null)
+	const { openShell } = useShell()
+	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
+	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'restart', pods: DashboardPod[] }>(null)
+	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
 	// Ensure pod-specific action capabilities are requested (default is conservative)
 	React.useEffect(() => {
@@ -148,9 +148,9 @@ function PodsContent() {
 	const [phaseFilter, setPhaseFilter] = React.useState<string>("all")
 
 	const phaseOptions: FilterOption[] = React.useMemo(() => {
-    const phases = Array.from(new Set(pods.map(p => p.status))).filter(Boolean).sort()
-    return phases.map(ph => ({ value: ph, label: ph, badge: getStatusBadge(ph) }))
-}, [pods])
+		const phases = Array.from(new Set(pods.map(p => p.status))).filter(Boolean).sort()
+		return phases.map(ph => ({ value: ph, label: ph, badge: getStatusBadge(ph) }))
+	}, [pods])
 
 	const filtered = React.useMemo(() => {
 		const q = globalFilter.trim().toLowerCase()
@@ -161,74 +161,74 @@ function PodsContent() {
 		})
 	}, [pods, globalFilter, phaseFilter])
 
-    // Build table columns
-    // IMPORTANT: use a function declaration (hoisted) so it's safe to reference above
-    function getStatusBadge(status: string) {
-      switch (status) {
-        case 'Running':
-          return (
-            <Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
-              <IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
-              {status}
-            </Badge>
-          )
-        case 'Pending':
-          return (
-            <Badge variant="outline" className="text-yellow-600 border-border bg-transparent px-1.5">
-              <IconLoader className="size-3 text-yellow-600 mr-1" />
-              {status}
-            </Badge>
-          )
-        case 'CrashLoopBackOff':
-        case 'Failed':
-          return (
-            <Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
-              <IconAlertTriangle className="size-3 text-red-600 mr-1" />
-              {status}
-            </Badge>
-          )
-        default:
-          return (
-            <Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
-              {status}
-            </Badge>
-          )
-      }
-    }
+	// Build table columns
+	// IMPORTANT: use a function declaration (hoisted) so it's safe to reference above
+	function getStatusBadge(status: string) {
+		switch (status) {
+			case 'Running':
+				return (
+					<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+						<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+						{status}
+					</Badge>
+				)
+			case 'Pending':
+				return (
+					<Badge variant="outline" className="text-yellow-600 border-border bg-transparent px-1.5">
+						<IconLoader className="size-3 text-yellow-600 mr-1" />
+						{status}
+					</Badge>
+				)
+			case 'CrashLoopBackOff':
+			case 'Failed':
+				return (
+					<Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
+						<IconAlertTriangle className="size-3 text-red-600 mr-1" />
+						{status}
+					</Badge>
+				)
+			default:
+				return (
+					<Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
+						{status}
+					</Badge>
+				)
+		}
+	}
 
-    function getReadyBadge(ready: string) {
-      const parts = ready.split('/')
-      if (parts.length !== 2) {
-        return <div className="font-mono text-sm">{ready}</div>
-      }
-      const current = Number(parts[0])
-      const total = Number(parts[1])
-      const isReady = current === total && total > 0
-      const isPartial = current > 0 && current < total
-      if (isReady) {
-        return (
-          <Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
-            <IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
-            {ready}
-          </Badge>
-        )
-      } else if (isPartial) {
-        return (
-          <Badge variant="outline" className="text-yellow-600 border-border bg-transparent px-1.5">
-            <IconLoader className="size-3 text-yellow-600 mr-1" />
-            {ready}
-          </Badge>
-        )
-      }
-      return (
-        <Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
-          <IconAlertTriangle className="size-3 text-red-600 mr-1" />
-          {ready}
-        </Badge>
-      )
-    }
+	function getReadyBadge(ready: string) {
+		const parts = ready.split('/')
+		if (parts.length !== 2) {
+			return <div className="font-mono text-sm">{ready}</div>
+		}
+		const current = Number(parts[0])
+		const total = Number(parts[1])
+		const isReady = current === total && total > 0
+		const isPartial = current > 0 && current < total
+		if (isReady) {
+			return (
+				<Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+					<IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+					{ready}
+				</Badge>
+			)
+		} else if (isPartial) {
+			return (
+				<Badge variant="outline" className="text-yellow-600 border-border bg-transparent px-1.5">
+					<IconLoader className="size-3 text-yellow-600 mr-1" />
+					{ready}
+				</Badge>
+			)
+		}
+		return (
+			<Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
+				<IconAlertTriangle className="size-3 text-red-600 mr-1" />
+				{ready}
+			</Badge>
+		)
+	}
 
-    const columns: ColumnDef<DashboardPod>[] = React.useMemo(() => ([
+	const columns: ColumnDef<DashboardPod>[] = React.useMemo(() => ([
 		{
 			accessorKey: 'name',
 			header: 'Pod',
@@ -247,16 +247,16 @@ function PodsContent() {
 						{row.original.name}
 					</button>
 				</IfAllowed>
-            ),
-        },
-        { accessorKey: 'namespace', header: 'Namespace', cell: ({ row }) => (<Badge variant="outline" className="text-muted-foreground px-1.5">{row.original.namespace}</Badge>) },
-        { accessorKey: 'node', header: 'Node' },
-        { accessorKey: 'status', header: 'Status', cell: ({ row }) => getStatusBadge(row.original.status) },
-        { accessorKey: 'ready', header: 'Ready', cell: ({ row }) => getReadyBadge(row.original.ready) },
-        { accessorKey: 'restarts', header: 'Restarts', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.restarts}</div>) },
-        { accessorKey: 'age', header: 'Age', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.age}</div>) },
-        { accessorKey: 'cpu', header: 'CPU', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.cpu}</div>) },
-        { accessorKey: 'memory', header: 'Memory', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.memory}</div>) },
+			),
+		},
+		{ accessorKey: 'namespace', header: 'Namespace', cell: ({ row }) => (<Badge variant="outline" className="text-muted-foreground px-1.5">{row.original.namespace}</Badge>) },
+		{ accessorKey: 'node', header: 'Node' },
+		{ accessorKey: 'status', header: 'Status', cell: ({ row }) => getStatusBadge(row.original.status) },
+		{ accessorKey: 'ready', header: 'Ready', cell: ({ row }) => getReadyBadge(row.original.ready) },
+		{ accessorKey: 'restarts', header: 'Restarts', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.restarts}</div>) },
+		{ accessorKey: 'age', header: 'Age', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.age}</div>) },
+		{ accessorKey: 'cpu', header: 'CPU', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.cpu}</div>) },
+		{ accessorKey: 'memory', header: 'Memory', cell: ({ row }) => (<div className="font-mono text-sm">{row.original.memory}</div>) },
 		{ accessorKey: 'image', header: 'Image' },
 		{
 			id: 'actions',
@@ -333,7 +333,7 @@ function PodsContent() {
 	]), [clusterId])
 
 	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validatePodsAction = React.useCallback(async (type: 'delete'|'restart', rows: DashboardPod[]) => {
+	const validatePodsAction = React.useCallback(async (type: 'delete' | 'restart', rows: DashboardPod[]) => {
 		try {
 			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
 			const legacyAction = type === 'delete' ? 'delete-pods' : 'restart-pods'
@@ -351,43 +351,45 @@ function PodsContent() {
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardPod[]) => void | Promise<void> }[] = []
 		actions.push({ id: 'copy-names', label: 'Copy Pod Names', icon: <IconCopy className="size-4" />, requiresSelection: true, action: (rows) => navigator.clipboard.writeText(rows.map(r => r.name).join('\n')) })
-    if (isAllowed('pods.logs')) actions.push({ id: 'get-logs', label: 'Get Logs', icon: <IconFileText className="size-4" />, requiresSelection: true, action: (rows) => {
-      const first = rows[0]
-      if (!first) return
-      const sameNS = rows.every(r => r.namespace === first.namespace)
-      // If single selection, deep link to specific pod; else link by namespace
-      if (rows.length === 1) {
-        window.location.href = `/logs?namespace=${encodeURIComponent(first.namespace)}&pod=${encodeURIComponent(first.name)}&since=15m`
-      } else if (sameNS) {
-        window.location.href = `/logs?namespace=${encodeURIComponent(first.namespace)}&since=15m`
-      } else {
-        window.location.href = `/logs?since=15m`
-      }
-    } })
-    if (isAllowed('pods.patch')) actions.push({ id: 'restart-pods', label: 'Restart Selected Pods', icon: <IconRefresh className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'restart', pods: rows }); setConfirmDialogOpen(true); validatePodsAction('restart', rows) } })
-    if (isAllowed('pods.delete')) actions.push({ id: 'delete-pods', label: 'Delete Selected Pods', icon: <IconTrash className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'delete', pods: rows }); setConfirmDialogOpen(true); validatePodsAction('delete', rows) } })
-    return actions
-  }, [isAllowed, validatePodsAction])
+		if (isAllowed('pods.logs')) actions.push({
+			id: 'get-logs', label: 'Get Logs', icon: <IconFileText className="size-4" />, requiresSelection: true, action: (rows) => {
+				const first = rows[0]
+				if (!first) return
+				const sameNS = rows.every(r => r.namespace === first.namespace)
+				// If single selection, deep link to specific pod; else link by namespace
+				if (rows.length === 1) {
+					window.location.href = `/logs?namespace=${encodeURIComponent(first.namespace)}&pod=${encodeURIComponent(first.name)}&since=15m`
+				} else if (sameNS) {
+					window.location.href = `/logs?namespace=${encodeURIComponent(first.namespace)}&since=15m`
+				} else {
+					window.location.href = `/logs?since=15m`
+				}
+			}
+		})
+		if (isAllowed('pods.patch')) actions.push({ id: 'restart-pods', label: 'Restart Selected Pods', icon: <IconRefresh className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'restart', pods: rows }); setConfirmDialogOpen(true); validatePodsAction('restart', rows) } })
+		if (isAllowed('pods.delete')) actions.push({ id: 'delete-pods', label: 'Delete Selected Pods', icon: <IconTrash className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'delete', pods: rows }); setConfirmDialogOpen(true); validatePodsAction('delete', rows) } })
+		return actions
+	}, [isAllowed, validatePodsAction])
 
-  const handleConfirmAction = React.useCallback(async () => {
-    if (!pendingAction) return
-    setIsConfirmExecuting(true)
-    try {
-      const targets = pendingAction.pods.map(p => ({ namespace: p.namespace, name: p.name }))
-      const legacyAction = pendingAction.type === 'delete' ? 'delete-pods' : 'restart-pods'
-      const resp = await bulkActionsApi.executeBulkAction('pods', { action: legacyAction, targets })
-      const success = resp?.success
-      const total = resp?.resources_total ?? 0
-      const affected = resp?.resources_affected ?? 0
-      setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} pods processed` : `Errors: ${total - affected} failed`, description: resp?.message })
-    } catch (e: any) {
-      setAlert({ variant: 'error', title: 'Action failed', description: e?.message ?? String(e) })
-    } finally {
-      setIsConfirmExecuting(false)
-      setConfirmDialogOpen(false)
-      setPendingAction(null)
-    }
-  }, [pendingAction])
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.pods.map(p => ({ namespace: p.namespace, name: p.name }))
+			const legacyAction = pendingAction.type === 'delete' ? 'delete-pods' : 'restart-pods'
+			const resp = await bulkActionsApi.executeBulkAction('pods', { action: legacyAction, targets })
+			const success = resp?.success
+			const total = resp?.resources_total ?? 0
+			const affected = resp?.resources_affected ?? 0
+			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} pods processed` : `Errors: ${total - affected} failed`, description: resp?.message })
+		} catch (e: any) {
+			setAlert({ variant: 'error', title: 'Action failed', description: e?.message ?? String(e) })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
 
 	return (
 		<div className="space-y-6">
@@ -397,37 +399,22 @@ function PodsContent() {
 					<div className="space-y-2">
 						<div className="flex items-center gap-2">
 							<h1 className="text-2xl font-bold tracking-tight">Pods</h1>
-            {isConnected && (
-              <div className="flex items-center gap-1.5 text-xs text-green-600">
-                <div className="size-2 bg-green-500 rounded-full animate-pulse" />
-                Live
-              </div>
-            )}
-
-      {/* Bulk action confirmation dialog */}
-      <ActionConfirmationDialog
-        open={confirmDialogOpen}
-        onOpenChange={setConfirmDialogOpen}
-        title={pendingAction?.type === 'restart' ? 'Restart Pods' : 'Delete Pods'}
-        description={pendingAction?.type === 'restart' ? 'Are you sure you want to restart the selected pods? This will terminate and recreate them.' : 'Are you sure you want to delete the selected pods? This action cannot be undone.'}
-        actionLabel={pendingAction?.type === 'restart' ? 'Restart Pods' : 'Delete Pods'}
-        variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
-        isExecuting={false}
-        onConfirm={handleConfirmAction}
-        resources={(pendingAction?.pods || []).map(p => ({ name: p.name, namespace: p.namespace }))}
-        safetyViolations={[]}
-        warnings={[]}
-      />
+							{isConnected && (
+								<div className="flex items-center gap-1.5 text-xs text-green-600">
+									<div className="size-2 bg-green-500 rounded-full animate-pulse" />
+									Live
+								</div>
+							)}
 						</div>
 						<p className="text-muted-foreground">
 							Manage and monitor pod resources in your Kubernetes cluster
 						</p>
 					</div>
-            {lastUpdated && (
-              <div className="text-sm text-muted-foreground">
-                <span suppressHydrationWarning>Last updated: {new Date(lastUpdated).toLocaleTimeString()}</span>
-              </div>
-            )}
+					{lastUpdated && (
+						<div className="text-sm text-muted-foreground">
+							<span suppressHydrationWarning>Last updated: {new Date(lastUpdated).toLocaleTimeString()}</span>
+						</div>
+					)}
 				</div>
 			</div>
 
@@ -441,17 +428,17 @@ function PodsContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-        {alert && (
-          <Alert
-            className={alert.variant === 'success'
-              ? 'bg-transparent border-green-600 text-green-700'
-              : 'bg-transparent border-red-600 text-red-700'}
-            variant='default'
-          >
-            <AlertTitle>{alert.title}</AlertTitle>
-            {alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-          </Alert>
-        )}
+				{alert && (
+					<Alert
+						className={alert.variant === 'success'
+							? 'bg-transparent border-green-600 text-green-700'
+							: 'bg-transparent border-red-600 text-red-700'}
+						variant='default'
+					>
+						<AlertTitle>{alert.title}</AlertTitle>
+						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
+					</Alert>
+				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -491,6 +478,21 @@ function PodsContent() {
 					}}
 				/>
 			)}
+
+			{/* Bulk action confirmation dialog */}
+			<ActionConfirmationDialog
+				open={confirmDialogOpen}
+				onOpenChange={setConfirmDialogOpen}
+				title={pendingAction?.type === 'restart' ? 'Restart Pods' : 'Delete Pods'}
+				description={pendingAction?.type === 'restart' ? 'Are you sure you want to restart the selected pods? This will terminate and recreate them.' : 'Are you sure you want to delete the selected pods? This action cannot be undone.'}
+				actionLabel={pendingAction?.type === 'restart' ? 'Restart Pods' : 'Delete Pods'}
+				variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
+				isExecuting={isConfirmExecuting}
+				onConfirm={handleConfirmAction}
+				resources={(pendingAction?.pods || []).map(p => ({ name: p.name, namespace: p.namespace }))}
+				safetyViolations={[]}
+				warnings={confirmWarnings}
+			/>
 		</div>
 	)
 }

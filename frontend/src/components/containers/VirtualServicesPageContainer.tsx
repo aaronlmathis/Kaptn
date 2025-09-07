@@ -599,7 +599,18 @@ function VirtualServicesContent() {
 			/>
 
 			{/* Virtual Services Data Table */}
-			<div className="px-4 lg:px-6">
+			<div className="px-4 lg:px-6 space-y-3">
+				{alert && (
+					<Alert
+						className={alert.variant === 'success'
+							? 'bg-transparent border-green-600 text-green-700'
+							: 'bg-transparent border-red-600 text-red-700'}
+						variant='default'
+					>
+						<AlertTitle>{alert.title}</AlertTitle>
+						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
+					</Alert>
+				)}
 				<UniversalDataTable
 					data={filteredData}
 					columns={columns}
@@ -680,16 +691,6 @@ function VirtualServicesContent() {
 						}
 					}}
 				/>
-			)}
-
-			{/* Alert for action results */}
-			{alert && (
-				<div className={`fixed bottom-4 right-4 w-96 z-50`}>
-					<Alert className={alert.variant === 'error' ? 'border-red-500' : 'border-green-500'}>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				</div>
 			)}
 
 		</div>

@@ -8,6 +8,8 @@ import { useJobsWithWebSocket } from "@/hooks/useJobsWithWebSocket"
 import { JobDetailDrawer } from "@/components/viewers/JobDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ActionConfirmationDialog"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
 	getReplicaStatusBadge,
 	getUpdateStatusBadge,
@@ -98,6 +100,9 @@ function JobsContent() {
 	// Confirmation dialog state
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [pendingAction, setPendingAction] = React.useState<{ type: 'delete' | 'restart', items: DashboardJob[] } | null>(null)
+	const [_isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+	const [_confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
 	// Ensure job-specific action capabilities are requested
 	React.useEffect(() => {
@@ -155,6 +160,21 @@ function JobsContent() {
 		return filtered
 	}, [jobs, statusFilter, globalFilter])
 
+	const validateJobsAction = React.useCallback(async (type: 'delete' | 'restart', rows: DashboardJob[]) => {
+		try {
+			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
+			const legacyAction = type === 'delete' ? 'delete-job' : 'restart-job'
+			const resp = await bulkActionsApi.validateAction('jobs', { action: legacyAction, targets })
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
+
 	// Bulk actions (capability-aware)
 	const bulkActions: BulkAction<DashboardJob>[] = React.useMemo(() => {
 		const actions: BulkAction<DashboardJob>[] = []
@@ -194,6 +214,7 @@ function JobsContent() {
 				action: (rows) => {
 					setPendingAction({ type: 'restart', items: rows })
 					setConfirmDialogOpen(true)
+					validateJobsAction('restart', rows)
 				},
 				requiresSelection: true,
 			})
@@ -209,13 +230,14 @@ function JobsContent() {
 				action: (rows) => {
 					setPendingAction({ type: 'delete', items: rows })
 					setConfirmDialogOpen(true)
+					validateJobsAction('delete', rows)
 				},
 				requiresSelection: true,
 			})
 		}
 
 		return actions
-	}, [isAllowed])
+	}, [isAllowed, validateJobsAction])
 
 	// Table columns
 	const columns: ColumnDef<DashboardJob>[] = React.useMemo(() => [
@@ -413,44 +435,25 @@ function JobsContent() {
 	], [handleViewDetails, clusterId])
 
 	// Handle confirmation dialog actions
-	const handleConfirmAction = async () => {
+	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
-
+		setIsConfirmExecuting(true)
 		try {
-			if (pendingAction.type === 'delete') {
-				// Call delete API for each job
-				for (const job of pendingAction.items) {
-					const response = await fetch('/api/v1/resources', {
-						method: 'DELETE',
-						headers: {
-							'Content-Type': 'application/json',
-							'X-CSRF-Token': document.cookie.split('; ').find(row => row.startsWith('csrf_token='))?.split('=')[1] || '',
-						},
-						credentials: 'include',
-						body: JSON.stringify({
-							kind: 'Job',
-							namespace: job.namespace,
-							name: job.name,
-						}),
-					})
-
-					if (!response.ok) {
-						console.error(`Failed to delete job ${job.name}:`, await response.text())
-					}
-				}
-			} else if (pendingAction.type === 'restart') {
-				// Restart jobs (placeholder implementation)
-				pendingAction.items.forEach(job => {
-					console.log('Restart job:', `${job.name} in ${job.namespace}`)
-				})
-			}
-		} catch (error) {
-			console.error('Error performing action:', error)
+			const targets = pendingAction.items.map(j => ({ namespace: j.namespace, name: j.name }))
+			const legacyAction = pendingAction.type === 'delete' ? 'delete-job' : 'restart-job'
+			const resp = await bulkActionsApi.executeBulkAction('jobs', { action: legacyAction, targets })
+			const success = resp?.success
+			const total = resp?.resources_total ?? 0
+			const affected = resp?.resources_affected ?? 0
+			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} jobs processed` : `Errors: ${total - affected} failed`, description: resp?.message })
+		} catch (e: any) {
+			setAlert({ variant: 'error', title: 'Action failed', description: e?.message ?? String(e) })
 		} finally {
+			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
 			setPendingAction(null)
 		}
-	}
+	}, [pendingAction])
 
 	// Generate summary cards from jobs data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
@@ -610,6 +613,19 @@ function JobsContent() {
 						}
 					}}
 				/>
+			)}
+
+			{/* Action result alert */}
+			{alert && (
+				<Alert
+					className={alert.variant === 'success'
+						? 'bg-transparent border-green-600 text-green-700'
+						: 'bg-transparent border-red-600 text-red-700'}
+					variant='default'
+				>
+					<AlertTitle>{alert.title}</AlertTitle>
+					{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
+				</Alert>
 			)}
 
 			{/* Confirmation dialog for destructive actions */}
