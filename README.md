@@ -60,24 +60,7 @@ Manage/Add/Edit secrets securely (RBAC Enforced access) with the secrets page.
 
 ![Secrets Page](images/Kaptn_Secrets_Page.gif)
 
----
 
-## Settings Interface
-
-**API Settings**
-
-
-![Resource Page - Services](images/api_settings.gif)
-
-**Cluster Settings**
-
-
-![Resource Page - Services](images/cluster_settings.gif)
-
-**User Settings**
-
-
-![Resource Page - Services](images/user_settings.gif)
 
 ---
 
