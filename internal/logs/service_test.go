@@ -3,6 +3,8 @@ package logs
 import (
 	"testing"
 	"time"
+
+	"github.com/aaronlmathis/kaptn/internal/config"
 )
 
 func TestRingBasicOperations(t *testing.T) {
@@ -199,11 +201,18 @@ func TestBusBasicOperations(t *testing.T) {
 }
 
 func TestServiceIntegration(t *testing.T) {
-	config := DefaultServiceConfig()
-	config.GlobalMaxEntries = 5                      // Small for testing
-	config.EvictionInterval = 100 * time.Millisecond // Fast for testing
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	if err != nil {
+		t.Fatalf("Failed to get logs service config: %v", err)
+	}
+	serviceConfig.GlobalMaxEntries = 5                      // Small for testing
+	serviceConfig.EvictionInterval = 100 * time.Millisecond // Fast for testing
 
-	service := NewService(config)
+	service := NewService(serviceConfig)
 	defer service.Stop()
 
 	// Test ingestion

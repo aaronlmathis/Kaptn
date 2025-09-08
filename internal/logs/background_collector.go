@@ -8,26 +8,7 @@ import (
 	"sync"
 	"time"
 
-// Stop stops the background log collection and waits for all goroutines to finish
-func (bc *BackgroundCollector) Stop() {
-	bc.logger.Info("Stopping background log collection")
-
-	close(bc.stopCh)
-
-	// Cancel all active pod streams
-	bc.podStreamsMu.Lock()
-	for podKey, cancel := range bc.podStreams {
-		bc.logger.Debug("Canceling pod stream", zap.String("pod", podKey))
-		cancel()
-	}
-	bc.podStreams = make(map[string]context.CancelFunc)
-	bc.podStreamsMu.Unlock()
-
-	// Wait for all goroutines to finish
-	bc.logger.Info("Waiting for all log collection goroutines to finish...")
-	bc.wg.Wait()
-	bc.logger.Info("All log collection goroutines have finished")
-}ap"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -57,11 +38,7 @@ type BackgroundCollectorConfig struct {
 
 // NewBackgroundCollector creates a new background log collector
 func NewBackgroundCollector(logger *zap.Logger, kubeClient kubernetes.Interface, logsService *Service, clusterName string, config BackgroundCollectorConfig) *BackgroundCollector {
-	logger.Info("🏗️ Creating new background collector", 
-		zap.String("cluster", clusterName),
-		zap.Bool("enabled", config.Enabled),
-		zap.Duration("interval", config.Interval))
-	
+
 	return &BackgroundCollector{
 		logger:      logger.Named("background-collector"),
 		kubeClient:  kubeClient,
@@ -75,18 +52,13 @@ func NewBackgroundCollector(logger *zap.Logger, kubeClient kubernetes.Interface,
 
 // Start begins background log collection
 func (bc *BackgroundCollector) Start(ctx context.Context) error {
-	bc.logger.Info("🎬 Background collector Start() called", 
+	bc.logger.Info("Background collector Start() called",
 		zap.Bool("enabled", bc.config.Enabled))
-	
+
 	if !bc.config.Enabled {
-		bc.logger.Info("❌ Background log collection is disabled")
+		bc.logger.Info("Background log collection is disabled")
 		return nil
 	}
-
-	bc.logger.Info("🚀 Starting background log collection",
-		zap.Duration("retention", bc.config.Retention),
-		zap.Duration("interval", bc.config.Interval),
-		zap.Int64("tail_lines", bc.config.TailLines))
 
 	// Start the main collection loop
 	bc.wg.Add(1) // Track main collection loop
@@ -95,7 +67,6 @@ func (bc *BackgroundCollector) Start(ctx context.Context) error {
 		bc.collectLogs(ctx)
 	}()
 
-	bc.logger.Info("✅ Background collector started successfully")
 	return nil
 }
 
@@ -132,25 +103,23 @@ func (bc *BackgroundCollector) Stop() {
 
 // collectLogs is the main collection loop
 func (bc *BackgroundCollector) collectLogs(ctx context.Context) {
-	bc.logger.Info("🔄 Starting main collection loop")
-	
+
 	ticker := time.NewTicker(bc.config.Interval)
 	defer ticker.Stop()
 
 	// Initial collection
-	bc.logger.Info("🔍 Running initial pod discovery")
 	bc.discoverAndCollectPods(ctx)
 
 	for {
 		select {
 		case <-ticker.C:
-			bc.logger.Debug("⏰ Ticker fired, discovering pods")
+
 			bc.discoverAndCollectPods(ctx)
 		case <-bc.stopCh:
-			bc.logger.Info("🛑 Stop signal received, exiting collection loop")
+			bc.logger.Info("Stop signal received, exiting collection loop")
 			return
 		case <-ctx.Done():
-			bc.logger.Info("🛑 Context cancelled, exiting collection loop")
+			bc.logger.Info("Context cancelled, exiting collection loop")
 			return
 		}
 	}
@@ -158,19 +127,16 @@ func (bc *BackgroundCollector) collectLogs(ctx context.Context) {
 
 // discoverAndCollectPods discovers all pods and starts log collection
 func (bc *BackgroundCollector) discoverAndCollectPods(ctx context.Context) {
-	bc.logger.Info("🔍 Discovering pods for log collection")
+	bc.logger.Info("Discovering pods for log collection")
 
 	// List all pods in all namespaces
 	pods, err := bc.kubeClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: "status.phase=Running", // Only collect from running pods
 	})
 	if err != nil {
-		bc.logger.Error("❌ Failed to list pods", zap.Error(err))
+		bc.logger.Error("[ERROR] Failed to list pods", zap.Error(err))
 		return
 	}
-
-	bc.logger.Info("📊 Found pods for log collection", 
-		zap.Int("total_count", len(pods.Items)))
 
 	// Track active pods
 	activePods := make(map[string]bool)
@@ -190,15 +156,10 @@ func (bc *BackgroundCollector) discoverAndCollectPods(ctx context.Context) {
 
 		if !exists {
 			// Start collecting from this pod
-			bc.logger.Debug("🆕 Starting new pod collection", zap.String("pod", podKey))
+			bc.logger.Debug("Starting new pod collection", zap.String("pod", podKey))
 			bc.startPodCollection(ctx, &pod)
 		}
 	}
-
-	bc.logger.Info("📈 Pod collection status", 
-		zap.Int("running_pods", runningCount),
-		zap.Int("total_pods", len(pods.Items)),
-		zap.Int("active_streams", len(bc.podStreams)))
 
 	// Stop collection from pods that no longer exist
 	bc.podStreamsMu.Lock()
@@ -243,9 +204,6 @@ func (bc *BackgroundCollector) collectContainerLogs(ctx context.Context, pod *co
 	podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 	containerKey := fmt.Sprintf("%s/%s", podKey, containerName)
 
-	bc.logger.Info("📦 Starting container log collection", 
-		zap.String("container", containerKey))
-
 	// Prepare log request options
 	logOptions := &corev1.PodLogOptions{
 		Container:  containerName,
@@ -264,15 +222,13 @@ func (bc *BackgroundCollector) collectContainerLogs(ctx context.Context, pod *co
 				zap.String("container", containerKey),
 				zap.Error(err))
 		} else {
-			bc.logger.Error("❌ Failed to open log stream",
+			bc.logger.Error("Failed to open log stream",
 				zap.String("container", containerKey),
 				zap.Error(err))
 		}
 		return
 	}
 	defer stream.Close()
-
-	bc.logger.Info("✅ Opened log stream", zap.String("container", containerKey))
 
 	// Read log lines and ingest them
 	scanner := bufio.NewScanner(stream)
@@ -282,7 +238,7 @@ func (bc *BackgroundCollector) collectContainerLogs(ctx context.Context, pod *co
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			bc.logger.Info("🛑 Context canceled, stopping log collection", 
+			bc.logger.Info("Context canceled, stopping log collection",
 				zap.String("container", containerKey),
 				zap.Int("lines_processed", lineCount))
 			return
@@ -296,9 +252,7 @@ func (bc *BackgroundCollector) collectContainerLogs(ctx context.Context, pod *co
 
 		lineCount++
 		if lineCount%100 == 0 {
-			bc.logger.Debug("📊 Processing logs", 
-				zap.String("container", containerKey),
-				zap.Int("lines_processed", lineCount))
+			// Log progress every 100 lines (optional)
 		}
 
 		// Parse the log entry

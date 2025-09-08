@@ -54,6 +54,8 @@ async function resolvePageComponent(pathname: string): Promise<PageComponent | n
         return (await import("@/components/containers/JobsPageContainer")).JobsPageContainer;
       case "/load-balancers":
         return (await import("@/components/containers/LoadBalancersPageContainer")).LoadBalancersPageContainer;
+      case "/logs":
+        return (await import("@/components/containers/LogsPageContainer")).LogsPageContainer;
       case "/metric-explorer":
         return (await import("@/components/charts/ClusterCPUChart")).ClusterCPUChart; // simple visual, page-level explorer may wrap chart(s)
       case "/namespaces":
@@ -62,7 +64,7 @@ async function resolvePageComponent(pathname: string): Promise<PageComponent | n
         return (await import("@/components/containers/NetworkPoliciesPageContainer")).NetworkPoliciesPageContainer;
       case "/nodes":
         return (await import("@/components/containers/NodesPageContainer")).NodesPageContainer;
-  case "/opsview":
+      case "/opsview":
         return (await import("@/components/opsview-container")).OpsViewContainer;
       case "/persistent-volume-claims":
         return (await import("@/components/containers/PersistentVolumeClaimsPage")).PersistentVolumeClaimsPageContainer;

@@ -3,9 +3,6 @@
 import * as React from "react"
 import { RouteGuard } from "@/components/authz"
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable"
-import { DataTableFilters, type FilterOption } from "@/components/ui/data-table-filters"
-import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
-import { useCluster } from "@/hooks/useCluster"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -15,8 +12,9 @@ import { getLogs, type GetLogsParams, type LogEntry } from "@/api/logs"
 import { useLogStream } from "@/hooks/useLogStream"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { IconPlayerPlay, IconPlayerStop, IconDownload, IconSearch, IconRefresh, IconCircleCheckFilled, IconAlertTriangle } from "@tabler/icons-react"
+import { IconDownload, IconSearch, IconRefresh, IconCircleCheckFilled, IconAlertTriangle, IconInfoCircle, IconClock } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
+import { useNamespace } from "@/contexts/namespace-context"
 
 type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL"
 
@@ -30,15 +28,13 @@ const LOG_LEVEL_COLORS: Record<LogLevel, string> = {
 
 // Inner component that can access the namespace context
 function LogsContent() {
-  const _clusterId = useCluster()
-  const _authCapabilities = useAuthzCapabilitiesInContext(['pods.logs'])
+  const { namespaces } = useNamespace()
   const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 
   // Filter states
   const [globalFilter, setGlobalFilter] = React.useState("")
   const [levelFilter, setLevelFilter] = React.useState<string>("all")
-  const [namespaceFilter, setNamespaceFilter] = React.useState("")
-  const [podFilter, setPodFilter] = React.useState("")
+  const [namespaceFilter, setNamespaceFilter] = React.useState("all")
   const [sinceFilter, setSinceFilter] = React.useState("15m")
   const [limitFilter, setLimitFilter] = React.useState(1000)
 
@@ -49,34 +45,44 @@ function LogsContent() {
   const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
   // WebSocket streaming
-  const { entries: liveEntries, state: streamState, start: startStream, stop: stopStream, setEntries: setLiveEntries } = useLogStream()
+  const { entries: liveEntries, state: streamState, setEntries: setLiveEntries } = useLogStream()
 
   // Determine displayed data: live entries when streaming, static entries otherwise
   const displayedEntries = React.useMemo(() => {
     return (streamState.status === "connected" || streamState.status === "degraded") ? liveEntries : entries
   }, [streamState.status, liveEntries, entries])
 
-  // Parse URL parameters on mount
+  // Parse URL parameters on mount and auto-search when filters change
   React.useEffect(() => {
     const sp = new URLSearchParams(window.location.search)
-    const ns = sp.get("namespace") || ""
-    const pod = sp.get("pod") || ""
+    const ns = sp.get("namespace") || "all"
     const levels = sp.get("levels") || ""
     const q = sp.get("q") || ""
     const since = sp.get("since") || "15m"
     const limit = parseInt(sp.get("limit") || "1000", 10)
 
     setNamespaceFilter(ns)
-    setPodFilter(pod)
     if (levels) setLevelFilter(levels)
     setGlobalFilter(q)
     setSinceFilter(since)
     setLimitFilter(isNaN(limit) ? 1000 : limit)
 
     // Initial fetch
-    handleSearch(ns, pod, levels, q, since, isNaN(limit) ? 1000 : limit).catch(() => { })
+    handleSearch(ns, "", levels, q, since, isNaN(limit) ? 1000 : limit).catch(() => { })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Auto-search when filters change (debounced)
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if ((namespaceFilter && namespaceFilter !== "all") || levelFilter !== "all" || sinceFilter !== "15m" || limitFilter !== 1000) {
+        handleSearch().catch(() => { })
+      }
+    }, 500) // 500ms debounce
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namespaceFilter, levelFilter, sinceFilter, limitFilter])
 
   // Update lastUpdated when entries change
   React.useEffect(() => {
@@ -157,22 +163,10 @@ function LogsContent() {
     ]
   }, [displayedEntries, streamState.status])
 
-  // Level filter options
-  const levelOptions: FilterOption[] = React.useMemo(() => {
-    const levels = Array.from(new Set(displayedEntries.map(e => e.level))).filter(Boolean).sort()
-    return levels.map(level => ({
-      value: level,
-      label: level,
-      badge: <Badge variant="outline" className={cn("text-xs", LOG_LEVEL_COLORS[level as LogLevel] || "text-foreground")}>
-        {level}
-      </Badge>
-    }))
-  }, [displayedEntries])
-
   // Search and filter function
-  async function handleSearch(ns = namespaceFilter, pod = podFilter, levels = levelFilter, q = globalFilter, since = sinceFilter, limit = limitFilter) {
+  async function handleSearch(ns = namespaceFilter, pod = "", levels = levelFilter, q = globalFilter, since = sinceFilter, limit = limitFilter) {
     const params: GetLogsParams = {
-      namespace: ns || undefined,
+      namespace: ns && ns !== "all" ? ns : undefined,
       pod: pod || undefined,
       levels: levels && levels !== "all" ? levels.split(",").map(s => s.trim()).filter(Boolean) : undefined,
       q: q || undefined,
@@ -198,38 +192,10 @@ function LogsContent() {
     }
   }
 
-  // Handle live streaming toggle
-  async function handleStreamToggle() {
-    if (streamState.status === "connected" || streamState.status === "degraded") {
-      await stopStream()
-      setAlert({ variant: 'success', title: 'Live streaming stopped' })
-      return
-    }
-
-    try {
-      const body = {
-        selector: namespaceFilter ? { namespace: namespaceFilter } : { namespaces: [] },
-        container: undefined,
-        sinceSeconds: undefined,
-        tailLines: limitFilter,
-        follow: true,
-        timestamps: true,
-        previous: false,
-      }
-      // Clear live entries and start with current data
-      setLiveEntries(entries)
-      await startStream(body)
-      setAlert({ variant: 'success', title: 'Live streaming started', description: `Monitoring ${streamState.podCount || 0} pods` })
-    } catch (e: unknown) {
-      setAlert({ variant: 'error', title: 'Failed to start live stream', description: e instanceof Error ? e.message : String(e) })
-    }
-  }
-
   // Handle export
   function handleExport(format: "csv" | "json") {
     const params = new URLSearchParams()
-    if (namespaceFilter) params.set("namespace", namespaceFilter)
-    if (podFilter) params.set("pod", podFilter)
+    if (namespaceFilter && namespaceFilter !== "all") params.set("namespace", namespaceFilter)
     if (levelFilter && levelFilter !== "all") params.set("levels", levelFilter)
     if (globalFilter) params.set("q", globalFilter)
     if (sinceFilter) params.set("since", sinceFilter)
@@ -437,110 +403,140 @@ function LogsContent() {
           initialSorting={[{ id: "ts", desc: true }]}
           renderFilters={({ table, selectedCount, totalCount }) => (
             <div className="space-y-4">
-              <DataTableFilters
-                globalFilter={globalFilter}
-                onGlobalFilterChange={setGlobalFilter}
-                searchPlaceholder="Search logs by message, pod, namespace, or node..."
-                categoryFilter={levelFilter}
-                onCategoryFilterChange={setLevelFilter}
-                categoryLabel="Level"
-                categoryOptions={levelOptions}
-                selectedCount={selectedCount}
-                totalCount={totalCount}
-                bulkActions={bulkActions.map(a => ({
-                  id: a.id,
-                  label: a.label,
-                  icon: a.icon || undefined,
-                  variant: a.variant || 'default',
-                  requiresSelection: a.requiresSelection,
-                  action: () => a.action(table.getFilteredSelectedRowModel().rows.map((r: { original: LogEntry }) => r.original as LogEntry))
-                }))}
-                table={table}
-                showColumnToggle={true}
-              >
-                {/* Custom filter controls */}
-                <div className="flex flex-wrap gap-2">
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Namespace</label>
+              {/* Inline Filter Bar */}
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+                {/* Left side - Search and Filters */}
+                <div className="flex flex-col sm:flex-row gap-3 flex-1 min-w-0">
+                  {/* Search Input */}
+                  <div className="relative flex-1 min-w-0">
+                    <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground size-4" />
                     <Input
-                      value={namespaceFilter}
-                      onChange={e => setNamespaceFilter(e.target.value)}
-                      placeholder="default"
-                      className="w-32"
+                      value={globalFilter}
+                      onChange={e => setGlobalFilter(e.target.value)}
+                      placeholder="Search logs by message, pod, namespace, or node..."
+                      className="pl-10 h-9"
                     />
                   </div>
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Pod</label>
-                    <Input
-                      value={podFilter}
-                      onChange={e => setPodFilter(e.target.value)}
-                      placeholder="pod-name"
-                      className="w-40"
-                    />
-                  </div>
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Since</label>
-                    <Select value={sinceFilter} onValueChange={setSinceFilter}>
-                      <SelectTrigger className="w-32">
+
+                  {/* Level Filter */}
+                  <Select value={levelFilter} onValueChange={setLevelFilter}>
+                    <SelectTrigger className="w-[120px] h-9">
+                      <div className="flex items-center gap-2">
+                        <IconInfoCircle className="size-4" />
+                        <SelectValue placeholder="Level" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Levels</SelectItem>
+                      <SelectItem value="DEBUG">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-gray-500" />
+                          DEBUG
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="INFO">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-blue-500" />
+                          INFO
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="WARN">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                          WARN
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="ERROR">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-red-500" />
+                          ERROR
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="FATAL">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-red-800" />
+                          FATAL
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Since Filter */}
+                  <Select value={sinceFilter} onValueChange={setSinceFilter}>
+                    <SelectTrigger className="w-[100px] h-9">
+                      <div className="flex items-center gap-2">
+                        <IconClock className="size-4" />
                         <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="5m">5 minutes</SelectItem>
-                        <SelectItem value="15m">15 minutes</SelectItem>
-                        <SelectItem value="1h">1 hour</SelectItem>
-                        <SelectItem value="6h">6 hours</SelectItem>
-                        <SelectItem value="24h">24 hours</SelectItem>
-                        <SelectItem value="7d">7 days</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col">
-                    <label className="text-xs text-muted-foreground mb-1">Limit</label>
-                    <Input
-                      value={limitFilter}
-                      onChange={e => setLimitFilter(parseInt(e.target.value || "0", 10) || 1000)}
-                      className="w-24"
-                      type="number"
-                    />
-                  </div>
-                  <div className="flex flex-col justify-end">
-                    <Button onClick={() => handleSearch()} disabled={loading} className="flex gap-1">
-                      <IconSearch className="size-4" /> Search
-                    </Button>
-                  </div>
-                  <div className="flex flex-col justify-end">
-                    <Button
-                      onClick={handleStreamToggle}
-                      variant={streamState.status === "connected" || streamState.status === "degraded" ? "secondary" : "default"}
-                      className="flex gap-1"
-                    >
-                      {streamState.status === "connected" || streamState.status === "degraded" ? (
-                        <>
-                          <IconPlayerStop className="size-4" />
-                          Stop Live
-                        </>
-                      ) : (
-                        <>
-                          <IconPlayerPlay className="size-4" />
-                          Start Live
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <div className="flex flex-col justify-end">
-                    <div className="flex gap-1">
-                      <Button variant="outline" onClick={() => handleExport("json")} size="sm">
-                        <IconDownload className="size-4 mr-1" />
-                        JSON
-                      </Button>
-                      <Button variant="outline" onClick={() => handleExport("csv")} size="sm">
-                        <IconDownload className="size-4 mr-1" />
-                        CSV
-                      </Button>
-                    </div>
-                  </div>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5m">5m</SelectItem>
+                      <SelectItem value="15m">15m</SelectItem>
+                      <SelectItem value="1h">1h</SelectItem>
+                      <SelectItem value="6h">6h</SelectItem>
+                      <SelectItem value="24h">24h</SelectItem>
+                      <SelectItem value="7d">7d</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </DataTableFilters>
+
+                {/* Right side - Actions */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Export Buttons */}
+                  <Button variant="outline" onClick={() => handleExport("json")} size="sm" className="h-9">
+                    <IconDownload className="size-4 mr-1" />
+                    JSON
+                  </Button>
+                  <Button variant="outline" onClick={() => handleExport("csv")} size="sm" className="h-9">
+                    <IconDownload className="size-4 mr-1" />
+                    CSV
+                  </Button>
+                </div>
+              </div>
+
+              {/* Advanced Filters - Collapsible */}
+              <div className="flex flex-wrap gap-2 items-center">
+                <Select value={namespaceFilter} onValueChange={setNamespaceFilter}>
+                  <SelectTrigger className="w-40 h-8">
+                    <SelectValue placeholder="Namespace..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Namespaces</SelectItem>
+                    {namespaces.map(ns => (
+                      <SelectItem key={ns.metadata.name} value={ns.metadata.name || ""}>
+                        {ns.metadata.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={limitFilter}
+                  onChange={e => setLimitFilter(parseInt(e.target.value || "0", 10) || 1000)}
+                  placeholder="Limit"
+                  className="w-20 h-8"
+                  type="number"
+                />
+
+                {selectedCount > 0 && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <span className="text-sm text-muted-foreground">
+                      {selectedCount} of {totalCount} selected
+                    </span>
+                    {bulkActions.map(action => (
+                      <Button
+                        key={action.id}
+                        variant={action.variant || 'outline'}
+                        size="sm"
+                        onClick={() => action.action(table.getFilteredSelectedRowModel().rows.map((r: { original: LogEntry }) => r.original as LogEntry))}
+                        className="h-8"
+                      >
+                        {action.icon}
+                        {action.label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
           renderEmptyState={() => (

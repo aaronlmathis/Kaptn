@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/logs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,17 +17,21 @@ import (
 // BenchmarkHighThroughputIngestion tests the logs system under high-volume ingestion
 // Target: 5-10k lines/sec as specified in requirements
 func BenchmarkHighThroughputIngestion(b *testing.B) {
-	config := logs.DefaultServiceConfig()
+	cfg, err := config.Load()
+	require.NoError(b, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(b, err)
 	// Optimize for high throughput
-	config.GlobalMaxEntries = 500000
-	config.BufferSize = 1000
-	config.EvictionInterval = 60 * time.Second // Less frequent eviction during benchmarks
+	serviceConfig.GlobalMaxEntries = 500000
+	serviceConfig.BufferSize = 1000
+	serviceConfig.EvictionInterval = 60 * time.Second // Less frequent eviction during benchmarks
 
-	service := logs.NewService(config)
+	service := logs.NewService(serviceConfig)
 
 	ctx := context.Background()
-	err := service.Start(ctx)
-	require.NoError(b, err)
+	if err := service.Start(ctx); err != nil {
+		b.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	// Generate realistic log entries
@@ -82,15 +87,19 @@ func BenchmarkHighThroughputIngestion(b *testing.B) {
 // BenchmarkConcurrentSubscribers tests the system with multiple concurrent streaming subscribers
 // Target: 50-200 concurrent subscribers as specified in requirements
 func BenchmarkConcurrentSubscribers(b *testing.B) {
-	config := logs.DefaultServiceConfig()
-	config.MaxSubscribers = 300 // Allow more than target for testing
-	config.BufferSize = 200
+	cfg, err := config.Load()
+	require.NoError(b, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(b, err)
+	serviceConfig.MaxSubscribers = 300 // Allow more than target for testing
+	serviceConfig.BufferSize = 200
 
-	service := logs.NewService(config)
+	service := logs.NewService(serviceConfig)
 
 	ctx := context.Background()
-	err := service.Start(ctx)
-	require.NoError(b, err)
+	if err := service.Start(ctx); err != nil {
+		b.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	// Test different subscriber counts
@@ -174,14 +183,18 @@ func BenchmarkConcurrentSubscribers(b *testing.B) {
 
 // BenchmarkQueryPerformance tests query performance under different conditions
 func BenchmarkQueryPerformance(b *testing.B) {
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 100000
+	cfg, err := config.Load()
+	require.NoError(b, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(b, err)
+	serviceConfig.GlobalMaxEntries = 100000
 
-	service := logs.NewService(config)
+	service := logs.NewService(serviceConfig)
 
 	ctx := context.Background()
-	err := service.Start(ctx)
-	require.NoError(b, err)
+	if err := service.Start(ctx); err != nil {
+		b.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	// Pre-populate with test data
@@ -286,15 +299,19 @@ func BenchmarkQueryPerformance(b *testing.B) {
 
 // BenchmarkMemoryEfficiency tests memory usage under sustained load
 func BenchmarkMemoryEfficiency(b *testing.B) {
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 200000
-	config.EvictionInterval = 5 * time.Second
+	cfg, err := config.Load()
+	require.NoError(b, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(b, err)
+	serviceConfig.GlobalMaxEntries = 200000
+	serviceConfig.EvictionInterval = 5 * time.Second
 
-	service := logs.NewService(config)
+	service := logs.NewService(serviceConfig)
 
 	ctx := context.Background()
-	err := service.Start(ctx)
-	require.NoError(b, err)
+	if err := service.Start(ctx); err != nil {
+		b.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	b.ResetTimer()
@@ -340,18 +357,22 @@ func LoadTestComprehensive(t *testing.T) {
 		t.Skip("Skipping comprehensive load test in short mode")
 	}
 
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 500000
-	config.MaxSubscribers = 300
-	config.BufferSize = 500
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.GlobalMaxEntries = 500000
+	serviceConfig.MaxSubscribers = 300
+	serviceConfig.BufferSize = 500
 
-	service := logs.NewService(config)
+	service := logs.NewService(serviceConfig)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	var wg sync.WaitGroup

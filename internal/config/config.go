@@ -779,34 +779,76 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		c.Caching.LogsCache.BackgroundCollectionInterval,
 		c.Caching.LogsCache.BackgroundCollectionRetention)
 
+	// Set defaults for empty values
+	ttl := c.Caching.LogsCache.TTL
+	if ttl == "" {
+		ttl = "1h" // Default 1 hour
+	}
+
+	evictionIntervalStr := c.Caching.LogsCache.EvictionInterval
+	if evictionIntervalStr == "" {
+		evictionIntervalStr = "5m" // Default 5 minutes
+	}
+
+	cleanupIntervalStr := c.Caching.LogsCache.CleanupInterval
+	if cleanupIntervalStr == "" {
+		cleanupIntervalStr = "10m" // Default 10 minutes
+	}
+
+	degradedModeTimeoutStr := c.Caching.LogsCache.DegradedModeTimeout
+	if degradedModeTimeoutStr == "" {
+		degradedModeTimeoutStr = "30s" // Default 30 seconds
+	}
+
 	// Parse duration strings
-	globalMaxAge, err := time.ParseDuration(c.Caching.LogsCache.TTL)
+	globalMaxAge, err := time.ParseDuration(ttl)
 	if err != nil {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache TTL: %w", err)
 	}
 
-	evictionInterval, err := time.ParseDuration(c.Caching.LogsCache.EvictionInterval)
+	evictionInterval, err := time.ParseDuration(evictionIntervalStr)
 	if err != nil {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache eviction interval: %w", err)
 	}
 
-	cleanupInterval, err := time.ParseDuration(c.Caching.LogsCache.CleanupInterval)
+	cleanupInterval, err := time.ParseDuration(cleanupIntervalStr)
 	if err != nil {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache cleanup interval: %w", err)
 	}
 
-	degradedModeTimeout, err := time.ParseDuration(c.Caching.LogsCache.DegradedModeTimeout)
+	degradedModeTimeout, err := time.ParseDuration(degradedModeTimeoutStr)
 	if err != nil {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache degraded mode timeout: %w", err)
 	}
 
+	// Set default values for numeric fields if they're zero
+	maxGlobal := c.Caching.LogsCache.MaxGlobal
+	if maxGlobal == 0 {
+		maxGlobal = 250000 // Default
+	}
+
+	maxPerScope := c.Caching.LogsCache.MaxPerScope
+	if maxPerScope == 0 {
+		maxPerScope = 20000 // Default
+	}
+
+	maxSubscribers := c.Caching.LogsCache.MaxSubscribers
+	if maxSubscribers == 0 {
+		maxSubscribers = 200 // Default
+	}
+
+	bufferSize := c.Caching.LogsCache.BufferSize
+	if bufferSize == 0 {
+		bufferSize = 100 // Default
+	}
+
 	return LogsServiceConfig{
-		GlobalMaxEntries: c.Caching.LogsCache.MaxGlobal,
+		GlobalMaxEntries: maxGlobal,
 		GlobalMaxAge:     globalMaxAge,
-		ScopeMaxEntries:  c.Caching.LogsCache.MaxPerScope,
+		ScopeMaxEntries:  maxPerScope,
 		ScopeMaxAge:      globalMaxAge, // Use same TTL for scoped rings
-		MaxSubscribers:   c.Caching.LogsCache.MaxSubscribers,
-		BufferSize:       c.Caching.LogsCache.BufferSize,
+		MaxSubscribers:   maxSubscribers,
+		BufferSize:       bufferSize,
 		EvictionInterval: evictionInterval,
 		CleanupInterval:  cleanupInterval,
 

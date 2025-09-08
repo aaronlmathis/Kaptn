@@ -19,7 +19,7 @@ all: build ## Build everything
 
 dev: ## Run backend in development mode with hot reload
 	@echo "Starting development server..."
-	@go run -ldflags "$(LDFLAGS)" ./cmd/server --config=config.authdev.yaml &
+	@go run -race -ldflags "$(LDFLAGS)" ./cmd/server --config=config.authdev.yaml &
 	@echo "Backend PID: $$!"
 	@echo "Starting frontend development server..."
 	@cd frontend && npm run dev
@@ -88,18 +88,18 @@ frontend: ## Build frontend
 backend: ## Build backend binary
 	@echo "Building backend..."
 	@mkdir -p $(BUILD_DIR)
-	@CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+	@CGO_ENABLED=1 go build -race -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 	@echo "Backend binary built: $(BUILD_DIR)/$(BINARY_NAME)"
 
 build: frontend ## Build backend binary (embeds frontend)
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
-	@CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+	@CGO_ENABLED=1 go build -race -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 	@echo "Binary built: $(BUILD_DIR)/$(BINARY_NAME)"
 
 run: build ## Run the built binary
 	@echo "Running $(BINARY_NAME)..."
-	@$(BUILD_DIR)/$(BINARY_NAME)
+	@$(BUILD_DIR)/$(BINARY_NAME) --config=config.dev.yaml
 
 IMAGE_NAME := aaronlmathis/kaptn
 

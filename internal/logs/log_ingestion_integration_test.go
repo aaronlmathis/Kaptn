@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/logs"
 )
 
@@ -20,18 +21,20 @@ func TestLogIngestionAndReplay(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 1000
-	config.ScopeMaxEntries = 200
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.GlobalMaxEntries = 1000
+	serviceConfig.ScopeMaxEntries = 200
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	// Start the service
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	ctx := context.Background()
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Simulate normalized log entries as they would come from the coordinator
 	testLogEntries := []logs.LogEntry{
@@ -159,16 +162,20 @@ func TestLiveStreamingWithBackfill(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service
-	config := logs.DefaultServiceConfig()
-	config.BufferSize = 50
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.BufferSize = 50
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Ingest some historical data for backfill
 	baseTime := time.Now().Add(-10 * time.Minute)
@@ -264,16 +271,20 @@ func TestConcurrentStreamsAndIngestion(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service
-	config := logs.DefaultServiceConfig()
-	config.MaxSubscribers = 10
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.MaxSubscribers = 10
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	numStreams := 5
 	entriesPerNamespace := 20

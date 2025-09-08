@@ -8,7 +8,7 @@ import react from "@astrojs/react";
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('dev');
 const isBuild = process.argv.includes('build');
 
-console.log(`🚀 Astro config: ${isDev ? 'Development (SSR)' : 'Production (Static)'}`);
+console.log(`Astro config: ${isDev ? 'Development (SSR)' : 'Production (Static)'}`);
 
 // https://astro.build/config
 export default defineConfig({

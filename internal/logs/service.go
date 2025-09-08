@@ -242,8 +242,6 @@ func (s *Service) Stream(f LogFilter) (<-chan LogEntry, func()) {
 	s.metrics.RecordSubscription()
 	s.prometheusMetrics.RecordSubscription()
 
-	ch, cancel := s.bus.Subscribe(f)
-
 	// Generate unique stream ID for tracking
 	streamID := fmt.Sprintf("stream-%d-%d", time.Now().UnixNano(), s.metrics.SubscriptionsTotal)
 	subscriberID := fmt.Sprintf("sub-%d", time.Now().UnixNano())
@@ -251,14 +249,53 @@ func (s *Service) Stream(f LogFilter) (<-chan LogEntry, func()) {
 	// Track the stream
 	s.trackStream(streamID, subscriberID, f)
 
+	// Create output channel
+	outputCh := make(chan LogEntry, s.config.BufferSize)
+
+	// Subscribe to live events
+	liveCh, liveCancel := s.bus.Subscribe(f)
+
+	// Start goroutine to handle backfill and live streaming
+	go func() {
+		defer close(outputCh)
+
+		// Provide backfill if Since filter is specified
+		if !f.Since.IsZero() {
+			// Query historical data for backfill
+			historical := s.Replay(f)
+
+			// Send historical entries as backfill
+			for _, entry := range historical {
+				select {
+				case outputCh <- entry:
+					// Successfully sent
+				case <-time.After(time.Second):
+					// Timeout sending backfill, skip
+					goto livephase
+				}
+			}
+		}
+
+	livephase:
+		// Forward live events
+		for entry := range liveCh {
+			select {
+			case outputCh <- entry:
+				// Successfully forwarded
+			default:
+				// Output channel full, skip
+			}
+		}
+	}()
+
 	// Wrap cancel to update metrics and remove tracking
 	wrappedCancel := func() {
 		s.metrics.RecordUnsubscription()
 		s.untrackStream(streamID)
-		cancel()
+		liveCancel()
 	}
 
-	return ch, wrappedCancel
+	return outputCh, wrappedCancel
 }
 
 // Stop shuts down the service and cleans up resources
@@ -448,18 +485,24 @@ func (s *Service) performEviction() {
 	s.workerMu.Unlock()
 
 	cutoff := time.Now().Add(-s.config.GlobalMaxAge)
+	scopeCutoff := time.Now().Add(-s.config.ScopeMaxAge)
 
-	// Evict from global ring
+	// Evict from global ring (no service lock needed)
 	s.globalRing.EvictByTime(cutoff)
 	s.metrics.SetGlobalRingSize(s.globalRing.Size())
 
-	// Evict from scoped rings
-	s.mu.Lock()
-	scopeCutoff := time.Now().Add(-s.config.ScopeMaxAge)
+	// Collect scoped rings to avoid holding lock during eviction
+	s.mu.RLock()
+	scopedRings := make([]LogRing, 0, len(s.scopedRings))
 	for _, ring := range s.scopedRings {
+		scopedRings = append(scopedRings, ring)
+	}
+	s.mu.RUnlock()
+
+	// Evict from scoped rings without holding service lock
+	for _, ring := range scopedRings {
 		ring.EvictByTime(scopeCutoff)
 	}
-	s.mu.Unlock()
 }
 
 // performCleanup cleans up stale subscriptions and empty rings
@@ -473,14 +516,27 @@ func (s *Service) performCleanup() {
 		bus.CleanupStaleSubscriptions(10 * time.Minute)
 	}
 
-	// Cleanup empty scoped rings
-	s.mu.Lock()
+	// Cleanup empty scoped rings - collect keys first to minimize lock time
+	var emptyKeys []string
+	s.mu.RLock()
 	for key, ring := range s.scopedRings {
 		if ring.Size() == 0 {
-			delete(s.scopedRings, key)
+			emptyKeys = append(emptyKeys, key)
 		}
 	}
-	s.mu.Unlock()
+	s.mu.RUnlock()
+
+	// Delete empty rings with write lock
+	if len(emptyKeys) > 0 {
+		s.mu.Lock()
+		for _, key := range emptyKeys {
+			// Double-check in case ring was used between read and write lock
+			if ring, exists := s.scopedRings[key]; exists && ring.Size() == 0 {
+				delete(s.scopedRings, key)
+			}
+		}
+		s.mu.Unlock()
+	}
 
 	// Cleanup stale streams
 	s.streamMu.Lock()
