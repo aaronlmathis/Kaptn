@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/logs"
 	"github.com/stretchr/testify/assert"
 )
@@ -11,7 +12,7 @@ import (
 // TestAdminMethodsIntegration tests the admin methods on a real service instance
 func TestAdminMethodsIntegration(t *testing.T) {
 	// Create a real service for integration testing
-	config := logs.ServiceConfig{
+	cfg := config.LogsServiceConfig{
 		GlobalMaxEntries: 1000,
 		ScopeMaxEntries:  500,
 		MaxSubscribers:   10,
@@ -22,7 +23,7 @@ func TestAdminMethodsIntegration(t *testing.T) {
 		CleanupInterval:  time.Minute,
 	}
 
-	service := logs.NewService(config)
+	service := logs.NewService(cfg)
 	defer service.Stop()
 
 	t.Run("AdminClearRings", func(t *testing.T) {
@@ -81,7 +82,7 @@ func TestAdminMethodsIntegration(t *testing.T) {
 
 // TestAdminOperationsWithData tests admin operations when service has some data
 func TestAdminOperationsWithData(t *testing.T) {
-	config := logs.ServiceConfig{
+	cfg := config.LogsServiceConfig{
 		GlobalMaxEntries: 100,
 		ScopeMaxEntries:  50,
 		MaxSubscribers:   5,
@@ -92,7 +93,7 @@ func TestAdminOperationsWithData(t *testing.T) {
 		CleanupInterval:  time.Minute,
 	}
 
-	service := logs.NewService(config)
+	service := logs.NewService(cfg)
 	defer service.Stop()
 
 	// Add some test data
@@ -153,7 +154,7 @@ func TestAdminOperationsWithData(t *testing.T) {
 
 // TestAdminStreamsTracking tests stream lifecycle tracking
 func TestAdminStreamsTracking(t *testing.T) {
-	config := logs.ServiceConfig{
+	cfg := config.LogsServiceConfig{
 		GlobalMaxEntries: 100,
 		ScopeMaxEntries:  50,
 		MaxSubscribers:   5,
@@ -164,7 +165,7 @@ func TestAdminStreamsTracking(t *testing.T) {
 		CleanupInterval:  time.Minute,
 	}
 
-	service := logs.NewService(config)
+	service := logs.NewService(cfg)
 	defer service.Stop()
 
 	// Add some test data

@@ -163,6 +163,11 @@ type LogsCacheConfig struct {
 	EvictionInterval string `yaml:"eviction_interval"`
 	CleanupInterval  string `yaml:"cleanup_interval"`
 
+	// Background log collection configuration
+	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
+	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
+	BackgroundCollectionInterval  string `yaml:"background_collection_interval"`
+
 	// Operational limits (Phase 10)
 	MaxStreamsPerUser     int    `yaml:"max_streams_per_user"`
 	MaxQueryLimit         int    `yaml:"max_query_limit"`
@@ -311,13 +316,19 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			SearchMaxSize:  getEnvInt("KAPTN_SEARCH_MAX_SIZE", 10000),
 
 			LogsCache: LogsCacheConfig{
-				TTL:                   getEnv("KAPTN_LOGS_TTL", "10m"),
-				MaxGlobal:             getEnvInt("KAPTN_LOGS_MAX_GLOBAL", 250000),
-				MaxPerScope:           getEnvInt("KAPTN_LOGS_MAX_PER_SCOPE", 20000),
-				MaxSubscribers:        getEnvInt("KAPTN_LOGS_MAX_SUBSCRIBERS", 200),
-				BufferSize:            getEnvInt("KAPTN_LOGS_BUFFER_SIZE", 100),
-				EvictionInterval:      getEnv("KAPTN_LOGS_EVICTION_INTERVAL", "30s"),
-				CleanupInterval:       getEnv("KAPTN_LOGS_CLEANUP_INTERVAL", "5m"),
+				TTL:              getEnv("KAPTN_LOGS_TTL", "10m"),
+				MaxGlobal:        getEnvInt("KAPTN_LOGS_MAX_GLOBAL", 250000),
+				MaxPerScope:      getEnvInt("KAPTN_LOGS_MAX_PER_SCOPE", 20000),
+				MaxSubscribers:   getEnvInt("KAPTN_LOGS_MAX_SUBSCRIBERS", 200),
+				BufferSize:       getEnvInt("KAPTN_LOGS_BUFFER_SIZE", 100),
+				EvictionInterval: getEnv("KAPTN_LOGS_EVICTION_INTERVAL", "30s"),
+				CleanupInterval:  getEnv("KAPTN_LOGS_CLEANUP_INTERVAL", "5m"),
+
+				// Background collection settings
+				BackgroundCollectionEnabled:   getEnvBool("KAPTN_LOGS_BACKGROUND_COLLECTION_ENABLED", true),
+				BackgroundCollectionRetention: getEnv("KAPTN_LOGS_BACKGROUND_COLLECTION_RETENTION", "1h"),
+				BackgroundCollectionInterval:  getEnv("KAPTN_LOGS_BACKGROUND_COLLECTION_INTERVAL", "30s"),
+
 				MaxStreamsPerUser:     getEnvInt("KAPTN_LOGS_MAX_STREAMS_PER_USER", 50),
 				MaxQueryLimit:         getEnvInt("KAPTN_LOGS_MAX_QUERY_LIMIT", 10000),
 				MaxExportSize:         int64(getEnvInt("KAPTN_LOGS_MAX_EXPORT_SIZE", 100*1024*1024)), // 100MB
@@ -745,6 +756,11 @@ type LogsServiceConfig struct {
 	EvictionInterval time.Duration `yaml:"eviction_interval"`
 	CleanupInterval  time.Duration `yaml:"cleanup_interval"`
 
+	// Background collection
+	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
+	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
+	BackgroundCollectionInterval  string `yaml:"background_collection_interval"`
+
 	// Phase 10: Operational guardrails
 	MaxStreamsPerUser     int           `yaml:"max_streams_per_user"`
 	MaxQueryLimit         int           `yaml:"max_query_limit"`
@@ -757,6 +773,12 @@ type LogsServiceConfig struct {
 
 // GetLogsServiceConfig converts the config to a logs service config
 func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
+	// Debug: Log what we're reading from config
+	fmt.Printf("🔍 [DEBUG] Reading logs config: background_collection_enabled=%v, interval=%s, retention=%s\n",
+		c.Caching.LogsCache.BackgroundCollectionEnabled,
+		c.Caching.LogsCache.BackgroundCollectionInterval,
+		c.Caching.LogsCache.BackgroundCollectionRetention)
+
 	// Parse duration strings
 	globalMaxAge, err := time.ParseDuration(c.Caching.LogsCache.TTL)
 	if err != nil {
@@ -787,6 +809,11 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		BufferSize:       c.Caching.LogsCache.BufferSize,
 		EvictionInterval: evictionInterval,
 		CleanupInterval:  cleanupInterval,
+
+		// Background collection
+		BackgroundCollectionEnabled:   c.Caching.LogsCache.BackgroundCollectionEnabled,
+		BackgroundCollectionRetention: c.Caching.LogsCache.BackgroundCollectionRetention,
+		BackgroundCollectionInterval:  c.Caching.LogsCache.BackgroundCollectionInterval,
 
 		// Phase 10: Operational guardrails
 		MaxStreamsPerUser:     c.Caching.LogsCache.MaxStreamsPerUser,

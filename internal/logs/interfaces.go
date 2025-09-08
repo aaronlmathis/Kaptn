@@ -3,6 +3,8 @@ package logs
 import (
 	"context"
 	"time"
+
+	"github.com/aaronlmathis/kaptn/internal/config"
 )
 
 // LogEntry represents a single log line with normalized metadata
@@ -137,7 +139,7 @@ type AdminStats struct {
 	BackgroundWorkers WorkerStats `json:"background_workers"`
 
 	// Configuration snapshot
-	Configuration ServiceConfig `json:"configuration"`
+	Configuration config.LogsServiceConfig `json:"configuration"`
 }
 
 // RingStats represents statistics for individual rings

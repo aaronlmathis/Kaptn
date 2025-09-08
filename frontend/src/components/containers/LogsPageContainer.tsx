@@ -1,100 +1,240 @@
 "use client"
 
 import * as React from "react"
-import { getLogs, type GetLogsParams, type LogEntry } from "@/api/logs"
-import { useLogStream } from "@/hooks/useLogStream"
+import { RouteGuard } from "@/components/authz"
+import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable"
+import { DataTableFilters, type FilterOption } from "@/components/ui/data-table-filters"
+import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
+import { useCluster } from "@/hooks/useCluster"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { IconPlayerPlay, IconPlayerStop, IconDownload, IconSearch } from "@tabler/icons-react"
+import { type ColumnDef } from "@/lib/table"
+import { getLogs, type GetLogsParams, type LogEntry } from "@/api/logs"
+import { useLogStream } from "@/hooks/useLogStream"
+import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { IconPlayerPlay, IconPlayerStop, IconDownload, IconSearch, IconRefresh, IconCircleCheckFilled, IconAlertTriangle } from "@tabler/icons-react"
+import { cn } from "@/lib/utils"
 
-export function LogsPageContainer() {
-  const [namespace, setNamespace] = React.useState("")
-  const [pod, setPod] = React.useState("")
-  const [levels, setLevels] = React.useState<string>("")
-  const [q, setQ] = React.useState("")
-  const [since, setSince] = React.useState("15m")
-  const [limit, setLimit] = React.useState(1000)
+type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL"
+
+const LOG_LEVEL_COLORS: Record<LogLevel, string> = {
+  DEBUG: "text-muted-foreground",
+  INFO: "text-blue-600",
+  WARN: "text-yellow-600",
+  ERROR: "text-red-600",
+  FATAL: "text-red-800 font-bold"
+}
+
+// Inner component that can access the namespace context
+function LogsContent() {
+  const _clusterId = useCluster()
+  const _authCapabilities = useAuthzCapabilitiesInContext(['pods.logs'])
+  const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
+
+  // Filter states
+  const [globalFilter, setGlobalFilter] = React.useState("")
+  const [levelFilter, setLevelFilter] = React.useState<string>("all")
+  const [namespaceFilter, setNamespaceFilter] = React.useState("")
+  const [podFilter, setPodFilter] = React.useState("")
+  const [sinceFilter, setSinceFilter] = React.useState("15m")
+  const [limitFilter, setLimitFilter] = React.useState(1000)
+
+  // Data states
   const [entries, setEntries] = React.useState<LogEntry[]>([])
   const [loading, setLoading] = React.useState(false)
-  const { entries: liveEntries, state, start, stop, setEntries: setLiveEntries } = useLogStream()
+  const [error, setError] = React.useState<string | null>(null)
+  const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
-  // Merge live entries into display when streaming
-  const displayed = state.status === "connected" || state.status === "degraded" ? liveEntries : entries
+  // WebSocket streaming
+  const { entries: liveEntries, state: streamState, start: startStream, stop: stopStream, setEntries: setLiveEntries } = useLogStream()
 
+  // Determine displayed data: live entries when streaming, static entries otherwise
+  const displayedEntries = React.useMemo(() => {
+    return (streamState.status === "connected" || streamState.status === "degraded") ? liveEntries : entries
+  }, [streamState.status, liveEntries, entries])
+
+  // Parse URL parameters on mount
   React.useEffect(() => {
     const sp = new URLSearchParams(window.location.search)
     const ns = sp.get("namespace") || ""
-    const p = sp.get("pod") || ""
-    const lv = sp.get("levels") || ""
-    const text = sp.get("q") || ""
-    const sn = sp.get("since") || "15m"
-    const lim = parseInt(sp.get("limit") || "1000", 10)
-    setNamespace(ns)
-    setPod(p)
-    setLevels(lv)
-    setQ(text)
-    setSince(sn)
-    setLimit(isNaN(lim) ? 1000 : lim)
+    const pod = sp.get("pod") || ""
+    const levels = sp.get("levels") || ""
+    const q = sp.get("q") || ""
+    const since = sp.get("since") || "15m"
+    const limit = parseInt(sp.get("limit") || "1000", 10)
+
+    setNamespaceFilter(ns)
+    setPodFilter(pod)
+    if (levels) setLevelFilter(levels)
+    setGlobalFilter(q)
+    setSinceFilter(since)
+    setLimitFilter(isNaN(limit) ? 1000 : limit)
+
     // Initial fetch
-    handleSearch(ns, p, lv, text, sn, isNaN(lim) ? 1000 : lim).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    handleSearch(ns, pod, levels, q, since, isNaN(limit) ? 1000 : limit).catch(() => { })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function handleSearch(ns = namespace, p = pod, lv = levels, text = q, sn = since, lm = limit) {
+  // Update lastUpdated when entries change
+  React.useEffect(() => {
+    if (displayedEntries.length > 0) {
+      setLastUpdated(new Date().toISOString())
+    }
+  }, [displayedEntries])
+
+  // Generate summary cards from log data
+  const summaryData: SummaryCard[] = React.useMemo(() => {
+    if (!displayedEntries || displayedEntries.length === 0) {
+      return [
+        {
+          title: "Total Logs",
+          value: 0,
+          subtitle: "No logs found"
+        },
+        {
+          title: "Pods",
+          value: 0,
+          subtitle: "0 unique pods"
+        },
+        {
+          title: "Errors",
+          value: 0,
+          subtitle: "0 error logs"
+        },
+        {
+          title: "Latest",
+          value: "-",
+          subtitle: "No recent logs"
+        }
+      ]
+    }
+
+    const totalLogs = displayedEntries.length
+    const uniquePods = new Set(displayedEntries.map(e => e.pod)).size
+    const errorLogs = displayedEntries.filter(e => e.level === 'ERROR' || e.level === 'FATAL').length
+    const warnLogs = displayedEntries.filter(e => e.level === 'WARN').length
+    const latestLog = displayedEntries[0]?.ts ? new Date(displayedEntries[0].ts) : null
+
+    return [
+      {
+        title: "Total Logs",
+        value: totalLogs,
+        subtitle: `${uniquePods} unique pods`,
+        badge: totalLogs > 0 ? <Badge variant="outline" className="text-blue-600 border-border bg-transparent px-1.5">
+          <IconCircleCheckFilled className="size-3 fill-blue-600 mr-1" />
+          {totalLogs}
+        </Badge> : undefined,
+        footer: streamState.status === "connected" ? "Live streaming" : "Historical data"
+      },
+      {
+        title: "Unique Pods",
+        value: uniquePods,
+        subtitle: `From ${new Set(displayedEntries.map(e => e.namespace)).size} namespaces`,
+        footer: uniquePods > 0 ? "Active log sources" : "No active sources"
+      },
+      {
+        title: "Error Logs",
+        value: errorLogs,
+        subtitle: warnLogs > 0 ? `${warnLogs} warnings` : "No warnings",
+        badge: errorLogs > 0 ? <Badge variant="outline" className="text-red-600 border-border bg-transparent px-1.5">
+          <IconAlertTriangle className="size-3 text-red-600 mr-1" />
+          {errorLogs}
+        </Badge> : <Badge variant="outline" className="text-green-600 border-border bg-transparent px-1.5">
+          <IconCircleCheckFilled className="size-3 fill-green-600 mr-1" />
+          Clean
+        </Badge>,
+        footer: errorLogs === 0 ? "No errors detected" : "Needs attention"
+      },
+      {
+        title: "Latest Log",
+        value: latestLog ? latestLog.toLocaleTimeString() : "-",
+        subtitle: latestLog ? `${Math.round((Date.now() - latestLog.getTime()) / 1000)}s ago` : "No recent logs",
+        footer: streamState.status === "connected" ? "Real-time updates" : "Static snapshot"
+      }
+    ]
+  }, [displayedEntries, streamState.status])
+
+  // Level filter options
+  const levelOptions: FilterOption[] = React.useMemo(() => {
+    const levels = Array.from(new Set(displayedEntries.map(e => e.level))).filter(Boolean).sort()
+    return levels.map(level => ({
+      value: level,
+      label: level,
+      badge: <Badge variant="outline" className={cn("text-xs", LOG_LEVEL_COLORS[level as LogLevel] || "text-foreground")}>
+        {level}
+      </Badge>
+    }))
+  }, [displayedEntries])
+
+  // Search and filter function
+  async function handleSearch(ns = namespaceFilter, pod = podFilter, levels = levelFilter, q = globalFilter, since = sinceFilter, limit = limitFilter) {
     const params: GetLogsParams = {
       namespace: ns || undefined,
-      pod: p || undefined,
-      levels: lv ? lv.split(",").map(s => s.trim()).filter(Boolean) : undefined,
-      q: text || undefined,
-      since: sn || undefined,
-      limit: lm || undefined,
+      pod: pod || undefined,
+      levels: levels && levels !== "all" ? levels.split(",").map(s => s.trim()).filter(Boolean) : undefined,
+      q: q || undefined,
+      since: since || undefined,
+      limit: limit || undefined,
       direction: "backward",
     }
+
     setLoading(true)
+    setError(null)
     try {
       const res = await getLogs(params)
       setEntries(res.data || [])
       // If streaming was active, reset live list too
       setLiveEntries(res.data || [])
-    } catch (e) {
-      // noop error display for now
+      setAlert({ variant: 'success', title: `Loaded ${res.data?.length || 0} log entries` })
+    } catch (e: unknown) {
+      const errorMsg = e instanceof Error ? e.message : String(e)
+      setError(errorMsg)
+      setAlert({ variant: 'error', title: 'Failed to load logs', description: errorMsg })
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleFollow() {
-    if (state.status === "connected" || state.status === "degraded") {
-      await stop()
+  // Handle live streaming toggle
+  async function handleStreamToggle() {
+    if (streamState.status === "connected" || streamState.status === "degraded") {
+      await stopStream()
+      setAlert({ variant: 'success', title: 'Live streaming stopped' })
       return
     }
-    const body = {
-      selector: namespace ? { namespace } : { namespaces: [] },
-      container: undefined,
-      sinceSeconds: undefined,
-      tailLines: undefined,
-      follow: true,
-      timestamps: true,
-      previous: false,
+
+    try {
+      const body = {
+        selector: namespaceFilter ? { namespace: namespaceFilter } : { namespaces: [] },
+        container: undefined,
+        sinceSeconds: undefined,
+        tailLines: limitFilter,
+        follow: true,
+        timestamps: true,
+        previous: false,
+      }
+      // Clear live entries and start with current data
+      setLiveEntries(entries)
+      await startStream(body)
+      setAlert({ variant: 'success', title: 'Live streaming started', description: `Monitoring ${streamState.podCount || 0} pods` })
+    } catch (e: unknown) {
+      setAlert({ variant: 'error', title: 'Failed to start live stream', description: e instanceof Error ? e.message : String(e) })
     }
-    // Clear live entries and start
-    setLiveEntries(entries)
-    await start(body)
   }
 
-  function formatEntry(e: LogEntry) {
-    return `${new Date(e.ts).toLocaleTimeString()} [${e.level}] ${e.namespace}/${e.pod} ${e.container} - ${e.msg}`
-  }
-
-  function onExport(format: "csv" | "json") {
+  // Handle export
+  function handleExport(format: "csv" | "json") {
     const params = new URLSearchParams()
-    if (namespace) params.set("namespace", namespace)
-    if (pod) params.set("pod", pod)
-    if (levels) params.set("levels", levels)
-    if (q) params.set("q", q)
-    if (since) params.set("since", since)
-    if (limit) params.set("limit", String(limit))
+    if (namespaceFilter) params.set("namespace", namespaceFilter)
+    if (podFilter) params.set("pod", podFilter)
+    if (levelFilter && levelFilter !== "all") params.set("levels", levelFilter)
+    if (globalFilter) params.set("q", globalFilter)
+    if (sinceFilter) params.set("since", sinceFilter)
+    if (limitFilter) params.set("limit", String(limitFilter))
+
     const url = `/api/v1/logs/export?${params.toString()}&format=${format}`
     const a = document.createElement('a')
     a.href = url
@@ -102,57 +242,336 @@ export function LogsPageContainer() {
     a.click()
   }
 
+  // Filtered data based on global search and level filter
+  const filteredEntries = React.useMemo(() => {
+    const q = globalFilter.trim().toLowerCase()
+    return displayedEntries.filter(entry => {
+      const matchesGlobal = !q ||
+        entry.msg.toLowerCase().includes(q) ||
+        entry.pod.toLowerCase().includes(q) ||
+        entry.namespace.toLowerCase().includes(q) ||
+        entry.container.toLowerCase().includes(q) ||
+        entry.node.toLowerCase().includes(q)
+
+      const matchesLevel = levelFilter === 'all' || entry.level === levelFilter
+
+      return matchesGlobal && matchesLevel
+    })
+  }, [displayedEntries, globalFilter, levelFilter])
+
+  // Table columns
+  const columns: ColumnDef<LogEntry>[] = React.useMemo(() => ([
+    {
+      accessorKey: "ts",
+      header: "Timestamp",
+      cell: ({ row }: { row: { original: LogEntry } }) => {
+        const ts = row.original.ts
+        return (
+          <div className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+            {new Date(ts).toLocaleString()}
+          </div>
+        )
+      },
+      size: 160,
+    },
+    {
+      accessorKey: "level",
+      header: "Level",
+      cell: ({ row }: { row: { original: LogEntry } }) => {
+        const level = row.original.level as LogLevel
+        return (
+          <Badge
+            variant="outline"
+            className={cn("font-mono text-xs", LOG_LEVEL_COLORS[level] || "text-foreground")}
+          >
+            {level}
+          </Badge>
+        )
+      },
+      size: 80,
+    },
+    {
+      accessorKey: "namespace",
+      header: "Namespace",
+      cell: ({ row }: { row: { original: LogEntry } }) => (
+        <Badge variant="outline" className="text-muted-foreground px-1.5 font-mono text-xs">
+          {row.original.namespace}
+        </Badge>
+      ),
+      size: 120,
+    },
+    {
+      accessorKey: "pod",
+      header: "Pod",
+      cell: ({ row }: { row: { original: LogEntry } }) => (
+        <div className="font-mono text-sm truncate max-w-[200px]" title={row.original.pod}>
+          {row.original.pod}
+        </div>
+      ),
+      size: 200,
+    },
+    {
+      accessorKey: "container",
+      header: "Container",
+      cell: ({ row }: { row: { original: LogEntry } }) => (
+        <div className="font-mono text-sm">{row.original.container}</div>
+      ),
+      size: 120,
+    },
+    {
+      accessorKey: "node",
+      header: "Node",
+      cell: ({ row }: { row: { original: LogEntry } }) => (
+        <div className="font-mono text-sm">{row.original.node}</div>
+      ),
+      size: 120,
+    },
+    {
+      accessorKey: "msg",
+      header: "Message",
+      cell: ({ row }: { row: { original: LogEntry } }) => (
+        <div className="font-mono text-sm whitespace-pre-wrap break-words max-w-[400px]">
+          {row.original.msg}
+        </div>
+      ),
+      size: 400,
+    },
+  ]), [])
+
+  // Bulk actions
+  const bulkActions = React.useMemo(() => {
+    const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: LogEntry[]) => void | Promise<void> }[] = []
+
+    actions.push({
+      id: 'export-selected',
+      label: 'Export Selected',
+      icon: <IconDownload className="size-4" />,
+      requiresSelection: true,
+      action: async (rows) => {
+        const data = JSON.stringify(rows, null, 2)
+        const blob = new Blob([data], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `selected-logs-${new Date().toISOString().slice(0, 19)}.json`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    })
+
+    return actions
+  }, [])
+
+  // Add unique IDs for row selection
+  const dataWithIds = React.useMemo(() =>
+    filteredEntries.map((entry, index) => ({
+      ...entry,
+      __uid: `${entry.ts}-${entry.pod}-${entry.container}-${index}`
+    })), [filteredEntries]
+  )
+
   return (
-    <div className="space-y-4 p-4 lg:p-6">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col">
-          <label className="text-xs text-muted-foreground">Namespace</label>
-          <Input value={namespace} onChange={e => setNamespace(e.target.value)} placeholder="default" className="w-48" />
-        </div>
-        <div className="flex flex-col">
-          <label className="text-xs text-muted-foreground">Pod (optional)</label>
-          <Input value={pod} onChange={e => setPod(e.target.value)} placeholder="mypod-abc" className="w-56" />
-        </div>
-        <div className="flex flex-col">
-          <label className="text-xs text-muted-foreground">Levels (comma)</label>
-          <Input value={levels} onChange={e => setLevels(e.target.value)} placeholder="INFO,ERROR" className="w-40" />
-        </div>
-        <div className="flex flex-col">
-          <label className="text-xs text-muted-foreground">Search</label>
-          <Input value={q} onChange={e => setQ(e.target.value)} placeholder="text..." className="w-56" />
-        </div>
-        <div className="flex flex-col">
-          <label className="text-xs text-muted-foreground">Since</label>
-          <Input value={since} onChange={e => setSince(e.target.value)} placeholder="15m or RFC3339" className="w-40" />
-        </div>
-        <div className="flex flex-col">
-          <label className="text-xs text-muted-foreground">Limit</label>
-          <Input value={limit} onChange={e => setLimit(parseInt(e.target.value || "0", 10) || 1000)} className="w-28" />
-        </div>
-        <Button onClick={() => handleSearch()} disabled={loading} className="flex gap-1">
-          <IconSearch className="size-4" /> Search
-        </Button>
-        <Button onClick={handleFollow} variant={state.status === "connected" || state.status === "degraded" ? "secondary" : "default"} className="flex gap-1">
-          {state.status === "connected" || state.status === "degraded" ? <IconPlayerStop className="size-4" /> : <IconPlayerPlay className="size-4" />}
-          {state.status === "connected" || state.status === "degraded" ? "Stop" : "Follow"}
-        </Button>
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={() => onExport("json")} className="flex gap-1"><IconDownload className="size-4" /> JSON</Button>
-          <Button variant="outline" onClick={() => onExport("csv")} className="flex gap-1"><IconDownload className="size-4" /> CSV</Button>
+    <div className="space-y-6">
+      {/* Header with connection status */}
+      <div className="px-4 lg:px-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight">Logs</h1>
+              {streamState.status === "connected" && (
+                <div className="flex items-center gap-1.5 text-xs text-green-600">
+                  <div className="size-2 bg-green-500 rounded-full animate-pulse" />
+                  Live
+                </div>
+              )}
+              {streamState.status === "degraded" && (
+                <div className="flex items-center gap-1.5 text-xs text-yellow-600">
+                  <div className="size-2 bg-yellow-500 rounded-full animate-pulse" />
+                  Degraded
+                </div>
+              )}
+            </div>
+            <p className="text-muted-foreground">
+              Monitor and analyze log streams from your Kubernetes cluster
+            </p>
+          </div>
+          {lastUpdated && (
+            <div className="text-sm text-muted-foreground">
+              <span suppressHydrationWarning>Last updated: {new Date(lastUpdated).toLocaleTimeString()}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {(state.status === "degraded") && (
-        <div className="text-sm"><Badge variant="outline">Degraded</Badge> Streaming in batch mode</div>
-      )}
+      {/* Summary Cards */}
+      <SummaryCards
+        cards={summaryData}
+        loading={loading}
+        error={error}
+        lastUpdated={lastUpdated}
+      />
 
-      <div className="border rounded-md p-2 h-[60vh] overflow-auto bg-background text-sm font-mono">
-        {displayed.length === 0 && <div className="text-muted-foreground">No logs</div>}
-        {displayed.map((e, i) => (
-          <div key={i} className="whitespace-pre-wrap break-words">{formatEntry(e)}</div>
-        ))}
+      <div className="px-4 lg:px-6 space-y-3">
+        {alert && (
+          <Alert
+            className={alert.variant === 'success'
+              ? 'bg-transparent border-green-600 text-green-700'
+              : 'bg-transparent border-red-600 text-red-700'}
+            variant='default'
+          >
+            <AlertTitle>{alert.title}</AlertTitle>
+            {alert.description && <AlertDescription>{alert.description}</AlertDescription>}
+          </Alert>
+        )}
+
+        <UniversalDataTable
+          data={dataWithIds}
+          columns={columns}
+          enableReorder={false}
+          enableRowSelection={true}
+          loading={loading}
+          error={error}
+          className="px-0 [&_tbody_tr]:bg-background/50"
+          getRowId={(row) => `${row.cluster}-${row.namespace}-${row.pod}-${row.container}-${row.ts}`}
+          initialPageSize={50}
+          initialSorting={[{ id: "ts", desc: true }]}
+          renderFilters={({ table, selectedCount, totalCount }) => (
+            <div className="space-y-4">
+              <DataTableFilters
+                globalFilter={globalFilter}
+                onGlobalFilterChange={setGlobalFilter}
+                searchPlaceholder="Search logs by message, pod, namespace, or node..."
+                categoryFilter={levelFilter}
+                onCategoryFilterChange={setLevelFilter}
+                categoryLabel="Level"
+                categoryOptions={levelOptions}
+                selectedCount={selectedCount}
+                totalCount={totalCount}
+                bulkActions={bulkActions.map(a => ({
+                  id: a.id,
+                  label: a.label,
+                  icon: a.icon || undefined,
+                  variant: a.variant || 'default',
+                  requiresSelection: a.requiresSelection,
+                  action: () => a.action(table.getFilteredSelectedRowModel().rows.map((r: { original: LogEntry }) => r.original as LogEntry))
+                }))}
+                table={table}
+                showColumnToggle={true}
+              >
+                {/* Custom filter controls */}
+                <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-col">
+                    <label className="text-xs text-muted-foreground mb-1">Namespace</label>
+                    <Input
+                      value={namespaceFilter}
+                      onChange={e => setNamespaceFilter(e.target.value)}
+                      placeholder="default"
+                      className="w-32"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-xs text-muted-foreground mb-1">Pod</label>
+                    <Input
+                      value={podFilter}
+                      onChange={e => setPodFilter(e.target.value)}
+                      placeholder="pod-name"
+                      className="w-40"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-xs text-muted-foreground mb-1">Since</label>
+                    <Select value={sinceFilter} onValueChange={setSinceFilter}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5m">5 minutes</SelectItem>
+                        <SelectItem value="15m">15 minutes</SelectItem>
+                        <SelectItem value="1h">1 hour</SelectItem>
+                        <SelectItem value="6h">6 hours</SelectItem>
+                        <SelectItem value="24h">24 hours</SelectItem>
+                        <SelectItem value="7d">7 days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-xs text-muted-foreground mb-1">Limit</label>
+                    <Input
+                      value={limitFilter}
+                      onChange={e => setLimitFilter(parseInt(e.target.value || "0", 10) || 1000)}
+                      className="w-24"
+                      type="number"
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <Button onClick={() => handleSearch()} disabled={loading} className="flex gap-1">
+                      <IconSearch className="size-4" /> Search
+                    </Button>
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <Button
+                      onClick={handleStreamToggle}
+                      variant={streamState.status === "connected" || streamState.status === "degraded" ? "secondary" : "default"}
+                      className="flex gap-1"
+                    >
+                      {streamState.status === "connected" || streamState.status === "degraded" ? (
+                        <>
+                          <IconPlayerStop className="size-4" />
+                          Stop Live
+                        </>
+                      ) : (
+                        <>
+                          <IconPlayerPlay className="size-4" />
+                          Start Live
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <div className="flex gap-1">
+                      <Button variant="outline" onClick={() => handleExport("json")} size="sm">
+                        <IconDownload className="size-4 mr-1" />
+                        JSON
+                      </Button>
+                      <Button variant="outline" onClick={() => handleExport("csv")} size="sm">
+                        <IconDownload className="size-4 mr-1" />
+                        CSV
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </DataTableFilters>
+            </div>
+          )}
+          renderEmptyState={() => (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="text-muted-foreground mb-4">
+                {streamState.status === "connected" || streamState.status === "degraded"
+                  ? "Waiting for new logs..."
+                  : "No logs found"}
+              </div>
+              {!(streamState.status === "connected" || streamState.status === "degraded") && (
+                <Button onClick={() => handleSearch()} disabled={loading} variant="outline">
+                  <IconRefresh className="size-4 mr-2" />
+                  Refresh
+                </Button>
+              )}
+            </div>
+          )}
+        />
       </div>
     </div>
+  )
+}
+
+export function LogsPageContainer() {
+  return (
+    <RouteGuard
+      requiredCapabilities={['pods.logs']}
+      requireAll={false}
+    >
+      <LogsContent />
+    </RouteGuard>
   )
 }
 

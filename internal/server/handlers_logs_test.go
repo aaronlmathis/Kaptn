@@ -108,11 +108,11 @@ func TestParseLogFilter(t *testing.T) {
 
 func TestLogsServiceIntegration(t *testing.T) {
 	// Test that the logs service can be properly used in the replay flow
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 100
-	config.EvictionInterval = 10 * time.Millisecond
+	cfg := logs.DefaultTestConfig()
+	cfg.GlobalMaxEntries = 100
+	cfg.EvictionInterval = 10 * time.Millisecond
 
-	service := logs.NewService(config)
+	service := logs.NewService(cfg)
 	defer service.Stop()
 
 	// Start the service
