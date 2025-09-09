@@ -44,10 +44,11 @@ type CORSConfig struct {
 
 // SecurityConfig represents the security configuration
 type SecurityConfig struct {
-	AuthMode       string     `yaml:"auth_mode"`
-	OIDC           OIDCConfig `yaml:"oidc"`
-	TLS            TLSConfig  `yaml:"tls"`
-	UsernameFormat string     `yaml:"username_format"`
+	AuthMode       string         `yaml:"auth_mode"`
+	OIDC           OIDCConfig     `yaml:"oidc"`
+	TLS            TLSConfig      `yaml:"tls"`
+	AuthKeys       AuthKeysConfig `yaml:"auth_keys"`
+	UsernameFormat string         `yaml:"username_format"`
 }
 
 // OIDCConfig represents the OIDC configuration
@@ -59,6 +60,14 @@ type OIDCConfig struct {
 	Scopes       []string `yaml:"scopes"`
 	Audience     string   `yaml:"audience"`
 	JWKSURL      string   `yaml:"jwks_url"`
+}
+
+// AuthKeysConfig represents authentication key file paths
+type AuthKeysConfig struct {
+	OIDCStateHashKeyPath  string `yaml:"oidc_state_hash_key_path"`
+	OIDCStateBlockKeyPath string `yaml:"oidc_state_block_key_path"`
+	JWTPrivateKeyPath     string `yaml:"jwt_private_key_path"`
+	JWTPublicKeyPath      string `yaml:"jwt_public_key_path"`
 }
 
 // TLSConfig represents TLS configuration
@@ -260,6 +269,12 @@ func loadWithDefaults(configPath string) (*Config, error) {
 				Enabled:  getEnvBool("KAPTN_TLS_ENABLED", false),
 				CertFile: getEnv("KAPTN_TLS_CERT_FILE", ""),
 				KeyFile:  getEnv("KAPTN_TLS_KEY_FILE", ""),
+			},
+			AuthKeys: AuthKeysConfig{
+				OIDCStateHashKeyPath:  getEnv("KAPTN_OIDC_STATE_HASH_KEY_PATH", "keys/oidc_state_hash.key"),
+				OIDCStateBlockKeyPath: getEnv("KAPTN_OIDC_STATE_BLOCK_KEY_PATH", "keys/oidc_state_block.key"),
+				JWTPrivateKeyPath:     getEnv("KAPTN_JWT_PRIVATE_KEY_PATH", "keys/kaptn_jwt_private.pem"),
+				JWTPublicKeyPath:      getEnv("KAPTN_JWT_PUBLIC_KEY_PATH", "keys/kaptn_jwt_public.pem"),
 			},
 		},
 		Authz: AuthzConfig{
@@ -576,6 +591,20 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 			}
 		}
 		result.Security.OIDC.Scopes = scopes
+	}
+
+	// Handle Auth Keys configuration
+	if envValue := os.Getenv("KAPTN_OIDC_STATE_HASH_KEY_PATH"); envValue != "" {
+		result.Security.AuthKeys.OIDCStateHashKeyPath = envValue
+	}
+	if envValue := os.Getenv("KAPTN_OIDC_STATE_BLOCK_KEY_PATH"); envValue != "" {
+		result.Security.AuthKeys.OIDCStateBlockKeyPath = envValue
+	}
+	if envValue := os.Getenv("KAPTN_JWT_PRIVATE_KEY_PATH"); envValue != "" {
+		result.Security.AuthKeys.JWTPrivateKeyPath = envValue
+	}
+	if envValue := os.Getenv("KAPTN_JWT_PUBLIC_KEY_PATH"); envValue != "" {
+		result.Security.AuthKeys.JWTPublicKeyPath = envValue
 	}
 
 	// Handle Authz configuration

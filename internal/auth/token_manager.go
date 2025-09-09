@@ -3,12 +3,15 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -91,15 +94,120 @@ type TokenManager struct {
 }
 
 // NewTokenManager creates a new token manager with RSA key pair
+// Keys are loaded from environment variables (for Kubernetes) with file path fallback (for local development)
 func NewTokenManager(logger *zap.Logger, accessTokenTTL, refreshTokenTTL time.Duration) (*TokenManager, error) {
-	// Generate RSA key pair
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate RSA key pair: %w", err)
+	return NewTokenManagerWithPaths(logger, accessTokenTTL, refreshTokenTTL, "", "")
+}
+
+// NewTokenManagerWithPaths creates a new token manager with specified key file paths
+// If paths are empty, will try environment variables first, then default paths
+func NewTokenManagerWithPaths(logger *zap.Logger, accessTokenTTL, refreshTokenTTL time.Duration, privateKeyPath, publicKeyPath string) (*TokenManager, error) {
+	var privateKey *rsa.PrivateKey
+	var publicKey *rsa.PublicKey
+	var keyID string
+
+	// Load private key: env var > specified path > default path > generate
+	privateKeyPEM := os.Getenv("KAPTN_JWT_PRIVATE_KEY_PEM")
+	if privateKeyPEM == "" {
+		// Try specified path first, then default path
+		pathsToTry := []string{}
+		if privateKeyPath != "" {
+			pathsToTry = append(pathsToTry, privateKeyPath)
+		}
+		pathsToTry = append(pathsToTry, "keys/kaptn_jwt_private.pem")
+
+		for _, path := range pathsToTry {
+			if data, err := os.ReadFile(path); err == nil {
+				privateKeyPEM = string(data)
+				logger.Info("Loaded JWT private key from file", zap.String("path", path))
+				break
+			}
+		}
 	}
 
-	publicKey := &privateKey.PublicKey
-	keyID := generateKeyID()
+	// Load public key: env var > specified path > default path > derive from private
+	publicKeyPEM := os.Getenv("KAPTN_JWT_PUBLIC_KEY_PEM")
+	if publicKeyPEM == "" {
+		// Try specified path first, then default path
+		pathsToTry := []string{}
+		if publicKeyPath != "" {
+			pathsToTry = append(pathsToTry, publicKeyPath)
+		}
+		pathsToTry = append(pathsToTry, "keys/kaptn_jwt_public.pem")
+
+		for _, path := range pathsToTry {
+			if data, err := os.ReadFile(path); err == nil {
+				publicKeyPEM = string(data)
+				logger.Info("Loaded JWT public key from file", zap.String("path", path))
+				break
+			}
+		}
+	}
+
+	if privateKeyPEM != "" {
+		// Parse private key from PEM
+		block, _ := pem.Decode([]byte(privateKeyPEM))
+		if block == nil {
+			return nil, fmt.Errorf("failed to decode PEM block from private key")
+		}
+
+		parsedPrivateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			// Try PKCS8 format as fallback
+			if parsedKey, err2 := x509.ParsePKCS8PrivateKey(block.Bytes); err2 == nil {
+				if rsaKey, ok := parsedKey.(*rsa.PrivateKey); ok {
+					parsedPrivateKey = rsaKey
+				} else {
+					return nil, fmt.Errorf("parsed key is not RSA private key")
+				}
+			} else {
+				return nil, fmt.Errorf("failed to parse RSA private key: %w", err)
+			}
+		}
+
+		privateKey = parsedPrivateKey
+
+		// Parse public key if provided, otherwise derive from private key
+		if publicKeyPEM != "" {
+			block, _ := pem.Decode([]byte(publicKeyPEM))
+			if block == nil {
+				return nil, fmt.Errorf("failed to decode PEM block from public key")
+			}
+
+			parsedPublicKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse public key: %w", err)
+			}
+
+			rsaPublicKey, ok := parsedPublicKey.(*rsa.PublicKey)
+			if !ok {
+				return nil, fmt.Errorf("parsed public key is not RSA public key")
+			}
+
+			publicKey = rsaPublicKey
+		} else {
+			// Derive public key from private key
+			publicKey = &privateKey.PublicKey
+		}
+
+		// Use a stable key ID based on public key for shared keys
+		keyID = generateStableKeyID(publicKey)
+
+		logger.Info("Token manager loaded RSA keys from environment (shared across replicas)",
+			zap.String("key_id", keyID))
+	} else {
+		// Generate ephemeral keys as fallback (NOT RECOMMENDED for production with multiple replicas)
+		logger.Warn("No KAPTN_JWT_PRIVATE_KEY_PEM provided; generated ephemeral keys (NOT RECOMMENDED for multi-replica deployments)")
+
+		var err error
+		privateKey, err = rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate RSA key pair: %w", err)
+		}
+
+		publicKey = &privateKey.PublicKey
+		keyID = generateKeyID() // Random key ID for ephemeral keys
+	}
 
 	tm := &TokenManager{
 		logger:          logger,
@@ -732,6 +840,14 @@ func generateKeyID() string {
 	return uuid.New().String()[:8]
 }
 
+// generateStableKeyID generates a stable key ID based on the public key
+func generateStableKeyID(publicKey *rsa.PublicKey) string {
+	// Create a stable hash of the public key
+	pubKeyBytes, _ := x509.MarshalPKIXPublicKey(publicKey)
+	hash := sha256.Sum256(pubKeyBytes)
+	return hex.EncodeToString(hash[:])[:8] // Use first 8 characters
+}
+
 // removeDuplicates removes duplicate strings from slice
 func removeDuplicates(slice []string) []string {
 	keys := make(map[string]bool)
@@ -760,6 +876,12 @@ func (tm *TokenManager) GetPublicKeyPEM() (string, error) {
 	}
 
 	return string(pem.EncodeToMemory(pemBlock)), nil
+}
+
+// ExportPublicKeyPEM returns the public key in PEM format for future JWKS work
+func (tm *TokenManager) ExportPublicKeyPEM() string {
+	pem, _ := tm.GetPublicKeyPEM()
+	return pem
 }
 
 // GetKeyID returns the current key ID

@@ -529,6 +529,16 @@ func (rm *ResourceManager) ExportResource(ctx context.Context, namespace, name, 
 			return nil, fmt.Errorf("failed to convert ResourceQuota to unstructured")
 		}
 		obj = rm.stripManagedFields(unstructuredResourceQuota)
+	case "HorizontalPodAutoscaler":
+		hpa, err := rm.kubeClient.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		unstructuredHPA := rm.convertToUnstructured(hpa)
+		if unstructuredHPA == nil {
+			return nil, fmt.Errorf("failed to convert HorizontalPodAutoscaler to unstructured")
+		}
+		obj = rm.stripManagedFields(unstructuredHPA)
 	default:
 		return nil, fmt.Errorf("unsupported resource kind for export: %s", kind)
 	}

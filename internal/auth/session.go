@@ -35,6 +35,11 @@ type SessionManager struct {
 
 // NewSessionManager creates a new session manager with dual token support
 func NewSessionManager(logger *zap.Logger, secret string, sessionTTL time.Duration) (*SessionManager, error) {
+	return NewSessionManagerWithAuthKeys(logger, secret, sessionTTL, "", "")
+}
+
+// NewSessionManagerWithAuthKeys creates a new session manager with specified auth key paths
+func NewSessionManagerWithAuthKeys(logger *zap.Logger, secret string, sessionTTL time.Duration, privateKeyPath, publicKeyPath string) (*SessionManager, error) {
 	if len(secret) < 32 {
 		return nil, fmt.Errorf("session secret must be at least 32 characters")
 	}
@@ -43,7 +48,7 @@ func NewSessionManager(logger *zap.Logger, secret string, sessionTTL time.Durati
 	accessTokenTTL := 15 * time.Minute    // 15 minute access tokens
 	refreshTokenTTL := 7 * 24 * time.Hour // 7 day refresh tokens
 
-	tokenManager, err := NewTokenManager(logger, accessTokenTTL, refreshTokenTTL)
+	tokenManager, err := NewTokenManagerWithPaths(logger, accessTokenTTL, refreshTokenTTL, privateKeyPath, publicKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create token manager: %w", err)
 	}
@@ -392,28 +397,8 @@ func generateTraceID() string {
 	return fmt.Sprintf("trace-%s", id)
 }
 
-// Session storage for PKCE state (in-memory for now, can be Redis later)
-var pkceStore = make(map[string]*PKCEParams)
-
-// StorePKCEParams stores PKCE parameters temporarily (keyed by state)
-func StorePKCEParams(params *PKCEParams) {
-	pkceStore[params.State] = params
-
-	// Clean up old entries (simple cleanup)
-	go func() {
-		time.Sleep(10 * time.Minute)
-		delete(pkceStore, params.State)
-	}()
-}
-
-// GetPKCEParams retrieves and removes PKCE parameters by state
-func GetPKCEParams(state string) (*PKCEParams, bool) {
-	params, exists := pkceStore[state]
-	if exists {
-		delete(pkceStore, state) // One-time use
-	}
-	return params, exists
-}
+// Note: PKCE state storage has been moved to cookie-backed storage in oidc_state.go
+// The in-memory pkceStore has been removed to support stateless authentication across replicas
 
 // ToUser converts a Session to a User struct for compatibility
 func (s *Session) ToUser() *User {

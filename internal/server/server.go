@@ -63,6 +63,7 @@ type Server struct {
 	searchService        *cache.SearchService
 	authMiddleware       *auth.Middleware
 	oidcClient           *auth.OIDCClient
+	oidcStateStore       *auth.OIDCStateStore
 	sessionManager       *auth.SessionManager
 	impersonationMgr     *k8s.ImpersonationManager
 	clientFactory        *client.Factory
@@ -565,7 +566,13 @@ func (s *Server) initAuth() error {
 			sessionTTL = 12 * time.Hour
 		}
 
-		s.sessionManager, err = auth.NewSessionManager(s.logger, s.config.Server.CookieSecret, sessionTTL)
+		s.sessionManager, err = auth.NewSessionManagerWithAuthKeys(
+			s.logger,
+			s.config.Server.CookieSecret,
+			sessionTTL,
+			s.config.Security.AuthKeys.JWTPrivateKeyPath,
+			s.config.Security.AuthKeys.JWTPublicKeyPath,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to initialize session manager: %w", err)
 		}
@@ -591,7 +598,17 @@ func (s *Server) initAuth() error {
 			return err
 		}
 
-		s.logger.Info("OIDC authentication initialized")
+		// Initialize OIDC state store for stateless authentication across replicas
+		s.oidcStateStore, err = auth.NewOIDCStateStoreWithPaths(
+			s.logger,
+			s.config.Security.AuthKeys.OIDCStateHashKeyPath,
+			s.config.Security.AuthKeys.OIDCStateBlockKeyPath,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize OIDC state store: %w", err)
+		}
+
+		s.logger.Info("OIDC authentication initialized with stateless state store")
 	}
 
 	// Initialize authorization resolver
