@@ -3,6 +3,7 @@
 import * as React from "react"
 import { RouteGuard } from "@/components/authz"
 import { UniversalDataTable } from "@/components/data_tables/UniversalDataTable"
+import { type FilterOption } from "@/components/ui/data-table-filters"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -12,7 +13,7 @@ import { getLogs, type GetLogsParams, type LogEntry } from "@/api/logs"
 import { useLogStream } from "@/hooks/useLogStream"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { IconDownload, IconSearch, IconRefresh, IconCircleCheckFilled, IconAlertTriangle, IconInfoCircle, IconClock } from "@tabler/icons-react"
+import { IconDownload, IconRefresh, IconCircleCheckFilled, IconAlertTriangle, IconClock, IconFileText } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { useNamespace } from "@/contexts/namespace-context"
 
@@ -51,6 +52,20 @@ function LogsContent() {
   const displayedEntries = React.useMemo(() => {
     return (streamState.status === "connected" || streamState.status === "degraded") ? liveEntries : entries
   }, [streamState.status, liveEntries, entries])
+
+  const levelOptions: FilterOption[] = React.useMemo(() => {
+    const levels = Array.from(new Set(displayedEntries.map(e => e.level))).filter(Boolean).sort()
+    return levels.map(level => ({
+      value: level,
+      label: level,
+      badge: <Badge
+        variant="outline"
+        className={cn("font-mono text-xs", LOG_LEVEL_COLORS[level as LogLevel] || "text-foreground")}
+      >
+        {level}
+      </Badge>
+    }))
+  }, [displayedEntries])
 
   // Parse URL parameters on mount and auto-search when filters change
   React.useEffect(() => {
@@ -309,8 +324,8 @@ function LogsContent() {
     const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: LogEntry[]) => void | Promise<void> }[] = []
 
     actions.push({
-      id: 'export-selected',
-      label: 'Export Selected',
+      id: 'export-json',
+      label: 'Export as JSON',
       icon: <IconDownload className="size-4" />,
       requiresSelection: true,
       action: async (rows) => {
@@ -320,6 +335,37 @@ function LogsContent() {
         const a = document.createElement('a')
         a.href = url
         a.download = `selected-logs-${new Date().toISOString().slice(0, 19)}.json`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    })
+
+    actions.push({
+      id: 'export-csv',
+      label: 'Export as CSV',
+      icon: <IconFileText className="size-4" />,
+      requiresSelection: true,
+      action: async (rows) => {
+        // Convert to CSV format
+        const headers = ['Timestamp', 'Level', 'Namespace', 'Pod', 'Container', 'Node', 'Message']
+        const csvRows = [
+          headers.join(','),
+          ...rows.map(row => [
+            new Date(row.ts).toISOString(),
+            row.level,
+            row.namespace,
+            row.pod,
+            row.container,
+            row.node,
+            `"${row.msg.replace(/"/g, '""')}"` // Escape quotes in message
+          ].join(','))
+        ]
+        const csvContent = csvRows.join('\n')
+        const blob = new Blob([csvContent], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `selected-logs-${new Date().toISOString().slice(0, 19)}.csv`
         a.click()
         URL.revokeObjectURL(url)
       }
@@ -403,67 +449,55 @@ function LogsContent() {
           initialSorting={[{ id: "ts", desc: true }]}
           renderFilters={({ table, selectedCount, totalCount }) => (
             <div className="space-y-4">
-              {/* Inline Filter Bar */}
-              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-                {/* Left side - Search and Filters */}
-                <div className="flex flex-col sm:flex-row gap-3 flex-1 min-w-0">
-                  {/* Search Input */}
-                  <div className="relative flex-1 min-w-0">
-                    <IconSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground size-4" />
-                    <Input
-                      value={globalFilter}
-                      onChange={e => setGlobalFilter(e.target.value)}
-                      placeholder="Search logs by message, pod, namespace, or node..."
-                      className="pl-10 h-9"
-                    />
-                  </div>
+              {/* All Filters in One Responsive Row */}
+              <div className="flex flex-wrap gap-2 items-center">
+                {/* Search Input - Full width on mobile, flex-1 on larger screens */}
+                <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
+                  <Input
+                    value={globalFilter}
+                    onChange={e => setGlobalFilter(e.target.value)}
+                    placeholder="Search logs by message, pod, namespace, or node..."
+                    className="h-8"
+                  />
+                </div>
 
+                {/* Other filters - wrap to new line on mobile if needed */}
+                <div className="flex flex-wrap gap-2 items-center w-full sm:w-auto">
                   {/* Level Filter */}
                   <Select value={levelFilter} onValueChange={setLevelFilter}>
-                    <SelectTrigger className="w-[120px] h-9">
-                      <div className="flex items-center gap-2">
-                        <IconInfoCircle className="size-4" />
-                        <SelectValue placeholder="Level" />
-                      </div>
+                    <SelectTrigger className="w-[120px] h-8">
+                      <SelectValue placeholder="Level" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Levels</SelectItem>
-                      <SelectItem value="DEBUG">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-gray-500" />
-                          DEBUG
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="INFO">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-blue-500" />
-                          INFO
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="WARN">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                          WARN
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="ERROR">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-red-500" />
-                          ERROR
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="FATAL">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-red-800" />
-                          FATAL
-                        </div>
-                      </SelectItem>
+                      {levelOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          <div className="flex items-center gap-2">
+                            {option.badge}
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
 
-                  {/* Since Filter */}
+                  {/* Namespace Filter */}
+                  <Select value={namespaceFilter} onValueChange={setNamespaceFilter}>
+                    <SelectTrigger className="w-40 h-8">
+                      <SelectValue placeholder="Namespace..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Namespaces</SelectItem>
+                      {namespaces.map(ns => (
+                        <SelectItem key={ns.metadata.name} value={ns.metadata.name || ""}>
+                          {ns.metadata.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Time Period Filter */}
                   <Select value={sinceFilter} onValueChange={setSinceFilter}>
-                    <SelectTrigger className="w-[100px] h-9">
+                    <SelectTrigger className="w-[100px] h-8">
                       <div className="flex items-center gap-2">
                         <IconClock className="size-4" />
                         <SelectValue />
@@ -474,54 +508,39 @@ function LogsContent() {
                       <SelectItem value="15m">15m</SelectItem>
                       <SelectItem value="1h">1h</SelectItem>
                       <SelectItem value="6h">6h</SelectItem>
+                      <SelectItem value="12h">12h</SelectItem>
                       <SelectItem value="24h">24h</SelectItem>
-                      <SelectItem value="7d">7d</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
 
-                {/* Right side - Actions */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* Export Buttons */}
-                  <Button variant="outline" onClick={() => handleExport("json")} size="sm" className="h-9">
+                  {/* Limit Input */}
+                  <Input
+                    value={limitFilter}
+                    onChange={e => setLimitFilter(parseInt(e.target.value || "0", 10) || 1000)}
+                    placeholder="Limit"
+                    className="w-20 h-8"
+                    type="number"
+                  />
+
+                  {/* Export Buttons for all data */}
+                  <Button variant="outline" onClick={() => handleExport("json")} size="sm" className="h-8">
                     <IconDownload className="size-4 mr-1" />
-                    JSON
+                    Export JSON
                   </Button>
-                  <Button variant="outline" onClick={() => handleExport("csv")} size="sm" className="h-9">
+                  <Button variant="outline" onClick={() => handleExport("csv")} size="sm" className="h-8">
                     <IconDownload className="size-4 mr-1" />
-                    CSV
+                    Export CSV
                   </Button>
                 </div>
               </div>
 
-              {/* Advanced Filters - Collapsible */}
-              <div className="flex flex-wrap gap-2 items-center">
-                <Select value={namespaceFilter} onValueChange={setNamespaceFilter}>
-                  <SelectTrigger className="w-40 h-8">
-                    <SelectValue placeholder="Namespace..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Namespaces</SelectItem>
-                    {namespaces.map(ns => (
-                      <SelectItem key={ns.metadata.name} value={ns.metadata.name || ""}>
-                        {ns.metadata.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  value={limitFilter}
-                  onChange={e => setLimitFilter(parseInt(e.target.value || "0", 10) || 1000)}
-                  placeholder="Limit"
-                  className="w-20 h-8"
-                  type="number"
-                />
-
-                {selectedCount > 0 && (
-                  <div className="flex items-center gap-2 ml-auto">
-                    <span className="text-sm text-muted-foreground">
-                      {selectedCount} of {totalCount} selected
-                    </span>
+              {/* Selection and Bulk Actions Row */}
+              {selectedCount > 0 && (
+                <div className="flex items-center justify-between gap-2 p-3 bg-muted/50 rounded-lg">
+                  <span className="text-sm text-muted-foreground">
+                    {selectedCount} of {totalCount} selected
+                  </span>
+                  <div className="flex items-center gap-2">
                     {bulkActions.map(action => (
                       <Button
                         key={action.id}
@@ -535,8 +554,8 @@ function LogsContent() {
                       </Button>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
           renderEmptyState={() => (
