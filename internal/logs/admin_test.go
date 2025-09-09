@@ -4,13 +4,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // Test_AdminClearRings tests the administrative ring clearing functionality
 func Test_AdminClearRings(t *testing.T) {
-	service := NewService(ServiceConfig{
+	service := NewService(config.LogsServiceConfig{
 		GlobalMaxEntries: 100,
 		ScopeMaxEntries:  50,
 		MaxSubscribers:   5,
@@ -48,7 +49,7 @@ func Test_AdminClearRings(t *testing.T) {
 
 // Test_AdminGetDetailedStats tests comprehensive administrative statistics
 func Test_AdminGetDetailedStats(t *testing.T) {
-	service := NewService(ServiceConfig{
+	service := NewService(config.LogsServiceConfig{
 		GlobalMaxEntries: 100,
 		ScopeMaxEntries:  50,
 		MaxSubscribers:   5,
@@ -89,7 +90,7 @@ func Test_AdminGetDetailedStats(t *testing.T) {
 
 // Test_AdminListActiveStreams tests stream tracking functionality
 func Test_AdminListActiveStreams(t *testing.T) {
-	service := NewService(ServiceConfig{
+	service := NewService(config.LogsServiceConfig{
 		GlobalMaxEntries: 100,
 		ScopeMaxEntries:  50,
 		MaxSubscribers:   5,
@@ -145,7 +146,7 @@ func Test_AdminListActiveStreams(t *testing.T) {
 
 // Test_AdminUpdateLimits tests dynamic limit configuration
 func Test_AdminUpdateLimits(t *testing.T) {
-	service := NewService(ServiceConfig{
+	service := NewService(config.LogsServiceConfig{
 		GlobalMaxEntries: 100,
 		ScopeMaxEntries:  50,
 		MaxSubscribers:   5,
@@ -186,7 +187,7 @@ func Test_AdminUpdateLimits(t *testing.T) {
 
 // Test_AdminUpdateLimitsValidation tests limit validation
 func Test_AdminUpdateLimitsValidation(t *testing.T) {
-	service := NewService(ServiceConfig{
+	service := NewService(config.LogsServiceConfig{
 		GlobalMaxEntries: 100,
 		ScopeMaxEntries:  50,
 		MaxSubscribers:   5,
@@ -264,7 +265,7 @@ func Test_AdminUpdateLimitsValidation(t *testing.T) {
 
 // Test_OperationalLogging tests the operational logging functionality
 func Test_OperationalLogging(t *testing.T) {
-	service := NewService(ServiceConfig{
+	service := NewService(config.LogsServiceConfig{
 		GlobalMaxEntries: 100,
 		ScopeMaxEntries:  50,
 		MaxSubscribers:   5,
@@ -293,7 +294,7 @@ func Test_OperationalLogging(t *testing.T) {
 
 // Test_ComprehensiveIntegration tests all features together
 func Test_ComprehensiveIntegration(t *testing.T) {
-	service := NewService(ServiceConfig{
+	service := NewService(config.LogsServiceConfig{
 		GlobalMaxEntries: 200,
 		ScopeMaxEntries:  100,
 		MaxSubscribers:   10,

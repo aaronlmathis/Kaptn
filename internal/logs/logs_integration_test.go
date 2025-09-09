@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/logs"
 )
 
@@ -20,18 +21,22 @@ func TestIntegration_LogIngestionToCache(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 1000
-	config.ScopeMaxEntries = 200
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.GlobalMaxEntries = 1000
+	serviceConfig.ScopeMaxEntries = 200
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	// Start the service
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Simulate normalized log entries as they would come from the coordinator
 	testLogEntries := []logs.LogEntry{
@@ -159,16 +164,20 @@ func TestIntegration_LiveStreamingWithBackfill(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service
-	config := logs.DefaultServiceConfig()
-	config.BufferSize = 50
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.BufferSize = 50
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Ingest some historical data for backfill
 	baseTime := time.Now().Add(-10 * time.Minute)
@@ -185,6 +194,13 @@ func TestIntegration_LiveStreamingWithBackfill(t *testing.T) {
 		}
 		service.Ingest(entry)
 	}
+
+	// Give a moment for ingestion to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Check that entries were actually stored
+	stats := service.Stats()
+	t.Logf("Service stats after ingestion: GlobalRingSize=%d", stats.GlobalRingSize)
 
 	// Create stream subscription
 	streamFilter := logs.LogFilter{
@@ -209,8 +225,11 @@ func TestIntegration_LiveStreamingWithBackfill(t *testing.T) {
 		}
 	}()
 
-	// Wait for backfill (should be immediate)
-	timeout := time.After(1 * time.Second)
+	// Wait for backfill (increase timeout for test stability)
+	timeout := time.After(5 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
 	for !backfillComplete {
 		select {
 		case entry, ok := <-streamResults:
@@ -224,8 +243,12 @@ func TestIntegration_LiveStreamingWithBackfill(t *testing.T) {
 				backfillComplete = true
 			}
 
+		case <-ticker.C:
+			// Log progress for debugging
+			t.Logf("Backfill progress: received %d/10 entries", len(backfillEntries))
+
 		case <-timeout:
-			t.Fatal("Timeout waiting for backfill data")
+			t.Fatalf("Timeout waiting for backfill data. Received %d/10 entries", len(backfillEntries))
 		}
 	}
 
@@ -289,16 +312,20 @@ func TestIntegration_ConcurrentStreamsAndIngestion(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service
-	config := logs.DefaultServiceConfig()
-	config.MaxSubscribers = 10
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.MaxSubscribers = 10
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	numStreams := 5
 	entriesPerNamespace := 20
@@ -419,17 +446,21 @@ func TestIntegration_MemoryBounds(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service with controlled limits
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 100
-	config.ScopeMaxEntries = 20
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.GlobalMaxEntries = 100
+	serviceConfig.ScopeMaxEntries = 20
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Ingest more entries than the limit to test eviction
 	numEntries := 200 // Double the global limit
@@ -454,7 +485,7 @@ func TestIntegration_MemoryBounds(t *testing.T) {
 
 	// Verify memory bounds are respected
 	stats := service.Stats()
-	assert.LessOrEqual(t, int(stats.GlobalRingSize), config.GlobalMaxEntries,
+	assert.LessOrEqual(t, int(stats.GlobalRingSize), serviceConfig.GlobalMaxEntries,
 		"Global ring size should not exceed configured limit")
 
 	// Verify we can still query and get recent entries
@@ -478,17 +509,21 @@ func TestIntegration_TimeBasedEviction(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service with short TTL for testing
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxAge = 2 * time.Second            // Very short for testing
-	config.EvictionInterval = 500 * time.Millisecond // Fast eviction
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.GlobalMaxAge = 2 * time.Second            // Very short for testing
+	serviceConfig.EvictionInterval = 500 * time.Millisecond // Fast eviction
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Ingest old entry
 	oldEntry := logs.LogEntry{

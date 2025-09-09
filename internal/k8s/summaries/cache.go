@@ -2,6 +2,7 @@ package summaries
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -34,16 +35,16 @@ func (c *Cache) Get(key string) (*ResourceSummary, bool) {
 
 	item, exists := c.items[key]
 	if !exists {
-		c.missCount++
+		atomic.AddInt64(&c.missCount, 1)
 		return nil, false
 	}
 
 	if time.Now().After(item.ExpiresAt) {
-		c.missCount++
+		atomic.AddInt64(&c.missCount, 1)
 		return nil, false
 	}
 
-	c.hitCount++
+	atomic.AddInt64(&c.hitCount, 1)
 	summary := *item.Summary // Create a copy
 	summary.CacheHit = true
 	return &summary, true
@@ -105,17 +106,19 @@ func (c *Cache) GetStats() map[string]interface{} {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
 
-	total := c.hitCount + c.missCount
+	hitCount := atomic.LoadInt64(&c.hitCount)
+	missCount := atomic.LoadInt64(&c.missCount)
+	total := hitCount + missCount
 	hitRate := 0.0
 	if total > 0 {
-		hitRate = float64(c.hitCount) / float64(total) * 100
+		hitRate = float64(hitCount) / float64(total) * 100
 	}
 
 	return map[string]interface{}{
 		"items":    len(c.items),
 		"max_size": c.maxSize,
-		"hits":     c.hitCount,
-		"misses":   c.missCount,
+		"hits":     hitCount,
+		"misses":   missCount,
 		"hit_rate": hitRate,
 	}
 }
@@ -160,8 +163,8 @@ func (c *Cache) Clear() {
 	defer c.mutex.Unlock()
 
 	c.items = make(map[string]*CacheItem)
-	c.hitCount = 0
-	c.missCount = 0
+	atomic.StoreInt64(&c.hitCount, 0)
+	atomic.StoreInt64(&c.missCount, 0)
 }
 
 // generateCacheKey creates a cache key for resource summaries

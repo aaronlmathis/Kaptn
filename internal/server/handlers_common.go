@@ -181,6 +181,36 @@ type SecurityContext struct {
 
 // getSecurityContext extracts user and impersonated client from request
 func (s *Server) getSecurityContext(r *http.Request) (*SecurityContext, error) {
+	// Check if auth is disabled
+	if s.config.Security.AuthMode == "none" {
+		// When auth is disabled, provide admin access using the service account client
+		client := s.clientFactory.Client()
+		if client == nil {
+			s.logger.Error("Failed to get admin client for auth_mode none")
+			return nil, &SecurityError{
+				Code:    "CLIENT_FAILED",
+				Message: "Failed to create admin client",
+				Status:  http.StatusInternalServerError,
+			}
+		}
+
+		// Create a synthetic admin user for logging purposes
+		adminUser := &auth.User{
+			ID:     "admin",
+			Email:  "admin@kaptn.local",
+			Name:   "Admin User (auth disabled)",
+			Groups: []string{"admin"},
+		}
+
+		return &SecurityContext{
+			User:           adminUser,
+			Client:         client,
+			SSARHelper:     s.impersonationMgr.SSARHelper(),
+			Logger:         s.logger,
+			RequestContext: r.URL.Path,
+		}, nil
+	}
+
 	// Get authenticated user
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok || user == nil {

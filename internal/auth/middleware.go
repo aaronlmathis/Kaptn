@@ -144,9 +144,8 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 				user, err = m.authenticateFromToken(ctx, r)
 				if err != nil {
 					m.logger.Debug("Token authentication failed", zap.Error(err))
-					// Only return error if all auth methods failed
-					m.writeUnauthorized(w, "Invalid or missing authentication")
-					return
+					// Don't immediately fail here - some endpoints may not require auth
+					// Only fail if this is an endpoint that explicitly requires authentication
 				}
 				if user != nil {
 					m.logger.Debug("Authenticated via Bearer token", zap.String("userId", user.ID))

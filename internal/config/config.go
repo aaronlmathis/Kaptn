@@ -163,6 +163,11 @@ type LogsCacheConfig struct {
 	EvictionInterval string `yaml:"eviction_interval"`
 	CleanupInterval  string `yaml:"cleanup_interval"`
 
+	// Background log collection configuration
+	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
+	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
+	BackgroundCollectionInterval  string `yaml:"background_collection_interval"`
+
 	// Operational limits (Phase 10)
 	MaxStreamsPerUser     int    `yaml:"max_streams_per_user"`
 	MaxQueryLimit         int    `yaml:"max_query_limit"`
@@ -311,13 +316,19 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			SearchMaxSize:  getEnvInt("KAPTN_SEARCH_MAX_SIZE", 10000),
 
 			LogsCache: LogsCacheConfig{
-				TTL:                   getEnv("KAPTN_LOGS_TTL", "10m"),
-				MaxGlobal:             getEnvInt("KAPTN_LOGS_MAX_GLOBAL", 250000),
-				MaxPerScope:           getEnvInt("KAPTN_LOGS_MAX_PER_SCOPE", 20000),
-				MaxSubscribers:        getEnvInt("KAPTN_LOGS_MAX_SUBSCRIBERS", 200),
-				BufferSize:            getEnvInt("KAPTN_LOGS_BUFFER_SIZE", 100),
-				EvictionInterval:      getEnv("KAPTN_LOGS_EVICTION_INTERVAL", "30s"),
-				CleanupInterval:       getEnv("KAPTN_LOGS_CLEANUP_INTERVAL", "5m"),
+				TTL:              getEnv("KAPTN_LOGS_TTL", "10m"),
+				MaxGlobal:        getEnvInt("KAPTN_LOGS_MAX_GLOBAL", 250000),
+				MaxPerScope:      getEnvInt("KAPTN_LOGS_MAX_PER_SCOPE", 20000),
+				MaxSubscribers:   getEnvInt("KAPTN_LOGS_MAX_SUBSCRIBERS", 200),
+				BufferSize:       getEnvInt("KAPTN_LOGS_BUFFER_SIZE", 100),
+				EvictionInterval: getEnv("KAPTN_LOGS_EVICTION_INTERVAL", "30s"),
+				CleanupInterval:  getEnv("KAPTN_LOGS_CLEANUP_INTERVAL", "5m"),
+
+				// Background collection settings
+				BackgroundCollectionEnabled:   getEnvBool("KAPTN_LOGS_BACKGROUND_COLLECTION_ENABLED", true),
+				BackgroundCollectionRetention: getEnv("KAPTN_LOGS_BACKGROUND_COLLECTION_RETENTION", "1h"),
+				BackgroundCollectionInterval:  getEnv("KAPTN_LOGS_BACKGROUND_COLLECTION_INTERVAL", "30s"),
+
 				MaxStreamsPerUser:     getEnvInt("KAPTN_LOGS_MAX_STREAMS_PER_USER", 50),
 				MaxQueryLimit:         getEnvInt("KAPTN_LOGS_MAX_QUERY_LIMIT", 10000),
 				MaxExportSize:         int64(getEnvInt("KAPTN_LOGS_MAX_EXPORT_SIZE", 100*1024*1024)), // 100MB
@@ -745,6 +756,11 @@ type LogsServiceConfig struct {
 	EvictionInterval time.Duration `yaml:"eviction_interval"`
 	CleanupInterval  time.Duration `yaml:"cleanup_interval"`
 
+	// Background collection
+	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
+	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
+	BackgroundCollectionInterval  string `yaml:"background_collection_interval"`
+
 	// Phase 10: Operational guardrails
 	MaxStreamsPerUser     int           `yaml:"max_streams_per_user"`
 	MaxQueryLimit         int           `yaml:"max_query_limit"`
@@ -757,36 +773,89 @@ type LogsServiceConfig struct {
 
 // GetLogsServiceConfig converts the config to a logs service config
 func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
+	// Debug: Log what we're reading from config
+	fmt.Printf("🔍 [DEBUG] Reading logs config: background_collection_enabled=%v, interval=%s, retention=%s\n",
+		c.Caching.LogsCache.BackgroundCollectionEnabled,
+		c.Caching.LogsCache.BackgroundCollectionInterval,
+		c.Caching.LogsCache.BackgroundCollectionRetention)
+
+	// Set defaults for empty values
+	ttl := c.Caching.LogsCache.TTL
+	if ttl == "" {
+		ttl = "1h" // Default 1 hour
+	}
+
+	evictionIntervalStr := c.Caching.LogsCache.EvictionInterval
+	if evictionIntervalStr == "" {
+		evictionIntervalStr = "5m" // Default 5 minutes
+	}
+
+	cleanupIntervalStr := c.Caching.LogsCache.CleanupInterval
+	if cleanupIntervalStr == "" {
+		cleanupIntervalStr = "10m" // Default 10 minutes
+	}
+
+	degradedModeTimeoutStr := c.Caching.LogsCache.DegradedModeTimeout
+	if degradedModeTimeoutStr == "" {
+		degradedModeTimeoutStr = "30s" // Default 30 seconds
+	}
+
 	// Parse duration strings
-	globalMaxAge, err := time.ParseDuration(c.Caching.LogsCache.TTL)
+	globalMaxAge, err := time.ParseDuration(ttl)
 	if err != nil {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache TTL: %w", err)
 	}
 
-	evictionInterval, err := time.ParseDuration(c.Caching.LogsCache.EvictionInterval)
+	evictionInterval, err := time.ParseDuration(evictionIntervalStr)
 	if err != nil {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache eviction interval: %w", err)
 	}
 
-	cleanupInterval, err := time.ParseDuration(c.Caching.LogsCache.CleanupInterval)
+	cleanupInterval, err := time.ParseDuration(cleanupIntervalStr)
 	if err != nil {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache cleanup interval: %w", err)
 	}
 
-	degradedModeTimeout, err := time.ParseDuration(c.Caching.LogsCache.DegradedModeTimeout)
+	degradedModeTimeout, err := time.ParseDuration(degradedModeTimeoutStr)
 	if err != nil {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache degraded mode timeout: %w", err)
 	}
 
+	// Set default values for numeric fields if they're zero
+	maxGlobal := c.Caching.LogsCache.MaxGlobal
+	if maxGlobal == 0 {
+		maxGlobal = 250000 // Default
+	}
+
+	maxPerScope := c.Caching.LogsCache.MaxPerScope
+	if maxPerScope == 0 {
+		maxPerScope = 20000 // Default
+	}
+
+	maxSubscribers := c.Caching.LogsCache.MaxSubscribers
+	if maxSubscribers == 0 {
+		maxSubscribers = 200 // Default
+	}
+
+	bufferSize := c.Caching.LogsCache.BufferSize
+	if bufferSize == 0 {
+		bufferSize = 100 // Default
+	}
+
 	return LogsServiceConfig{
-		GlobalMaxEntries: c.Caching.LogsCache.MaxGlobal,
+		GlobalMaxEntries: maxGlobal,
 		GlobalMaxAge:     globalMaxAge,
-		ScopeMaxEntries:  c.Caching.LogsCache.MaxPerScope,
+		ScopeMaxEntries:  maxPerScope,
 		ScopeMaxAge:      globalMaxAge, // Use same TTL for scoped rings
-		MaxSubscribers:   c.Caching.LogsCache.MaxSubscribers,
-		BufferSize:       c.Caching.LogsCache.BufferSize,
+		MaxSubscribers:   maxSubscribers,
+		BufferSize:       bufferSize,
 		EvictionInterval: evictionInterval,
 		CleanupInterval:  cleanupInterval,
+
+		// Background collection
+		BackgroundCollectionEnabled:   c.Caching.LogsCache.BackgroundCollectionEnabled,
+		BackgroundCollectionRetention: c.Caching.LogsCache.BackgroundCollectionRetention,
+		BackgroundCollectionInterval:  c.Caching.LogsCache.BackgroundCollectionInterval,
 
 		// Phase 10: Operational guardrails
 		MaxStreamsPerUser:     c.Caching.LogsCache.MaxStreamsPerUser,

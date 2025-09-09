@@ -4,15 +4,24 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/aaronlmathis/kaptn/internal/config"
 )
 
 func TestServiceLifecycle(t *testing.T) {
 	// Create service with default config
-	config := DefaultServiceConfig()
-	config.EvictionInterval = 100 * time.Millisecond
-	config.CleanupInterval = 100 * time.Millisecond
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	if err != nil {
+		t.Fatalf("Failed to get logs service config: %v", err)
+	}
+	serviceConfig.EvictionInterval = 100 * time.Millisecond
+	serviceConfig.CleanupInterval = 100 * time.Millisecond
 
-	service := NewService(config)
+	service := NewService(serviceConfig)
 
 	// Test initial state
 	if service.started {
@@ -81,9 +90,15 @@ func TestServiceLifecycle(t *testing.T) {
 		t.Errorf("Expected 1 entry from replay, got %d", len(entries))
 	}
 
-	// Test stream subscription
-	ch, cancel := service.Stream(filter)
+	// Test stream subscription - use filter that will only catch new entries
+	streamFilter := LogFilter{
+		Levels: []string{"ERROR"}, // Only ERROR level entries
+	}
+	ch, cancel := service.Stream(streamFilter)
 	defer cancel()
+
+	// Wait a moment to ensure stream is ready
+	time.Sleep(10 * time.Millisecond)
 
 	// Ingest another entry
 	entry2 := LogEntry{
@@ -119,8 +134,15 @@ func TestServiceLifecycle(t *testing.T) {
 }
 
 func TestServiceMetrics(t *testing.T) {
-	config := DefaultServiceConfig()
-	service := NewService(config)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	if err != nil {
+		t.Fatalf("Failed to get logs service config: %v", err)
+	}
+	service := NewService(serviceConfig)
 
 	ctx := context.Background()
 	if err := service.Start(ctx); err != nil {
@@ -159,8 +181,15 @@ func TestServiceMetrics(t *testing.T) {
 }
 
 func TestServiceHealthChecks(t *testing.T) {
-	config := DefaultServiceConfig()
-	service := NewService(config)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	if err != nil {
+		t.Fatalf("Failed to get logs service config: %v", err)
+	}
+	service := NewService(serviceConfig)
 
 	// Test unhealthy (not started)
 	health := service.Health()

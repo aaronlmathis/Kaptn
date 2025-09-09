@@ -212,6 +212,26 @@ func (s *Server) Handler() http.Handler {
 	return s.router
 }
 
+// getAuthMiddleware returns the auth middleware based on auth mode
+// Returns nil when auth_mode is "none" to disable authentication
+func (s *Server) getAuthMiddleware() func(http.Handler) http.Handler {
+	authMode := auth.AuthMode(s.config.Security.AuthMode)
+	if authMode == auth.AuthModeNone {
+		return nil
+	}
+	return s.authMiddleware.RequireAuth
+}
+
+// getImpersonationMiddleware returns the impersonation middleware based on auth mode
+// Returns nil when auth_mode is "none" to disable impersonation requirements
+func (s *Server) getImpersonationMiddleware() func(http.Handler) http.Handler {
+	authMode := auth.AuthMode(s.config.Security.AuthMode)
+	if authMode == auth.AuthModeNone {
+		return nil
+	}
+	return s.impersonationMiddleware.RequireImpersonation
+}
+
 // SetupRoutes sets up all API routes using the contract-based architecture
 func (s *Server) SetupRoutes() {
 	// Create the tiers structure with the server implementing all interfaces
@@ -224,8 +244,8 @@ func (s *Server) SetupRoutes() {
 		System: s, // Server implements SystemHandlers
 		Static: s, // Server implements StaticHandlers
 		MW: routes.Middlewares{
-			RequireAuth:          s.authMiddleware.RequireAuth,
-			RequireImpersonation: s.impersonationMiddleware.RequireImpersonation,
+			RequireAuth:          s.getAuthMiddleware(),
+			RequireImpersonation: s.getImpersonationMiddleware(),
 		},
 	}
 
@@ -319,10 +339,17 @@ func (s *Server) initKubernetesClient() error {
 	s.logsService = k8slogs.NewStreamManager(s.logger, s.kubeClient)
 
 	// Initialize logs cache service
-	logsCacheConfig, err := logs.ServiceConfigFromConfig(s.config)
+	s.logger.Info("🗂️ Initializing logs cache service")
+	logsCacheConfig, err := s.config.GetLogsServiceConfig()
 	if err != nil {
 		return fmt.Errorf("failed to create logs cache config: %w", err)
 	}
+
+	s.logger.Info("📋 Logs cache config loaded",
+		zap.Bool("background_collection_enabled", logsCacheConfig.BackgroundCollectionEnabled),
+		zap.String("background_collection_interval", logsCacheConfig.BackgroundCollectionInterval),
+		zap.String("background_collection_retention", logsCacheConfig.BackgroundCollectionRetention))
+
 	s.logsCacheService = logs.NewService(logsCacheConfig)
 
 	// Initialize logs coordinator (multi-pod streaming)
@@ -330,6 +357,14 @@ func (s *Server) initKubernetesClient() error {
 	if clusterName == "" {
 		clusterName = "default" // fallback if not configured
 	}
+
+	// Set up background log collection
+	s.logger.Info("🔧 Setting up background log collection")
+	if err := s.logsCacheService.SetBackgroundCollector(s.kubeClient, clusterName); err != nil {
+		return fmt.Errorf("failed to set up background log collector: %w", err)
+	}
+	s.logger.Info("✅ Background log collector setup complete")
+
 	s.logsCoordinator = k8slogs.NewStreamCoordinator(s.logger, s.kubeClient, s.logsCacheService, s.wsHub, clusterName)
 
 	// Initialize exec service

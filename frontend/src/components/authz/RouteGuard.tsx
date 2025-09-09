@@ -86,6 +86,17 @@ export function RouteGuard({
   // On error, show error state
   if (error) {
     devWarn('[route-guard] authorization check failed');
+
+    // Check if the error suggests an authentication issue
+    const errorMessage = error.toString().toLowerCase();
+    if (errorMessage.includes('authentication') || errorMessage.includes('unauthorized') || errorMessage.includes('session expired')) {
+      devLog('[route-guard] Authentication error detected, redirecting to login');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+      return null;
+    }
+
     return fallback ? (
       <>{fallback}</>
     ) : (
@@ -94,7 +105,7 @@ export function RouteGuard({
           <ShieldX className="h-4 w-4" />
           <AlertTitle>Authorization Error</AlertTitle>
           <AlertDescription>
-            Unable to verify permissions. Please try refreshing the page.
+            Unable to verify permissions. Please try refreshing the page or <a href="/login" className="underline">log in again</a>.
           </AlertDescription>
         </Alert>
       </div>

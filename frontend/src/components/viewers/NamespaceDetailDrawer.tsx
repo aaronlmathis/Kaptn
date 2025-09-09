@@ -1,5 +1,4 @@
 import * as React from "react"
-import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle, IconTrash } from "@tabler/icons-react"
@@ -17,9 +16,7 @@ import { DetailRows } from "@/components/ResourceDetailDrawer"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { useNamespaceDetails } from "@/hooks/use-resource-details"
-
-// Import the namespace schema from the main data table component
-import { namespaceSchema } from "@/components/data_tables/NamespacesDataTable"
+import type { DashboardNamespace } from "@/lib/k8s-cluster"
 
 function getStatusBadge(status: string) {
 	switch (status) {
@@ -54,7 +51,7 @@ function getStatusBadge(status: string) {
 }
 
 interface NamespaceDetailDrawerProps {
-	item: z.infer<typeof namespaceSchema>
+	item: DashboardNamespace
 	open: boolean
 	onOpenChange: (open: boolean) => void
 }

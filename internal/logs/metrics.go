@@ -8,9 +8,9 @@ import (
 // Metrics holds counters and gauges for the log service
 type Metrics struct {
 	// Ingest metrics
-	IngestTotal    int64     // Total number of entries ingested
-	IngestBytes    int64     // Total bytes ingested
-	LastIngestTime time.Time // Last time an entry was ingested
+	IngestTotal      int64 // Total number of entries ingested
+	IngestBytes      int64 // Total bytes ingested
+	LastIngestTimeNs int64 // Last time an entry was ingested (Unix nanoseconds, atomic)
 
 	// Ring metrics
 	GlobalRingSize   int64 // Current size of global ring
@@ -36,7 +36,7 @@ func NewMetrics() *Metrics {
 func (m *Metrics) RecordIngest(entrySize int) {
 	atomic.AddInt64(&m.IngestTotal, 1)
 	atomic.AddInt64(&m.IngestBytes, int64(entrySize))
-	m.LastIngestTime = time.Now()
+	atomic.StoreInt64(&m.LastIngestTimeNs, time.Now().UnixNano())
 }
 
 // RecordEviction records an evicted entry
@@ -81,12 +81,18 @@ func (m *Metrics) RecordQuery(durationMs int64) {
 
 // GetStats returns current statistics
 func (m *Metrics) GetStats() ServiceStats {
+	lastIngestNs := atomic.LoadInt64(&m.LastIngestTimeNs)
+	var lastIngestTime time.Time
+	if lastIngestNs > 0 {
+		lastIngestTime = time.Unix(0, lastIngestNs)
+	}
+
 	return ServiceStats{
 		GlobalRingSize:      int(atomic.LoadInt64(&m.GlobalRingSize)),
 		ScopedRingsCount:    int(atomic.LoadInt64(&m.ScopedRingsCount)),
 		TotalSubscribers:    int(atomic.LoadInt64(&m.SubscribersTotal)),
 		IngestRate:          m.calculateIngestRate(),
-		LastIngestTime:      m.LastIngestTime,
+		LastIngestTime:      lastIngestTime,
 		EvictionsTotal:      atomic.LoadInt64(&m.EvictionsTotal),
 		DroppedEntriesTotal: atomic.LoadInt64(&m.DroppedTotal),
 	}
@@ -96,11 +102,13 @@ func (m *Metrics) GetStats() ServiceStats {
 func (m *Metrics) calculateIngestRate() int64 {
 	// This is a simplified calculation
 	// In a real implementation, you'd want a sliding window
-	if m.LastIngestTime.IsZero() {
+	lastIngestNs := atomic.LoadInt64(&m.LastIngestTimeNs)
+	if lastIngestNs == 0 {
 		return 0
 	}
 
-	elapsed := time.Since(m.LastIngestTime)
+	lastIngestTime := time.Unix(0, lastIngestNs)
+	elapsed := time.Since(lastIngestTime)
 	if elapsed > time.Minute {
 		return 0 // No recent activity
 	}
@@ -137,5 +145,5 @@ func (m *Metrics) Reset() {
 	atomic.StoreInt64(&m.SubscriptionsTotal, 0)
 	atomic.StoreInt64(&m.QueriesTotal, 0)
 	atomic.StoreInt64(&m.QueryDurationMs, 0)
-	m.LastIngestTime = time.Time{}
+	atomic.StoreInt64(&m.LastIngestTimeNs, 0)
 }

@@ -7,68 +7,13 @@ import (
 	"time"
 
 	"github.com/aaronlmathis/kaptn/internal/config"
+	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
 )
-
-// ServiceConfig is an alias for the config package's LogsServiceConfig
-type ServiceConfig = config.LogsServiceConfig
-
-// DefaultServiceConfig returns sensible defaults using the config package
-func DefaultServiceConfig() ServiceConfig {
-	// Load defaults by calling loadWithDefaults with empty path (uses env vars and defaults)
-	defaultConfig, err := config.Load()
-	if err != nil {
-		// If config loading fails, return hardcoded defaults
-		return config.LogsServiceConfig{
-			GlobalMaxEntries: 250000,
-			GlobalMaxAge:     10 * time.Minute,
-			ScopeMaxEntries:  20000,
-			ScopeMaxAge:      10 * time.Minute,
-			MaxSubscribers:   200,
-			BufferSize:       100,
-			EvictionInterval: 30 * time.Second,
-			CleanupInterval:  5 * time.Minute,
-
-			// Operational guardrails defaults
-			MaxStreamsPerUser:     50,
-			MaxQueryLimit:         10000,
-			MaxExportSize:         100 * 1024 * 1024, // 100MB
-			MaxConcurrentQueries:  20,
-			RateLimitPerSecond:    1000,
-			BackpressureThreshold: 80, // Percentage
-			DegradedModeTimeout:   5 * time.Minute,
-		}
-	}
-
-	logsConfig, err := defaultConfig.GetLogsServiceConfig()
-	if err != nil {
-		// If conversion fails, return hardcoded defaults
-		return config.LogsServiceConfig{
-			GlobalMaxEntries: 250000,
-			GlobalMaxAge:     10 * time.Minute,
-			ScopeMaxEntries:  20000,
-			ScopeMaxAge:      10 * time.Minute,
-			MaxSubscribers:   200,
-			BufferSize:       100,
-			EvictionInterval: 30 * time.Second,
-			CleanupInterval:  5 * time.Minute,
-
-			// Operational guardrails defaults
-			MaxStreamsPerUser:     50,
-			MaxQueryLimit:         10000,
-			MaxExportSize:         100 * 1024 * 1024, // 100MB
-			MaxConcurrentQueries:  20,
-			RateLimitPerSecond:    1000,
-			BackpressureThreshold: 80, // Percentage
-			DegradedModeTimeout:   5 * time.Minute,
-		}
-	}
-
-	return logsConfig
-}
 
 // Service implements LogService and coordinates rings, bus, and metrics
 type Service struct {
-	config            ServiceConfig
+	config            config.LogsServiceConfig
 	metrics           *Metrics
 	prometheusMetrics *PrometheusMetrics
 	opLogger          *OperationalLogger
@@ -79,6 +24,9 @@ type Service struct {
 
 	// Pub/sub
 	bus LogBus
+
+	// Background collection
+	backgroundCollector *BackgroundCollector
 
 	// Lifecycle
 	stopCh    chan struct{}
@@ -97,20 +45,20 @@ type Service struct {
 }
 
 // NewService creates a new log service
-func NewService(config ServiceConfig) *Service {
+func NewService(cfg config.LogsServiceConfig) *Service {
 	s := &Service{
-		config:            config,
+		config:            cfg,
 		metrics:           NewMetrics(),
 		prometheusMetrics: NewPrometheusMetrics(),
 		opLogger:          NewOperationalLogger(),
-		globalRing:        NewRing(config.GlobalMaxEntries, config.GlobalMaxAge),
+		globalRing:        NewRing(cfg.GlobalMaxEntries, cfg.GlobalMaxAge),
 		scopedRings:       make(map[string]LogRing),
-		bus:               NewBus(config.BufferSize),
+		bus:               NewBus(cfg.BufferSize),
 		stopCh:            make(chan struct{}),
 		started:           false,
 
 		adminLimits: AdminLimits{
-			MaxSubscribers:        config.MaxSubscribers,
+			MaxSubscribers:        cfg.MaxSubscribers,
 			MaxStreamsPerUser:     50, // Default limit per user
 			MaxBufferSize:         1000,
 			MaxQueryLimit:         10000,
@@ -126,19 +74,108 @@ func NewService(config ServiceConfig) *Service {
 	return s
 }
 
+// SetBackgroundCollector sets up the background log collector
+func (s *Service) SetBackgroundCollector(kubeClient kubernetes.Interface, clusterName string) error {
+	s.opLogger.logger.Info("🔧 SetBackgroundCollector called",
+		zap.Bool("enabled", s.config.BackgroundCollectionEnabled),
+		zap.String("cluster", clusterName))
+
+	if !s.config.BackgroundCollectionEnabled {
+		s.opLogger.LogServiceState("background_collection", "disabled", map[string]interface{}{
+			"reason": "background_collection_enabled is false",
+		})
+		s.opLogger.logger.Info("❌ Background collection disabled in config")
+		return nil
+	}
+
+	// Parse retention duration
+	retention, err := time.ParseDuration(s.config.BackgroundCollectionRetention)
+	if err != nil {
+		s.opLogger.logger.Error("❌ Failed to parse background collection retention",
+			zap.String("retention", s.config.BackgroundCollectionRetention),
+			zap.Error(err))
+		return fmt.Errorf("invalid background collection retention: %w", err)
+	}
+
+	// Parse interval duration
+	interval, err := time.ParseDuration(s.config.BackgroundCollectionInterval)
+	if err != nil {
+		s.opLogger.logger.Error("❌ Failed to parse background collection interval",
+			zap.String("interval", s.config.BackgroundCollectionInterval),
+			zap.Error(err))
+		return fmt.Errorf("invalid background collection interval: %w", err)
+	}
+
+	s.opLogger.logger.Info("⏱️ Parsed background collection config",
+		zap.Duration("retention", retention),
+		zap.Duration("interval", interval))
+
+	// Create background collector config
+	collectorConfig := BackgroundCollectorConfig{
+		Enabled:   true,
+		Retention: retention,
+		Interval:  interval,
+		TailLines: 100, // Start with last 100 lines per container
+	}
+
+	s.opLogger.logger.Info("📋 Created background collector config",
+		zap.Bool("enabled", collectorConfig.Enabled),
+		zap.Int64("tail_lines", collectorConfig.TailLines))
+
+	// Create the background collector
+	s.backgroundCollector = NewBackgroundCollector(
+		s.opLogger.logger, // Use the operational logger's underlying zap logger
+		kubeClient,
+		s,
+		clusterName,
+		collectorConfig,
+	)
+
+	s.opLogger.logger.Info("✅ Background collector created successfully")
+
+	s.opLogger.LogServiceState("background_collection", "configured", map[string]interface{}{
+		"retention":  retention.String(),
+		"interval":   interval.String(),
+		"tail_lines": collectorConfig.TailLines,
+		"cluster":    clusterName,
+	})
+
+	return nil
+}
+
 // Start starts the service and background workers
 func (s *Service) Start(ctx context.Context) error {
+	s.opLogger.logger.Info("🚀 Starting logs service",
+		zap.Bool("has_background_collector", s.backgroundCollector != nil))
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.started {
+		s.opLogger.logger.Info("⚠️ Service already started, skipping")
 		return nil // Already started
 	}
 
 	// Start background goroutines
+	s.opLogger.logger.Info("🔄 Starting background workers")
 	go s.evictionWorker()
 	go s.cleanupWorker()
 	go s.metricsWorker()
+
+	// Start background log collection if enabled
+	if s.backgroundCollector != nil {
+		s.opLogger.logger.Info("🎯 Starting background log collector")
+		if err := s.backgroundCollector.Start(ctx); err != nil {
+			s.opLogger.logger.Error("❌ Failed to start background collector", zap.Error(err))
+			return fmt.Errorf("failed to start background log collector: %w", err)
+		}
+		s.opLogger.LogServiceState("background_collection", "started", map[string]interface{}{
+			"enabled": true,
+		})
+		s.opLogger.logger.Info("✅ Background collector started successfully")
+	} else {
+		s.opLogger.logger.Warn("⚠️ No background collector to start (nil)")
+	}
 
 	s.started = true
 	s.startTime = time.Now()
@@ -158,6 +195,17 @@ func (s *Service) Start(ctx context.Context) error {
 func (s *Service) Ingest(e LogEntry) {
 	// Normalize the entry
 	normalized := NormalizeLogEntry(e)
+
+	s.opLogger.logger.Debug("📥 Ingesting log entry",
+		zap.String("pod", normalized.Pod),
+		zap.String("namespace", normalized.Namespace),
+		zap.String("level", normalized.Level),
+		zap.String("message_preview", func() string {
+			if len(normalized.Msg) > 50 {
+				return normalized.Msg[:50] + "..."
+			}
+			return normalized.Msg
+		}()))
 
 	// Record metrics
 	entrySize := estimateEntrySize(normalized)
@@ -194,8 +242,6 @@ func (s *Service) Stream(f LogFilter) (<-chan LogEntry, func()) {
 	s.metrics.RecordSubscription()
 	s.prometheusMetrics.RecordSubscription()
 
-	ch, cancel := s.bus.Subscribe(f)
-
 	// Generate unique stream ID for tracking
 	streamID := fmt.Sprintf("stream-%d-%d", time.Now().UnixNano(), s.metrics.SubscriptionsTotal)
 	subscriberID := fmt.Sprintf("sub-%d", time.Now().UnixNano())
@@ -203,14 +249,53 @@ func (s *Service) Stream(f LogFilter) (<-chan LogEntry, func()) {
 	// Track the stream
 	s.trackStream(streamID, subscriberID, f)
 
+	// Create output channel
+	outputCh := make(chan LogEntry, s.config.BufferSize)
+
+	// Subscribe to live events
+	liveCh, liveCancel := s.bus.Subscribe(f)
+
+	// Start goroutine to handle backfill and live streaming
+	go func() {
+		defer close(outputCh)
+
+		// Provide backfill if Since filter is specified
+		if !f.Since.IsZero() {
+			// Query historical data for backfill
+			historical := s.Replay(f)
+
+			// Send historical entries as backfill
+			for _, entry := range historical {
+				select {
+				case outputCh <- entry:
+					// Successfully sent
+				case <-time.After(time.Second):
+					// Timeout sending backfill, skip
+					goto livephase
+				}
+			}
+		}
+
+	livephase:
+		// Forward live events
+		for entry := range liveCh {
+			select {
+			case outputCh <- entry:
+				// Successfully forwarded
+			default:
+				// Output channel full, skip
+			}
+		}
+	}()
+
 	// Wrap cancel to update metrics and remove tracking
 	wrappedCancel := func() {
 		s.metrics.RecordUnsubscription()
 		s.untrackStream(streamID)
-		cancel()
+		liveCancel()
 	}
 
-	return ch, wrappedCancel
+	return outputCh, wrappedCancel
 }
 
 // Stop shuts down the service and cleans up resources
@@ -219,6 +304,12 @@ func (s *Service) Stop() {
 		s.mu.Lock()
 		s.started = false
 		s.mu.Unlock()
+
+		// Stop background collector if enabled
+		if s.backgroundCollector != nil {
+			s.backgroundCollector.Stop()
+			s.opLogger.LogServiceState("background_collection", "stopped", map[string]interface{}{})
+		}
 
 		// Log service shutdown
 		s.opLogger.LogServiceState("stop", "stopped", map[string]interface{}{
@@ -394,18 +485,24 @@ func (s *Service) performEviction() {
 	s.workerMu.Unlock()
 
 	cutoff := time.Now().Add(-s.config.GlobalMaxAge)
+	scopeCutoff := time.Now().Add(-s.config.ScopeMaxAge)
 
-	// Evict from global ring
+	// Evict from global ring (no service lock needed)
 	s.globalRing.EvictByTime(cutoff)
 	s.metrics.SetGlobalRingSize(s.globalRing.Size())
 
-	// Evict from scoped rings
-	s.mu.Lock()
-	scopeCutoff := time.Now().Add(-s.config.ScopeMaxAge)
+	// Collect scoped rings to avoid holding lock during eviction
+	s.mu.RLock()
+	scopedRings := make([]LogRing, 0, len(s.scopedRings))
 	for _, ring := range s.scopedRings {
+		scopedRings = append(scopedRings, ring)
+	}
+	s.mu.RUnlock()
+
+	// Evict from scoped rings without holding service lock
+	for _, ring := range scopedRings {
 		ring.EvictByTime(scopeCutoff)
 	}
-	s.mu.Unlock()
 }
 
 // performCleanup cleans up stale subscriptions and empty rings
@@ -419,14 +516,27 @@ func (s *Service) performCleanup() {
 		bus.CleanupStaleSubscriptions(10 * time.Minute)
 	}
 
-	// Cleanup empty scoped rings
-	s.mu.Lock()
+	// Cleanup empty scoped rings - collect keys first to minimize lock time
+	var emptyKeys []string
+	s.mu.RLock()
 	for key, ring := range s.scopedRings {
 		if ring.Size() == 0 {
-			delete(s.scopedRings, key)
+			emptyKeys = append(emptyKeys, key)
 		}
 	}
-	s.mu.Unlock()
+	s.mu.RUnlock()
+
+	// Delete empty rings with write lock
+	if len(emptyKeys) > 0 {
+		s.mu.Lock()
+		for _, key := range emptyKeys {
+			// Double-check in case ring was used between read and write lock
+			if ring, exists := s.scopedRings[key]; exists && ring.Size() == 0 {
+				delete(s.scopedRings, key)
+			}
+		}
+		s.mu.Unlock()
+	}
 
 	// Cleanup stale streams
 	s.streamMu.Lock()

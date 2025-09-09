@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/logs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,12 +16,16 @@ import (
 func TestRBACNamespaceIsolation(t *testing.T) {
 	t.Parallel()
 
-	config := logs.DefaultServiceConfig()
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	service := logs.NewService(serviceConfig)
 
 	ctx := context.Background()
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	// Simulate ingesting logs from multiple namespaces
@@ -98,12 +103,16 @@ func TestRBACNamespaceIsolation(t *testing.T) {
 func TestRBACWorkloadIsolation(t *testing.T) {
 	t.Parallel()
 
-	config := logs.DefaultServiceConfig()
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	service := logs.NewService(serviceConfig)
 
 	ctx := context.Background()
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	// Simulate ingesting logs from multiple workloads in the same namespace
@@ -194,12 +203,16 @@ func TestRBACWorkloadIsolation(t *testing.T) {
 func TestRBACStreamingIsolation(t *testing.T) {
 	t.Parallel()
 
-	config := logs.DefaultServiceConfig()
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	service := logs.NewService(serviceConfig)
 
 	ctx := context.Background()
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	// Create streams for different namespaces (simulating different user permissions)
@@ -308,12 +321,16 @@ verify:
 func TestRBACPodLevelAccess(t *testing.T) {
 	t.Parallel()
 
-	config := logs.DefaultServiceConfig()
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	service := logs.NewService(serviceConfig)
 
 	ctx := context.Background()
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 	defer service.Stop()
 
 	// Simulate ingesting logs from multiple pods in the same namespace/workload

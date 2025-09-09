@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/aaronlmathis/kaptn/internal/config"
 	"github.com/aaronlmathis/kaptn/internal/logs"
 )
 
@@ -19,16 +20,20 @@ func TestSlowClientBackpressure(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service with small buffer for testing backpressure
-	config := logs.DefaultServiceConfig()
-	config.BufferSize = 5 // Small buffer to trigger backpressure quickly
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.BufferSize = 5 // Small buffer to trigger backpressure quickly
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Create stream subscription
 	streamFilter := logs.LogFilter{
@@ -97,17 +102,21 @@ func TestMemoryBounds(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service with controlled limits
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 100
-	config.ScopeMaxEntries = 20
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.GlobalMaxEntries = 100
+	serviceConfig.ScopeMaxEntries = 20
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Ingest more entries than the limit to test eviction
 	numEntries := 200 // Double the global limit
@@ -132,7 +141,7 @@ func TestMemoryBounds(t *testing.T) {
 
 	// Verify memory bounds are respected
 	stats := service.Stats()
-	assert.LessOrEqual(t, int(stats.GlobalRingSize), config.GlobalMaxEntries,
+	assert.LessOrEqual(t, int(stats.GlobalRingSize), serviceConfig.GlobalMaxEntries,
 		"Global ring size should not exceed configured limit")
 
 	// Verify we can still query and get recent entries
@@ -160,17 +169,21 @@ func TestTimeBasedEviction(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service with short TTL for testing
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxAge = 2 * time.Second            // Very short for testing
-	config.EvictionInterval = 500 * time.Millisecond // Fast eviction
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.GlobalMaxAge = 2 * time.Second            // Very short for testing
+	serviceConfig.EvictionInterval = 500 * time.Millisecond // Fast eviction
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Ingest old entry
 	oldEntry := logs.LogEntry{
@@ -221,17 +234,21 @@ func TestHighThroughputIngestion(t *testing.T) {
 	t.Parallel()
 
 	// Create log cache service optimized for high throughput
-	config := logs.DefaultServiceConfig()
-	config.GlobalMaxEntries = 10000
-	config.BufferSize = 100
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.GlobalMaxEntries = 10000
+	serviceConfig.BufferSize = 100
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Test high-throughput ingestion
 	numEntries := 5000
@@ -303,16 +320,20 @@ func TestScopedRingIsolation(t *testing.T) {
 	t.Parallel()
 
 	// Test that scoped rings properly isolate entries by namespace/workload
-	config := logs.DefaultServiceConfig()
-	config.ScopeMaxEntries = 50
-	service := logs.NewService(config)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	serviceConfig, err := cfg.GetLogsServiceConfig()
+	require.NoError(t, err)
+	serviceConfig.ScopeMaxEntries = 50
+	service := logs.NewService(serviceConfig)
 	defer service.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := service.Start(ctx)
-	require.NoError(t, err)
+	if err := service.Start(ctx); err != nil {
+		t.Fatalf("Failed to start service: %v", err)
+	}
 
 	// Create entries for different namespaces
 	namespaces := []string{"prod", "staging", "dev"}
