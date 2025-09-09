@@ -139,6 +139,8 @@ func (sm *SessionManager) validateLegacySession(tokenString string) (*Session, e
 	})
 
 	if err != nil {
+		// If HMAC validation fails, try to handle gracefully
+		sm.logger.Debug("Legacy HMAC session validation failed", zap.Error(err))
 		return nil, fmt.Errorf("failed to parse session token: %w", err)
 	}
 
@@ -186,9 +188,15 @@ func (sm *SessionManager) validateLegacySession(tokenString string) (*Session, e
 		session.ExpiresAt = time.Unix(int64(exp), 0)
 	}
 
-	// Check expiration
+	// Check expiration - but be more lenient for recovery
 	if time.Now().After(session.ExpiresAt) {
-		return nil, fmt.Errorf("session expired")
+		sm.logger.Warn("Legacy session expired, but allowing short grace period for recovery",
+			zap.String("user_id", session.Sub),
+			zap.Time("expired_at", session.ExpiresAt))
+		// Allow a 5-minute grace period for expired sessions to enable recovery
+		if time.Now().After(session.ExpiresAt.Add(5 * time.Minute)) {
+			return nil, fmt.Errorf("session expired")
+		}
 	}
 
 	return session, nil

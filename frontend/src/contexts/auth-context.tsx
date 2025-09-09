@@ -108,6 +108,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				if (refreshResponse.ok) {
 					devLog('[auth] Token refresh successful; retrying request')
 					response = await fetch(url, defaultOptions)
+
+					// If still 401 after refresh, redirect to login
+					if (response.status === 401) {
+						devLog('[auth] Still unauthorized after refresh; redirecting to login')
+						setAuthState(prev => ({
+							...prev,
+							isAuthenticated: false,
+							user: null,
+						}));
+						window.location.href = '/login'
+						throw new Error('Authentication session expired')
+					}
 				} else {
 					devLog('[auth] Token refresh failed; redirecting to login')
 					const injectedSession = getInjectedSession()
@@ -115,6 +127,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 						devLog('[auth] Auth mode is none; skipping redirect on refresh failure')
 						throw new Error('Refresh failed but auth disabled')
 					}
+					setAuthState(prev => ({
+						...prev,
+						isAuthenticated: false,
+						user: null,
+					}));
 					window.location.href = '/login'
 					throw new Error('Authentication session expired')
 				}
@@ -125,6 +142,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 					devLog('[auth] Auth mode is none; skipping redirect on error')
 					throw new Error('Auth error but auth disabled')
 				}
+				setAuthState(prev => ({
+					...prev,
+					isAuthenticated: false,
+					user: null,
+				}));
+				window.location.href = '/login'
+				throw new Error('Authentication session expired')
+			}
+		}
+
+		// Handle other auth-related errors that should force re-authentication
+		if (response.status === 403 && url.includes('/api/')) {
+			const responseText = await response.text()
+			if (responseText.includes('session expired') || responseText.includes('invalid')) {
+				devLog('[auth] Session expired detected in 403 response; redirecting to login')
+				setAuthState(prev => ({
+					...prev,
+					isAuthenticated: false,
+					user: null,
+				}));
 				window.location.href = '/login'
 				throw new Error('Authentication session expired')
 			}
