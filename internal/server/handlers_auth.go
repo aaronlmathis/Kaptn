@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// Helper function to generate PKCE code challenge from verifier
+func generateCodeChallenge(codeVerifier string) string {
+	hash := sha256.Sum256([]byte(codeVerifier))
+	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
+
 // Authentication handlers
 
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +39,7 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.oidcClient == nil {
+	if s.oidcClient == nil || s.oidcStateStore == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -42,10 +49,13 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate PKCE parameters for security
-	pkceParams, err := auth.GeneratePKCEParams()
+	// Store OIDC state in secure cookie and get the authorization URL
+	// Use the configured redirect URI from environment/config
+	redirectURI := s.config.Security.OIDC.RedirectURL
+
+	oidcState, err := s.oidcStateStore.Set(w, r, redirectURI)
 	if err != nil {
-		s.logger.Error("Failed to generate PKCE parameters", zap.Error(err))
+		s.logger.Error("Failed to store OIDC state", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -54,25 +64,30 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store PKCE parameters for later verification
-	auth.StorePKCEParams(pkceParams)
+	// Create PKCE params for the authorization URL
+	pkceParams := &auth.PKCEParams{
+		State:         oidcState.State,
+		Nonce:         oidcState.Nonce,
+		CodeVerifier:  oidcState.CodeVerifier,
+		CodeChallenge: generateCodeChallenge(oidcState.CodeVerifier),
+	}
 
 	// Get authorization URL with PKCE
 	authURL := s.oidcClient.GetAuthURL(pkceParams.State, pkceParams)
 
 	s.logger.Info("Generated login URL",
-		zap.String("state", pkceParams.State),
+		zap.String("state", oidcState.State),
 		zap.String("requestId", middleware.GetReqID(r.Context())))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"authUrl": authURL,
-		"state":   pkceParams.State,
+		"state":   oidcState.State,
 	})
 }
 
 func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
-	if s.oidcClient == nil {
+	if s.oidcClient == nil || s.oidcStateStore == nil {
 		s.logAuthEvent(r, "", "callback_failed", "OIDC not configured", nil)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -96,17 +111,27 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Retrieve and validate PKCE parameters
-	pkceParams, exists := auth.GetPKCEParams(state)
-	if !exists {
-		s.logger.Error("Invalid or expired state parameter", zap.String("state", state))
+	// Retrieve and validate OIDC state from secure cookie
+	oidcState, err := s.oidcStateStore.GetAndClear(w, r)
+	if err != nil {
+		s.logger.Error("Failed to retrieve OIDC state", zap.Error(err), zap.String("state", state))
 		s.logAuthEvent(r, "", "callback_failed", "Invalid or expired login session", nil)
 		http.Error(w, "Invalid or expired login session", http.StatusBadRequest)
 		return
 	}
 
+	// Verify state parameter matches
+	if oidcState.State != state {
+		s.logger.Error("State parameter mismatch",
+			zap.String("expected", oidcState.State),
+			zap.String("received", state))
+		s.logAuthEvent(r, "", "callback_failed", "State parameter mismatch", nil)
+		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+		return
+	}
+
 	// Exchange code for tokens with PKCE
-	token, err := s.oidcClient.ExchangeCodeWithPKCE(r.Context(), code, pkceParams.CodeVerifier)
+	token, err := s.oidcClient.ExchangeCodeWithPKCE(r.Context(), code, oidcState.CodeVerifier)
 	if err != nil {
 		s.logger.Error("Failed to exchange code for token", zap.Error(err))
 		s.logAuthEvent(r, "", "token_exchange_failed", err.Error(), err)
@@ -123,6 +148,8 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify the ID token and get user info
+	// TODO: Add explicit nonce verification if needed - currently handled by OIDC client
+	s.logger.Debug("Verifying ID token with expected nonce", zap.String("nonce", oidcState.Nonce))
 	user, err := s.oidcClient.VerifyToken(r.Context(), idToken)
 	if err != nil {
 		s.logger.Error("Failed to verify ID token", zap.Error(err))

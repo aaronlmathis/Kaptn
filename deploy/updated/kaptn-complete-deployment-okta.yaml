@@ -348,7 +348,7 @@ metadata:
   namespace: kaptn
   labels: { app: kaptn }
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels: { app: kaptn }
   template:
@@ -401,6 +401,15 @@ spec:
               valueFrom: { secretKeyRef: { name: kaptn-oauth, key: OKTA_CLIENT_SECRET } }
             - name: OKTA_REDIRECT_URI
               valueFrom: { secretKeyRef: { name: kaptn-oauth, key: OKTA_REDIRECT_URI } }
+            # New environment variables for stateless auth across replicas
+            - name: OIDC_STATE_HASH_KEY
+              valueFrom: { secretKeyRef: { name: kaptn-auth-keys, key: OIDC_STATE_HASH_KEY } }
+            - name: OIDC_STATE_BLOCK_KEY
+              valueFrom: { secretKeyRef: { name: kaptn-auth-keys, key: OIDC_STATE_BLOCK_KEY } }
+            - name: KAPTN_JWT_PRIVATE_KEY_PEM
+              valueFrom: { secretKeyRef: { name: kaptn-auth-keys, key: KAPTN_JWT_PRIVATE_KEY_PEM } }
+            - name: KAPTN_JWT_PUBLIC_KEY_PEM
+              valueFrom: { secretKeyRef: { name: kaptn-auth-keys, key: KAPTN_JWT_PUBLIC_KEY_PEM } }
           volumeMounts:
             - name: rendered-config
               mountPath: /etc/kaptn
