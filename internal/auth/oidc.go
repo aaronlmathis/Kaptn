@@ -106,8 +106,8 @@ func (c *OIDCClient) VerifyToken(ctx context.Context, tokenString string) (*User
 		return nil, fmt.Errorf("failed to extract claims: %w", err)
 	}
 
-	// Debug: Log all claims received from Google
-	c.logger.Info("Google OAuth claims received",
+	// Debug: Log all claims received from OAuth provider
+	c.logger.Info("OAuth claims received",
 		zap.Any("all_claims", claims))
 
 	// Specifically check for picture in ID token claims
