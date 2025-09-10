@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/contexts/auth-context"
 import { NavigationProvider } from "@/contexts/navigation-context"
 import { NamespaceProvider } from "@/contexts/namespace-context"
@@ -48,27 +47,25 @@ export function SharedProviders({ children }: SharedProvidersProps) {
 	return (
 		<AuthzErrorBoundary>
 			<QueryClientProvider client={queryClient}>
-				<ThemeProvider defaultTheme="system" storageKey="k8s-dashboard-theme">
-					<AuthProvider>
-						<ClusterProvider>
-							<CapabilitiesProvider>
-								<ClusterFeaturesProvider>
-									<NavigationProvider>
-										<NamespaceProvider>
-											<ShellProvider>
-												<AppContent>
-													{children}
-												</AppContent>
-												<Toaster />
-												<PodShellManager />
-											</ShellProvider>
-										</NamespaceProvider>
-									</NavigationProvider>
-								</ClusterFeaturesProvider>
-							</CapabilitiesProvider>
-						</ClusterProvider>
-					</AuthProvider>
-				</ThemeProvider>
+				<AuthProvider>
+					<ClusterProvider>
+						<CapabilitiesProvider>
+							<ClusterFeaturesProvider>
+								<NavigationProvider>
+									<NamespaceProvider>
+										<ShellProvider>
+											<AppContent>
+												{children}
+											</AppContent>
+											<Toaster />
+											<PodShellManager />
+										</ShellProvider>
+									</NamespaceProvider>
+								</NavigationProvider>
+							</ClusterFeaturesProvider>
+						</CapabilitiesProvider>
+					</ClusterProvider>
+				</AuthProvider>
 			</QueryClientProvider>
 		</AuthzErrorBoundary>
 	)

@@ -26,30 +26,22 @@ export function ThemeProvider({
 	storageKey = "k8s-dashboard-theme",
 	...props
 }: ThemeProviderProps) {
-	// Always start with default theme for SSR consistency
 	const [theme, setTheme] = React.useState<Theme>(defaultTheme)
-	const [isHydrated, setIsHydrated] = React.useState(false)
 
-	// Hydrate theme from localStorage after mount to prevent SSR mismatch
+	// Hydrate theme from localStorage after mount
 	React.useEffect(() => {
 		if (typeof window !== "undefined") {
 			const storedTheme = localStorage.getItem(storageKey) as Theme
 			if (storedTheme) {
 				setTheme(storedTheme)
 			}
-			setIsHydrated(true)
 		}
 	}, [storageKey])
 
 	React.useEffect(() => {
-		// Only apply theme changes after hydration to prevent conflicts
-		if (!isHydrated) return
+		if (typeof window === "undefined") return
 
 		const root = window.document.documentElement
-
-		// Don't remove classes if they're already correct to prevent flash
-		const currentHasLight = root.classList.contains("light")
-		const currentHasDark = root.classList.contains("dark")
 
 		let targetTheme: string
 		if (theme === "system") {
@@ -58,7 +50,10 @@ export function ThemeProvider({
 			targetTheme = theme
 		}
 
-		// Only update classes if they need to change
+		// Since Astro already set the initial theme, only update if different
+		const currentHasLight = root.classList.contains("light")
+		const currentHasDark = root.classList.contains("dark")
+		
 		if (
 			(targetTheme === "dark" && !currentHasDark) ||
 			(targetTheme === "light" && !currentHasLight)
@@ -71,14 +66,15 @@ export function ThemeProvider({
 		if (theme === "system") {
 			const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
 			const handleChange = () => {
+				const newTheme = mediaQuery.matches ? "dark" : "light"
 				root.classList.remove("light", "dark")
-				root.classList.add(mediaQuery.matches ? "dark" : "light")
+				root.classList.add(newTheme)
 			}
 
 			mediaQuery.addEventListener("change", handleChange)
 			return () => mediaQuery.removeEventListener("change", handleChange)
 		}
-	}, [theme, isHydrated])
+	}, [theme])
 
 	const value = {
 		theme,
