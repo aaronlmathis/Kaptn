@@ -26,7 +26,7 @@ type Service struct {
 	bus LogBus
 
 	// Background collection
-	backgroundCollector *BackgroundCollector
+	backgroundCollector *BackgroundCollector // Legacy collector (deprecated)
 
 	// Lifecycle
 	stopCh    chan struct{}
@@ -97,47 +97,29 @@ func (s *Service) SetBackgroundCollector(kubeClient kubernetes.Interface, cluste
 		return fmt.Errorf("invalid background collection retention: %w", err)
 	}
 
-	// Parse interval duration
-	interval, err := time.ParseDuration(s.config.BackgroundCollectionInterval)
-	if err != nil {
-		s.opLogger.logger.Error("❌ Failed to parse background collection interval",
-			zap.String("interval", s.config.BackgroundCollectionInterval),
-			zap.Error(err))
-		return fmt.Errorf("invalid background collection interval: %w", err)
-	}
-
 	s.opLogger.logger.Info("⏱️ Parsed background collection config",
 		zap.Duration("retention", retention),
-		zap.Duration("interval", interval))
+		zap.String("note", "V2 uses event-driven collection (no interval)"))
 
-	// Create background collector config
-	collectorConfig := BackgroundCollectorConfig{
-		Enabled:   true,
-		Retention: retention,
-		Interval:  interval,
-		TailLines: 100, // Start with last 100 lines per container
-	}
-
-	s.opLogger.logger.Info("📋 Created background collector config",
-		zap.Bool("enabled", collectorConfig.Enabled),
-		zap.Int64("tail_lines", collectorConfig.TailLines))
-
-	// Create the background collector
+	// Create the new event-driven background collector
 	s.backgroundCollector = NewBackgroundCollector(
-		s.opLogger.logger, // Use the operational logger's underlying zap logger
+		s.opLogger.logger,
 		kubeClient,
 		s,
 		clusterName,
-		collectorConfig,
+		s.config.BackgroundCollectionEnabled,
+		retention,
+		100, // Start with last 100 lines per container
 	)
 
-	s.opLogger.logger.Info("✅ Background collector created successfully")
+	s.opLogger.logger.Info("✅ Background collector V2 created successfully")
 
 	s.opLogger.LogServiceState("background_collection", "configured", map[string]interface{}{
 		"retention":  retention.String(),
-		"interval":   interval.String(),
-		"tail_lines": collectorConfig.TailLines,
+		"interval":   "event-driven", // No longer interval-based
+		"tail_lines": int64(100),
 		"cluster":    clusterName,
+		"version":    "v2-event-driven",
 	})
 
 	return nil
@@ -171,6 +153,7 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 		s.opLogger.LogServiceState("background_collection", "started", map[string]interface{}{
 			"enabled": true,
+			"version": "v2-event-driven",
 		})
 		s.opLogger.logger.Info("✅ Background collector started successfully")
 	} else {
@@ -308,7 +291,9 @@ func (s *Service) Stop() {
 		// Stop background collector if enabled
 		if s.backgroundCollector != nil {
 			s.backgroundCollector.Stop()
-			s.opLogger.LogServiceState("background_collection", "stopped", map[string]interface{}{})
+			s.opLogger.LogServiceState("background_collection", "stopped", map[string]interface{}{
+				"version": "v2-event-driven",
+			})
 		}
 
 		// Log service shutdown

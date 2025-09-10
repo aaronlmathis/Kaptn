@@ -26,7 +26,7 @@ const CapabilitiesContext = React.createContext<CapabilitiesContextValue | undef
 
 export { CapabilitiesContext }
 
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+const CACHE_DURATION = 10 * 60 * 1000 // 10 minutes (less than 15min token TTL)
 
 // Dev-only logging helpers
 const IS_DEV = (import.meta as any)?.env?.DEV === true
@@ -477,9 +477,9 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 		}
 	})
 
-    const { clusterId } = useCluster()
+	const { clusterId } = useCluster()
 
-    const fetchCapabilities = React.useCallback(async () => {
+	const fetchCapabilities = React.useCallback(async () => {
 		// Skip API calls during SSR/build time
 		if (typeof window === 'undefined') {
 			return
@@ -512,57 +512,57 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 		try {
 			// Create a smaller, focused request body for faster loading
 			// Only request the most commonly needed capabilities initially
-            const requestBody = {
-                cluster: clusterId || "default",
-                features: [
-                    // Core viewing capabilities - most pages need these
-                    'pods.list', 'pods.get',
-                    'deployments.list', 'deployments.get',
-                    'replicasets.list', 'replicasets.get',
-                    'daemonsets.list', 'daemonsets.get',
-                    'statefulsets.list', 'statefulsets.get',
-                    'endpoints.list', 'endpoints.get',
-                    'endpointslices.list', 'endpointslices.get',
-                    'ingresses.list', 'ingresses.get',
-                    'ingressclasses.list', 'ingressclasses.get',
-                    'networkpolicies.list', 'networkpolicies.get',
-                    'virtualservices.list', 'virtualservices.get',
-                    'gateways.list', 'gateways.get',
-                    // Workloads: CronJobs
-                    'cronjobs.list', 'cronjobs.get',
-                    'services.list', 'services.get',
-                    'configmaps.list', 'secrets.list',
-                    // HPAs (to support HPA pages and menus)
-                    'horizontalpodautoscalers.list', 'horizontalpodautoscalers.get', 'horizontalpodautoscalers.patch', 'horizontalpodautoscalers.delete',
-                    // Quotas
-                    'resourcequotas.list', 'resourcequotas.get',
-                    // Storage core lists so RouteGuard doesn't stall
-                    'persistentvolumes.list',
-                    'persistentvolumeclaims.list',
-                    'storageclasses.list',
-                    'volumesnapshots.list',
-                    'volumesnapshotclasses.list',
-                    'namespaces.list', 'events.list', 'nodes.list',
+			const requestBody = {
+				cluster: clusterId || "default",
+				features: [
+					// Core viewing capabilities - most pages need these
+					'pods.list', 'pods.get',
+					'deployments.list', 'deployments.get',
+					'replicasets.list', 'replicasets.get',
+					'daemonsets.list', 'daemonsets.get',
+					'statefulsets.list', 'statefulsets.get',
+					'endpoints.list', 'endpoints.get',
+					'endpointslices.list', 'endpointslices.get',
+					'ingresses.list', 'ingresses.get',
+					'ingressclasses.list', 'ingressclasses.get',
+					'networkpolicies.list', 'networkpolicies.get',
+					'virtualservices.list', 'virtualservices.get',
+					'gateways.list', 'gateways.get',
+					// Workloads: CronJobs
+					'cronjobs.list', 'cronjobs.get',
+					'services.list', 'services.get',
+					'configmaps.list', 'secrets.list',
+					// HPAs (to support HPA pages and menus)
+					'horizontalpodautoscalers.list', 'horizontalpodautoscalers.get', 'horizontalpodautoscalers.patch', 'horizontalpodautoscalers.delete',
+					// Quotas
+					'resourcequotas.list', 'resourcequotas.get',
+					// Storage core lists so RouteGuard doesn't stall
+					'persistentvolumes.list',
+					'persistentvolumeclaims.list',
+					'storageclasses.list',
+					'volumesnapshots.list',
+					'volumesnapshotclasses.list',
+					'namespaces.list', 'events.list', 'nodes.list',
 
-                    // Basic management capabilities  
-                    'pods.delete', 'deployments.delete', 'services.delete',
-                    'pods.logs', 'pods.exec', 'deployments.restart',
+					// Basic management capabilities  
+					'pods.delete', 'deployments.delete', 'services.delete',
+					'pods.logs', 'pods.exec', 'deployments.restart',
 
-                    // Dashboard essentials
-                    'dashboard.view',
-                ]
-            }
+					// Dashboard essentials
+					'dashboard.view',
+				]
+			}
 
 
 			devLog('[capabilities] Fetching core capabilities (fast load)')
 
-            const response = await fetchWithAuth('/api/v1/authz/capabilities', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody),
-            })
+			const response = await fetchWithAuth('/api/v1/authz/capabilities', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(requestBody),
+			})
 
 			devLog('[capabilities] Response status:', response.status, response.statusText)
 
@@ -572,105 +572,153 @@ export function CapabilitiesProvider({ children }: { children: React.ReactNode }
 				throw new Error(`Failed to fetch capabilities: ${response.statusText} - ${errorText}`)
 			}
 
-            const data = await response.json()
-            devLog('[capabilities] Response received')
+			const data = await response.json()
+			devLog('[capabilities] Response received')
 
-            devLog('[capabilities] Setting capabilities state (merge)')
-            setState(prev => ({
-                ...prev,
-                // Merge to avoid wiping capabilities fetched via fetchAdditional
-                capabilities: { ...prev.capabilities, ...(data.caps || {}) },
-                isLoading: false,
-                error: null,
-                lastFetched: Date.now(),
-            }))
-		} catch (error) {
-			devError('[capabilities] Failed to fetch capabilities')
+			devLog('[capabilities] Setting capabilities state (merge)')
 			setState(prev => ({
 				...prev,
+				// Merge to avoid wiping capabilities fetched via fetchAdditional
+				capabilities: { ...prev.capabilities, ...(data.caps || {}) },
 				isLoading: false,
-				error: error instanceof Error ? error.message : 'Failed to fetch capabilities',
+				error: null,
+				lastFetched: Date.now(),
 			}))
+		} catch (error) {
+			devError('[capabilities] Failed to fetch capabilities:', error)
+
+			// Check if this is a token expiration issue
+			const errorMessage = error instanceof Error ? error.message : 'Failed to fetch capabilities'
+			const isTokenExpired = errorMessage.includes('401') ||
+				errorMessage.includes('Unauthorized') ||
+				errorMessage.includes('session expired') ||
+				errorMessage.includes('520')
+
+			if (isTokenExpired) {
+				devLog('[capabilities] Detected token expiration, capabilities will retry after token refresh')
+				// Don't set error state for token expiration - the auth context will handle refresh
+				// and this will retry automatically when auth state updates
+				setState(prev => ({
+					...prev,
+					isLoading: false,
+					// Keep existing capabilities until refresh succeeds
+					// error: null, // Don't show error for auth issues
+				}))
+			} else {
+				// Other errors should be displayed
+				setState(prev => ({
+					...prev,
+					isLoading: false,
+					error: errorMessage,
+				}))
+			}
 		}
-    }, [isAuthenticated, authMode, fetchWithAuth, clusterId])
+	}, [isAuthenticated, authMode, fetchWithAuth, clusterId])
 
-    // Track features we've already requested in this session to avoid duplicate POSTs
-    const inFlightRef = React.useRef<Set<string>>(new Set());
+	// Track features we've already requested in this session to avoid duplicate POSTs
+	const inFlightRef = React.useRef<Set<string>>(new Set());
 
-    // Function to load additional capabilities on-demand (for specific pages that need more)
-    const fetchAdditionalCapabilities = React.useCallback(async (additionalFeatures: string[]) => {
-        if (typeof window === 'undefined' || !isAuthenticated || authMode === 'none') {
-            return
-        }
+	// Function to load additional capabilities on-demand (for specific pages that need more)
+	const fetchAdditionalCapabilities = React.useCallback(async (additionalFeatures: string[]) => {
+		if (typeof window === 'undefined' || !isAuthenticated || authMode === 'none') {
+			return
+		}
 
-        // Filter out capabilities we already know about or have requested
-        const featuresToRequest = additionalFeatures
-            .filter(f => !inFlightRef.current.has(f))
-            .filter(f => state.capabilities[f] === undefined)
+		// Filter out capabilities we already know about or have requested
+		const featuresToRequest = additionalFeatures
+			.filter(f => !inFlightRef.current.has(f))
+			.filter(f => state.capabilities[f] === undefined)
 
-        if (featuresToRequest.length === 0) {
-            return
-        }
+		if (featuresToRequest.length === 0) {
+			return
+		}
 
-        // Mark as in-flight to prevent duplicate concurrent requests
-        featuresToRequest.forEach(f => inFlightRef.current.add(f))
+		// Mark as in-flight to prevent duplicate concurrent requests
+		featuresToRequest.forEach(f => inFlightRef.current.add(f))
 
-        try {
-            const requestBody = {
-                cluster: clusterId || "default",
-                features: featuresToRequest,
-            }
+		try {
+			const requestBody = {
+				cluster: clusterId || "default",
+				features: featuresToRequest,
+			}
 
-            const response = await fetchWithAuth('/api/v1/authz/capabilities', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-            })
+			const response = await fetchWithAuth('/api/v1/authz/capabilities', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(requestBody),
+			})
 
-            if (response.ok) {
-                const data = await response.json()
-                // Ensure all requested features are defined; default unknown to false
-                const returnedCaps: Record<string, boolean> = data.caps || {}
-                const normalizedCaps: Record<string, boolean> = { ...returnedCaps }
-                for (const feat of featuresToRequest) {
-                    if (normalizedCaps[feat] === undefined) {
-                        normalizedCaps[feat] = false
-                    }
-                }
-                setState(prev => ({
-                    ...prev,
-                    capabilities: { ...prev.capabilities, ...normalizedCaps },
-                    lastFetched: Date.now(),
-                }))
-            } else {
-                devWarn('[capabilities] Additional capabilities request failed:', response.status, response.statusText)
-            }
-        } catch (error) {
-            devWarn('[capabilities] Failed to fetch additional capabilities')
-        } finally {
-            // Clear in-flight flags so future attempts can retry
-            featuresToRequest.forEach(f => inFlightRef.current.delete(f))
-        }
-    }, [isAuthenticated, authMode, fetchWithAuth, state.capabilities, clusterId])
+			if (response.ok) {
+				const data = await response.json()
+				// Ensure all requested features are defined; default unknown to false
+				const returnedCaps: Record<string, boolean> = data.caps || {}
+				const normalizedCaps: Record<string, boolean> = { ...returnedCaps }
+				for (const feat of featuresToRequest) {
+					if (normalizedCaps[feat] === undefined) {
+						normalizedCaps[feat] = false
+					}
+				}
+				setState(prev => ({
+					...prev,
+					capabilities: { ...prev.capabilities, ...normalizedCaps },
+					lastFetched: Date.now(),
+				}))
+			} else {
+				devWarn('[capabilities] Additional capabilities request failed:', response.status, response.statusText)
+
+				// For 401/520 errors, don't log warnings as these are token expiration issues
+				const isTokenExpired = response.status === 401 || response.status === 520
+				if (!isTokenExpired) {
+					devWarn('[capabilities] Non-auth error for additional capabilities:', response.status, response.statusText)
+				}
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+			const isTokenExpired = errorMessage.includes('401') ||
+				errorMessage.includes('Unauthorized') ||
+				errorMessage.includes('session expired') ||
+				errorMessage.includes('520')
+
+			if (!isTokenExpired) {
+				devWarn('[capabilities] Failed to fetch additional capabilities:', errorMessage)
+			}
+		} finally {
+			// Clear in-flight flags so future attempts can retry
+			featuresToRequest.forEach(f => inFlightRef.current.delete(f))
+		}
+	}, [isAuthenticated, authMode, fetchWithAuth, state.capabilities, clusterId])
 
 	// Fetch capabilities on mount and when auth state changes
 	React.useEffect(() => {
 		fetchCapabilities()
 	}, [fetchCapabilities])
 
-	// Auto-refresh capabilities periodically
+	// Auto-refresh capabilities periodically with intelligent timing
 	React.useEffect(() => {
 		if (!isAuthenticated || authMode === 'none') return
 
 		const interval = setInterval(() => {
 			const now = Date.now()
 			if (state.lastFetched && (now - state.lastFetched) > CACHE_DURATION) {
+				devLog('[capabilities] Auto-refreshing capabilities due to cache expiration')
 				fetchCapabilities()
 			}
 		}, 60_000) // Check every minute
 
 		return () => clearInterval(interval)
 	}, [isAuthenticated, authMode, state.lastFetched, fetchCapabilities])
+
+	// Additional effect to retry capabilities fetch when auth state changes
+	// This handles cases where capabilities failed due to token expiration
+	React.useEffect(() => {
+		if (!isAuthenticated || authMode === 'none') return
+
+		// If we have an error state and auth is now valid, retry
+		if (state.error && !state.isLoading) {
+			devLog('[capabilities] Auth state changed and we have an error, retrying capabilities fetch')
+			fetchCapabilities()
+		}
+	}, [isAuthenticated, authMode, state.error, state.isLoading, fetchCapabilities])
 
 	const isAllowed = React.useCallback((capability: CapabilityKey): boolean => {
 		const result = state.capabilities[capability] === true

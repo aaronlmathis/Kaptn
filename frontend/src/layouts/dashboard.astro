@@ -53,11 +53,13 @@ const { title } = Astro.props;
 			(function () {
 				// Disable transitions until React fully loads to prevent flashing
 				document.documentElement.classList.add("no-transitions");
-				
+
 				// Remove no-transitions after React has had time to mount
-				document.addEventListener("DOMContentLoaded", function() {
-					setTimeout(function() {
-						document.documentElement.classList.remove("no-transitions");
+				document.addEventListener("DOMContentLoaded", function () {
+					setTimeout(function () {
+						document.documentElement.classList.remove(
+							"no-transitions",
+						);
 					}, 200);
 				});
 			})();

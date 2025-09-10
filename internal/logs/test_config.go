@@ -21,7 +21,6 @@ func DefaultTestConfig() config.LogsServiceConfig {
 		// Background collection (enabled for testing)
 		BackgroundCollectionEnabled:   true,
 		BackgroundCollectionRetention: "1h",
-		BackgroundCollectionInterval:  "30s",
 
 		// Operational guardrails defaults
 		MaxStreamsPerUser:     50,

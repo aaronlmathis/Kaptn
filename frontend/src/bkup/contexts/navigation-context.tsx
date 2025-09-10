@@ -4,7 +4,6 @@
 import {
 	createContext,
 	useContext,
-	useMemo,
 	useState,
 	useEffect,
 	type ReactNode,
@@ -24,6 +23,7 @@ export interface NavigationContextValue {
 	setMenuExpanded: (menuTitle: string, expanded: boolean) => void;
 	clearMenuState: () => void;
 	isHydrated: boolean;
+	// page title management
 	pageTitle: string;
 	pageSubtitle?: string;
 	setPageTitle: (title: string, subtitle?: string) => void;
@@ -43,7 +43,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 	const [isHydrated, setIsHydrated] = useState(false);
 
 	// Page title state
-	const [pageTitle, setPageTitleState] = useState("Home");
+	const [pageTitle, setPageTitleState] = useState("Documents");
 	const [pageSubtitle, setPageSubtitleState] = useState<string | undefined>(undefined);
 
 	// Load saved menu state after hydration to prevent SSR mismatch
@@ -62,19 +62,19 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 		}
 	}, []);
 
-	// Simple breadcrumbs (trim as you like)
-	const breadcrumbsMap: Record<string, BreadcrumbItem[]> = useMemo(
-		() => ({
-			"/": [{ title: "Kubernetes Admin", url: "/" }, { title: "Dashboard" }],
-			"/dashboard": [{ title: "Kubernetes Admin", url: "/" }, { title: "Dashboard" }],
-			// … keep your mapping here …
-		}),
-		[]
-	);
+	// // Simple breadcrumbs (trim as you like)
+	// const breadcrumbsMap: Record<string, BreadcrumbItem[]> = useMemo(
+	// 	() => ({
+	// 		"/": [{ title: "Kubernetes Admin", url: "/" }, { title: "Dashboard" }],
+	// 		"/dashboard": [{ title: "Kubernetes Admin", url: "/" }, { title: "Dashboard" }],
+	// 		// … keep your mapping here …
+	// 	}),
+	// 	[]
+	// );
 
-	const breadcrumbs: BreadcrumbItem[] = useMemo(() => {
-		return breadcrumbsMap[currentPath] || [{ title: "Kubernetes Admin", url: "/" }];
-	}, [breadcrumbsMap, currentPath]);
+	// const breadcrumbs: BreadcrumbItem[] = useMemo(() => {
+	// 	return breadcrumbsMap[currentPath] || [{ title: "Kubernetes Admin", url: "/" }];
+	// }, [breadcrumbsMap, currentPath]);
 
 	const persistMenus = (next: Record<string, boolean>) => {
 		setExpandedMenus(next);

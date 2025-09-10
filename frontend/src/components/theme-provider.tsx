@@ -53,7 +53,7 @@ export function ThemeProvider({
 		// Since Astro already set the initial theme, only update if different
 		const currentHasLight = root.classList.contains("light")
 		const currentHasDark = root.classList.contains("dark")
-		
+
 		if (
 			(targetTheme === "dark" && !currentHasDark) ||
 			(targetTheme === "light" && !currentHasLight)

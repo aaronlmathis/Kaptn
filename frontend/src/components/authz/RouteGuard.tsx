@@ -7,7 +7,7 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import type { CapabilityKey } from "@/lib/authz";
 import { LoadingBar } from "@/components/ui/loading-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ShieldX } from "lucide-react";
+import { ShieldX, RefreshCw } from "lucide-react";
 
 export interface RouteGuardProps {
   requiredCapabilities: CapabilityKey[];
@@ -56,6 +56,16 @@ export function RouteGuard({
     [requiredCapabilities, capabilities]
   );
 
+  // Check authentication first (only after auth has finished loading)
+  if (!isAuthenticated) {
+    devLog('[route-guard] redirecting to login (unauthenticated)');
+    // Redirect to login
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+    return null;
+  }
+
   // Show loading state while auth is initializing, or while required caps are unknown.
   // Do NOT block rendering just because capabilities are fetching in background
   // if we already know the required caps for this route. This avoids UI flicker.
@@ -73,28 +83,35 @@ export function RouteGuard({
     );
   }
 
-  // Check authentication first (only after auth has finished loading)
-  if (!isAuthenticated) {
-    devLog('[route-guard] redirecting to login (unauthenticated)');
-    // Redirect to login
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
-    return null;
-  }
+
 
   // On error, show error state
   if (error) {
-    devWarn('[route-guard] authorization check failed');
+    devWarn('[route-guard] authorization check failed:', error);
 
-    // Check if the error suggests an authentication issue
+    // Check if the error suggests an authentication/token issue
     const errorMessage = error.toString().toLowerCase();
-    if (errorMessage.includes('authentication') || errorMessage.includes('unauthorized') || errorMessage.includes('session expired')) {
-      devLog('[route-guard] Authentication error detected, redirecting to login');
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-      return null;
+    const isAuthError = errorMessage.includes('authentication') ||
+      errorMessage.includes('unauthorized') ||
+      errorMessage.includes('session expired') ||
+      errorMessage.includes('520') ||
+      errorMessage.includes('401')
+
+    if (isAuthError) {
+      // For auth errors, show a loading state briefly then redirect if needed
+      return fallback ? (
+        <>{fallback}</>
+      ) : (
+        <div className="container mx-auto p-4">
+          <Alert variant="default">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            <AlertTitle>Refreshing Authentication</AlertTitle>
+            <AlertDescription>
+              Your session is being refreshed. If this persists, you may need to <a href="/login" className="underline">log in again</a>.
+            </AlertDescription>
+          </Alert>
+        </div>
+      );
     }
 
     return fallback ? (

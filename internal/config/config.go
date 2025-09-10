@@ -175,7 +175,7 @@ type LogsCacheConfig struct {
 	// Background log collection configuration
 	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
 	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
-	BackgroundCollectionInterval  string `yaml:"background_collection_interval"`
+	// Note: V2 collector is event-driven, no polling interval needed
 
 	// Operational limits (Phase 10)
 	MaxStreamsPerUser     int    `yaml:"max_streams_per_user"`
@@ -339,10 +339,9 @@ func loadWithDefaults(configPath string) (*Config, error) {
 				EvictionInterval: getEnv("KAPTN_LOGS_EVICTION_INTERVAL", "30s"),
 				CleanupInterval:  getEnv("KAPTN_LOGS_CLEANUP_INTERVAL", "5m"),
 
-				// Background collection settings
+				// Background collection settings (V2 is event-driven)
 				BackgroundCollectionEnabled:   getEnvBool("KAPTN_LOGS_BACKGROUND_COLLECTION_ENABLED", true),
 				BackgroundCollectionRetention: getEnv("KAPTN_LOGS_BACKGROUND_COLLECTION_RETENTION", "1h"),
-				BackgroundCollectionInterval:  getEnv("KAPTN_LOGS_BACKGROUND_COLLECTION_INTERVAL", "30s"),
 
 				MaxStreamsPerUser:     getEnvInt("KAPTN_LOGS_MAX_STREAMS_PER_USER", 50),
 				MaxQueryLimit:         getEnvInt("KAPTN_LOGS_MAX_QUERY_LIMIT", 10000),
@@ -785,10 +784,9 @@ type LogsServiceConfig struct {
 	EvictionInterval time.Duration `yaml:"eviction_interval"`
 	CleanupInterval  time.Duration `yaml:"cleanup_interval"`
 
-	// Background collection
+	// Background collection (V2 is event-driven)
 	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
 	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
-	BackgroundCollectionInterval  string `yaml:"background_collection_interval"`
 
 	// Phase 10: Operational guardrails
 	MaxStreamsPerUser     int           `yaml:"max_streams_per_user"`
@@ -803,9 +801,8 @@ type LogsServiceConfig struct {
 // GetLogsServiceConfig converts the config to a logs service config
 func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 	// Debug: Log what we're reading from config
-	fmt.Printf("🔍 [DEBUG] Reading logs config: background_collection_enabled=%v, interval=%s, retention=%s\n",
+	fmt.Printf("🔍 [DEBUG] Reading logs config: background_collection_enabled=%v, retention=%s (V2 is event-driven)\n",
 		c.Caching.LogsCache.BackgroundCollectionEnabled,
-		c.Caching.LogsCache.BackgroundCollectionInterval,
 		c.Caching.LogsCache.BackgroundCollectionRetention)
 
 	// Set defaults for empty values
@@ -884,7 +881,7 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		// Background collection
 		BackgroundCollectionEnabled:   c.Caching.LogsCache.BackgroundCollectionEnabled,
 		BackgroundCollectionRetention: c.Caching.LogsCache.BackgroundCollectionRetention,
-		BackgroundCollectionInterval:  c.Caching.LogsCache.BackgroundCollectionInterval,
+		// Note: V2 collector is event-driven, no interval field needed
 
 		// Phase 10: Operational guardrails
 		MaxStreamsPerUser:     c.Caching.LogsCache.MaxStreamsPerUser,

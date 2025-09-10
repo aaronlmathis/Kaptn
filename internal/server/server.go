@@ -348,8 +348,8 @@ func (s *Server) initKubernetesClient() error {
 
 	s.logger.Info("📋 Logs cache config loaded",
 		zap.Bool("background_collection_enabled", logsCacheConfig.BackgroundCollectionEnabled),
-		zap.String("background_collection_interval", logsCacheConfig.BackgroundCollectionInterval),
-		zap.String("background_collection_retention", logsCacheConfig.BackgroundCollectionRetention))
+		zap.String("background_collection_retention", logsCacheConfig.BackgroundCollectionRetention),
+		zap.String("note", "V2 collector is event-driven (no polling)"))
 
 	s.logsCacheService = logs.NewService(logsCacheConfig)
 

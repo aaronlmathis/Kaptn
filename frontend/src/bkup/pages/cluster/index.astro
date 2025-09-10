@@ -1,0 +1,13 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { ClusterPageContainer } from "@/components/containers/ClusterPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "Cluster";
+---
+
+<Layout title={title}>
+	<AppShell client:load>
+		<ClusterPageContainer />
+	</AppShell>
+</Layout>

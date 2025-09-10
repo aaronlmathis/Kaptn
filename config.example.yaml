@@ -63,10 +63,10 @@ caching:
     eviction_interval: "30s"
     cleanup_interval: "5m"
     
-    # Background log collection - automatically collects logs from all pods
+    # Background log collection - automatically collects logs from all pods (V2 - Event-driven)
     background_collection_enabled: true
     background_collection_retention: "1h"
-    background_collection_interval: "30s"
+    # Note: background_collection_interval is obsolete in V2 (event-driven collection)
     
     # Operational limits (Phase 10)
     max_streams_per_user: 50

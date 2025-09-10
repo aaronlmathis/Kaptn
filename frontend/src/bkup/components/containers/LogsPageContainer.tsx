@@ -14,6 +14,7 @@ import { useLogStream } from "@/hooks/useLogStream"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { IconDownload, IconRefresh, IconCircleCheckFilled, IconAlertTriangle, IconClock, IconFileText } from "@tabler/icons-react"
+import { LiveDataStatusBadge } from "@/components/badges/LiveDataStatus"
 import { cn } from "@/lib/utils"
 import { useNamespace } from "@/contexts/namespace-context"
 
@@ -30,7 +31,6 @@ const LOG_LEVEL_COLORS: Record<LogLevel, string> = {
 // Inner component that can access the namespace context
 function LogsContent() {
   const { namespaces } = useNamespace()
-  const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 
   // Filter states
   const [globalFilter, setGlobalFilter] = React.useState("")
@@ -52,28 +52,6 @@ function LogsContent() {
   const displayedEntries = React.useMemo(() => {
     return (streamState.status === "connected" || streamState.status === "degraded") ? liveEntries : entries
   }, [streamState.status, liveEntries, entries])
-
-  // Filtered data based on all filters (for real-time filtering)
-  const filteredEntries = React.useMemo(() => {
-    const q = globalFilter.trim().toLowerCase()
-    return displayedEntries.filter(entry => {
-      // Global text search
-      const matchesGlobal = !q ||
-        entry.msg.toLowerCase().includes(q) ||
-        entry.pod.toLowerCase().includes(q) ||
-        entry.namespace.toLowerCase().includes(q) ||
-        entry.container.toLowerCase().includes(q) ||
-        entry.node.toLowerCase().includes(q)
-
-      // Level filter
-      const matchesLevel = levelFilter === 'all' || entry.level === levelFilter
-
-      // Namespace filter
-      const matchesNamespace = namespaceFilter === 'all' || entry.namespace === namespaceFilter
-
-      return matchesGlobal && matchesLevel && matchesNamespace
-    })
-  }, [displayedEntries, globalFilter, levelFilter, namespaceFilter])
 
   const levelOptions: FilterOption[] = React.useMemo(() => {
     const levels = Array.from(new Set(displayedEntries.map(e => e.level))).filter(Boolean).sort()
@@ -109,43 +87,21 @@ function LogsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Auto-search when specific filters change (debounced) - only for server-side filters
+  // Auto-search when filters change (debounced)
   React.useEffect(() => {
     const timeoutId = setTimeout(() => {
-      // Only trigger API calls for filters that affect the data source (since, limit)
-      // Namespace, level, and text filtering are now done client-side for real-time response
-      if (sinceFilter !== "15m" || limitFilter !== 1000) {
+      if ((namespaceFilter && namespaceFilter !== "all") || levelFilter !== "all" || sinceFilter !== "15m" || limitFilter !== 1000) {
         handleSearch().catch(() => { })
       }
-    }, 1000) // 1 second debounce for server-side filters
+    }, 500) // 500ms debounce
 
     return () => clearTimeout(timeoutId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sinceFilter, limitFilter])
+  }, [namespaceFilter, levelFilter, sinceFilter, limitFilter])
 
-  // Separate effect for namespace filter changes - this should trigger a new API call
-  // since it affects which pods we're looking at
-  React.useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (namespaceFilter !== "all") {
-        handleSearch().catch(() => { })
-      }
-    }, 800) // Shorter debounce for namespace changes
-
-    return () => clearTimeout(timeoutId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespaceFilter])
-
-  // Update lastUpdated when entries change
-  React.useEffect(() => {
-    if (displayedEntries.length > 0) {
-      setLastUpdated(new Date().toISOString())
-    }
-  }, [displayedEntries])
-
-  // Generate summary cards from filtered log data
+  // Generate summary cards from log data
   const summaryData: SummaryCard[] = React.useMemo(() => {
-    if (!filteredEntries || filteredEntries.length === 0) {
+    if (!displayedEntries || displayedEntries.length === 0) {
       return [
         {
           title: "Total Logs",
@@ -170,11 +126,11 @@ function LogsContent() {
       ]
     }
 
-    const totalLogs = filteredEntries.length
-    const uniquePods = new Set(filteredEntries.map(e => e.pod)).size
-    const errorLogs = filteredEntries.filter(e => e.level === 'ERROR' || e.level === 'FATAL').length
-    const warnLogs = filteredEntries.filter(e => e.level === 'WARN').length
-    const latestLog = filteredEntries[0]?.ts ? new Date(filteredEntries[0].ts) : null
+    const totalLogs = displayedEntries.length
+    const uniquePods = new Set(displayedEntries.map(e => e.pod)).size
+    const errorLogs = displayedEntries.filter(e => e.level === 'ERROR' || e.level === 'FATAL').length
+    const warnLogs = displayedEntries.filter(e => e.level === 'WARN').length
+    const latestLog = displayedEntries[0]?.ts ? new Date(displayedEntries[0].ts) : null
 
     return [
       {
@@ -190,7 +146,7 @@ function LogsContent() {
       {
         title: "Unique Pods",
         value: uniquePods,
-        subtitle: `From ${new Set(filteredEntries.map(e => e.namespace)).size} namespaces`,
+        subtitle: `From ${new Set(displayedEntries.map(e => e.namespace)).size} namespaces`,
         footer: uniquePods > 0 ? "Active log sources" : "No active sources"
       },
       {
@@ -213,7 +169,7 @@ function LogsContent() {
         footer: streamState.status === "connected" ? "Real-time updates" : "Static snapshot"
       }
     ]
-  }, [filteredEntries, streamState.status])
+  }, [displayedEntries, streamState.status])
 
   // Search and filter function
   async function handleSearch(ns = namespaceFilter, pod = "", levels = levelFilter, q = globalFilter, since = sinceFilter, limit = limitFilter) {
@@ -259,6 +215,23 @@ function LogsContent() {
     a.download = `logs.${format === 'csv' ? 'csv' : 'json'}`
     a.click()
   }
+
+  // Filtered data based on global search and level filter
+  const filteredEntries = React.useMemo(() => {
+    const q = globalFilter.trim().toLowerCase()
+    return displayedEntries.filter(entry => {
+      const matchesGlobal = !q ||
+        entry.msg.toLowerCase().includes(q) ||
+        entry.pod.toLowerCase().includes(q) ||
+        entry.namespace.toLowerCase().includes(q) ||
+        entry.container.toLowerCase().includes(q) ||
+        entry.node.toLowerCase().includes(q)
+
+      const matchesLevel = levelFilter === 'all' || entry.level === levelFilter
+
+      return matchesGlobal && matchesLevel
+    })
+  }, [displayedEntries, globalFilter, levelFilter])
 
   // Table columns
   const columns: ColumnDef<LogEntry>[] = React.useMemo(() => ([
@@ -410,28 +383,12 @@ function LogsContent() {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight">Logs</h1>
-              {streamState.status === "connected" && (
-                <div className="flex items-center gap-1.5 text-xs text-green-600">
-                  <div className="size-2 bg-green-500 rounded-full animate-pulse" />
-                  Live
-                </div>
-              )}
-              {streamState.status === "degraded" && (
-                <div className="flex items-center gap-1.5 text-xs text-yellow-600">
-                  <div className="size-2 bg-yellow-500 rounded-full animate-pulse" />
-                  Degraded
-                </div>
-              )}
             </div>
             <p className="text-muted-foreground">
               Monitor and analyze log streams from your Kubernetes cluster
             </p>
           </div>
-          {lastUpdated && (
-            <div className="text-sm text-muted-foreground">
-              <span suppressHydrationWarning>Last updated: {new Date(lastUpdated).toLocaleTimeString()}</span>
-            </div>
-          )}
+          <LiveDataStatusBadge isConnected={streamState.status === "connected"} />
         </div>
       </div>
 
@@ -440,7 +397,6 @@ function LogsContent() {
         cards={summaryData}
         loading={loading}
         error={error}
-        lastUpdated={lastUpdated}
       />
 
       <div className="px-4 lg:px-6 space-y-3">

@@ -30,7 +30,7 @@ export const AppLogo: React.FC<AppLogoProps> = ({ className }) => {
           "
         >
           {/* Looser tracking so it doesn't look squished */}
-          <span className="text-[1.5rem] leading-none font-bold tracking-[0.02em] text-gray-900 dark:text-white">
+          <span className="text-[1.5rem] font-bold leading-none tracking-[0.02em] text-gray-900 dark:text-white">
             Kaptn
           </span>
           {/* Slightly wider tracking for readability; align baseline with K */}

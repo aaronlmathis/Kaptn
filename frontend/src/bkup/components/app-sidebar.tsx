@@ -29,7 +29,6 @@ import { useClusterFeatures } from "@/contexts/cluster-features-context";
 import { useAuth } from "@/contexts/auth-context";
 import { NavSettings } from "./nav-settings";
 
-
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { isMenuExpanded } = useNavigation();
   const { istioInstalled, istioUsed, istio } = useClusterFeatures();
@@ -117,6 +116,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           { title: "CSI Drivers", url: "/csi-drivers" },
         ],
       },
+
       {
         title: "Access Control",
         url: "#",
@@ -127,7 +127,29 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           { title: "Pod Security", url: "/pod-security" },
         ],
       },
+      // {
+      //   title: "Monitoring",
+      //   url: "#",
+      //   icon: IconChartBar,
+      //   items: [
+      //     { title: "Explore Metrics", url: "/metric-explorer" },
+      //     { title: "OpsView", url: "/opsview" },
+      //     { title: "Logs", url: "/logs" },
+      //     { title: "Events", url: "/events" },
+      //   ],
+      // },
+      // {
+      //   title: "Settings",
+      //   url: "#",
+      //   icon: IconSettings,
+      //   items: [
+      //     { title: "Cluster Settings", url: "/settings/cluster" },
+      //     { title: "User Management", url: "/settings/users" },
+      //     { title: "API Settings", url: "/settings/api" },
+      //   ],
+      // },
     ];
+
     // Observability section - flat menu items with individual icons
     const observabilityNavItems = [
       { title: "Metrics", url: "/metric-explorer", icon: IconActivity },
