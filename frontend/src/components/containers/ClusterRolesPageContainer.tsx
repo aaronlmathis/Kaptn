@@ -520,30 +520,7 @@ function ClusterRolesContent() {
 
 	return (
 		<div className="space-y-6">
-			{/* Header with connection status */}
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-between">
-					<div className="space-y-2">
-						<div className="flex items-center gap-2">
-							<h1 className="text-2xl font-bold tracking-tight">Cluster Roles & Cluster Role Bindings</h1>
-							{isConnected && (
-								<div className="flex items-center gap-1.5 text-xs text-green-600">
-									<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-									Live
-								</div>
-							)}
-						</div>
-						<p className="text-muted-foreground">
-							Manage cluster-wide RBAC roles and role bindings in your Kubernetes cluster
-						</p>
-					</div>
-					{lastUpdated && (
-						<div className="text-sm text-muted-foreground">
-							Last updated: {new Date(lastUpdated).toLocaleTimeString()}
-						</div>
-					)}
-				</div>
-			</div>
+
 
 			{/* Summary Cards */}
 			<SummaryCards
@@ -555,7 +532,7 @@ function ClusterRolesContent() {
 
 			{/* Tabbed Content */}
 			<Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-				<div className="px-4 lg:px-6">
+				<div className="px-4 lg:px-6 ">
 					<TabsList className="grid w-full grid-cols-2">
 						<TabsTrigger value="cluster-roles" className="flex items-center gap-2">
 							<IconShield className="size-4" />

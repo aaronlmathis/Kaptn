@@ -247,14 +247,7 @@ function ApiResourcesContent() {
 	return (
 		<div className="space-y-6">
 			{/* Header */}
-			<div className="px-4 lg:px-6">
-				<div className="space-y-2">
-					<h1 className="text-2xl font-bold tracking-tight">API Resources</h1>
-					<p className="text-muted-foreground">
-						View available Kubernetes API resources and their details
-					</p>
-				</div>
-			</div>
+
 
 			<div className="px-4 lg:px-6">
 				<UniversalDataTable
