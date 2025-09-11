@@ -51,7 +51,7 @@ type Server struct {
 	applyService         *actions.ApplyService
 	actionCoordinator    *actions.ActionCoordinator
 	logsService          *k8slogs.StreamManager     // Old streaming service
-	logsCacheService     *logs.Service              // New cache service
+	logsCacheService     logs.LogService            // New cache service
 	logsCoordinator      *k8slogs.StreamCoordinator // Multi-pod log coordinator
 	execService          *exec.ExecManager
 	metricsService       *metrics.MetricsService
@@ -349,9 +349,11 @@ func (s *Server) initKubernetesClient() error {
 	s.logger.Info("📋 Logs cache config loaded",
 		zap.Bool("background_collection_enabled", logsCacheConfig.BackgroundCollectionEnabled),
 		zap.String("background_collection_retention", logsCacheConfig.BackgroundCollectionRetention),
-		zap.String("note", "V2 collector is event-driven (no polling)"))
+		zap.String("note", "Using reliable V3 collector with informer-based design"))
 
-	s.logsCacheService = logs.NewService(logsCacheConfig)
+	// Use the new reliable service
+	reliableService := logs.NewReliableLogService(logsCacheConfig, s.logger)
+	s.logsCacheService = reliableService
 
 	// Initialize logs coordinator (multi-pod streaming)
 	clusterName := s.config.Kubernetes.ClusterName
@@ -361,7 +363,7 @@ func (s *Server) initKubernetesClient() error {
 
 	// Set up background log collection
 	s.logger.Info("🔧 Setting up background log collection")
-	if err := s.logsCacheService.SetBackgroundCollector(s.kubeClient, clusterName); err != nil {
+	if err := reliableService.SetupLogCollector(s.kubeClient, clusterName); err != nil {
 		return fmt.Errorf("failed to set up background log collector: %w", err)
 	}
 	s.logger.Info("✅ Background log collector setup complete")

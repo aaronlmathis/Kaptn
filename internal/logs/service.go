@@ -25,8 +25,8 @@ type Service struct {
 	// Pub/sub
 	bus LogBus
 
-	// Background collection
-	backgroundCollector *BackgroundCollector // Legacy collector (deprecated)
+	// V3 service for reliable operation
+	serviceV3 *ServiceV3
 
 	// Lifecycle
 	stopCh    chan struct{}
@@ -44,8 +44,12 @@ type Service struct {
 	workerMu        sync.RWMutex
 }
 
-// NewService creates a new log service
+// NewService creates a new log service using the reliable V3 implementation
 func NewService(cfg config.LogsServiceConfig) *Service {
+	// For now, create the V3 service and wrap it as a legacy Service
+	// This allows backward compatibility while using the new implementation
+	logger := zap.NewNop() // Will be replaced when SetBackgroundCollector is called
+	
 	s := &Service{
 		config:            cfg,
 		metrics:           NewMetrics(),
@@ -59,7 +63,7 @@ func NewService(cfg config.LogsServiceConfig) *Service {
 
 		adminLimits: AdminLimits{
 			MaxSubscribers:        cfg.MaxSubscribers,
-			MaxStreamsPerUser:     50, // Default limit per user
+			MaxStreamsPerUser:     50, // Default limit per user  
 			MaxBufferSize:         1000,
 			MaxQueryLimit:         10000,
 			MaxExportSize:         100 * 1024 * 1024, // 100MB
@@ -71,65 +75,35 @@ func NewService(cfg config.LogsServiceConfig) *Service {
 		activeStreams: make(map[string]*StreamInfo),
 	}
 
+	// Initialize with a stable V3 implementation internally
+	s.serviceV3 = NewServiceV3(cfg, logger.Named("service-v3"))
+
 	return s
 }
 
 // SetBackgroundCollector sets up the background log collector
 func (s *Service) SetBackgroundCollector(kubeClient kubernetes.Interface, clusterName string) error {
-	s.opLogger.logger.Info("🔧 SetBackgroundCollector called",
-		zap.Bool("enabled", s.config.BackgroundCollectionEnabled),
-		zap.String("cluster", clusterName))
-
-	if !s.config.BackgroundCollectionEnabled {
-		s.opLogger.LogServiceState("background_collection", "disabled", map[string]interface{}{
-			"reason": "background_collection_enabled is false",
-		})
-		s.opLogger.logger.Info("❌ Background collection disabled in config")
-		return nil
+	// Set up logger properly now that we have one
+	logger := s.opLogger.logger
+	if logger == nil {
+		logger = zap.NewNop()
 	}
 
-	// Parse retention duration
-	retention, err := time.ParseDuration(s.config.BackgroundCollectionRetention)
-	if err != nil {
-		s.opLogger.logger.Error("❌ Failed to parse background collection retention",
-			zap.String("retention", s.config.BackgroundCollectionRetention),
-			zap.Error(err))
-		return fmt.Errorf("invalid background collection retention: %w", err)
-	}
+	// Replace serviceV3 with proper logger
+	s.serviceV3 = NewServiceV3(s.config, logger)
 
-	s.opLogger.logger.Info("⏱️ Parsed background collection config",
-		zap.Duration("retention", retention),
-		zap.String("note", "V2 uses event-driven collection (no interval)"))
-
-	// Create the new event-driven background collector
-	s.backgroundCollector = NewBackgroundCollector(
-		s.opLogger.logger,
-		kubeClient,
-		s,
-		clusterName,
-		s.config.BackgroundCollectionEnabled,
-		retention,
-		100, // Start with last 100 lines per container
-	)
-
-	s.opLogger.logger.Info("✅ Background collector V2 created successfully")
-
-	s.opLogger.LogServiceState("background_collection", "configured", map[string]interface{}{
-		"retention":  retention.String(),
-		"interval":   "event-driven", // No longer interval-based
-		"tail_lines": int64(100),
-		"cluster":    clusterName,
-		"version":    "v2-event-driven",
-	})
-
-	return nil
+	// Delegate to V3 service
+	return s.serviceV3.SetupLogCollector(kubeClient, clusterName)
 }
 
 // Start starts the service and background workers
 func (s *Service) Start(ctx context.Context) error {
-	s.opLogger.logger.Info("🚀 Starting logs service",
-		zap.Bool("has_background_collector", s.backgroundCollector != nil))
+	// Delegate to the reliable V3 service
+	if s.serviceV3 != nil {
+		return s.serviceV3.Start(ctx)
+	}
 
+	// Fallback to original implementation if V3 not available
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -138,102 +112,94 @@ func (s *Service) Start(ctx context.Context) error {
 		return nil // Already started
 	}
 
-	// Start background goroutines
-	s.opLogger.logger.Info("🔄 Starting background workers")
-	go s.evictionWorker()
-	go s.cleanupWorker()
-	go s.metricsWorker()
+	s.opLogger.logger.Info("� Starting logs service (fallback mode)")
+	
+	// Start background goroutines with error recovery
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.opLogger.logger.Error("Eviction worker panic recovered", zap.Any("panic", r))
+			}
+		}()
+		s.evictionWorker()
+	}()
 
-	// Start background log collection if enabled
-	if s.backgroundCollector != nil {
-		s.opLogger.logger.Info("🎯 Starting background log collector")
-		if err := s.backgroundCollector.Start(ctx); err != nil {
-			s.opLogger.logger.Error("❌ Failed to start background collector", zap.Error(err))
-			return fmt.Errorf("failed to start background log collector: %w", err)
-		}
-		s.opLogger.LogServiceState("background_collection", "started", map[string]interface{}{
-			"enabled": true,
-			"version": "v2-event-driven",
-		})
-		s.opLogger.logger.Info("✅ Background collector started successfully")
-	} else {
-		s.opLogger.logger.Warn("⚠️ No background collector to start (nil)")
-	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.opLogger.logger.Error("Cleanup worker panic recovered", zap.Any("panic", r))
+			}
+		}()
+		s.cleanupWorker()
+	}()
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.opLogger.logger.Error("Metrics worker panic recovered", zap.Any("panic", r))
+			}
+		}()
+		s.metricsWorker()
+	}()
 
 	s.started = true
 	s.startTime = time.Now()
 
-	// Log service startup
-	s.opLogger.LogServiceState("start", "running", map[string]interface{}{
-		"global_max_entries": s.config.GlobalMaxEntries,
-		"scope_max_entries":  s.config.ScopeMaxEntries,
-		"max_subscribers":    s.config.MaxSubscribers,
-		"buffer_size":        s.config.BufferSize,
-	})
-
+	s.opLogger.logger.Info("✅ Logs service started successfully (fallback mode)")
 	return nil
 }
 
 // Ingest accepts a log entry from collectors or mini-stern
-func (s *Service) Ingest(e LogEntry) {
-	// Normalize the entry
-	normalized := NormalizeLogEntry(e)
+func (s *Service) Ingest(entry LogEntry) {
+	// Delegate to V3 service if available
+	if s.serviceV3 != nil {
+		s.serviceV3.Ingest(entry)
+		return
+	}
 
-	s.opLogger.logger.Debug("📥 Ingesting log entry",
-		zap.String("pod", normalized.Pod),
-		zap.String("namespace", normalized.Namespace),
-		zap.String("level", normalized.Level),
-		zap.String("message_preview", func() string {
-			if len(normalized.Msg) > 50 {
-				return normalized.Msg[:50] + "..."
-			}
-			return normalized.Msg
-		}()))
-
-	// Record metrics
-	entrySize := estimateEntrySize(normalized)
-	s.metrics.RecordIngest(entrySize)
-	s.prometheusMetrics.RecordIngest(entrySize)
-
-	// Add to global ring
-	s.globalRing.Append(normalized)
-	s.metrics.SetGlobalRingSize(s.globalRing.Size())
-
-	// Add to scoped rings
-	s.addToScopedRings(normalized)
-
-	// Publish to subscribers
-	s.bus.Publish(normalized)
+	// Fallback implementation
+	s.globalRing.Append(entry)
+	s.bus.Publish(entry)
 }
 
 // Replay returns historical log entries matching the filter
-func (s *Service) Replay(f LogFilter) []LogEntry {
-	start := time.Now()
-	defer func() {
-		duration := time.Since(start).Milliseconds()
-		s.metrics.RecordQuery(duration)
-		s.prometheusMetrics.RecordQuery()
-	}()
+func (s *Service) Replay(filter LogFilter) []LogEntry {
+	// Delegate to V3 service if available
+	if s.serviceV3 != nil {
+		return s.serviceV3.Replay(filter)
+	}
 
-	// For now, query the global ring
-	// Later we can optimize by choosing the best ring based on filter
-	return s.globalRing.Query(f)
+	// Fallback implementation
+	return s.globalRing.Query(filter)
 }
 
 // Stream creates a live stream of log entries matching the filter
-func (s *Service) Stream(f LogFilter) (<-chan LogEntry, func()) {
-	s.metrics.RecordSubscription()
-	s.prometheusMetrics.RecordSubscription()
+func (s *Service) Stream(filter LogFilter) (<-chan LogEntry, func()) {
+	// Delegate to V3 service if available
+	if s.serviceV3 != nil {
+		return s.serviceV3.Stream(filter)
+	}
 
-	// Generate unique stream ID for tracking
-	streamID := fmt.Sprintf("stream-%d-%d", time.Now().UnixNano(), s.metrics.SubscriptionsTotal)
-	subscriberID := fmt.Sprintf("sub-%d", time.Now().UnixNano())
+	// Fallback implementation
+	return s.bus.Subscribe(filter)
+}
 
-	// Track the stream
-	s.trackStream(streamID, subscriberID, f)
+// RecordExport records export metrics
+func (s *Service) RecordExport(format string, bytesExported int64, durationMs int64) {
+	// Delegate to V3 service if available
+	if s.serviceV3 != nil {
+		s.serviceV3.RecordExport(format, bytesExported, durationMs)
+		return
+	}
 
-	// Create output channel
-	outputCh := make(chan LogEntry, s.config.BufferSize)
+	// Fallback - just log
+	s.opLogger.logger.Debug("Export recorded",
+		zap.String("format", format),
+		zap.Int64("bytes", bytesExported),
+		zap.Int64("duration_ms", durationMs))
+}
+
+// Stop shuts down the service and cleans up resources
 
 	// Subscribe to live events
 	liveCh, liveCancel := s.bus.Subscribe(f)
