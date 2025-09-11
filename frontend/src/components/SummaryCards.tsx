@@ -35,12 +35,12 @@ export function SummaryCards({
 	lastUpdated = null,
 	noPadding = false
 }: SummaryCardsProps) {
-    // Show skeleton only on initial load or when no cards to display.
-    // Avoid flashing skeleton during background refresh when data already present.
-    if (loading && (!cards || cards.length === 0)) {
-        return (
-            <div
-                className={`
+	// Show skeleton only on initial load or when no cards to display.
+	// Avoid flashing skeleton during background refresh when data already present.
+	if (loading && (!cards || cards.length === 0)) {
+		return (
+			<div
+				className={`
 		        /* slot‐based card styles */
 		        [data-slot=card]:bg-gradient-to-t
 		        [data-slot=card]:from-primary/5
@@ -98,36 +98,10 @@ export function SummaryCards({
 		return null
 	}
 
-	// Helper function to format the last updated time
-	const formatLastUpdated = (timestamp: string | null) => {
-		if (!timestamp) return null
 
-		try {
-			const date = new Date(timestamp)
-			const now = new Date()
-			const diffMs = now.getTime() - date.getTime()
-			const diffMinutes = Math.floor(diffMs / 60000)
-
-			if (diffMinutes < 1) return 'Updated just now'
-			if (diffMinutes < 60) return `Updated ${diffMinutes}m ago`
-
-			const diffHours = Math.floor(diffMinutes / 60)
-			if (diffHours < 24) return `Updated ${diffHours}h ago`
-
-			return `Updated ${date.toLocaleDateString()}`
-		} catch {
-			return null
-		}
-	}
 
 	return (
 		<div className={noPadding ? 'mb-6' : 'px-4 lg:px-6 mb-6'}>
-			{/* Last Updated Info */}
-			{lastUpdated && (
-				<div className="mb-4 text-sm text-muted-foreground">
-					{formatLastUpdated(lastUpdated)}
-				</div>
-			)}
 
 			{/* Summary Cards Grid */}
 			<div

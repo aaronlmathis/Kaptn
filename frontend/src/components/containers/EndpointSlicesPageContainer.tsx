@@ -430,30 +430,7 @@ function EndpointSlicesContent() {
 
 	return (
 		<div className="space-y-6">
-			{/* Header with connection status */}
-			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-between">
-					<div className="space-y-2">
-						<div className="flex items-center gap-2">
-							<h1 className="text-2xl font-bold tracking-tight">Endpoint Slices</h1>
-							{isConnected && (
-								<div className="flex items-center gap-1.5 text-xs text-green-600">
-									<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-									Live
-								</div>
-							)}
-						</div>
-						<p className="text-muted-foreground">
-							Manage and monitor endpoint slice resources in your Kubernetes cluster
-						</p>
-					</div>
-					{lastUpdated && (
-						<div className="text-sm text-muted-foreground">
-							<span suppressHydrationWarning>Last updated: {new Date(lastUpdated).toLocaleTimeString()}</span>
-						</div>
-					)}
-				</div>
-			</div>
+
 
 			{/* Summary Cards */}
 			<SummaryCards
@@ -508,12 +485,6 @@ function EndpointSlicesContent() {
 								table={table}
 								showColumnToggle={true}
 							/>
-							{isConnected && (
-								<div className="flex items-center space-x-1 text-xs text-green-600">
-									<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-									<span>Real-time updates enabled</span>
-								</div>
-							)}
 						</div>
 					)}
 				/>

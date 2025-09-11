@@ -294,20 +294,7 @@ function HPAsContent() {
 
   return (
     <>
-      <div className="px-4 lg:px-6">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold tracking-tight">Horizontal Pod Autoscalers</h1>
-            {isConnected && (
-              <div className="flex items-center space-x-1 text-xs text-green-600">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span>Real-time updates enabled</span>
-              </div>
-            )}
-          </div>
-          <p className="text-muted-foreground">View and monitor HPA status and scaling activity</p>
-        </div>
-      </div>
+
 
       <SummaryCards cards={summaryData} loading={isLoading} error={error} lastUpdated={lastUpdated} />
 

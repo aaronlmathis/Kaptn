@@ -400,22 +400,7 @@ function ResourceQuotasContent() {
 
 	return (
 		<>
-			<div className="px-4 lg:px-6">
-				<div className="space-y-2">
-					<div className="flex items-center justify-between">
-						<h1 className="text-2xl font-bold tracking-tight">Resource Quotas</h1>
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Real-time updates enabled</span>
-							</div>
-						)}
-					</div>
-					<p className="text-muted-foreground">
-						Manage and monitor resource quota limits in your Kubernetes cluster
-					</p>
-				</div>
-			</div>
+
 
 			<SummaryCards
 				cards={summaryData}
@@ -423,48 +408,44 @@ function ResourceQuotasContent() {
 				error={error}
 				lastUpdated={lastUpdated}
 			/>
+			<div className="px-4 lg:px-6">
 
-			<UniversalDataTable
-				data={filteredData}
-				columns={columns}
-				enableReorder={false}
-				enableRowSelection={true}
-				loading={isLoading}
-				error={error}
-				bulkActions={bulkActions}
-				renderFilters={({ table, selectedCount, totalCount }) => (
-					<DataTableFilters
-						globalFilter={globalFilter}
-						onGlobalFilterChange={setGlobalFilter}
-						searchPlaceholder="Search ResourceQuotas by name, namespace, limits, or usage... (Press '/' to focus)"
-						categoryFilter={resourceTypeFilter}
-						onCategoryFilterChange={setResourceTypeFilter}
-						categoryLabel="Filter by resource type"
-						categoryOptions={resourceTypeFilters}
-						selectedCount={selectedCount}
-						totalCount={totalCount}
-						bulkActions={bulkActions.map(a => ({
-							id: a.id,
-							label: a.label,
-							icon: a.icon,
-							variant: a.variant === "destructive" ? "destructive" : "default",
-							requiresSelection: a.requiresSelection,
-							action: () => a.action(table.getFilteredSelectedRowModel().rows.map((row: Row<DashboardResourceQuota>) => row.original))
-						}))}
-						table={table}
-						showColumnToggle={true}
-					>
-						{/* Real-time updates indicator */}
-						{isConnected && (
-							<div className="flex items-center space-x-1 text-xs text-green-600">
-								<div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-								<span>Live updates</span>
-							</div>
-						)}
-					</DataTableFilters>
-				)}
-			/>
 
+				<UniversalDataTable
+					data={filteredData}
+					columns={columns}
+					enableReorder={false}
+					enableRowSelection={true}
+					loading={isLoading}
+					error={error}
+					bulkActions={bulkActions}
+					renderFilters={({ table, selectedCount, totalCount }) => (
+						<DataTableFilters
+							globalFilter={globalFilter}
+							onGlobalFilterChange={setGlobalFilter}
+							searchPlaceholder="Search ResourceQuotas by name, namespace, limits, or usage... (Press '/' to focus)"
+							categoryFilter={resourceTypeFilter}
+							onCategoryFilterChange={setResourceTypeFilter}
+							categoryLabel="Filter by resource type"
+							categoryOptions={resourceTypeFilters}
+							selectedCount={selectedCount}
+							totalCount={totalCount}
+							bulkActions={bulkActions.map(a => ({
+								id: a.id,
+								label: a.label,
+								icon: a.icon,
+								variant: a.variant === "destructive" ? "destructive" : "default",
+								requiresSelection: a.requiresSelection,
+								action: () => a.action(table.getFilteredSelectedRowModel().rows.map((row: Row<DashboardResourceQuota>) => row.original))
+							}))}
+							table={table}
+							showColumnToggle={true}
+						>
+
+						</DataTableFilters>
+					)}
+				/>
+			</div>
 			{/* Detail drawer */}
 			{selectedResourceQuotaForDetails && (
 				<ResourceQuotaDetailDrawer

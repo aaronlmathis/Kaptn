@@ -7,11 +7,8 @@ import { CodeEditor } from "@/components/CodeEditor"
 function ApplyContent() {
 	return (
 		<div className="px-4 lg:px-6">
-			<div className="space-y-2">
-				<h1 className="text-2xl font-bold tracking-tight">Apply Configuration</h1>
-				<p className="text-muted-foreground">
-					Apply or update configurations for your kubernetes resources.
-				</p>
+			<div className="space-y-3">
+
 
 				<CodeEditor />
 			</div>

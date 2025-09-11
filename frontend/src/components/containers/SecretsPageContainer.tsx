@@ -536,33 +536,14 @@ function SecretsContent() {
 		<div className="space-y-6">
 			{/* Header with connection status */}
 			<div className="px-4 lg:px-6">
-				<div className="flex items-center justify-between">
-					<div className="space-y-2">
-						<div className="flex items-center gap-2">
-							<h1 className="text-2xl font-bold tracking-tight">Secrets</h1>
-							{isConnected && (
-								<div className="flex items-center gap-1.5 text-xs text-green-600">
-									<div className="size-2 bg-green-500 rounded-full animate-pulse" />
-									Live
-								</div>
-							)}
-						</div>
-						<p className="text-muted-foreground">
-							Manage and monitor secret resources in your Kubernetes cluster
-						</p>
-						{/* Security reminder */}
-						<div className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 bg-transparent px-4 py-3 rounded-lg border-2 border-orange-400 dark:border-orange-600">
-							<IconExclamationCircle className="size-4 text-orange-600 dark:text-orange-400" />
-							<span>Secret values are hidden by default for security. Click to reveal individual values.</span>
-						</div>
-					</div>
-					{lastUpdated && typeof window !== 'undefined' && (
-						<div className="text-sm text-muted-foreground">
-							Last updated: {new Date(lastUpdated).toLocaleTimeString()}
-						</div>
-					)}
+
+				{/* Security reminder */}
+				<div className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 bg-transparent px-4 py-3 rounded-lg border-2 border-orange-400 dark:border-orange-600">
+					<IconExclamationCircle className="size-4 text-orange-600 dark:text-orange-400" />
+					<span>Secret values are hidden by default for security. Click to reveal individual values.</span>
 				</div>
 			</div>
+
 
 			{/* Summary Cards */}
 			<SummaryCards
