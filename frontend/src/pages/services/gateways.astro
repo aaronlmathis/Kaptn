@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { GatewaysPageContainer } from "@/components/containers/GatewaysPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "Gateways";
+---
+
+<Layout title={title}>
+<AppShell client:load>
+  <GatewaysPageContainer />
+</AppShell>
+</Layout>
+

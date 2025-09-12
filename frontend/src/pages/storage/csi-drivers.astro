@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { CSIDriversPageContainer } from "@/components/containers/CSIDriversPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "CSI Drivers";
+---
+
+<Layout title={title}>
+<AppShell client:load>
+  <CSIDriversPageContainer />
+</AppShell>
+</Layout>
+

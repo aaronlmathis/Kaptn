@@ -93,22 +93,44 @@ func (im *ImpersonationManager) BuildClientsFromUserWithGroups(user *auth.User, 
 
 // formatUsername applies the configured username format
 func (im *ImpersonationManager) formatUsername(user *auth.User, format string) string {
-	if format == "" {
-		// Default format: prefer sub over email
-		if user.Sub != "" {
-			return fmt.Sprintf("oidc:%s", user.Sub)
-		}
-		return fmt.Sprintf("email:%s", user.Email)
-	}
+    // Default behavior when no format is provided: prefer sub over email
+    if format == "" {
+        if user.Sub != "" {
+            return fmt.Sprintf("oidc:%s", user.Sub)
+        }
+        if user.Email != "" {
+            return fmt.Sprintf("email:%s", user.Email)
+        }
+        // Robust fallback
+        if user.ID != "" {
+            return fmt.Sprintf("user:%s", user.ID)
+        }
+        return "anonymous"
+    }
 
-	// Apply format replacements
-	username := format
-	username = strings.ReplaceAll(username, "{sub}", user.Sub)
-	username = strings.ReplaceAll(username, "{email}", user.Email)
-	username = strings.ReplaceAll(username, "{name}", user.Name)
-	username = strings.ReplaceAll(username, "{id}", user.ID)
+    // Apply format replacements
+    username := format
+    username = strings.ReplaceAll(username, "{sub}", user.Sub)
+    username = strings.ReplaceAll(username, "{email}", user.Email)
+    username = strings.ReplaceAll(username, "{name}", user.Name)
+    username = strings.ReplaceAll(username, "{id}", user.ID)
 
-	return username
+    // If the formatted username is effectively empty (e.g., "email:"), fall back to defaults
+    trimmed := strings.TrimSpace(username)
+    if trimmed == "" || strings.HasSuffix(trimmed, ":") {
+        if user.Sub != "" {
+            return fmt.Sprintf("oidc:%s", user.Sub)
+        }
+        if user.Email != "" {
+            return fmt.Sprintf("email:%s", user.Email)
+        }
+        if user.ID != "" {
+            return fmt.Sprintf("user:%s", user.ID)
+        }
+        return "anonymous"
+    }
+
+    return username
 }
 
 // SSARHelper returns the SSAR helper

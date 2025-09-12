@@ -194,8 +194,9 @@ func (sm *StreamManager) streamContainerLogs(stream *LogStream, containerName st
 	}
 	defer logStream.Close()
 
-	// Read logs line by line
-	scanner := bufio.NewScanner(logStream)
+    // Read logs line by line with a safe buffer (default 256KB)
+    scanner := bufio.NewScanner(logStream)
+    scanner.Buffer(make([]byte, 64*1024), 256*1024)
 	for scanner.Scan() {
 		select {
 		case <-stream.ctx.Done():

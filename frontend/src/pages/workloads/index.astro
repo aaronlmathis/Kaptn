@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { AppShell } from "@/components/AppShell";
+import { WorkloadsPageContainer } from "@/components/pages/WorkloadsPageContainer";
+
+const title = "Workloads";
+---
+
+<Layout title={title}>
+  <AppShell client:load>
+    <WorkloadsPageContainer />
+  </AppShell>
+</Layout>
+

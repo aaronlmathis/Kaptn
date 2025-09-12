@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { StorageClassesPageContainer } from "@/components/containers/StorageClassesPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "Storage Classes";
+---
+
+<Layout title={title}>
+<AppShell client:load>
+  <StorageClassesPageContainer />
+</AppShell>
+</Layout>
+

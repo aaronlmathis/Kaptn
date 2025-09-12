@@ -66,7 +66,17 @@ caching:
     # Background log collection - automatically collects logs from all pods (V2 - Event-driven)
     background_collection_enabled: true
     background_collection_retention: "1h"
-    # Note: background_collection_interval is obsolete in V2 (event-driven collection)
+    # Collection mode and interval
+    #   stream: follow live logs (default)
+    #   poll:   fetch logs every poll_interval (lighter on API server)
+    background_collection_mode: "stream"     # or "poll"
+    background_collection_poll_interval: "10s"
+    background_collection_tail_lines: 100
+
+    # Max per-line size (bytes) read from logs to protect memory
+    max_log_line_bytes: 262144   # 256KB
+    # Optional: informer resync period (advanced). 0s disables periodic resync.
+    informer_resync: "0s"
     
     # Operational limits (Phase 10)
     max_streams_per_user: 50

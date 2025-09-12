@@ -44,13 +44,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       url: "/services",
       icon: IconTopologyStar,
       items: [
-        { title: "Services", url: "/services" },
-        { title: "Endpoints", url: "/endpoints" },
-        { title: "Endpoint Slices", url: "/endpoint-slices" },
-        { title: "Ingresses", url: "/ingresses" },
-        { title: "Ingress Classes", url: "/ingress-classes" },
-        { title: "Network Policies", url: "/network-policies" },
-        { title: "Load Balancers", url: "/load-balancers" },
+        { title: "Endpoints", url: "/services/endpoints" },
+        { title: "Endpoint Slices", url: "/services/endpoint-slices" },
+        { title: "Ingresses", url: "/services/ingresses" },
+        { title: "Ingress Classes", url: "/services/ingress-classes" },
+        { title: "Network Policies", url: "/services/network-policies" },
+        { title: "Load Balancers", url: "/services/load-balancers" },
       ],
     };
 
@@ -59,10 +58,10 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       const vsCount = istio?.counts?.virtualservices ?? 0;
       const gwCount = istio?.counts?.gateways ?? 0;
       if (vsCount > 0) {
-        servicesNav.items.push({ title: "Virtual Services", url: "/virtual-services" });
+        servicesNav.items.push({ title: "Virtual Services", url: "/services/virtual-services" });
       }
       if (gwCount > 0) {
-        servicesNav.items.push({ title: "Gateways", url: "/gateways" });
+        servicesNav.items.push({ title: "Gateways", url: "/services/gateways" });
       }
     }
 
@@ -74,57 +73,57 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         url: "/cluster",
         icon: IconHexagons,
         items: [
-          { title: "Nodes", url: "/nodes" },
-          { title: "Namespaces", url: "/namespaces" },
-          { title: "Resource Quotas", url: "/resource-quotas" },
-          { title: "API Resources", url: "/api-resources" },
-          { title: "CRDs", url: "/crds" },
-          { title: "Roles & RoleBindings", url: "/roles" },
-          { title: "ClusterRoles & Bindings", url: "/cluster-roles" },
-          { title: "Component Status", url: "/component-status" },
-          { title: "Certificates", url: "/certificates" },
-          { title: "Version & Upgrades", url: "/version-upgrades" },
+          { title: "Nodes", url: "/cluster/nodes" },
+          { title: "Namespaces", url: "/cluster/namespaces" },
+          { title: "Resource Quotas", url: "/cluster/resource-quotas" },
+          { title: "API Resources", url: "/cluster/api-resources" },
+          { title: "CRDs", url: "/cluster/crds" },
+          { title: "Roles & RoleBindings", url: "/cluster/roles" },
+          { title: "ClusterRoles & Bindings", url: "/cluster/cluster-roles" },
+          { title: "Component Status", url: "/cluster/component-status" },
+          { title: "Certificates", url: "/cluster/certificates" },
+          { title: "Version & Upgrades", url: "/cluster/version-upgrades" },
         ],
       },
       {
         title: "Workloads",
-        url: "#",
+        url: "/workloads",
         icon: IconCloudComputing,
         items: [
-          { title: "Pods", url: "/pods" },
-          { title: "Deployments", url: "/deployments" },
-          { title: "ReplicaSets", url: "/replicasets" },
-          { title: "StatefulSets", url: "/statefulsets" },
-          { title: "DaemonSets", url: "/daemonsets" },
-          { title: "HPAs", url: "/hpas" },
-          { title: "Jobs", url: "/jobs" },
-          { title: "CronJobs", url: "/cronjobs" },
+          { title: "Pods", url: "/workloads/pods" },
+          { title: "Deployments", url: "/workloads/deployments" },
+          { title: "ReplicaSets", url: "/workloads/replicasets" },
+          { title: "StatefulSets", url: "/workloads/statefulsets" },
+          { title: "DaemonSets", url: "/workloads/daemonsets" },
+          { title: "HPAs", url: "/workloads/hpas" },
+          { title: "Jobs", url: "/workloads/jobs" },
+          { title: "CronJobs", url: "/workloads/cronjobs" },
         ],
       },
       servicesNav,
       {
         title: "Config & Storage",
-        url: "#",
+        url: "/storage",
         icon: IconDatabase,
         items: [
-          { title: "ConfigMaps", url: "/config-maps" },
-          { title: "Secrets", url: "/secrets" },
-          { title: "Persistent Volumes", url: "/persistent-volumes" },
-          { title: "Persistent Volume Claims", url: "/persistent-volume-claims" },
-          { title: "Storage Classes", url: "/storage-classes" },
-          { title: "Volume Snapshots", url: "/volume-snapshots" },
-          { title: "Volume Snapshot Classes", url: "/volume-snapshot-classes" },
-          { title: "CSI Drivers", url: "/csi-drivers" },
+          { title: "ConfigMaps", url: "/storage/config-maps" },
+          { title: "Secrets", url: "/storage/secrets" },
+          { title: "Persistent Volumes", url: "/storage/persistent-volumes" },
+          { title: "Persistent Volume Claims", url: "/storage/persistent-volume-claims" },
+          { title: "Storage Classes", url: "/storage/storage-classes" },
+          { title: "Volume Snapshots", url: "/storage/volume-snapshots" },
+          { title: "Volume Snapshot Classes", url: "/storage/volume-snapshot-classes" },
+          { title: "CSI Drivers", url: "/storage/csi-drivers" },
         ],
       },
       {
         title: "Access Control",
-        url: "#",
+        url: "/access",
         icon: IconShield,
         items: [
-          { title: "RBAC", url: "/rbac" },
-          { title: "Service Accounts", url: "/service-accounts" },
-          { title: "Pod Security", url: "/pod-security" },
+          { title: "RBAC", url: "/access/rbac" },
+          { title: "Service Accounts", url: "/access/service-accounts" },
+          { title: "Pod Security", url: "/access/pod-security" },
         ],
       },
     ];

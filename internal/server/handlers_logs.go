@@ -273,10 +273,10 @@ func (s *Server) parseLogFilter(r *http.Request) (logs.LogFilter, error) {
 		return filter, fmt.Errorf("since time cannot be after until time")
 	}
 
-	// If no time range specified for regular queries, default to last 15 minutes
-	if filter.Since.IsZero() && filter.Until.IsZero() && r.URL.Path != "/api/v1/logs/export" {
-		filter.Since = time.Now().Add(-15 * time.Minute)
-	}
+    // If no time range specified, default to last 1 hour (aligns with logs TTL defaults)
+    if filter.Since.IsZero() && filter.Until.IsZero() && r.URL.Path != "/api/v1/logs/export" {
+        filter.Since = time.Now().Add(-1 * time.Hour)
+    }
 
 	return filter, nil
 }

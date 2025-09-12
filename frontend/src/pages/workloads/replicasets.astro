@@ -1,0 +1,12 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { ReplicaSetsPageContainer } from "@/components/containers/ReplicaSetsPageContainer";
+import { AppShell } from "@/components/AppShell";
+---
+
+<Layout title="ReplicaSets">
+  <AppShell client:load>
+    <ReplicaSetsPageContainer />
+  </AppShell>
+</Layout>
+

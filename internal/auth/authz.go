@@ -70,6 +70,9 @@ func (a *AuthzResolver) ResolveAuthorization(ctx context.Context, userInfo *User
 
 	// Format the username according to configuration
 	username := a.formatUsername(userInfo, usernameFormat)
+	if username == "" {
+		return nil, fmt.Errorf("failed to format username - missing required user fields")
+	}
 
 	// Resolve groups using the configured resolver
 	groups, err := a.groupResolver.ResolveGroups(ctx, userInfo)
@@ -89,6 +92,21 @@ func (a *AuthzResolver) ResolveAuthorization(ctx context.Context, userInfo *User
 
 // formatUsername applies the configured username format
 func (a *AuthzResolver) formatUsername(userInfo *User, format string) string {
+	// Validate required fields before formatting
+	if userInfo.Email == "" && strings.Contains(format, "{email}") {
+		a.logger.Error("Cannot format username - missing email",
+			zap.String("format", format),
+			zap.String("userID", userInfo.ID))
+		return ""
+	}
+
+	if userInfo.Sub == "" && strings.Contains(format, "{sub}") {
+		a.logger.Error("Cannot format username - missing subject",
+			zap.String("format", format),
+			zap.String("userID", userInfo.ID))
+		return ""
+	}
+
 	// Replace placeholders in the format string
 	username := format
 	username = strings.ReplaceAll(username, "{sub}", userInfo.Sub)

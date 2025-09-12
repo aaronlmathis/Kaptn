@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { ResourceQuotasPageContainer } from "@/components/containers/ResourceQuotasPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "Resource Quotas";
+---
+
+<Layout title={title}>
+<AppShell client:load>
+  <ResourceQuotasPageContainer />
+</AppShell>
+</Layout>
+

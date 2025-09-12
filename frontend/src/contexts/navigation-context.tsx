@@ -38,29 +38,23 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
 		return window.location.pathname || "/";
 	});
 
-	// Restore per-menu state from storage ONLY after hydration
-	const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
-	const [isHydrated, setIsHydrated] = useState(false);
+	// Restore per-menu state from storage synchronously to avoid flash
+	const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => {
+		if (typeof window === "undefined") return {};
+		try {
+			const raw = localStorage.getItem("kaptn.sidebar.menus");
+			return raw ? JSON.parse(raw) : {};
+		} catch {
+			return {};
+		}
+	});
+	const [isHydrated, setIsHydrated] = useState(true);
 
 	// Page title state
 	const [pageTitle, setPageTitleState] = useState("Home");
 	const [pageSubtitle, setPageSubtitleState] = useState<string | undefined>(undefined);
 
-	// Load saved menu state after hydration to prevent SSR mismatch
-	useEffect(() => {
-		if (typeof window !== "undefined") {
-			try {
-				const raw = localStorage.getItem("kaptn.sidebar.menus");
-				if (raw) {
-					setExpandedMenus(JSON.parse(raw));
-				}
-			} catch {
-				// Ignore localStorage errors
-			}
-			// Set hydrated after attempting to load state
-			setIsHydrated(true);
-		}
-	}, []);
+	// isHydrated is true immediately in client-only islands; no deferred load needed
 
 	// Simple breadcrumbs (trim as you like)
 	const breadcrumbsMap: Record<string, BreadcrumbItem[]> = useMemo(

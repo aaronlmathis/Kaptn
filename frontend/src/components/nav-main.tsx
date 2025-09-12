@@ -20,6 +20,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  SidebarMenuAction,
 } from "@/components/ui/sidebar";
 
 type Item = {
@@ -88,9 +89,8 @@ function NavGroupItem({ item }: { item: Item }) {
     setMenuExpanded,
   } = useNavigation();
 
-  // Always start with false to ensure SSR/client consistency
-  const [internalOpen, setInternalOpen] = React.useState(false);
   const [childActive, setChildActive] = React.useState(false);
+  const [selfActive, setSelfActive] = React.useState(false);
 
   // Calculate if any child is active after hydration
   React.useEffect(() => {
@@ -102,51 +102,62 @@ function NavGroupItem({ item }: { item: Item }) {
     });
 
     setChildActive(active);
+    setSelfActive(item.url !== "#" && currentPath === item.url);
   }, [isHydrated, currentPath, item.items]);
 
-  // Initialize open state after hydration to prevent SSR mismatch
-  React.useEffect(() => {
-    if (!isHydrated) return;
-
+  // Derive open state from persisted menu state or child activity (no internal state)
+  const open = React.useMemo(() => {
+    if (!isHydrated) return false;
     if (hasMenuState(item.title)) {
-      // Use saved preference
-      setInternalOpen(isMenuExpanded(item.title));
-    } else if (childActive) {
-      // Auto-expand when a child is active (only if no saved state)
-      setMenuExpanded(item.title, true);
-      setInternalOpen(true);
+      return isMenuExpanded(item.title);
     }
-  }, [isHydrated, childActive, hasMenuState, isMenuExpanded, item.title, setMenuExpanded]);
+    return childActive || selfActive; // auto-expand when a child or the section page is active and no saved state exists yet
+  }, [childActive, selfActive, hasMenuState, isHydrated, isMenuExpanded, item.title]);
 
-  const open = internalOpen;
+  const isActive = isHydrated ? (childActive || selfActive) : false;
 
   return (
     <Collapsible
       asChild
-      open={isHydrated ? open : false} // Always false during SSR
+      open={isHydrated ? open : false}
       onOpenChange={(nextOpen) => {
-        if (!isHydrated) return; // Prevent state changes during SSR
-        setInternalOpen(nextOpen);
+        if (!isHydrated) return;
         setMenuExpanded(item.title, nextOpen);
       }}
       className="group/collapsible"
-      suppressHydrationWarning={true} // Suppress hydration warnings for this component
+      suppressHydrationWarning={true}
     >
       <SidebarMenuItem>
-        <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.title} isActive={isHydrated ? childActive : false}>
+        {/* Row behaves as link and toggle:
+            - Primary left click: expands when closed; navigates when already open
+            - Modified/middle click: navigate (no toggle)
+        */}
+        <SidebarMenuButton tooltip={item.title} isActive={isActive} asChild>
+          <a
+            href={item.url}
+            onClick={(e) => {
+              if (!isHydrated) return;
+              // Always persist expansion, then allow navigation
+              setMenuExpanded(item.title, true);
+            }}
+          >
             {item.icon && <item.icon />}
             <span>{item.title}</span>
+          </a>
+        </SidebarMenuButton>
+
+        {/* Caret toggle on the right (also toggles) */}
+        <CollapsibleTrigger asChild>
+          <SidebarMenuAction aria-label={`Toggle ${item.title} navigation`}>
             <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-          </SidebarMenuButton>
+          </SidebarMenuAction>
         </CollapsibleTrigger>
+
         <CollapsibleContent suppressHydrationWarning={true}>
           <SidebarMenuSub>
-            {(item.items ?? []).map((subItem) => {
-              return (
-                <SubMenuItem key={subItem.title} subItem={subItem} />
-              );
-            })}
+            {(item.items ?? []).map((subItem) => (
+              <SubMenuItem key={subItem.title} subItem={subItem} />
+            ))}
           </SidebarMenuSub>
         </CollapsibleContent>
       </SidebarMenuItem>

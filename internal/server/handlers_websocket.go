@@ -48,13 +48,62 @@ func (s *Server) HandleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if the stream exists (verify it was started via coordinator)
-	activeStreams := s.logsCoordinator.GetActiveStreams()
-	selector, exists := activeStreams[streamID]
-	if !exists {
-		http.Error(w, "Log stream not found or inactive", http.StatusNotFound)
-		return
-	}
+    // Check if the stream exists; if not, try to auto-start from query params for convenience
+    activeStreams := s.logsCoordinator.GetActiveStreams()
+    selector, exists := activeStreams[streamID]
+    if !exists {
+        // Attempt auto-provision using URL query params
+        autoSelector := k8slogs.PodSelector{}
+        if ns := r.URL.Query().Get("namespace"); ns != "" {
+            autoSelector.Namespace = ns
+        }
+        if nsCSV := r.URL.Query().Get("namespaces"); nsCSV != "" {
+            autoSelector.Namespaces = strings.Split(nsCSV, ",")
+        }
+        // Parse labelSelector as key=value pairs separated by commas
+        if ls := r.URL.Query().Get("labelSelector"); ls != "" {
+            autoSelector.LabelSelector = parseKeyValueCSV(ls)
+        }
+        if fs := r.URL.Query().Get("fieldSelector"); fs != "" {
+            autoSelector.FieldSelector = parseKeyValueCSV(fs)
+        }
+
+        // Require at least one namespace scope for safety
+        if autoSelector.Namespace == "" && len(autoSelector.Namespaces) == 0 {
+            http.Error(w, "Log stream not found and no namespace provided to auto-start", http.StatusNotFound)
+            return
+        }
+
+        // RBAC context
+        secCtx, err := s.getSecurityContext(r)
+        if err != nil {
+            s.logger.Error("Failed to get security context", zap.Error(err))
+            http.Error(w, "Authorization failed", http.StatusInternalServerError)
+            return
+        }
+        s.logsCoordinator.SetRBACContext(secCtx.SSARHelper, secCtx.Client, secCtx.User)
+
+        // Build k8s log filter from query
+        k8sFilter := k8slogs.LogFilter{}
+        if c := r.URL.Query().Get("container"); c != "" { k8sFilter.Container = c }
+        if v := r.URL.Query().Get("sinceSeconds"); v != "" { if n, err := strconv.ParseInt(v, 10, 64); err == nil { k8sFilter.SinceSeconds = &n } }
+        if v := r.URL.Query().Get("tailLines"); v != "" { if n, err := strconv.ParseInt(v, 10, 64); err == nil { k8sFilter.TailLines = &n } }
+        if v := r.URL.Query().Get("follow"); v != "" { if b, err := strconv.ParseBool(v); err == nil { k8sFilter.Follow = b } }
+        if v := r.URL.Query().Get("timestamps"); v != "" { if b, err := strconv.ParseBool(v); err == nil { k8sFilter.Timestamps = b } }
+        if v := r.URL.Query().Get("previous"); v != "" { if b, err := strconv.ParseBool(v); err == nil { k8sFilter.Previous = b } }
+
+        // Start coordinated stream with short timeout
+        ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+        defer cancel()
+        if err := s.logsCoordinator.StartCoordinatedStream(ctx, streamID, autoSelector, k8sFilter); err != nil {
+            s.logger.Error("Auto-start log stream failed", zap.Error(err))
+            http.Error(w, "Failed to start log stream", http.StatusInternalServerError)
+            return
+        }
+        // Update selector for downstream use
+        selector = autoSelector
+        exists = true
+    }
 
 	// Validate RBAC permissions for the stream scope
 	if err := s.validateLogStreamAccess(r, selector); err != nil {
@@ -74,8 +123,8 @@ func (s *Server) HandleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	s.logsCoordinator.SetRBACContext(secCtx.SSARHelper, secCtx.Client, secCtx.User)
 
-	// Create log filter from query parameters for initial replay
-	logFilter := s.buildLogFilterFromRequest(r, selector)
+    // Create log filter from query parameters for initial replay
+    logFilter := s.buildLogFilterFromRequest(r, selector)
 
 	// Start a streaming subscription with the logs cache service
 	streamCh, cancelStream := s.logsCacheService.Stream(logFilter)
@@ -84,8 +133,25 @@ func (s *Server) HandleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Send initial backfill before connecting to WebSocket
 	replayEntries := s.logsCacheService.Replay(logFilter)
 
-	// Connect to WebSocket and bridge the live stream
-	s.bridgeLogStreamToWebSocket(w, r, "logs:"+streamID, replayEntries, streamCh)
+    // Connect to WebSocket and bridge the live stream (with periodic backfill to cover drops)
+    s.bridgeLogStreamToWebSocket(w, r, "logs:"+streamID, replayEntries, streamCh, logFilter)
+}
+
+// parseKeyValueCSV parses comma-separated key=value pairs into a map
+func parseKeyValueCSV(csv string) map[string]string {
+    m := make(map[string]string)
+    parts := strings.Split(csv, ",")
+    for _, p := range parts {
+        kv := strings.SplitN(strings.TrimSpace(p), "=", 2)
+        if len(kv) == 2 {
+            k := strings.TrimSpace(kv[0])
+            v := strings.TrimSpace(kv[1])
+            if k != "" && v != "" {
+                m[k] = v
+            }
+        }
+    }
+    return m
 }
 
 func (s *Server) HandleStartLogStream(w http.ResponseWriter, r *http.Request) {
@@ -421,16 +487,16 @@ func (s *Server) buildLogFilterFromRequest(r *http.Request, selector k8slogs.Pod
 		filter.Direction = direction
 	}
 
-	// If no since time specified, default to last 10 minutes for initial backfill
-	if filter.Since.IsZero() {
-		filter.Since = time.Now().Add(-10 * time.Minute)
-	}
+    // If no since time specified, default to last 1 hour for initial backfill
+    if filter.Since.IsZero() {
+        filter.Since = time.Now().Add(-1 * time.Hour)
+    }
 
 	return filter
 }
 
 // bridgeLogStreamToWebSocket connects the logs cache stream to a WebSocket connection
-func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Request, room string, replayEntries []logs.LogEntry, streamCh <-chan logs.LogEntry) {
+func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Request, room string, replayEntries []logs.LogEntry, streamCh <-chan logs.LogEntry, baseFilter logs.LogFilter) {
 	// Upgrade to WebSocket
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -445,28 +511,38 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 	}
 	defer conn.Close()
 
-	// Set up ping/pong to keep connection alive
-	pingTicker := time.NewTicker(30 * time.Second)
-	defer pingTicker.Stop()
+    // Set up ping/pong to keep connection alive
+    pingTicker := time.NewTicker(30 * time.Second)
+    defer pingTicker.Stop()
+
+    // Periodic backfill to recover from dropped WS messages (e.g., bus/backpressure)
+    backfillTicker := time.NewTicker(10 * time.Second)
+    defer backfillTicker.Stop()
 
 	// Create a cancellable context for this connection
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	// Send initial backfill data
-	if len(replayEntries) > 0 {
-		backfillMsg := map[string]interface{}{
-			"type": "logs.init",
-			"data": replayEntries,
-		}
-		if err := conn.WriteJSON(backfillMsg); err != nil {
-			s.logger.Error("Failed to send backfill data", zap.Error(err))
-			return
-		}
-		s.logger.Info("Sent backfill data",
-			zap.String("room", room),
-			zap.Int("entries", len(replayEntries)))
-	}
+    // Send initial backfill data and set last seen timestamp for incremental backfill
+    var lastTS time.Time
+    if len(replayEntries) > 0 {
+        backfillMsg := map[string]interface{}{
+            "type": "logs.init",
+            "data": replayEntries,
+        }
+        if err := conn.WriteJSON(backfillMsg); err != nil {
+            s.logger.Error("Failed to send backfill data", zap.Error(err))
+            return
+        }
+        s.logger.Info("Sent backfill data",
+            zap.String("room", room),
+            zap.Int("entries", len(replayEntries)))
+
+        // Track last timestamp
+        lastTS = replayEntries[len(replayEntries)-1].TS
+    } else if !baseFilter.Since.IsZero() {
+        lastTS = baseFilter.Since
+    }
 
 	// Handle backpressure and degraded mode
 	degraded := false
@@ -494,9 +570,9 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 		}
 	}()
 
-	for {
-		select {
-		case <-done:
+    for {
+        select {
+        case <-done:
 			// Send any remaining batch before closing
 			if len(batchBuffer) > 0 {
 				s.sendBatchedLogs(conn, batchBuffer, room)
@@ -519,10 +595,10 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 				batchBuffer = batchBuffer[:0] // Clear buffer but keep capacity
 			}
 
-		case entry := <-streamCh:
-			if degraded {
-				// In degraded mode, buffer entries for batching
-				batchBuffer = append(batchBuffer, entry)
+        case entry := <-streamCh:
+            if degraded {
+                // In degraded mode, buffer entries for batching
+                batchBuffer = append(batchBuffer, entry)
 
 				// If buffer is full, send immediately
 				if len(batchBuffer) >= cap(batchBuffer) {
@@ -538,9 +614,9 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 
 				// Set a write timeout
 				conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-				err := conn.WriteJSON(msg)
+                err := conn.WriteJSON(msg)
 
-				if err != nil {
+                if err != nil {
 					droppedCount++
 					s.logger.Warn("Failed to send log entry",
 						zap.Error(err),
@@ -576,17 +652,17 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 					if websocket.IsCloseError(err, websocket.CloseAbnormalClosure, websocket.CloseGoingAway) {
 						return
 					}
-				} else {
-					// Successfully sent, reset dropped count
-					if droppedCount > 0 {
-						droppedCount = 0
-					}
+                } else {
+                    // Successfully sent, reset dropped count
+                    if droppedCount > 0 {
+                        droppedCount = 0
+                    }
 
-					// Exit degraded mode if we're sending successfully
-					if degraded {
-						degraded = false
-						batchTicker.Stop() // Stop batching
-						s.logger.Info("Exiting degraded mode", zap.String("room", room))
+                    // Exit degraded mode if we're sending successfully
+                    if degraded {
+                        degraded = false
+                        batchTicker.Stop() // Stop batching
+                        s.logger.Info("Exiting degraded mode", zap.String("room", room))
 
 						// Send normal mode notification to client
 						normalMsg := map[string]interface{}{
@@ -597,19 +673,57 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 						}
 						conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 						conn.WriteJSON(normalMsg)
-					}
-				}
-			}
+                    }
 
-		case <-pingTicker.C:
-			// Send ping to keep connection alive
-			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				s.logger.Error("Failed to send ping", zap.Error(err))
-				return
-			}
-		}
-	}
+                    // Update lastTS on successful send
+                    if entry.TS.After(lastTS) {
+                        lastTS = entry.TS
+                    }
+                }
+            }
+
+        case <-backfillTicker.C:
+            // Incremental backfill since lastTS to cover any missed messages
+            if !lastTS.IsZero() {
+                bf := baseFilter
+                bf.Since = lastTS
+                bf.Direction = "forward"
+                // Limit batch size to avoid flooding
+                if bf.Limit == 0 || bf.Limit > 500 {
+                    bf.Limit = 500
+                }
+                newEntries := s.logsCacheService.Replay(bf)
+                if len(newEntries) > 0 {
+                    // Drop the first if it equals lastTS (avoid duplicate)
+                    if newEntries[0].TS.Equal(lastTS) {
+                        newEntries = newEntries[1:]
+                    }
+                }
+                if len(newEntries) > 0 {
+                    batchMsg := map[string]interface{}{
+                        "type": "logs.backfill",
+                        "data": newEntries,
+                        "count": len(newEntries),
+                    }
+                    conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+                    if err := conn.WriteJSON(batchMsg); err != nil {
+                        s.logger.Warn("Failed to send backfill batch", zap.Error(err))
+                    } else {
+                        // Update lastTS to newest
+                        lastTS = newEntries[len(newEntries)-1].TS
+                    }
+                }
+            }
+
+        case <-pingTicker.C:
+            // Send ping to keep connection alive
+            conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+            if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+                s.logger.Error("Failed to send ping", zap.Error(err))
+                return
+            }
+        }
+    }
 }
 
 // sendBatchedLogs sends a batch of log entries as a single WebSocket message

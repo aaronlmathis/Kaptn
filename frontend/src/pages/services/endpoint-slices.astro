@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { EndpointSlicesPageContainer } from "@/components/containers/EndpointSlicesPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "Endpoint Slices";
+---
+
+<Layout title={title}>
+<AppShell client:load>
+  <EndpointSlicesPageContainer />
+</AppShell>
+</Layout>
+
