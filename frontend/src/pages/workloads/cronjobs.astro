@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { CronJobsPageContainer } from "@/components/containers/CronJobsPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "CronJobs";
+---
+
+<Layout title={title}>
+<AppShell client:load>
+  <CronJobsPageContainer />
+</AppShell>
+</Layout>
+

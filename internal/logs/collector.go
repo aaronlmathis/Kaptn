@@ -1,20 +1,21 @@
 package logs
 
 import (
-	"bufio"
-	"context"
-	"fmt"
-	"io"
-	"regexp"
-	"strings"
-	"sync"
-	"time"
+    "bufio"
+    "context"
+    "fmt"
+    "io"
+    "regexp"
+    "strings"
+    "sync"
+    "time"
 
-	"go.uber.org/zap"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
+    "go.uber.org/zap"
+    corev1 "k8s.io/api/core/v1"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/client-go/informers"
+    "k8s.io/client-go/kubernetes"
+    "k8s.io/client-go/tools/cache"
 )
 
 // LogCollector implements an informer-based log collection system
@@ -51,30 +52,38 @@ type LogCollector struct {
 
 // CollectorConfig holds configuration for the log collector
 type CollectorConfig struct {
-	Enabled                bool
-	TailLines              int64
-	MaxConcurrentStreams   int
-	LogRetention           time.Duration
-	StreamBufferSize       int
-	RestartBackoffInterval time.Duration
-	RestartMaxInterval     time.Duration
-	ExcludeSystemPods      bool
-	IncludeNamespaces      []string
-	ExcludeNamespaces      []string
+    Enabled                bool
+    TailLines              int64
+    MaxConcurrentStreams   int
+    LogRetention           time.Duration
+    StreamBufferSize       int
+    RestartBackoffInterval time.Duration
+    RestartMaxInterval     time.Duration
+    ExcludeSystemPods      bool
+    IncludeNamespaces      []string
+    ExcludeNamespaces      []string
+    // Mode controls collection style: "stream" follows pod output; "poll" fetches at intervals
+    Mode          string
+    PollInterval  time.Duration
+    MaxLogLineBytes int
+    InformerResync  time.Duration
 }
 
 // PodLogStream manages logs for a single pod
 type PodLogStream struct {
-	namespace  string
-	podName    string
-	containers []string
-	lastSeen   time.Time
-	streams    map[string]*ContainerStream // container -> stream
-	mu         sync.RWMutex
-	ctx        context.Context
-	cancel     context.CancelFunc
-	retryCount int
-	nextRetry  time.Time
+    namespace  string
+    podName    string
+    containers []string
+    lastSeen   time.Time
+    streams    map[string]*ContainerStream // container -> stream
+    mu         sync.RWMutex
+    ctx        context.Context
+    cancel     context.CancelFunc
+    retryCount int
+    nextRetry  time.Time
+    // Poll mode tracking
+    lastTSByContainer map[string]time.Time
+    tailLines         int64
 }
 
 // ContainerStream manages logs for a single container
@@ -115,11 +124,20 @@ func NewLogCollector(logger *zap.Logger, kubeClient kubernetes.Interface, servic
 	if config.RestartMaxInterval == 0 {
 		config.RestartMaxInterval = 2 * time.Minute
 	}
-	if config.LogRetention == 0 {
-		config.LogRetention = 1 * time.Hour
-	}
+    if config.LogRetention == 0 {
+        config.LogRetention = 1 * time.Hour
+    }
+    if config.Mode == "" {
+        config.Mode = "stream"
+    }
+    if config.PollInterval == 0 {
+        config.PollInterval = 10 * time.Second
+    }
+    if config.MaxLogLineBytes <= 0 {
+        config.MaxLogLineBytes = 256 * 1024 // 256KB
+    }
 
-	// Default exclusions for system pods
+    // Default exclusions for system pods
 	if config.ExcludeSystemPods && len(config.ExcludeNamespaces) == 0 {
 		config.ExcludeNamespaces = []string{"kube-system", "kube-public", "kube-node-lease"}
 	}
@@ -136,8 +154,9 @@ func NewLogCollector(logger *zap.Logger, kubeClient kubernetes.Interface, servic
 		cancel:        cancel,
 	}
 
-	// Setup informer factory with reasonable resync period
-	collector.informerFactory = informers.NewSharedInformerFactory(kubeClient, 30*time.Second)
+    // Setup informer factory; allow configurable resync (0 for no periodical full resync)
+    resync := config.InformerResync
+    collector.informerFactory = informers.NewSharedInformerFactory(kubeClient, resync)
 	collector.podInformer = collector.informerFactory.Core().V1().Pods().Informer()
 
 	// Add event handlers
@@ -194,8 +213,8 @@ func (c *LogCollector) Start(ctx context.Context) error {
 
 // Stop stops the log collector
 func (c *LogCollector) Stop() {
-	c.startMu.Lock()
-	defer c.startMu.Unlock()
+    c.startMu.Lock()
+    defer c.startMu.Unlock()
 
 	if !c.started {
 		return
@@ -217,11 +236,21 @@ func (c *LogCollector) Stop() {
 	c.activeStreams = make(map[string]*PodLogStream)
 	c.streamsMu.Unlock()
 
-	// Wait for workers to finish
-	c.wg.Wait()
+    // Wait for workers to finish with timeout to avoid shutdown hangs
+    done := make(chan struct{})
+    go func() {
+        c.wg.Wait()
+        close(done)
+    }()
+    select {
+    case <-done:
+        // ok
+    case <-time.After(10 * time.Second):
+        c.logger.Warn("Log collector shutdown timed out; continuing")
+    }
 
-	c.started = false
-	c.logger.Info("Log collector stopped")
+    c.started = false
+    c.logger.Info("Log collector stopped")
 }
 
 // GetStats returns current collector statistics
@@ -401,15 +430,17 @@ func (c *LogCollector) startPodLogStream(pod *corev1.Pod) {
 		containers = append(containers, container.Name)
 	}
 
-	stream := &PodLogStream{
-		namespace:  pod.Namespace,
-		podName:    pod.Name,
-		containers: containers,
-		lastSeen:   time.Now(),
-		streams:    make(map[string]*ContainerStream),
-		ctx:        ctx,
-		cancel:     cancel,
-	}
+    stream := &PodLogStream{
+        namespace:  pod.Namespace,
+        podName:    pod.Name,
+        containers: containers,
+        lastSeen:   time.Now(),
+        streams:    make(map[string]*ContainerStream),
+        ctx:        ctx,
+        cancel:     cancel,
+        lastTSByContainer: make(map[string]time.Time),
+        tailLines:         c.config.TailLines,
+    }
 
 	c.activeStreams[podKey] = stream
 
@@ -417,9 +448,13 @@ func (c *LogCollector) startPodLogStream(pod *corev1.Pod) {
 		zap.String("pod", podKey),
 		zap.Strings("containers", containers))
 
-	// Start streaming for each container
-	c.wg.Add(1)
-	go c.streamPodLogs(stream)
+    // Start collection based on mode
+    c.wg.Add(1)
+    if strings.EqualFold(c.config.Mode, "poll") {
+        go c.pollPodLogs(stream)
+    } else {
+        go c.streamPodLogs(stream)
+    }
 
 	c.mu.Lock()
 	c.stats.PodsWatched++
@@ -450,6 +485,128 @@ func (c *LogCollector) streamPodLogs(podStream *PodLogStream) {
 	}
 }
 
+// pollPodLogs polls logs for a pod at a fixed interval (non-follow mode)
+func (c *LogCollector) pollPodLogs(podStream *PodLogStream) {
+    defer c.wg.Done()
+
+    ticker := time.NewTicker(c.config.PollInterval)
+    defer ticker.Stop()
+
+    // initial immediate poll
+    for {
+        select {
+        case <-podStream.ctx.Done():
+            return
+        default:
+        }
+
+        for _, containerName := range podStream.containers {
+            // poll each container sequentially to avoid fan-out bursts
+            if err := c.pollContainerLogs(podStream, containerName); err != nil {
+                c.logger.Debug("Container log poll error",
+                    zap.String("pod", fmt.Sprintf("%s/%s", podStream.namespace, podStream.podName)),
+                    zap.String("container", containerName),
+                    zap.Error(err))
+            }
+        }
+
+        // wait for next interval or cancel
+        select {
+        case <-podStream.ctx.Done():
+            return
+        case <-ticker.C:
+        }
+    }
+}
+
+// pollContainerLogs fetches recent logs without following and ingests new lines since last poll
+func (c *LogCollector) pollContainerLogs(podStream *PodLogStream, containerName string) error {
+    // Build log options
+    opts := &corev1.PodLogOptions{
+        Container:  containerName,
+        Timestamps: true,
+    }
+
+    podStream.mu.RLock()
+    lastTS, hasLast := podStream.lastTSByContainer[containerName]
+    podStream.mu.RUnlock()
+
+    if hasLast {
+        // Use SinceTime to fetch only new entries
+        since := metav1.NewTime(lastTS)
+        opts.SinceTime = &since
+    } else if podStream.tailLines > 0 {
+        tl := podStream.tailLines
+        opts.TailLines = &tl
+    }
+
+    // Request logs
+    req := c.kubeClient.CoreV1().Pods(podStream.namespace).GetLogs(podStream.podName, opts)
+    rc, err := req.Stream(podStream.ctx)
+    if err != nil {
+        // don't count as failed connection loudly — poll may overlap pod restarts
+        return fmt.Errorf("poll stream open failed: %w", err)
+    }
+    defer rc.Close()
+
+    // Scan with bounded buffer
+    scanner := bufio.NewScanner(rc)
+    // allocate initial buffer ~64KB, cap at configured max
+    max := c.config.MaxLogLineBytes
+    if max < 64*1024 {
+        max = 64 * 1024
+    }
+    scanner.Buffer(make([]byte, 64*1024), max)
+
+    var newest time.Time
+
+    for scanner.Scan() {
+        select {
+        case <-podStream.ctx.Done():
+            return nil
+        default:
+        }
+
+        line := scanner.Text()
+        if line == "" {
+            continue
+        }
+
+        // Parse and normalize
+        entry := c.parseLogLine(line, podStream.namespace, podStream.podName, containerName)
+        if entry == nil {
+            continue
+        }
+
+        // Only ingest newer entries (guard against duplicate lines when using tail)
+        if hasLast && (entry.TS.Before(lastTS) || entry.TS.Equal(lastTS)) {
+            continue
+        }
+
+        c.service.Ingest(*entry)
+        c.mu.Lock()
+        c.stats.TotalLinesRead++
+        c.mu.Unlock()
+
+        if entry.TS.After(newest) {
+            newest = entry.TS
+        }
+    }
+    if err := scanner.Err(); err != nil && err != io.EOF {
+        return fmt.Errorf("poll scan error: %w", err)
+    }
+
+    // update lastSeen and lastTS
+    now := time.Now()
+    podStream.mu.Lock()
+    podStream.lastSeen = now
+    if !newest.IsZero() {
+        podStream.lastTSByContainer[containerName] = newest
+    }
+    podStream.mu.Unlock()
+
+    return nil
+}
 // streamContainerLogs streams logs for a single container
 func (c *LogCollector) streamContainerLogs(podStream *PodLogStream, containerName string) {
 	defer c.wg.Done()
@@ -531,8 +688,12 @@ func (c *LogCollector) streamSingleContainer(podStream *PodLogStream, containerN
 	podStream.mu.Unlock()
 
 	// Create scanner for reading lines
-	scanner := bufio.NewScanner(stream)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024) // 1MB max line size
+    scanner := bufio.NewScanner(stream)
+    max := c.config.MaxLogLineBytes
+    if max < 64*1024 {
+        max = 64 * 1024
+    }
+    scanner.Buffer(make([]byte, 64*1024), max)
 
 	// Parse log lines and forward to service
 	for scanner.Scan() {
@@ -548,7 +709,11 @@ func (c *LogCollector) streamSingleContainer(podStream *PodLogStream, containerN
 		}
 
 		// Parse the log entry
-		entry := c.parseLogLine(line, podStream.namespace, podStream.podName, containerName)
+        // Enforce max line length defensively (truncate if needed)
+        if len(line) > c.config.MaxLogLineBytes {
+            line = line[:c.config.MaxLogLineBytes]
+        }
+        entry := c.parseLogLine(line, podStream.namespace, podStream.podName, containerName)
 		if entry != nil {
 			// Ingest into service
 			c.service.Ingest(*entry)

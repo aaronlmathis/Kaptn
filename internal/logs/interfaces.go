@@ -51,8 +51,11 @@ type LogRing interface {
 	// Size returns the current number of entries in the ring
 	Size() int
 
-	// Clear removes all entries
-	Clear()
+    // Clear removes all entries
+    Clear()
+
+    // Bounds returns the oldest and newest timestamps currently in the ring
+    Bounds() (time.Time, time.Time)
 }
 
 // LogBus represents pub/sub for live log updates

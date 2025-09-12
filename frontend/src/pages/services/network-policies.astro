@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { NetworkPoliciesPageContainer } from "@/components/containers/NetworkPoliciesPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "Network Policies";
+---
+
+<Layout title={title}>
+<AppShell client:load>
+  <NetworkPoliciesPageContainer />
+</AppShell>
+</Layout>
+

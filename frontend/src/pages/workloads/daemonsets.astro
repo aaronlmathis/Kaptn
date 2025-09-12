@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { DaemonSetsPageContainer } from "@/components/containers/DaemonSetsPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "DaemonSets";
+---
+
+<Layout title={title}>
+  <AppShell client:load>
+    <DaemonSetsPageContainer />
+  </AppShell>
+</Layout>
+

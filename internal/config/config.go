@@ -172,10 +172,17 @@ type LogsCacheConfig struct {
 	EvictionInterval string `yaml:"eviction_interval"`
 	CleanupInterval  string `yaml:"cleanup_interval"`
 
-	// Background log collection configuration
-	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
-	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
-	// Note: V2 collector is event-driven, no polling interval needed
+    // Background log collection configuration
+    BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
+    BackgroundCollectionRetention string `yaml:"background_collection_retention"`
+    // Collection mode: "stream" (default, follow) or "poll"
+    BackgroundCollectionMode       string `yaml:"background_collection_mode"`
+    BackgroundCollectionPollInterval string `yaml:"background_collection_poll_interval"`
+    BackgroundCollectionTailLines    int    `yaml:"background_collection_tail_lines"`
+    // Maximum per-line bytes to read/emit from logs (protects memory)
+    MaxLogLineBytes int `yaml:"max_log_line_bytes"`
+    // Optional informer resync period override (advanced)
+    InformerResync string `yaml:"informer_resync"`
 
 	// Operational limits (Phase 10)
 	MaxStreamsPerUser     int    `yaml:"max_streams_per_user"`
@@ -784,9 +791,14 @@ type LogsServiceConfig struct {
 	EvictionInterval time.Duration `yaml:"eviction_interval"`
 	CleanupInterval  time.Duration `yaml:"cleanup_interval"`
 
-	// Background collection (V2 is event-driven)
-	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
-	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
+    // Background collection (V2 is event-driven)
+    BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
+    BackgroundCollectionRetention string `yaml:"background_collection_retention"`
+    BackgroundCollectionMode       string        `yaml:"background_collection_mode"`
+    BackgroundCollectionPollInterval time.Duration `yaml:"background_collection_poll_interval"`
+    BackgroundCollectionTailLines    int           `yaml:"background_collection_tail_lines"`
+    MaxLogLineBytes                  int           `yaml:"max_log_line_bytes"`
+    InformerResync                   time.Duration `yaml:"informer_resync"`
 
 	// Phase 10: Operational guardrails
 	MaxStreamsPerUser     int           `yaml:"max_streams_per_user"`
@@ -805,11 +817,11 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		c.Caching.LogsCache.BackgroundCollectionEnabled,
 		c.Caching.LogsCache.BackgroundCollectionRetention)
 
-	// Set defaults for empty values
-	ttl := c.Caching.LogsCache.TTL
-	if ttl == "" {
-		ttl = "1h" // Default 1 hour
-	}
+    // Set defaults for empty values
+    ttl := c.Caching.LogsCache.TTL
+    if ttl == "" {
+        ttl = "1h" // Default 1 hour
+    }
 
 	evictionIntervalStr := c.Caching.LogsCache.EvictionInterval
 	if evictionIntervalStr == "" {
@@ -847,11 +859,11 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache degraded mode timeout: %w", err)
 	}
 
-	// Set default values for numeric fields if they're zero
-	maxGlobal := c.Caching.LogsCache.MaxGlobal
-	if maxGlobal == 0 {
-		maxGlobal = 250000 // Default
-	}
+    // Set default values for numeric fields if they're zero
+    maxGlobal := c.Caching.LogsCache.MaxGlobal
+    if maxGlobal == 0 {
+        maxGlobal = 250000 // Default
+    }
 
 	maxPerScope := c.Caching.LogsCache.MaxPerScope
 	if maxPerScope == 0 {
@@ -863,29 +875,68 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		maxSubscribers = 200 // Default
 	}
 
-	bufferSize := c.Caching.LogsCache.BufferSize
-	if bufferSize == 0 {
-		bufferSize = 100 // Default
-	}
+    bufferSize := c.Caching.LogsCache.BufferSize
+    if bufferSize == 0 {
+        bufferSize = 100 // Default
+    }
 
-	return LogsServiceConfig{
-		GlobalMaxEntries: maxGlobal,
-		GlobalMaxAge:     globalMaxAge,
-		ScopeMaxEntries:  maxPerScope,
-		ScopeMaxAge:      globalMaxAge, // Use same TTL for scoped rings
-		MaxSubscribers:   maxSubscribers,
-		BufferSize:       bufferSize,
-		EvictionInterval: evictionInterval,
-		CleanupInterval:  cleanupInterval,
+    // Background collection mode defaults
+    bgMode := c.Caching.LogsCache.BackgroundCollectionMode
+    if bgMode == "" {
+        bgMode = "stream"
+    }
 
-		// Background collection
-		BackgroundCollectionEnabled:   c.Caching.LogsCache.BackgroundCollectionEnabled,
-		BackgroundCollectionRetention: c.Caching.LogsCache.BackgroundCollectionRetention,
-		// Note: V2 collector is event-driven, no interval field needed
+    pollIntervalStr := c.Caching.LogsCache.BackgroundCollectionPollInterval
+    if pollIntervalStr == "" {
+        pollIntervalStr = "10s"
+    }
+    pollInterval, err := time.ParseDuration(pollIntervalStr)
+    if err != nil {
+        return LogsServiceConfig{}, fmt.Errorf("invalid logs collection poll interval: %w", err)
+    }
 
-		// Phase 10: Operational guardrails
-		MaxStreamsPerUser:     c.Caching.LogsCache.MaxStreamsPerUser,
-		MaxQueryLimit:         c.Caching.LogsCache.MaxQueryLimit,
+    tailLines := c.Caching.LogsCache.BackgroundCollectionTailLines
+    if tailLines <= 0 {
+        tailLines = 100
+    }
+
+    maxLineBytes := c.Caching.LogsCache.MaxLogLineBytes
+    if maxLineBytes <= 0 {
+        maxLineBytes = 256 * 1024 // 256KB default per line
+    }
+
+    informerResyncStr := c.Caching.LogsCache.InformerResync
+    if informerResyncStr == "" {
+        informerResyncStr = "0s" // default no resync bursts
+    }
+    informerResync, err := time.ParseDuration(informerResyncStr)
+    if err != nil {
+        return LogsServiceConfig{}, fmt.Errorf("invalid logs informer resync: %w", err)
+    }
+
+    return LogsServiceConfig{
+        GlobalMaxEntries: maxGlobal,
+        GlobalMaxAge:     globalMaxAge,
+        ScopeMaxEntries:  maxPerScope,
+        ScopeMaxAge:      globalMaxAge, // Use same TTL for scoped rings
+        MaxSubscribers:   maxSubscribers,
+        BufferSize:       bufferSize,
+        EvictionInterval: evictionInterval,
+        CleanupInterval:  cleanupInterval,
+
+        // Background collection
+        BackgroundCollectionEnabled:       c.Caching.LogsCache.BackgroundCollectionEnabled,
+        BackgroundCollectionRetention:     c.Caching.LogsCache.BackgroundCollectionRetention,
+        BackgroundCollectionMode:           bgMode,
+        BackgroundCollectionPollInterval:   pollInterval,
+        BackgroundCollectionTailLines:      tailLines,
+        MaxLogLineBytes:                    maxLineBytes,
+        InformerResync:                     informerResync,
+        // Note: V2 collector is event-driven, no interval field needed
+
+        // Phase 10: Operational guardrails
+        MaxStreamsPerUser:     c.Caching.LogsCache.MaxStreamsPerUser,
+        MaxQueryLimit:         c.Caching.LogsCache.MaxQueryLimit,
 		MaxExportSize:         c.Caching.LogsCache.MaxExportSize,
 		MaxConcurrentQueries:  c.Caching.LogsCache.MaxConcurrentQueries,
 		RateLimitPerSecond:    c.Caching.LogsCache.RateLimitPerSecond,

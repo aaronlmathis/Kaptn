@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { VolumeSnapshotClassesPageContainer } from "@/components/containers/VolumeSnapshotClassesPageContainer";
+import { AppShell } from "@/components/AppShell";
+
+const title = "Volume Snapshot Classes";
+---
+
+<Layout title={title}>
+<AppShell client:load>
+  <VolumeSnapshotClassesPageContainer />
+</AppShell>
+</Layout>
+

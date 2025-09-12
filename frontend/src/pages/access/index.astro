@@ -1,0 +1,14 @@
+---
+import Layout from "@/layouts/dashboard.astro";
+import { AppShell } from "@/components/AppShell";
+import { AccessPageContainer } from "@/components/pages/AccessPageContainer";
+
+const title = "Access Control";
+---
+
+<Layout title={title}>
+  <AppShell client:load>
+    <AccessPageContainer />
+  </AppShell>
+</Layout>
+

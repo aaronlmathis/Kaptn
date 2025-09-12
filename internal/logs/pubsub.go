@@ -10,11 +10,12 @@ import (
 
 // Subscription represents an active log subscription
 type Subscription struct {
-	id       string
-	filter   LogFilter
-	ch       chan LogEntry
-	cancel   func()
-	lastSeen time.Time
+    id       string
+    filter   LogFilter
+    ch       chan LogEntry
+    cancel   func()
+    // lastSeenUnix stores last activity in UnixNano to avoid races
+    lastSeenUnix atomic.Int64
 }
 
 // Bus implements LogBus for pub/sub functionality
@@ -38,17 +39,18 @@ func (b *Bus) Publish(e LogEntry) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	for _, sub := range b.subscriptions {
-		if b.matchesFilter(e, sub.filter) {
-			select {
-			case sub.ch <- e:
-				sub.lastSeen = time.Now()
-			default:
-				// Channel is full - skip this entry to prevent blocking
-				// In production, we might want to track dropped entries
-			}
-		}
-	}
+    now := time.Now().UnixNano()
+    for _, sub := range b.subscriptions {
+        if b.matchesFilter(e, sub.filter) {
+            select {
+            case sub.ch <- e:
+                sub.lastSeenUnix.Store(now)
+            default:
+                // Channel is full - skip this entry to prevent blocking
+                // In production, we might want to track dropped entries
+            }
+        }
+    }
 }
 
 // Subscribe creates a subscription for log entries matching the filter
@@ -77,13 +79,13 @@ func (b *Bus) Subscribe(f LogFilter) (<-chan LogEntry, func()) {
 	}
 
 	// Store subscription
-	sub := &Subscription{
-		id:       id,
-		filter:   f,
-		ch:       ch,
-		cancel:   cancel,
-		lastSeen: time.Now(),
-	}
+    sub := &Subscription{
+        id:       id,
+        filter:   f,
+        ch:       ch,
+        cancel:   cancel,
+    }
+    sub.lastSeenUnix.Store(time.Now().UnixNano())
 
 	b.subscriptions[id] = sub
 
@@ -99,19 +101,20 @@ func (b *Bus) SubscriberCount() int {
 
 // CleanupStaleSubscriptions removes subscriptions that haven't received messages recently
 func (b *Bus) CleanupStaleSubscriptions(maxAge time.Duration) int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+    b.mu.Lock()
+    defer b.mu.Unlock()
 
-	cutoff := time.Now().Add(-maxAge)
-	cleaned := 0
+    cutoff := time.Now().Add(-maxAge)
+    cleaned := 0
 
-	for id, sub := range b.subscriptions {
-		if sub.lastSeen.Before(cutoff) {
-			close(sub.ch)
-			delete(b.subscriptions, id)
-			cleaned++
-		}
-	}
+    for id, sub := range b.subscriptions {
+        last := time.Unix(0, sub.lastSeenUnix.Load())
+        if last.Before(cutoff) {
+            close(sub.ch)
+            delete(b.subscriptions, id)
+            cleaned++
+        }
+    }
 
 	return cleaned
 }

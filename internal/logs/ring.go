@@ -68,22 +68,55 @@ func (r *Ring) Append(e LogEntry) {
 	}
 }
 
+// Bounds returns the oldest and newest timestamps currently in the ring
+func (r *Ring) Bounds() (time.Time, time.Time) {
+    r.mu.RLock()
+    defer r.mu.RUnlock()
+    if r.size == 0 {
+        return time.Time{}, time.Time{}
+    }
+    entries := r.getAllEntriesLocked()
+    if len(entries) == 0 {
+        return time.Time{}, time.Time{}
+    }
+    return entries[0].entry.TS, entries[len(entries)-1].entry.TS
+}
+
 // Query returns log entries matching the filter using optimized indexing
 func (r *Ring) Query(f LogFilter) []LogEntry {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+    r.mu.RLock()
+    defer r.mu.RUnlock()
 
-	if r.size == 0 {
-		return nil
-	}
+    if r.size == 0 {
+        return nil
+    }
 
 	// Build and execute query plan
 	plan := r.index.BuildQueryPlan(f)
 	candidateIndices := r.index.ExecutePlan(plan, f)
 
-	if len(candidateIndices) == 0 {
-		return nil
-	}
+    if len(candidateIndices) == 0 {
+        // Fallback: if index produced no candidates, do a linear scan over ring entries
+        // This guarantees correctness even if the index is cold or momentarily inconsistent.
+        entries := r.getAllEntriesLocked()
+        var matches []LogEntry
+        for _, re := range entries {
+            if r.matchesFilter(re.entry, f) {
+                matches = append(matches, re.entry)
+            }
+        }
+        // Apply direction and limit
+        if f.Direction == "backward" {
+            for i := 0; i < len(matches)/2; i++ {
+                j := len(matches) - 1 - i
+                matches[i], matches[j] = matches[j], matches[i]
+            }
+        }
+        if f.Limit > 0 && len(matches) > f.Limit {
+            matches = matches[:f.Limit]
+        }
+        return matches
+    }
 
 	// Convert ring indices to actual entries and apply final filters
 	var matches []ringEntry
@@ -129,29 +162,33 @@ func (r *Ring) Query(f LogFilter) []LogEntry {
 	return result
 }
 
-// EvictByTime removes entries older than the given time and updates index
-func (r *Ring) EvictByTime(cutoff time.Time) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+// EvictByTime evicts entries older than r.maxAge relative to now and updates index
+// Pass the current time; the ring computes the actual threshold using its configured maxAge.
+func (r *Ring) EvictByTime(now time.Time) {
+    r.mu.Lock()
+    defer r.mu.Unlock()
 
-	if r.size == 0 {
-		return
-	}
+    if r.size == 0 {
+        return
+    }
 
-	// Get all entries to examine
-	entries := r.getAllEntriesLocked()
+    // Get all entries to examine
+    entries := r.getAllEntriesLocked()
 
-	// Count how many entries to keep (from the end, since they're chronological)
-	keepCount := 0
-	validIndices := make(map[int]bool)
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].entry.TS.After(cutoff) {
-			keepCount++
-			validIndices[entries[i].index] = true
-		} else {
-			break
-		}
-	}
+    // Compute eviction threshold based on ring's maxAge
+    threshold := now.Add(-r.maxAge)
+
+    // Count how many entries to keep (from the end, since they're chronological)
+    keepCount := 0
+    validIndices := make(map[int]bool)
+    for i := len(entries) - 1; i >= 0; i-- {
+        if entries[i].entry.TS.After(threshold) {
+            keepCount++
+            validIndices[entries[i].index] = true
+        } else {
+            break
+        }
+    }
 
 	if keepCount == len(entries) {
 		// Nothing to evict
@@ -183,7 +220,7 @@ func (r *Ring) EvictByTime(cutoff time.Time) {
 	}
 
 	// Clean up index
-	r.index.EvictByTime(cutoff, validIndices)
+    r.index.EvictByTime(threshold, validIndices)
 }
 
 // Size returns the current number of entries in the ring

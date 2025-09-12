@@ -1,7 +1,7 @@
 SHELL := /usr/bin/env bash
 
 # Build variables
-BINARY_NAME := server
+BINARY_NAME := kaptn-server
 BUILD_DIR := bin
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "v0.1.0-dev")
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -100,6 +100,16 @@ build: frontend ## Build backend binary (embeds frontend)
 run: build ## Run the built binary
 	@echo "Running $(BINARY_NAME)..."
 	@$(BUILD_DIR)/$(BINARY_NAME) --config=config.dev.yaml
+
+.PHONY: start stop restart
+start: ## Start server via kaptn-ctl.sh (CONFIG=<file> overrides)
+	@BIN=$(BUILD_DIR)/$(BINARY_NAME) CONFIG=$(CONFIG) ./scripts/kaptn-ctl.sh start
+
+stop: ## Stop server via kaptn-ctl.sh
+	@./scripts/kaptn-ctl.sh stop
+
+restart: ## Restart server via kaptn-ctl.sh (CONFIG=<file> overrides)
+	@CONFIG=$(CONFIG) ./scripts/kaptn-ctl.sh restart
 
 IMAGE_NAME := aaronlmathis/kaptn
 

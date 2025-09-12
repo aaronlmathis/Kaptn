@@ -18,12 +18,13 @@ import (
 )
 
 func main() {
-	var (
-		showVersion = flag.Bool("version", false, "Show version information and exit")
-		healthCheck = flag.Bool("health-check", false, "Perform health check and exit")
-		configFile  = flag.String("config", "", "Path to configuration file")
-	)
-	flag.Parse()
+    var (
+        showVersion = flag.Bool("version", false, "Show version information and exit")
+        healthCheck = flag.Bool("health-check", false, "Perform health check and exit")
+        configFile  = flag.String("config", "", "Path to configuration file")
+        pidFile     = flag.String("pidfile", "kaptn.pid", "Path to write a PID file for easy stop/restart")
+    )
+    flag.Parse()
 
 	if *showVersion {
 		info := version.Get()
@@ -61,14 +62,28 @@ func main() {
 	}
 	defer logger.Sync()
 
-	info := version.Get()
-	logger.Info("Starting Kaptn Admin Dashboard",
-		zap.String("version", info.Version),
-		zap.String("gitCommit", info.GitCommit),
-		zap.String("buildDate", info.BuildDate),
-		zap.String("goVersion", info.GoVersion),
-		zap.String("addr", cfg.Server.Addr),
-	)
+    info := version.Get()
+    logger.Info("Starting Kaptn Admin Dashboard",
+        zap.String("version", info.Version),
+        zap.String("gitCommit", info.GitCommit),
+        zap.String("buildDate", info.BuildDate),
+        zap.String("goVersion", info.GoVersion),
+        zap.String("addr", cfg.Server.Addr),
+    )
+
+    // Write PID file (best effort) for easier shutdown via scripts
+    if *pidFile != "" {
+        if err := os.WriteFile(*pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o644); err != nil {
+            logger.Warn("Failed to write pidfile", zap.String("path", *pidFile), zap.Error(err))
+        } else {
+            logger.Info("Wrote pidfile", zap.String("path", *pidFile))
+            defer func() {
+                if rmErr := os.Remove(*pidFile); rmErr != nil {
+                    logger.Warn("Failed to remove pidfile", zap.String("path", *pidFile), zap.Error(rmErr))
+                }
+            }()
+        }
+    }
 
 	// Construct server with deps (logger, cfg, clients, etc.)
 	kaptnServer, err := server.New(logger, cfg)
@@ -100,9 +115,10 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-    <-quit
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+    sig := <-quit
+    logger.Info("Shutdown signal received", zap.String("signal", sig.String()))
     logger.Info("Server shutting down...")
 
     // Cancel background context to notify long-running goroutines

@@ -105,20 +105,24 @@ func (s *ServiceV3) SetupLogCollector(kubeClient kubernetes.Interface, clusterNa
 		return fmt.Errorf("invalid background collection retention: %w", err)
 	}
 
-	// Create collector config
-	collectorConfig := CollectorConfig{
-		Enabled:                s.config.BackgroundCollectionEnabled,
-		TailLines:              100, // Start with last 100 lines
-		MaxConcurrentStreams:   50,  // Support 50+ pods
-		LogRetention:           retention,
-		StreamBufferSize:       1000,
-		RestartBackoffInterval: 5 * time.Second,
-		RestartMaxInterval:     2 * time.Minute,
-		ExcludeSystemPods:      true, // Skip system pods by default
-	}
+    // Create collector config
+    collectorConfig := CollectorConfig{
+        Enabled:                  s.config.BackgroundCollectionEnabled,
+        TailLines:                int64(s.config.BackgroundCollectionTailLines),
+        MaxConcurrentStreams:     50,
+        LogRetention:             retention,
+        StreamBufferSize:         1000,
+        RestartBackoffInterval:   5 * time.Second,
+        RestartMaxInterval:       2 * time.Minute,
+        ExcludeSystemPods:        true, // Skip system pods by default
+        Mode:                     s.config.BackgroundCollectionMode,
+        PollInterval:             s.config.BackgroundCollectionPollInterval,
+        MaxLogLineBytes:          s.config.MaxLogLineBytes,
+        InformerResync:           s.config.InformerResync,
+    }
 
 	// Create the collector
-	s.collector = NewLogCollector(s.logger, kubeClient, s, clusterName, collectorConfig)
+    s.collector = NewLogCollector(s.logger, kubeClient, s, clusterName, collectorConfig)
 
 	s.logger.Info("Log collector configured",
 		zap.String("cluster", clusterName),
@@ -463,28 +467,35 @@ func (s *ServiceV3) AdminClearRings() error {
 }
 
 func (s *ServiceV3) AdminGetDetailedStats() AdminStats {
-	baseStats := s.Stats()
+    baseStats := s.Stats()
 
-	s.ringsMu.RLock()
-	ringDetails := make(map[string]RingStats)
-	ringDetails["global"] = RingStats{
-		Name:        "global",
-		Type:        "global",
-		Size:        s.globalRing.Size(),
-		Capacity:    s.config.GlobalMaxEntries,
-		MemoryBytes: int64(s.globalRing.Size() * 1024), // Rough estimate
-	}
+    s.ringsMu.RLock()
+    ringDetails := make(map[string]RingStats)
+    // Compute bounds for global ring
+    oldest, newest := s.globalRing.Bounds()
+    ringDetails["global"] = RingStats{
+        Name:        "global",
+        Type:        "global",
+        Size:        s.globalRing.Size(),
+        Capacity:    s.config.GlobalMaxEntries,
+        OldestEntry: oldest,
+        NewestEntry: newest,
+        MemoryBytes: int64(s.globalRing.Size() * 1024), // Rough estimate
+    }
 
-	for scope, ring := range s.scopedRings {
-		ringDetails[scope] = RingStats{
-			Name:        scope,
-			Type:        "scoped",
-			Size:        ring.Size(),
-			Capacity:    s.config.ScopeMaxEntries,
-			MemoryBytes: int64(ring.Size() * 1024), // Rough estimate
-		}
-	}
-	s.ringsMu.RUnlock()
+    for scope, ring := range s.scopedRings {
+        o, n := ring.Bounds()
+        ringDetails[scope] = RingStats{
+            Name:        scope,
+            Type:        "scoped",
+            Size:        ring.Size(),
+            Capacity:    s.config.ScopeMaxEntries,
+            OldestEntry: o,
+            NewestEntry: n,
+            MemoryBytes: int64(ring.Size() * 1024), // Rough estimate
+        }
+    }
+    s.ringsMu.RUnlock()
 
 	s.workerMu.RLock()
 	workerStats := WorkerStats{

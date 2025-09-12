@@ -5,10 +5,43 @@ import { ThemeToggle } from "@/components/theme-toggle"
 // import { SiteSearch } from "@/components/site-search"
 import { IconCloudUpload } from "@tabler/icons-react"
 import { useNavigation } from "@/contexts/navigation-context"
+import { getRouteMeta } from "@/routeMeta"
 
 
 export function SiteHeader() {
-  const { pageTitle } = useNavigation()
+  const { pageTitle, currentPath } = useNavigation()
+
+  // Derive breadcrumbs from route meta; fallback to pageTitle
+  const meta = typeof window !== 'undefined' ? getRouteMeta(currentPath) : null
+
+  const renderBreadcrumb = () => {
+    if (!meta) {
+      return (
+        <h1 className="text-base font-medium">{pageTitle}</h1>
+      )
+    }
+
+    // Section page: just section label
+    if (!meta.page) {
+      return (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="font-medium">{meta.section}</span>
+        </div>
+      )
+    }
+
+    // Child page: Section > Page (section clickable)
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <a href={meta.sectionHref} className="font-medium hover:underline">
+          {meta.section}
+        </a>
+        <span className="text-muted-foreground">›</span>
+        <span className="font-medium">{meta.page}</span>
+      </div>
+    )
+  }
+
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b bg-muted/30 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
       <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
@@ -17,12 +50,7 @@ export function SiteHeader() {
           orientation="vertical"
           className="mr-2 data-[orientation=vertical]:h-4"
         />
-        <div className="flex flex-col">
-          <h1 className="text-base font-medium">{pageTitle}</h1>
-          {/* {pageSubtitle && (
-            <p className="text-xs text-muted-foreground">{pageSubtitle}</p>
-          )} */}
-        </div>
+        <div className="flex flex-col">{renderBreadcrumb()}</div>
         <div className="ml-auto flex items-center gap-2">
 
           {/* <SiteSearch /> */}

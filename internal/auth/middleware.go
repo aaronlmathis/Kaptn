@@ -139,18 +139,53 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 				}
 			}
 
-			// If no session cookie or session invalid, try Bearer token
-			if user == nil {
-				user, err = m.authenticateFromToken(ctx, r)
-				if err != nil {
-					m.logger.Debug("Token authentication failed", zap.Error(err))
-					// Don't immediately fail here - some endpoints may not require auth
-					// Only fail if this is an endpoint that explicitly requires authentication
+				// If no session cookie or access token, attempt a silent refresh using refresh token cookie (server-side)
+				if user == nil && m.sessionManager != nil {
+					// Avoid looping on auth endpoints
+					path := r.URL.Path
+					if !strings.Contains(path, "/auth/refresh") && !strings.Contains(path, "/auth/login") && !strings.Contains(path, "/auth/callback") {
+						if newAccess, newRefresh, _, rerr := m.sessionManager.RefreshSessionFromToken(r); rerr == nil && newAccess != "" {
+							// Set new cookies and validate the fresh access token to build user context
+							m.sessionManager.SetDualTokenCookies(w, newAccess, newRefresh, r.TLS != nil)
+							if claims, vErr := m.sessionManager.GetTokenManager().ValidateAccessToken(newAccess); vErr == nil {
+                            user = &User{
+                                ID:      claims.UserID,
+                                Email:   claims.Email,
+                                Name:    claims.Name,
+                                Picture: claims.Picture,
+                                Groups:  claims.Roles, // Treat roles as groups for K8s RBAC gating
+                                Claims: map[string]interface{}{
+                                    "sub":      claims.UserID,
+                                    "email":    claims.Email,
+                                    "name":     claims.Name,
+                                    "picture":  claims.Picture,
+                                    "roles":    claims.Roles,
+                                    "perms":    claims.Perms,
+                                    "jti":      claims.JTI,
+                                    "trace_id": claims.TraceID,
+                                },
+                            }
+								m.logger.Debug("Authenticated via silent refresh", zap.String("userId", user.ID))
+							} else if vErr != nil {
+								m.logger.Debug("Silent refresh produced invalid access token", zap.Error(vErr))
+							}
+						} else if rerr != nil {
+							m.logger.Debug("Silent refresh not possible", zap.Error(rerr))
+						}
+					}
 				}
-				if user != nil {
-					m.logger.Debug("Authenticated via Bearer token", zap.String("userId", user.ID))
+
+				// If still no user, try Bearer token
+				if user == nil {
+					user, err = m.authenticateFromToken(ctx, r)
+					if err != nil {
+						m.logger.Debug("Token authentication failed", zap.Error(err))
+						// Don't immediately fail here - some endpoints may not require auth
+					}
+					if user != nil {
+						m.logger.Debug("Authenticated via Bearer token", zap.String("userId", user.ID))
+					}
 				}
-			}
 
 			if user != nil {
 				// Resolve authorization using the configured resolver
