@@ -28,11 +28,11 @@ import {
 	XAxis, YAxis, CartesianGrid,
 } from "recharts"
 import {
-    ChartContainer,
-    ChartTooltip,
-    ChartTooltipContent,
-    ChartLegend,
-    type ChartConfig,
+	ChartContainer,
+	ChartTooltip,
+	ChartTooltipContent,
+	ChartLegend,
+	type ChartConfig,
 } from "@/components/ui/chart"
 
 // Live timeseries streaming (shared with OpsView)
@@ -41,15 +41,15 @@ import { getNodes, type Node } from "@/lib/k8s-cluster"
 
 /** Mock fallbacks (kept only as fallback if live data unavailable) */
 function useMockCapacityVsUsage() {
-    return Array.from({ length: 30 }).map((_, i) => ({
-        t: Date.now() - (30 - i) * 60_000,
-        cpuAlloc: 10,
-        cpuReq: 3.2 + Math.sin(i / 4) * 0.4,
-        cpuUsed: 1.1 + Math.sin(i / 6) * 0.6,
-        memAlloc: 19.1,
-        memReq: 6.2 + Math.sin(i / 3) * 0.8,
-        memUsed: 7.2 + Math.sin(i / 5) * 0.6,
-    }))
+	return Array.from({ length: 30 }).map((_, i) => ({
+		t: Date.now() - (30 - i) * 60_000,
+		cpuAlloc: 10,
+		cpuReq: 3.2 + Math.sin(i / 4) * 0.4,
+		cpuUsed: 1.1 + Math.sin(i / 6) * 0.6,
+		memAlloc: 19.1,
+		memReq: 6.2 + Math.sin(i / 3) * 0.8,
+		memUsed: 7.2 + Math.sin(i / 5) * 0.6,
+	}))
 }
 function useNodePressure() {
 	const nodes = ["ip-10-0-1-10", "ip-10-0-1-11", "ip-10-0-1-12", "ip-10-0-1-13", "ip-10-0-1-14"]
@@ -160,188 +160,188 @@ const clusterChartConfig = {
 
 /** Main */
 export default function ClusterDashboard() {
-    // Subscribe to live cluster series (same WS client as OpsView)
-    const seriesKeys = React.useMemo(
-        () => [
-            // CPU
-            'cluster.cpu.used.cores',
-            'cluster.cpu.allocatable.cores',
-            'cluster.cpu.requested.cores',
-            // Memory (bytes)
-            'cluster.mem.used.bytes',
-            'cluster.mem.allocatable.bytes',
-            'cluster.mem.requested.bytes',
-            // KPIs
-            'cluster.nodes.ready',
-            'cluster.nodes.count',
-            'cluster.pods.running',
-            'cluster.pods.pending',
-            'cluster.pods.failed',
-            'cluster.pods.unschedulable',
-        ],
-        []
-    )
+	// Subscribe to live cluster series (same WS client as OpsView)
+	const seriesKeys = React.useMemo(
+		() => [
+			// CPU
+			'cluster.cpu.used.cores',
+			'cluster.cpu.allocatable.cores',
+			'cluster.cpu.requested.cores',
+			// Memory (bytes)
+			'cluster.mem.used.bytes',
+			'cluster.mem.allocatable.bytes',
+			'cluster.mem.requested.bytes',
+			// KPIs
+			'cluster.nodes.ready',
+			'cluster.nodes.count',
+			'cluster.pods.running',
+			'cluster.pods.pending',
+			'cluster.pods.failed',
+			'cluster.pods.unschedulable',
+		],
+		[]
+	)
 
-    const live = useLiveSeriesSubscription('cluster-dashboard', seriesKeys, {
-        res: 'lo',
-        since: '60m',
-        autoConnect: true,
-    })
+	const live = useLiveSeriesSubscription('cluster-dashboard', seriesKeys, {
+		res: 'lo',
+		since: '60m',
+		autoConnect: true,
+	})
 
-    const isConnected = live.isConnected
+	const isConnected = live.isConnected
 
-    // Helper: get latest value for a series key
-    const latest = React.useCallback((key: string): number => {
-        const arr = live.seriesData[key]
-        return arr && arr.length ? arr[arr.length - 1].v : 0
-    }, [live.seriesData])
+	// Helper: get latest value for a series key
+	const latest = React.useCallback((key: string): number => {
+		const arr = live.seriesData[key]
+		return arr && arr.length ? arr[arr.length - 1].v : 0
+	}, [live.seriesData])
 
-    // KPIs from live data (fallback to 0s if not available yet)
-    const kpis = React.useMemo(() => {
-        const nodesReady = Math.round(latest('cluster.nodes.ready'))
-        const nodesTotal = Math.round(latest('cluster.nodes.count'))
+	// KPIs from live data (fallback to 0s if not available yet)
+	const kpis = React.useMemo(() => {
+		const nodesReady = Math.round(latest('cluster.nodes.ready'))
+		const nodesTotal = Math.round(latest('cluster.nodes.count'))
 
-        const podsRunning = Math.round(latest('cluster.pods.running'))
-        const podsPending = Math.round(latest('cluster.pods.pending'))
-        const podsFailed = Math.round(latest('cluster.pods.failed'))
-        const podsTotal = podsRunning + podsPending + podsFailed
+		const podsRunning = Math.round(latest('cluster.pods.running'))
+		const podsPending = Math.round(latest('cluster.pods.pending'))
+		const podsFailed = Math.round(latest('cluster.pods.failed'))
+		const podsTotal = podsRunning + podsPending + podsFailed
 
-        return {
-            nodesReady: { value: nodesReady, total: nodesTotal, delta: 0 },
-            pods: { running: podsRunning, pending: podsPending, failed: podsFailed, total: podsTotal, delta: 0 },
-            podsProblem: { pending: podsPending, unschedulable: Math.round(latest('cluster.pods.unschedulable')), delta: 0 },
-            apiErrors: { rate: 0, delta: 0 },
-        }
-    }, [latest])
+		return {
+			nodesReady: { value: nodesReady, total: nodesTotal, delta: 0 },
+			pods: { running: podsRunning, pending: podsPending, failed: podsFailed, total: podsTotal, delta: 0 },
+			podsProblem: { pending: podsPending, unschedulable: Math.round(latest('cluster.pods.unschedulable')), delta: 0 },
+			apiErrors: { rate: 0, delta: 0 },
+		}
+	}, [latest])
 
-    // Align multiple series into a single recharts data array with progressive fill
-    type AlignConfig = { key: string; field: string; transform?: (v: number) => number }
-    function alignSeries(config: AlignConfig[]) {
-        const timestamps = new Set<number>()
-        for (const { key } of config) {
-            const arr = live.seriesData[key] || []
-            for (const p of arr) timestamps.add(p.t)
-        }
-        const sortedTs = Array.from(timestamps).sort((a, b) => a - b)
+	// Align multiple series into a single recharts data array with progressive fill
+	type AlignConfig = { key: string; field: string; transform?: (v: number) => number }
+	function alignSeries(config: AlignConfig[]) {
+		const timestamps = new Set<number>()
+		for (const { key } of config) {
+			const arr = live.seriesData[key] || []
+			for (const p of arr) timestamps.add(p.t)
+		}
+		const sortedTs = Array.from(timestamps).sort((a, b) => a - b)
 
-        // Build fast lookup per key
-        const seriesSorted: Record<string, { t: number; v: number }[]> = {}
-        for (const { key } of config) {
-            const arr = (live.seriesData[key] || []).slice().sort((a, b) => a.t - b.t)
-            seriesSorted[key] = arr
-        }
+		// Build fast lookup per key
+		const seriesSorted: Record<string, { t: number; v: number }[]> = {}
+		for (const { key } of config) {
+			const arr = (live.seriesData[key] || []).slice().sort((a, b) => a.t - b.t)
+			seriesSorted[key] = arr
+		}
 
-        const pointers: Record<string, number> = {}
-        const lastVal: Record<string, number | undefined> = {}
-        for (const { key } of config) pointers[key] = 0
+		const pointers: Record<string, number> = {}
+		const lastVal: Record<string, number | undefined> = {}
+		for (const { key } of config) pointers[key] = 0
 
-        const data: Array<any> = []
-        for (const t of sortedTs) {
-            const row: any = { t }
-            for (const { key, field, transform } of config) {
-                const arr = seriesSorted[key]
-                let i = pointers[key]
-                while (i < arr.length && arr[i].t <= t) {
-                    lastVal[key] = arr[i].v
-                    i++
-                }
-                pointers[key] = i
-                const v = lastVal[key]
-                row[field] = typeof v === 'number' ? (transform ? transform(v) : v) : undefined
-            }
-            data.push(row)
-        }
-        return data
-    }
+		const data: Array<any> = []
+		for (const t of sortedTs) {
+			const row: any = { t }
+			for (const { key, field, transform } of config) {
+				const arr = seriesSorted[key]
+				let i = pointers[key]
+				while (i < arr.length && arr[i].t <= t) {
+					lastVal[key] = arr[i].v
+					i++
+				}
+				pointers[key] = i
+				const v = lastVal[key]
+				row[field] = typeof v === 'number' ? (transform ? transform(v) : v) : undefined
+			}
+			data.push(row)
+		}
+		return data
+	}
 
-    // Chart datasets
-    const capCpu = React.useMemo(() => alignSeries([
-        { key: 'cluster.cpu.allocatable.cores', field: 'cpuAlloc' },
-        { key: 'cluster.cpu.requested.cores', field: 'cpuReq' },
-        { key: 'cluster.cpu.used.cores', field: 'cpuUsed' },
-    ]), [live.seriesData])
+	// Chart datasets
+	const capCpu = React.useMemo(() => alignSeries([
+		{ key: 'cluster.cpu.allocatable.cores', field: 'cpuAlloc' },
+		{ key: 'cluster.cpu.requested.cores', field: 'cpuReq' },
+		{ key: 'cluster.cpu.used.cores', field: 'cpuUsed' },
+	]), [live.seriesData])
 
-    const capMem = React.useMemo(() => alignSeries([
-        // Convert bytes -> GiB for readability
-        { key: 'cluster.mem.allocatable.bytes', field: 'memAlloc', transform: (v) => v / (1024 ** 3) },
-        { key: 'cluster.mem.requested.bytes', field: 'memReq', transform: (v) => v / (1024 ** 3) },
-        { key: 'cluster.mem.used.bytes', field: 'memUsed', transform: (v) => v / (1024 ** 3) },
-    ]), [live.seriesData])
+	const capMem = React.useMemo(() => alignSeries([
+		// Convert bytes -> GiB for readability
+		{ key: 'cluster.mem.allocatable.bytes', field: 'memAlloc', transform: (v) => v / (1024 ** 3) },
+		{ key: 'cluster.mem.requested.bytes', field: 'memReq', transform: (v) => v / (1024 ** 3) },
+		{ key: 'cluster.mem.used.bytes', field: 'memUsed', transform: (v) => v / (1024 ** 3) },
+	]), [live.seriesData])
 
-    // Fallbacks if no live data yet
-    const cap = capCpu.length > 0 && capMem.length > 0 ? undefined : useMockCapacityVsUsage()
-    // --- Node Health & Pressure (live) ---
-    const [nodeList, setNodeList] = React.useState<Node[]>([])
-    React.useEffect(() => {
-        let mounted = true
-        getNodes()
-            .then(items => { if (mounted) setNodeList(items) })
-            .catch(() => { /* ignore, leave empty */ })
-        return () => { mounted = false }
-    }, [])
+	// Fallbacks if no live data yet
+	const cap = capCpu.length > 0 && capMem.length > 0 ? undefined : useMockCapacityVsUsage()
+	// --- Node Health & Pressure (live) ---
+	const [nodeList, setNodeList] = React.useState<Node[]>([])
+	React.useEffect(() => {
+		let mounted = true
+		getNodes()
+			.then(items => { if (mounted) setNodeList(items) })
+			.catch(() => { /* ignore, leave empty */ })
+		return () => { mounted = false }
+	}, [])
 
-    const nodeNames = React.useMemo(() => nodeList.map(n => n.name), [nodeList])
+	const nodeNames = React.useMemo(() => nodeList.map(n => n.name), [nodeList])
 
-    const nodeMetricBases = React.useMemo(() => [
-        'node.cpu.usage.cores',
-        'node.allocatable.cpu.cores',
-        'node.mem.usage.bytes',
-        'node.allocatable.mem.bytes',
-        'node.fs.used.percent',
-        'node.imagefs.used.percent',
-        'node.condition.pid_pressure',
-    ], [])
+	const nodeMetricBases = React.useMemo(() => [
+		'node.cpu.usage.cores',
+		'node.allocatable.cpu.cores',
+		'node.mem.usage.bytes',
+		'node.allocatable.mem.bytes',
+		'node.fs.used.percent',
+		'node.imagefs.used.percent',
+		'node.condition.pid_pressure',
+	], [])
 
-    const nodeMetricKeys = React.useMemo(() => {
-        const keys: string[] = []
-        for (const name of nodeNames) {
-            for (const base of nodeMetricBases) keys.push(`${base}.${name}`)
-        }
-        return keys
-    }, [nodeNames, nodeMetricBases])
+	const nodeMetricKeys = React.useMemo(() => {
+		const keys: string[] = []
+		for (const name of nodeNames) {
+			for (const base of nodeMetricBases) keys.push(`${base}.${name}`)
+		}
+		return keys
+	}, [nodeNames, nodeMetricBases])
 
-    const { seriesData: nodeLive } = useLiveSeriesSubscription('node-health-grid', nodeMetricKeys, { res: 'lo', since: '30m', autoConnect: true })
+	const { seriesData: nodeLive } = useLiveSeriesSubscription('node-health-grid', nodeMetricKeys, { res: 'lo', since: '30m', autoConnect: true })
 
-    type NodePressureRow = { name: string; ready: boolean; cordoned: boolean; taints: number; values: { cpu: number; mem: number; disk: number; pid: number } }
-    const nodes: NodePressureRow[] = React.useMemo(() => {
-        return nodeList.map(n => {
-            const last = (key: string) => {
-                const arr = nodeLive[key]
-                return arr && arr.length ? arr[arr.length - 1]!.v : 0
-            }
-            const cpuU = last(`node.cpu.usage.cores.${n.name}`)
-            const cpuA = last(`node.allocatable.cpu.cores.${n.name}`)
-            const memU = last(`node.mem.usage.bytes.${n.name}`)
-            const memA = last(`node.allocatable.mem.bytes.${n.name}`)
-            const rootFsPct = last(`node.fs.used.percent.${n.name}`)
-            const imageFsPct = last(`node.imagefs.used.percent.${n.name}`)
-            const pidPressure = last(`node.condition.pid_pressure.${n.name}`)
+	type NodePressureRow = { name: string; ready: boolean; cordoned: boolean; taints: number; values: { cpu: number; mem: number; disk: number; pid: number } }
+	const nodes: NodePressureRow[] = React.useMemo(() => {
+		return nodeList.map(n => {
+			const last = (key: string) => {
+				const arr = nodeLive[key]
+				return arr && arr.length ? arr[arr.length - 1]!.v : 0
+			}
+			const cpuU = last(`node.cpu.usage.cores.${n.name}`)
+			const cpuA = last(`node.allocatable.cpu.cores.${n.name}`)
+			const memU = last(`node.mem.usage.bytes.${n.name}`)
+			const memA = last(`node.allocatable.mem.bytes.${n.name}`)
+			const rootFsPct = last(`node.fs.used.percent.${n.name}`)
+			const imageFsPct = last(`node.imagefs.used.percent.${n.name}`)
+			const pidPressure = last(`node.condition.pid_pressure.${n.name}`)
 
-            const cpu = cpuA > 0 ? Math.max(0, Math.min(1, cpuU / cpuA)) : 0
-            const mem = memA > 0 ? Math.max(0, Math.min(1, memU / memA)) : 0
-            const disk = Math.max(0, Math.min(1, Math.max(rootFsPct, imageFsPct) / 100))
-            const pid = pidPressure > 0 ? 1 : 0
+			const cpu = cpuA > 0 ? Math.max(0, Math.min(1, cpuU / cpuA)) : 0
+			const mem = memA > 0 ? Math.max(0, Math.min(1, memU / memA)) : 0
+			const disk = Math.max(0, Math.min(1, Math.max(rootFsPct, imageFsPct) / 100))
+			const pid = pidPressure > 0 ? 1 : 0
 
-            return {
-                name: n.name,
-                ready: !!n.status?.ready,
-                cordoned: !!n.status?.unschedulable,
-                taints: Array.isArray(n.taints) ? n.taints.length : 0,
-                values: { cpu, mem, disk, pid }
-            }
-        })
-    }, [nodeList, nodeLive])
+			return {
+				name: n.name,
+				ready: !!n.status?.ready,
+				cordoned: !!n.status?.unschedulable,
+				taints: Array.isArray(n.taints) ? n.taints.length : 0,
+				values: { cpu, mem, disk, pid }
+			}
+		})
+	}, [nodeList, nodeLive])
 	const ns = useNamespaceUsage()
 	const cp = useControlPlane()
 	const crds = useCRDs()
 
 	// Calculate latest values for health footers
-    const latestCpu = (capCpu.length ? capCpu[capCpu.length - 1] : (cap ? cap[cap.length - 1] : undefined)) as any
-    const latestMem = (capMem.length ? capMem[capMem.length - 1] : (cap ? cap[cap.length - 1] : undefined)) as any
-    const cpuUsedPct = latestCpu ? (latestCpu.cpuUsed || 0) / Math.max(1e-9, latestCpu.cpuAlloc || 0) : 0
-    const memUsedPct = latestMem ? (latestMem.memUsed || 0) / Math.max(1e-9, latestMem.memAlloc || 0) : 0
-    const cpuReqPct = latestCpu ? (latestCpu.cpuReq || 0) / Math.max(1e-9, latestCpu.cpuAlloc || 0) : 0
-    const memReqPct = latestMem ? (latestMem.memReq || 0) / Math.max(1e-9, latestMem.memAlloc || 0) : 0
+	const latestCpu = (capCpu.length ? capCpu[capCpu.length - 1] : (cap ? cap[cap.length - 1] : undefined)) as any
+	const latestMem = (capMem.length ? capMem[capMem.length - 1] : (cap ? cap[cap.length - 1] : undefined)) as any
+	const cpuUsedPct = latestCpu ? (latestCpu.cpuUsed || 0) / Math.max(1e-9, latestCpu.cpuAlloc || 0) : 0
+	const memUsedPct = latestMem ? (latestMem.memUsed || 0) / Math.max(1e-9, latestMem.memAlloc || 0) : 0
+	const cpuReqPct = latestCpu ? (latestCpu.cpuReq || 0) / Math.max(1e-9, latestCpu.cpuAlloc || 0) : 0
+	const memReqPct = latestMem ? (latestMem.memReq || 0) / Math.max(1e-9, latestMem.memAlloc || 0) : 0
 
 	const cpuTone: "ok" | "warn" | "crit" = cpuUsedPct > 0.85 ? "crit" : cpuUsedPct > 0.7 ? "warn" : "ok"
 	const memTone: "ok" | "warn" | "crit" = memUsedPct > 0.85 ? "crit" : memUsedPct > 0.7 ? "warn" : "ok"
@@ -356,40 +356,40 @@ export default function ClusterDashboard() {
 						<p className="text-sm text-muted-foreground">Monitor cluster health, capacity, and workload distribution</p>
 					</div>
 					<div className="px-4 py-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-                    <div className="flex gap-2 items-center">
-                        <Badge variant="outline" className="gap-1 text-foreground border-border"><Server className="h-4 w-4" /> Cluster</Badge>
-                        <Badge variant="outline" className="text-muted-foreground border-border">All Namespaces</Badge>
-                        <Badge variant="outline" className="text-muted-foreground border-border">Resolution: Low</Badge>
-                        {isConnected ? (
-                            <Badge variant="outline" className="gap-1 text-green-600 border-border">
-                                <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                                Live
-                            </Badge>
-                        ) : (
-                            <Badge variant="outline" className="gap-1 text-amber-600 border-border">
-                                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                                Paused
-                            </Badge>
-                        )}
-                    </div>
-                    <div className="flex gap-2 items-center">
-                        <Input placeholder="Filter operations data and sections…" className="w-72" />
-                        {isConnected ? (
-                            <Button size="sm" variant="outline" onClick={() => live.disconnect()}>Pause Live</Button>
-                        ) : (
-                            <Button size="sm" variant="default" onClick={() => live.connect()}>Resume Live</Button>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
+						<div className="flex gap-2 items-center">
+							<Badge variant="outline" className="gap-1 text-foreground border-border"><Server className="h-4 w-4" /> Cluster</Badge>
+							<Badge variant="outline" className="text-muted-foreground border-border">All Namespaces</Badge>
+							<Badge variant="outline" className="text-muted-foreground border-border">Resolution: Low</Badge>
+							{isConnected ? (
+								<Badge variant="outline" className="gap-1 text-green-600 border-border">
+									<span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+									Live
+								</Badge>
+							) : (
+								<Badge variant="outline" className="gap-1 text-amber-600 border-border">
+									<span className="h-2 w-2 rounded-full bg-amber-500" />
+									Paused
+								</Badge>
+							)}
+						</div>
+						<div className="flex gap-2 items-center">
+							<Input placeholder="Filter operations data and sections…" className="w-72" />
+							{isConnected ? (
+								<Button size="sm" variant="outline" onClick={() => live.disconnect()}>Pause Live</Button>
+							) : (
+								<Button size="sm" variant="default" onClick={() => live.connect()}>Resume Live</Button>
+							)}
+						</div>
+					</div>
+				</div>
+			</div>
 
 			{/* KPI Cards Grid */}
 			<div className="px-4 lg:px-6">
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 					{/* Nodes Ready */}
 					<div className="w-full max-w-[var(--card-max)] mx-auto">
-						<Card className="@container/chart p-0 relative">
+						<Card className="@container/chart p-0 gap-0 relative">
 							{/* Card Type Header */}
 							<div className="flex items-center justify-between px-3 py-2 border-b">
 								<div className="flex items-center gap-2">
@@ -412,28 +412,28 @@ export default function ClusterDashboard() {
 								</div>
 							</div>
 
-                            <CardContent className="px-3 pb-3 pt-6">
-                                {/* Big value */}
-                                <div className="flex items-center gap-3">
-                                    <div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
-                                        {kpis.nodesReady.value}/{kpis.nodesReady.total}
-                                    </div>
-                                    <Delta value={kpis.nodesReady.delta} />
-                                </div>
-                                {/* Headline */}
-                                <div className="mt-3 text-sm font-medium flex items-center gap-1">
-                                    {kpis.nodesReady.total > 0 && kpis.nodesReady.value === kpis.nodesReady.total ? (
-                                        <>
-                                            <span>All nodes ready</span>
-                                            <Check className="h-4 w-4" />
-                                        </>
-                                    ) : (
-                                        <span>{kpis.nodesReady.total > 0 ? `${kpis.nodesReady.total - kpis.nodesReady.value} node(s) not ready` : 'No cluster nodes detected'}</span>
-                                    )}
-                                </div>
-                                {/* Subline */}
-                                <div className="mt-1 text-sm text-muted-foreground">All systems operational</div>
-                            </CardContent>
+							<CardContent className="px-3 pb-3 pt-3 flex flex-col justify-center min-h-[120px]">
+								{/* Big value */}
+								<div className="flex items-center gap-3">
+									<div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
+										{kpis.nodesReady.value}/{kpis.nodesReady.total}
+									</div>
+									<Delta value={kpis.nodesReady.delta} />
+								</div>
+								{/* Headline */}
+								<div className="mt-3 text-sm font-medium flex items-center gap-1">
+									{kpis.nodesReady.total > 0 && kpis.nodesReady.value === kpis.nodesReady.total ? (
+										<>
+											<span>All nodes ready</span>
+											<Check className="h-4 w-4" />
+										</>
+									) : (
+										<span>{kpis.nodesReady.total > 0 ? `${kpis.nodesReady.total - kpis.nodesReady.value} node(s) not ready` : 'No cluster nodes detected'}</span>
+									)}
+								</div>
+								{/* Subline */}
+								<div className="mt-1 text-sm text-muted-foreground">All systems operational</div>
+							</CardContent>
 
 							{/* Info Tooltip - Bottom Right Corner */}
 							<Tooltip>
@@ -464,7 +464,7 @@ export default function ClusterDashboard() {
 
 					{/* Pods Running */}
 					<div className="w-full max-w-[var(--card-max)] mx-auto">
-						<Card className="@container/chart p-0 relative">
+						<Card className="@container/chart p-0 gap-0 relative">
 							{/* Card Type Header */}
 							<div className="flex items-center justify-between px-3 py-2 border-b">
 								<div className="flex items-center gap-2">
@@ -487,30 +487,30 @@ export default function ClusterDashboard() {
 								</div>
 							</div>
 
-                            <CardContent className="px-3 pb-3 pt-6">
-                                {/* Big value */}
-                                <div className="flex items-center gap-3">
-                                    <div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
-                                        {kpis.pods.total > 0 ? `${kpis.pods.running}/${kpis.pods.total}` : `${kpis.pods.running}`}
-                                    </div>
-                                    <Delta value={kpis.pods.delta} />
-                                </div>
-                                {/* Headline */}
-                                <div className="mt-3 text-sm font-medium flex items-center gap-1">
-                                    {kpis.pods.total > 0 ? (
-                                        <>
-                                            <span>{Math.round((kpis.pods.running / Math.max(1, kpis.pods.total)) * 100)}% pods running successfully</span>
-                                            <Check className="h-4 w-4" />
-                                        </>
-                                    ) : (
-                                        <span>No workload activity</span>
-                                    )}
-                                </div>
-                                {/* Subline */}
-                                <div className="mt-1 text-sm text-muted-foreground">
-                                    {kpis.pods.pending > 0 ? `${kpis.pods.pending} pod(s) pending startup` : 'All pods scheduled'}
-                                </div>
-                            </CardContent>
+							<CardContent className="px-3 pb-3 pt-3 flex flex-col justify-center min-h-[120px]">
+								{/* Big value */}
+								<div className="flex items-center gap-3">
+									<div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
+										{kpis.pods.total > 0 ? `${kpis.pods.running}/${kpis.pods.total}` : `${kpis.pods.running}`}
+									</div>
+									<Delta value={kpis.pods.delta} />
+								</div>
+								{/* Headline */}
+								<div className="mt-3 text-sm font-medium flex items-center gap-1">
+									{kpis.pods.total > 0 ? (
+										<>
+											<span>{Math.round((kpis.pods.running / Math.max(1, kpis.pods.total)) * 100)}% pods running successfully</span>
+											<Check className="h-4 w-4" />
+										</>
+									) : (
+										<span>No workload activity</span>
+									)}
+								</div>
+								{/* Subline */}
+								<div className="mt-1 text-sm text-muted-foreground">
+									{kpis.pods.pending > 0 ? `${kpis.pods.pending} pod(s) pending startup` : 'All pods scheduled'}
+								</div>
+							</CardContent>
 
 							{/* Info Tooltip - Bottom Right Corner */}
 							<Tooltip>
@@ -541,7 +541,7 @@ export default function ClusterDashboard() {
 
 					{/* Unschedulable Pods */}
 					<div className="w-full max-w-[var(--card-max)] mx-auto">
-						<Card className="@container/chart p-0 relative">
+						<Card className="@container/chart p-0 gap-0 relative">
 							{/* Card Type Header */}
 							<div className="flex items-center justify-between px-3 py-2 border-b">
 								<div className="flex items-center gap-2">
@@ -564,19 +564,19 @@ export default function ClusterDashboard() {
 								</div>
 							</div>
 
-                            <CardContent className="px-3 pb-3 pt-6">
-                                {/* Big value */}
-                                <div className="flex items-center gap-3">
-                                    <div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
-                                        {kpis.podsProblem.unschedulable}
-                                    </div>
-                                    <AlertTriangle className="h-5 w-5 text-amber-600" />
-                                </div>
-                                {/* Headline */}
-                                <div className="mt-3 text-sm font-medium">{kpis.podsProblem.unschedulable > 0 ? 'Unschedulable pods detected' : 'No unschedulable pods'}</div>
-                                {/* Subline */}
-                                <div className="mt-1 text-sm text-muted-foreground">Pods awaiting placement or resources</div>
-                            </CardContent>
+							<CardContent className="px-3 pb-3 pt-3 flex flex-col justify-center min-h-[120px]">
+								{/* Big value */}
+								<div className="flex items-center gap-3">
+									<div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
+										{kpis.podsProblem.unschedulable}
+									</div>
+									<AlertTriangle className="h-5 w-5 text-amber-600" />
+								</div>
+								{/* Headline */}
+								<div className="mt-3 text-sm font-medium">{kpis.podsProblem.unschedulable > 0 ? 'Unschedulable pods detected' : 'No unschedulable pods'}</div>
+								{/* Subline */}
+								<div className="mt-1 text-sm text-muted-foreground">Pods awaiting placement or resources</div>
+							</CardContent>
 
 							{/* Info Tooltip - Bottom Right Corner */}
 							<Tooltip>
@@ -607,7 +607,7 @@ export default function ClusterDashboard() {
 
 					{/* API Errors */}
 					<div className="w-full max-w-[var(--card-max)] mx-auto">
-						<Card className="@container/chart p-0 relative">
+						<Card className="@container/chart p-0 gap-0 relative">
 							{/* Card Type Header */}
 							<div className="flex items-center justify-between px-3 py-2 border-b">
 								<div className="flex items-center gap-2">
@@ -630,21 +630,21 @@ export default function ClusterDashboard() {
 								</div>
 							</div>
 
-                            <CardContent className="px-3 pb-3 pt-6">
-                                {/* Big value */}
-                                <div className="flex items-center gap-3">
-                                    <div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
-                                        {Number.isFinite(kpis?.apiErrors?.rate) ? kpis.apiErrors.rate.toFixed(2) : '—'}
-                                    </div>
-                                    <Delta value={kpis?.apiErrors?.delta ?? 0} />
-                                </div>
-                                {/* Headline */}
-                                <div className="mt-3 text-sm font-medium">
-                                    {kpis.apiErrors.rate > 0 ? 'API errors present' : 'Error rate nominal'}
-                                </div>
-                                {/* Subline */}
-                                <div className="mt-1 text-sm text-muted-foreground">API server error rate (errors/s)</div>
-                            </CardContent>
+							<CardContent className="px-3 pb-3 pt-3 flex flex-col justify-center min-h-[120px]">
+								{/* Big value */}
+								<div className="flex items-center gap-3">
+									<div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
+										{Number.isFinite(kpis?.apiErrors?.rate) ? kpis.apiErrors.rate.toFixed(2) : '—'}
+									</div>
+									<Delta value={kpis?.apiErrors?.delta ?? 0} />
+								</div>
+								{/* Headline */}
+								<div className="mt-3 text-sm font-medium">
+									{kpis.apiErrors.rate > 0 ? 'API errors present' : 'Error rate nominal'}
+								</div>
+								{/* Subline */}
+								<div className="mt-1 text-sm text-muted-foreground">API server error rate (errors/s)</div>
+							</CardContent>
 
 							{/* Info Tooltip - Bottom Right Corner */}
 							<Tooltip>
@@ -714,19 +714,19 @@ export default function ClusterDashboard() {
 
 							<CardContent className="px-3 pb-3 pt-3">
 								<div className="h-64">
-                            <ChartContainer config={clusterChartConfig} className="h-full w-full">
-                                <ComposedChart data={capCpu.length ? capCpu : (cap || [])} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="t" hide />
-                                    <YAxis />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <ChartLegend />
-                                    <Area dataKey="cpuAlloc" name="Allocatable" fill="var(--color-cpuAlloc)" fillOpacity={0.1} stroke="var(--color-cpuAlloc)" connectNulls />
-                                    <Area dataKey="cpuReq" name="Requested" fill="var(--color-cpuReq)" fillOpacity={0.3} stroke="var(--color-cpuReq)" connectNulls />
-                                    <Line dataKey="cpuUsed" name="Used" strokeWidth={2} dot={false} stroke="var(--color-cpuUsed)" connectNulls />
-                                </ComposedChart>
-                            </ChartContainer>
-                        </div>
+									<ChartContainer config={clusterChartConfig} className="h-full w-full">
+										<ComposedChart data={capCpu.length ? capCpu : (cap || [])} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+											<CartesianGrid strokeDasharray="3 3" />
+											<XAxis dataKey="t" hide />
+											<YAxis />
+											<ChartTooltip content={<ChartTooltipContent />} />
+											<ChartLegend />
+											<Area dataKey="cpuAlloc" name="Allocatable" fill="var(--color-cpuAlloc)" fillOpacity={0.1} stroke="var(--color-cpuAlloc)" connectNulls />
+											<Area dataKey="cpuReq" name="Requested" fill="var(--color-cpuReq)" fillOpacity={0.3} stroke="var(--color-cpuReq)" connectNulls />
+											<Line dataKey="cpuUsed" name="Used" strokeWidth={2} dot={false} stroke="var(--color-cpuUsed)" connectNulls />
+										</ComposedChart>
+									</ChartContainer>
+								</div>
 							</CardContent>
 
 							{/* Info Tooltip - Bottom Right Corner */}
@@ -760,7 +760,7 @@ export default function ClusterDashboard() {
 									<div className="flex-1">
 										<div className="text-sm">
 											<span className={`font-medium ${cpuTone === "crit" ? "text-red-300" : cpuTone === "warn" ? "text-amber-300" : "text-emerald-300"}`}>
-                                        CPU {(cpuUsedPct * 100).toFixed(0)}% utilized ({(latestCpu?.cpuUsed ?? 0).toFixed(1)} / {(latestCpu?.cpuAlloc ?? 0).toFixed(1)} cores)
+												CPU {(cpuUsedPct * 100).toFixed(0)}% utilized ({(latestCpu?.cpuUsed ?? 0).toFixed(1)} / {(latestCpu?.cpuAlloc ?? 0).toFixed(1)} cores)
 											</span>
 										</div>
 										{typeof cpuUsedPct === "number" && (
@@ -822,19 +822,19 @@ export default function ClusterDashboard() {
 
 							<CardContent className="px-3 pb-3 pt-3">
 								<div className="h-64">
-                            <ChartContainer config={clusterChartConfig} className="h-full w-full">
-                                <ComposedChart data={capMem.length ? capMem : (cap || [])} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="t" hide />
-                                    <YAxis />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <ChartLegend />
-                                    <Area dataKey="memAlloc" name="Allocatable" fill="var(--color-memAlloc)" fillOpacity={0.1} stroke="var(--color-memAlloc)" connectNulls />
-                                    <Area dataKey="memReq" name="Requested" fill="var(--color-memReq)" fillOpacity={0.3} stroke="var(--color-memReq)" connectNulls />
-                                    <Line dataKey="memUsed" name="Used" strokeWidth={2} dot={false} stroke="var(--color-memUsed)" connectNulls />
-                                </ComposedChart>
-                            </ChartContainer>
-                        </div>
+									<ChartContainer config={clusterChartConfig} className="h-full w-full">
+										<ComposedChart data={capMem.length ? capMem : (cap || [])} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+											<CartesianGrid strokeDasharray="3 3" />
+											<XAxis dataKey="t" hide />
+											<YAxis />
+											<ChartTooltip content={<ChartTooltipContent />} />
+											<ChartLegend />
+											<Area dataKey="memAlloc" name="Allocatable" fill="var(--color-memAlloc)" fillOpacity={0.1} stroke="var(--color-memAlloc)" connectNulls />
+											<Area dataKey="memReq" name="Requested" fill="var(--color-memReq)" fillOpacity={0.3} stroke="var(--color-memReq)" connectNulls />
+											<Line dataKey="memUsed" name="Used" strokeWidth={2} dot={false} stroke="var(--color-memUsed)" connectNulls />
+										</ComposedChart>
+									</ChartContainer>
+								</div>
 							</CardContent>
 
 							{/* Info Tooltip - Bottom Right Corner */}
@@ -868,7 +868,7 @@ export default function ClusterDashboard() {
 									<div className="flex-1">
 										<div className="text-sm">
 											<span className={`font-medium ${memTone === "crit" ? "text-red-300" : memTone === "warn" ? "text-amber-300" : "text-emerald-300"}`}>
-                                        Memory {(memUsedPct * 100).toFixed(0)}% utilized ({(latestMem?.memUsed ?? 0).toFixed(1)} / {(latestMem?.memAlloc ?? 0).toFixed(1)} GiB)
+												Memory {(memUsedPct * 100).toFixed(0)}% utilized ({(latestMem?.memUsed ?? 0).toFixed(1)} / {(latestMem?.memAlloc ?? 0).toFixed(1)} GiB)
 											</span>
 										</div>
 										{typeof memUsedPct === "number" && (
@@ -934,21 +934,21 @@ export default function ClusterDashboard() {
 							</div>
 							<Separator />
 							<div className="space-y-2">
-                            {nodes.map((n) => (
-                                <div key={n.name} className="grid grid-cols-12 items-center gap-2">
-                                    <div className="col-span-4 truncate font-medium text-sm">{n.name}</div>
-                                    <div className="col-span-2 flex items-center gap-1">
-                                        {n.ready ? <Badge variant="secondary" className="text-xs">Ready</Badge> : <Badge variant="destructive" className="text-xs">NotReady</Badge>}
-                                        {n.cordoned && <Badge variant="outline" className="text-xs">Cordoned</Badge>}
-                                        {n.taints > 0 && <Badge variant="outline" className="text-xs">Taints</Badge>}
-                                    </div>
-                                    <div className="col-span-6 grid grid-cols-4 gap-1">
-                                        {(["cpu", "mem", "disk", "pid"] as const).map((k) => (
-                                            <div key={k} className={`h-4 rounded ${cellClass(n.values[k])}`} title={`${k.toUpperCase()} ${(n.values[k] * 100).toFixed(0)}%`} />
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
+								{nodes.map((n) => (
+									<div key={n.name} className="grid grid-cols-12 items-center gap-2">
+										<div className="col-span-4 truncate font-medium text-sm">{n.name}</div>
+										<div className="col-span-2 flex items-center gap-1">
+											{n.ready ? <Badge variant="secondary" className="text-xs">Ready</Badge> : <Badge variant="destructive" className="text-xs">NotReady</Badge>}
+											{n.cordoned && <Badge variant="outline" className="text-xs">Cordoned</Badge>}
+											{n.taints > 0 && <Badge variant="outline" className="text-xs">Taints</Badge>}
+										</div>
+										<div className="col-span-6 grid grid-cols-4 gap-1">
+											{(["cpu", "mem", "disk", "pid"] as const).map((k) => (
+												<div key={k} className={`h-4 rounded ${cellClass(n.values[k])}`} title={`${k.toUpperCase()} ${(n.values[k] * 100).toFixed(0)}%`} />
+											))}
+										</div>
+									</div>
+								))}
 							</div>
 						</div>
 						<div className="px-4 pb-4 flex justify-end">
@@ -1102,24 +1102,24 @@ export default function ClusterDashboard() {
 									))}
 								</div>
 							</div>
-						{/* Info Tooltip - Bottom Right Corner */}
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="absolute bottom-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground z-10"
-								>
-									<Info className="h-3 w-3" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="left" align="end" className="max-w-[320px] bg-popover border border-border shadow-md">
-								<div className="space-y-1">
-									<div className="font-medium text-sm text-popover-foreground">Workload by Namespace</div>
-									<div className="text-xs text-muted-foreground leading-relaxed">Resource usage across namespaces</div>
-								</div>
-							</TooltipContent>
-						</Tooltip>
+							{/* Info Tooltip - Bottom Right Corner */}
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										variant="ghost"
+										size="icon"
+										className="absolute bottom-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground z-10"
+									>
+										<Info className="h-3 w-3" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="left" align="end" className="max-w-[320px] bg-popover border border-border shadow-md">
+									<div className="space-y-1">
+										<div className="font-medium text-sm text-popover-foreground">Workload by Namespace</div>
+										<div className="text-xs text-muted-foreground leading-relaxed">Resource usage across namespaces</div>
+									</div>
+								</TooltipContent>
+							</Tooltip>
 						</div>
 					</div>
 
@@ -1170,24 +1170,24 @@ export default function ClusterDashboard() {
 									))}
 								</div>
 							</div>
-						{/* Info Tooltip - Bottom Right Corner */}
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="absolute bottom-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground z-10"
-								>
-									<Info className="h-3 w-3" />
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="left" align="end" className="max-w-[320px] bg-popover border border-border shadow-md">
-								<div className="space-y-1">
-									<div className="font-medium text-sm text-popover-foreground">Custom Resources</div>
-									<div className="text-xs text-muted-foreground leading-relaxed">CRDs, groups, versions, and object counts</div>
-								</div>
-							</TooltipContent>
-						</Tooltip>
+							{/* Info Tooltip - Bottom Right Corner */}
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										variant="ghost"
+										size="icon"
+										className="absolute bottom-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground z-10"
+									>
+										<Info className="h-3 w-3" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="left" align="end" className="max-w-[320px] bg-popover border border-border shadow-md">
+									<div className="space-y-1">
+										<div className="font-medium text-sm text-popover-foreground">Custom Resources</div>
+										<div className="text-xs text-muted-foreground leading-relaxed">CRDs, groups, versions, and object counts</div>
+									</div>
+								</TooltipContent>
+							</Tooltip>
 						</div>
 					</div>
 				</div>
