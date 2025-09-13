@@ -60,15 +60,19 @@ type LogRing interface {
 
 // LogBus represents pub/sub for live log updates
 type LogBus interface {
-	// Publish broadcasts a log entry to all matching subscribers
-	Publish(e LogEntry)
+    // Publish broadcasts a log entry to all matching subscribers
+    Publish(e LogEntry)
 
-	// Subscribe creates a subscription for log entries matching the filter
-	// Returns a channel to receive entries and a cancel function
-	Subscribe(f LogFilter) (<-chan LogEntry, func())
+    // Subscribe creates a subscription for log entries matching the filter
+    // Returns a channel to receive entries and a cancel function
+    Subscribe(f LogFilter) (<-chan LogEntry, func())
 
-	// SubscriberCount returns the number of active subscribers
-	SubscriberCount() int
+    // SubscriberCount returns the number of active subscribers
+    SubscriberCount() int
+
+    // CleanupStaleSubscriptions removes idle subscriptions that haven't
+    // received a message within maxAge. Returns the number cleaned up.
+    CleanupStaleSubscriptions(maxAge time.Duration) int
 }
 
 // LogService represents the high-level facade used by HTTP/WS handlers

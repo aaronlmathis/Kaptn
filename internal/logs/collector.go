@@ -199,11 +199,12 @@ func (c *LogCollector) Start(ctx context.Context) error {
 
 	c.logger.Info("Pod informer cache synced")
 
-	// Start background workers
-	c.wg.Add(3)
-	go c.cleanupWorker()
-	go c.retryWorker()
-	go c.statsWorker()
+    // Start background workers
+    c.wg.Add(4)
+    go c.cleanupWorker()
+    go c.retryWorker()
+    go c.statsWorker()
+    go c.reconcileWorker()
 
 	c.started = true
 	c.logger.Info("Log collector started successfully")
@@ -888,36 +889,154 @@ func (c *LogCollector) statsWorker() {
 	}
 }
 
-// cleanupStaleStreams removes streams that haven't seen activity
+// reconcileWorker periodically ensures that all eligible pods have active streams
+// and removes streams for pods that are no longer eligible per current state/config.
+func (c *LogCollector) reconcileWorker() {
+    defer c.wg.Done()
+
+    // Run relatively frequently but not too aggressive
+    ticker := time.NewTicker(90 * time.Second)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-c.ctx.Done():
+            return
+        case <-ticker.C:
+            c.reconcileOnce()
+        }
+    }
+}
+
+func (c *LogCollector) reconcileOnce() {
+    // Snapshot current active stream keys
+    c.streamsMu.RLock()
+    active := make(map[string]struct{}, len(c.activeStreams))
+    for k := range c.activeStreams { active[k] = struct{}{} }
+    c.streamsMu.RUnlock()
+
+    // Iterate pods from informer cache
+    for _, obj := range c.podInformer.GetStore().List() {
+        pod, ok := obj.(*corev1.Pod)
+        if !ok { continue }
+        podKey := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+
+        // If pod is eligible and has no active stream, start one
+        if c.shouldCollectLogs(pod) {
+            if _, exists := active[podKey]; !exists {
+                c.logger.Debug("Reconcile: starting missing pod stream",
+                    zap.String("namespace", pod.Namespace),
+                    zap.String("pod", pod.Name))
+                c.startPodLogStream(pod)
+            }
+        } else {
+            // If pod is not eligible but we have a stream, stop it
+            if _, exists := active[podKey]; exists {
+                c.logger.Debug("Reconcile: stopping ineligible pod stream",
+                    zap.String("namespace", pod.Namespace),
+                    zap.String("pod", pod.Name))
+                c.stopPodLogStream(pod.Namespace, pod.Name)
+                delete(active, podKey)
+            }
+        }
+        // Mark as seen
+        delete(active, podKey)
+    }
+
+    // Any remaining active keys weren’t found in informer cache — ensure removal
+    if len(active) > 0 {
+        for podKey := range active {
+            parts := strings.SplitN(podKey, "/", 2)
+            if len(parts) == 2 {
+                c.logger.Debug("Reconcile: removing stream for missing pod",
+                    zap.String("namespace", parts[0]),
+                    zap.String("pod", parts[1]))
+                c.stopPodLogStream(parts[0], parts[1])
+            } else {
+                c.streamsMu.Lock()
+                if stream, ok := c.activeStreams[podKey]; ok {
+                    stream.cancel()
+                    delete(c.activeStreams, podKey)
+                }
+                c.streamsMu.Unlock()
+            }
+        }
+    }
+}
+
+// cleanupStaleStreams removes streams for pods that no longer exist or are not running.
+// NOTE: Do NOT use "inactivity" to decide cleanup for streaming mode. A pod can be quiet
+// for long periods and still eventually emit logs on the same Follow stream. Killing
+// such streams breaks continuous collection.
 func (c *LogCollector) cleanupStaleStreams() {
-	c.streamsMu.Lock()
-	defer c.streamsMu.Unlock()
+    // We intentionally snapshot keys first to avoid holding the lock across informer lookups.
+    c.streamsMu.RLock()
+    keys := make([]string, 0, len(c.activeStreams))
+    for k := range c.activeStreams {
+        keys = append(keys, k)
+    }
+    c.streamsMu.RUnlock()
 
-	cutoff := time.Now().Add(-c.config.LogRetention)
-	var toRemove []string
+    removed := 0
+    for _, podKey := range keys {
+        // Expect key in form namespace/name
+        parts := strings.SplitN(podKey, "/", 2)
+        if len(parts) != 2 {
+            // If key is malformed, remove it defensively
+            c.streamsMu.Lock()
+            if stream, exists := c.activeStreams[podKey]; exists {
+                stream.cancel()
+                delete(c.activeStreams, podKey)
+                removed++
+            }
+            c.streamsMu.Unlock()
+            continue
+        }
 
-	for podKey, stream := range c.activeStreams {
-		// Read lastSeen with proper locking
-		stream.mu.RLock()
-		isStale := stream.lastSeen.Before(cutoff)
-		stream.mu.RUnlock()
+        ns, name := parts[0], parts[1]
 
-		if isStale {
-			toRemove = append(toRemove, podKey)
-		}
-	}
+        // Use informer cache to check current pod phase without hitting API server
+        obj, exists, err := c.podInformer.GetStore().GetByKey(podKey)
+        if err != nil || !exists {
+            // Pod no longer in cache (deleted or informer hasn't seen it) -> remove stream
+            c.streamsMu.Lock()
+            if stream, ok := c.activeStreams[podKey]; ok {
+                c.logger.Debug("Cleaning up stream; pod missing from cache",
+                    zap.String("namespace", ns),
+                    zap.String("pod", name))
+                stream.cancel()
+                delete(c.activeStreams, podKey)
+                removed++
+            }
+            c.streamsMu.Unlock()
+            continue
+        }
 
-	for _, podKey := range toRemove {
-		if stream, exists := c.activeStreams[podKey]; exists {
-			c.logger.Debug("Cleaning up stale stream", zap.String("pod", podKey))
-			stream.cancel()
-			delete(c.activeStreams, podKey)
-		}
-	}
+        pod, ok := obj.(*corev1.Pod)
+        if !ok {
+            // Unexpected type; be conservative and keep stream
+            continue
+        }
 
-	if len(toRemove) > 0 {
-		c.logger.Info("Cleaned up stale streams", zap.Int("count", len(toRemove)))
-	}
+        if pod.Status.Phase != corev1.PodRunning {
+            // Pod is not running anymore -> stop following
+            c.streamsMu.Lock()
+            if stream, ok := c.activeStreams[podKey]; ok {
+                c.logger.Debug("Cleaning up stream; pod not running",
+                    zap.String("namespace", ns),
+                    zap.String("pod", name),
+                    zap.String("phase", string(pod.Status.Phase)))
+                stream.cancel()
+                delete(c.activeStreams, podKey)
+                removed++
+            }
+            c.streamsMu.Unlock()
+        }
+    }
+
+    if removed > 0 {
+        c.logger.Info("Cleaned up terminated/non-running pod streams", zap.Int("count", removed))
+    }
 }
 
 // logStats logs current collector statistics

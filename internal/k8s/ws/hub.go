@@ -78,17 +78,19 @@ type Message struct {
 }
 
 const (
-	// Time allowed to write a message to the peer
-	writeWait = 10 * time.Second
+    // Time allowed to write a message to the peer
+    writeWait = 10 * time.Second
 
-	// Time allowed to read the next pong message from the peer
-	pongWait = 60 * time.Second
+    // Time allowed to read the next pong message from the peer
+    // Keep reasonably large; we will ping more frequently to avoid idle LB timeouts.
+    pongWait = 60 * time.Second
 
-	// Send pings to peer with this period. Must be less than pongWait
-	pingPeriod = (pongWait * 9) / 10
+    // Send pings to peer with this period. Must be less than pongWait.
+    // Use 30s to play well with common 60s proxy idle timeouts.
+    pingPeriod = 30 * time.Second
 
-	// Maximum message size allowed from peer
-	maxMessageSize = 512
+    // Maximum message size allowed from peer
+    maxMessageSize = 512
 )
 
 var upgrader = websocket.Upgrader{
@@ -216,37 +218,49 @@ func (h *Hub) BroadcastToRoom(room string, messageType string, data interface{})
 	}
 	h.mu.RUnlock()
 
-	// Send to all room clients with timeout and backpressure handling
-	dropped := 0
-	sent := 0
+    // Send to all room clients with tolerant backpressure handling
+    // If a client is slow and its channel is full, drop the oldest queued message
+    // to make room for the latest state rather than disconnecting immediately.
+    sent := 0
+    drops := 0
+    skipped := 0
 
-	for _, client := range roomClients {
-		select {
-		case client.send <- msgBytes:
-			sent++
-		case <-time.After(h.clientSendTimeout):
-			// Client send timeout - remove slow client
-			h.logger.Warn("Removing slow WebSocket client",
-				zap.String("clientId", client.id),
-				zap.String("room", room))
-			h.removeClient(client)
-			dropped++
-		default:
-			// Channel full - remove unresponsive client
-			h.logger.Warn("Removing unresponsive WebSocket client",
-				zap.String("clientId", client.id),
-				zap.String("room", room))
-			h.removeClient(client)
-			dropped++
-		}
-	}
+    for _, client := range roomClients {
+        // Fast path: non-blocking send
+        select {
+        case client.send <- msgBytes:
+            sent++
+            continue
+        default:
+        }
 
-	if dropped > 0 {
-		h.logger.Info("WebSocket broadcast completed with dropped clients",
-			zap.String("room", room),
-			zap.Int("sent", sent),
-			zap.Int("dropped", dropped))
-	}
+        // Slow client: try to drop one oldest message to make room
+        select {
+        case <-client.send:
+            // dropped one old message; now try to send the latest
+        default:
+            // nothing to drop (race), skip this client for this message
+            skipped++
+            continue
+        }
+
+        select {
+        case client.send <- msgBytes:
+            sent++
+            drops++
+        default:
+            // Still jammed, skip for this message to avoid blocking the hub
+            skipped++
+        }
+    }
+
+    if drops > 0 || skipped > 0 {
+        h.logger.Debug("WebSocket broadcast backpressure",
+            zap.String("room", room),
+            zap.Int("sent", sent),
+            zap.Int("dropped_oldest", drops),
+            zap.Int("skipped_clients", skipped))
+    }
 }
 
 // removeClient safely removes a client from the hub
@@ -437,46 +451,56 @@ func (c *Client) readPump() {
 
 // writePump pumps messages from the hub to the websocket connection
 func (c *Client) writePump() {
-	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		c.conn.Close()
-	}()
+    ticker := time.NewTicker(pingPeriod)
+    defer func() {
+        ticker.Stop()
+        c.conn.Close()
+    }()
 
-	for {
-		select {
-		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if !ok {
-				// The hub closed the channel
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
+    for {
+        select {
+        case message, ok := <-c.send:
+            c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+            if !ok {
+                // The hub closed the channel
+                c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+                return
+            }
 
-			w, err := c.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return
-			}
-			w.Write(message)
+            w, err := c.conn.NextWriter(websocket.TextMessage)
+            if err != nil {
+                return
+            }
+            w.Write(message)
 
-			// Add queued messages to the current websocket message
-			n := len(c.send)
-			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.send)
-			}
+            // Add queued messages to the current websocket message
+            n := len(c.send)
+            for i := 0; i < n; i++ {
+                w.Write([]byte{'\n'})
+                w.Write(<-c.send)
+            }
 
-			if err := w.Close(); err != nil {
-				return
-			}
+            if err := w.Close(); err != nil {
+                return
+            }
 
-		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				return
-			}
-		}
-	}
+            // Ensure ping isn't starved by heavy message traffic
+            select {
+            case <-ticker.C:
+                c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+                if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+                    return
+                }
+            default:
+            }
+
+        case <-ticker.C:
+            c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+            if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+                return
+            }
+        }
+    }
 }
 
 // generateClientID generates a unique client ID
