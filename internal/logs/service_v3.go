@@ -636,12 +636,13 @@ func (s *ServiceV3) updateMetrics() {
 
 	now := time.Now()
 
-	// Update prometheus metrics if available
-	if s.prometheusMetrics != nil {
-		stats := s.Stats()
-		// Update individual metrics - would need to implement specific methods
-		s.logger.Debug("Updated metrics", zap.Any("stats", stats))
-	}
+    // Update prometheus metrics if available
+    if s.prometheusMetrics != nil {
+        stats := s.Stats()
+        // Report current subscribers
+        s.prometheusMetrics.UpdateSubscribers("logs", stats.TotalSubscribers)
+        s.logger.Debug("Updated metrics", zap.Any("stats", stats))
+    }
 
 	s.workerMu.Lock()
 	s.lastMetricsRun = now

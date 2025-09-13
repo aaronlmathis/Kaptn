@@ -134,7 +134,7 @@ func (s *Server) HandleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	replayEntries := s.logsCacheService.Replay(logFilter)
 
     // Connect to WebSocket and bridge the live stream (with periodic backfill to cover drops)
-    s.bridgeLogStreamToWebSocket(w, r, "logs:"+streamID, replayEntries, streamCh, logFilter)
+    s.bridgeLogStreamToWebSocket(w, r, "logs:"+streamID, replayEntries, streamCh, cancelStream, logFilter)
 }
 
 // parseKeyValueCSV parses comma-separated key=value pairs into a map
@@ -496,7 +496,7 @@ func (s *Server) buildLogFilterFromRequest(r *http.Request, selector k8slogs.Pod
 }
 
 // bridgeLogStreamToWebSocket connects the logs cache stream to a WebSocket connection
-func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Request, room string, replayEntries []logs.LogEntry, streamCh <-chan logs.LogEntry, baseFilter logs.LogFilter) {
+func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Request, room string, replayEntries []logs.LogEntry, streamCh <-chan logs.LogEntry, cancelStream func(), baseFilter logs.LogFilter) {
 	// Upgrade to WebSocket
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -553,8 +553,17 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 	defer batchTicker.Stop()
 	batchTicker.Stop() // Start stopped, will start when entering degraded mode
 
-	// Main message loop
-	done := make(chan struct{})
+    // Track current subscription so we can resubscribe if the bus channel closes
+    currentCh := streamCh
+    currentCancel := cancelStream
+    defer func() {
+        if currentCancel != nil {
+            currentCancel()
+        }
+    }()
+
+    // Main message loop
+    done := make(chan struct{})
 
 	// Start goroutine to handle pongs and close detection
 	go func() {
@@ -595,7 +604,20 @@ func (s *Server) bridgeLogStreamToWebSocket(w http.ResponseWriter, r *http.Reque
 				batchBuffer = batchBuffer[:0] // Clear buffer but keep capacity
 			}
 
-        case entry := <-streamCh:
+        case entry, ok := <-currentCh:
+            if !ok {
+                // Attempt to resubscribe gracefully
+                if currentCancel != nil {
+                    currentCancel()
+                }
+                // Short backoff before resubscribe
+                time.Sleep(200 * time.Millisecond)
+                newCh, newCancel := s.logsCacheService.Stream(baseFilter)
+                currentCh = newCh
+                currentCancel = newCancel
+                s.logger.Info("Resubscribed to logs stream after channel close", zap.String("room", room))
+                continue
+            }
             if degraded {
                 // In degraded mode, buffer entries for batching
                 batchBuffer = append(batchBuffer, entry)
