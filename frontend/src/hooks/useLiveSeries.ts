@@ -204,6 +204,7 @@ export function useLiveSeriesSubscription(
 
 	const liveSeries = useLiveSeries();
 	const [isSubscribed, setIsSubscribed] = React.useState(false);
+	const [groupActive, setGroupActive] = React.useState(false); // ack/init seen for this group
 
 	// Use ref to store series to avoid dependency issues
 	const seriesRef = React.useRef(series);
@@ -222,7 +223,7 @@ export function useLiveSeriesSubscription(
 					await liveSeries.connect();
 				}
 
-				console.log(`🚀 SUBSCRIBING: ${groupId} with ${seriesRef.current.length} series`);
+				console.log(`SUBSCRIBING: ${groupId} with ${seriesRef.current.length} series`);
 				liveSeries.subscribe({
 					groupId,
 					series: seriesRef.current,
@@ -232,16 +233,21 @@ export function useLiveSeriesSubscription(
 
 				setIsSubscribed(true);
 			} catch (error) {
-				console.error(`❌ SUBSCRIPTION FAILED: ${groupId}`, error);
+				console.error(`SUBSCRIPTION FAILED: ${groupId}`, error);
 			}
 		};
 
 		setup();
 
+		// Mark group active when ack/init received
+		const onInit = () => setGroupActive(true);
+		liveSeriesClient.on(`init:${groupId}`, onInit);
+
 		// Cleanup on unmount
 		return () => {
 			liveSeries.unsubscribe(groupId);
 			setIsSubscribed(false);
+			liveSeriesClient.off(`init:${groupId}`, onInit);
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [groupId, seriesKey, res, since, autoConnect]); // liveSeries intentionally omitted to prevent infinite loops
@@ -255,15 +261,15 @@ export function useLiveSeriesSubscription(
 			}
 		}
 
-		// Only log when there's a mismatch
-		if (Object.keys(filtered).length === 0 && seriesRef.current.length > 0) {
+		// Only log when there's a mismatch after the group becomes active (ack/init received)
+		if (groupActive && Object.keys(filtered).length === 0 && seriesRef.current.length > 0) {
 			console.log(`❌ FILTER MISMATCH: ${groupId} - Requested ${seriesRef.current.length} series, got 0`);
 			console.log(`❌ Available: [${Object.keys(liveSeries.seriesData).slice(0, 5).join(', ')}...]`);
 			console.log(`❌ Requested: [${seriesRef.current.slice(0, 5).join(', ')}...]`);
 		}
 
 		return filtered;
-	}, [groupId, liveSeries.seriesData]); // seriesKey not needed since we use seriesRef.current
+	}, [groupId, liveSeries.seriesData, groupActive]); // seriesKey not needed since we use seriesRef.current
 
 	return {
 		...liveSeries,
