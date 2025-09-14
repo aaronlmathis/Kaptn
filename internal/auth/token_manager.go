@@ -671,28 +671,58 @@ func (tm *TokenManager) SetRefreshTokenCookie(w http.ResponseWriter, token strin
 
 // ClearAuthCookies clears both access and refresh token cookies
 func (tm *TokenManager) ClearAuthCookies(w http.ResponseWriter) {
-	accessCookie := &http.Cookie{
-		Name:     "kaptn-access-token",
-		Value:    "",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
-		MaxAge:   -1,
-	}
+    // Clear cookies at the same path and attributes used when setting them
+    // Primary deletion (matches current cookie settings)
+    http.SetCookie(w, &http.Cookie{
+        Name:     "kaptn-access-token",
+        Value:    "",
+        HttpOnly: true,
+        Secure:   true,
+        SameSite: http.SameSiteLaxMode,
+        Path:     "/",
+        MaxAge:   -1,
+    })
+    http.SetCookie(w, &http.Cookie{
+        Name:     "kaptn-refresh-token",
+        Value:    "",
+        HttpOnly: true,
+        Secure:   true,
+        SameSite: http.SameSiteLaxMode,
+        Path:     "/",
+        MaxAge:   -1,
+    })
 
-	refreshCookie := &http.Cookie{
-		Name:     "kaptn-refresh-token",
-		Value:    "",
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/api/v1/auth/refresh",
-		MaxAge:   -1,
-	}
+    // Backward-compat cleanup: also clear potential legacy paths/attributes
+    // Non-secure variants (for local dev over http)
+    http.SetCookie(w, &http.Cookie{
+        Name:     "kaptn-access-token",
+        Value:    "",
+        HttpOnly: true,
+        Secure:   false,
+        SameSite: http.SameSiteLaxMode,
+        Path:     "/",
+        MaxAge:   -1,
+    })
+    http.SetCookie(w, &http.Cookie{
+        Name:     "kaptn-refresh-token",
+        Value:    "",
+        HttpOnly: true,
+        Secure:   false,
+        SameSite: http.SameSiteLaxMode,
+        Path:     "/",
+        MaxAge:   -1,
+    })
 
-	http.SetCookie(w, accessCookie)
-	http.SetCookie(w, refreshCookie)
+    // Old incorrect path that may have been used previously
+    http.SetCookie(w, &http.Cookie{
+        Name:     "kaptn-refresh-token",
+        Value:    "",
+        HttpOnly: true,
+        Secure:   true,
+        SameSite: http.SameSiteStrictMode,
+        Path:     "/api/v1/auth/refresh",
+        MaxAge:   -1,
+    })
 }
 
 // GetTokensFromCookies extracts tokens from request cookies
