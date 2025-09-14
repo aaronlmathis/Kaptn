@@ -44,9 +44,13 @@ func NewSessionManagerWithAuthKeys(logger *zap.Logger, secret string, sessionTTL
 		return nil, fmt.Errorf("session secret must be at least 32 characters")
 	}
 
-	// Create token manager with short access tokens and longer refresh tokens
-	accessTokenTTL := 15 * time.Minute    // 15 minute access tokens
-	refreshTokenTTL := 7 * 24 * time.Hour // 7 day refresh tokens
+    // Create token manager with access token TTL derived from configured session TTL
+    // and longer refresh tokens for silent renewal.
+    accessTokenTTL := sessionTTL
+    if accessTokenTTL <= 0 {
+        accessTokenTTL = 4 * time.Hour // sensible default if misconfigured
+    }
+    refreshTokenTTL := 7 * 24 * time.Hour // 7 day refresh tokens
 
 	tokenManager, err := NewTokenManagerWithPaths(logger, accessTokenTTL, refreshTokenTTL, privateKeyPath, publicKeyPath)
 	if err != nil {

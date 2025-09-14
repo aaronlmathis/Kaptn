@@ -100,13 +100,14 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 					accessToken, _ := tokenManager.GetTokensFromCookies(r)
 					if accessToken != "" {
 						if claims, tokenErr := tokenManager.ValidateAccessToken(accessToken); tokenErr == nil {
-							user = &User{
-								ID:      claims.UserID,
-								Email:   claims.Email,
-								Name:    claims.Name,
-								Picture: claims.Picture,
-								Groups:  claims.Roles, // Use roles as groups
-								Claims: map[string]interface{}{
+                        user = &User{
+                            ID:      claims.UserID,
+                            Sub:     claims.UserID,
+                            Email:   claims.Email,
+                            Name:    claims.Name,
+                            Picture: claims.Picture,
+                            Groups:  claims.Roles, // Use roles as groups
+                            Claims: map[string]interface{}{
 									"sub":         claims.UserID,
 									"email":       claims.Email,
 									"name":        claims.Name,
@@ -150,6 +151,7 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 							if claims, vErr := m.sessionManager.GetTokenManager().ValidateAccessToken(newAccess); vErr == nil {
                             user = &User{
                                 ID:      claims.UserID,
+                                Sub:     claims.UserID,
                                 Email:   claims.Email,
                                 Name:    claims.Name,
                                 Picture: claims.Picture,

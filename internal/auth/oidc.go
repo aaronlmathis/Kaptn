@@ -124,9 +124,10 @@ func (c *OIDCClient) VerifyToken(ctx context.Context, tokenString string) (*User
 	}
 
 	// Extract standard claims
-	if sub, ok := claims["sub"].(string); ok {
-		user.ID = sub
-	}
+    if sub, ok := claims["sub"].(string); ok {
+        user.ID = sub
+        user.Sub = sub
+    }
 	if email, ok := claims["email"].(string); ok {
 		user.Email = email
 	}
@@ -249,9 +250,10 @@ func (c *OIDCClient) GetUserInfo(ctx context.Context, accessToken string) (*User
 	}
 
 	// Extract standard claims
-	if sub, ok := claims["sub"].(string); ok {
-		user.ID = sub
-	}
+    if sub, ok := claims["sub"].(string); ok {
+        user.ID = sub
+        user.Sub = sub
+    }
 	if email, ok := claims["email"].(string); ok {
 		user.Email = email
 	}

@@ -92,35 +92,41 @@ func (a *AuthzResolver) ResolveAuthorization(ctx context.Context, userInfo *User
 
 // formatUsername applies the configured username format
 func (a *AuthzResolver) formatUsername(userInfo *User, format string) string {
-	// Validate required fields before formatting
-	if userInfo.Email == "" && strings.Contains(format, "{email}") {
-		a.logger.Error("Cannot format username - missing email",
-			zap.String("format", format),
-			zap.String("userID", userInfo.ID))
-		return ""
-	}
+    // Default to a stable identifier if no format configured
+    if strings.TrimSpace(format) == "" {
+        return userInfo.ID
+    }
 
-	if userInfo.Sub == "" && strings.Contains(format, "{sub}") {
-		a.logger.Error("Cannot format username - missing subject",
-			zap.String("format", format),
-			zap.String("userID", userInfo.ID))
-		return ""
-	}
+    // If required placeholders are missing, gracefully fall back to user.ID
+    if strings.Contains(format, "{email}") && userInfo.Email == "" {
+        a.logger.Warn("Username format requires email but claim is missing; falling back to user ID",
+            zap.String("format", format),
+            zap.String("userID", userInfo.ID))
+        return userInfo.ID
+    }
+    if strings.Contains(format, "{sub}") && userInfo.Sub == "" {
+        a.logger.Warn("Username format requires sub but claim is missing; falling back to user ID",
+            zap.String("format", format),
+            zap.String("userID", userInfo.ID))
+        return userInfo.ID
+    }
 
-	// Replace placeholders in the format string
-	username := format
-	username = strings.ReplaceAll(username, "{sub}", userInfo.Sub)
-	username = strings.ReplaceAll(username, "{email}", userInfo.Email)
-	username = strings.ReplaceAll(username, "{name}", userInfo.Name)
+    // Replace placeholders in the format string
+    username := format
+    username = strings.ReplaceAll(username, "{sub}", userInfo.Sub)
+    username = strings.ReplaceAll(username, "{email}", userInfo.Email)
+    username = strings.ReplaceAll(username, "{name}", userInfo.Name)
+    username = strings.ReplaceAll(username, "{id}", userInfo.ID)
 
-	// Handle nested claims if needed
-	if strings.Contains(username, "{") {
-		a.logger.Warn("Unknown placeholder in username format",
-			zap.String("format", format),
-			zap.String("result", username))
-	}
+    // If unrecognized placeholders remain, log and fall back to ID
+    if strings.Contains(username, "{") {
+        a.logger.Warn("Unknown placeholder in username format; using user ID",
+            zap.String("format", format),
+            zap.String("result", username))
+        return userInfo.ID
+    }
 
-	return username
+    return username
 }
 
 // ValidateGroups checks that the resolved groups match expected Kaptn groups
