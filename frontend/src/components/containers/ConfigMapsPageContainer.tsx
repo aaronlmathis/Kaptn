@@ -37,10 +37,51 @@ function ConfigMapsContent() {
 	const { isAllowed } = useAuthzCapabilitiesInContext(['configmaps.get', 'configmaps.patch', 'configmaps.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedConfigMapForDetails, setSelectedConfigMapForDetails] = React.useState<DashboardConfigMap | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', configMaps: DashboardConfigMap[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+
+	// Change item type as needed per page (e.g., DashboardService, DashboardConfigMap)
+	type Item = { name: string; namespace?: string }
+	type Scope = 'pods' | 'deployments' | 'services' | 'configmaps' | 'secrets' | 'daemonsets' | 'statefulsets' | 'cronjobs' | 'nodes' |
+				 'clusterroles' | 'clusterrolebindings' | 'roles' | 'rolebindings' | string
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
+
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -275,8 +316,10 @@ function ConfigMapsContent() {
 							<DropdownMenuItem
 								className="text-red-600"
 								onClick={() => {
-									setPendingAction({ type: 'delete', configMaps: [row.original] })
+									const item = row.original
+									setPendingAction({ scope: 'configmaps', items: [{ name: item.name, namespace: item.namespace }] })
 									setConfirmDialogOpen(true)
+									validateDelete('configmaps', [{ name: item.name, namespace: item.namespace }])
 								}}
 							>
 								<IconTrash className="size-4 mr-2" />
@@ -327,8 +370,10 @@ function ConfigMapsContent() {
 				icon: <IconTrash className="size-4" />,
 				variant: "destructive" as const,
 				action: (selectedConfigMaps: DashboardConfigMap[]) => {
-					setPendingAction({ type: 'delete', configMaps: selectedConfigMaps })
+					const selected = selectedConfigMaps.map(cm => ({ name: cm.name, namespace: cm.namespace }))
+					setPendingAction({ scope: 'configmaps', items: selected })
 					setConfirmDialogOpen(true)
+					validateDelete('configmaps', selected)
 				},
 				requiresSelection: true,
 			})
@@ -338,43 +383,6 @@ function ConfigMapsContent() {
 	}, [isAllowed, setPendingAction, setConfirmDialogOpen])
 
 	// Remove the getBulkActionWithData function as it's no longer needed
-
-	// Handle confirmed delete action
-	const handleConfirmAction = async () => {
-		if (!pendingAction) return
-
-		setIsConfirmExecuting(true)
-		try {
-			if (pendingAction.type === 'delete') {
-				const targets = pendingAction.configMaps.map(cm => ({
-					namespace: cm.namespace,
-					name: cm.name,
-				}))
-
-				await bulkActionsApi.executeBulkAction('configmaps', {
-					action: 'delete',
-					targets,
-					force_confirm: true,
-				})
-
-				setAlert({
-					variant: 'success',
-					title: 'ConfigMaps deleted successfully',
-					description: `${pendingAction.configMaps.length} ConfigMap(s) deleted.`
-				})
-			}
-		} catch (error) {
-			setAlert({
-				variant: 'error',
-				title: 'Delete failed',
-				description: error instanceof Error ? error.message : 'Unknown error occurred'
-			})
-		} finally {
-			setIsConfirmExecuting(false)
-			setConfirmDialogOpen(false)
-			setPendingAction(null)
-		}
-	}
 
 	// Generate summary cards from configMap data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
@@ -470,17 +478,6 @@ function ConfigMapsContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filteredData}
 					columns={columns}

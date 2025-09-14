@@ -44,6 +44,12 @@ function PodsContent() {
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
 	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'restart', pods: DashboardPod[] }>(null)
 	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+    const requireTextConfirm = React.useMemo(() => pendingAction?.type === 'delete' && (pendingAction?.pods?.length || 0) > 0, [pendingAction])
+    const confirmValue = React.useMemo(() => {
+        if (!pendingAction || pendingAction.type !== 'delete') return ''
+        const count = pendingAction.pods.length
+        return count === 1 ? pendingAction.pods[0].name : 'DELETE'
+    }, [pendingAction])
 
 	// Ensure pod-specific action capabilities are requested (default is conservative)
 	React.useEffect(() => {
@@ -381,7 +387,7 @@ function PodsContent() {
 		try {
 			const targets = pendingAction.pods.map(p => ({ namespace: p.namespace, name: p.name }))
 			const legacyAction = pendingAction.type === 'delete' ? 'delete-pods' : 'restart-pods'
-			const resp = await bulkActionsApi.executeBulkAction('pods', { action: legacyAction, targets })
+			const resp = await bulkActionsApi.executeBulkAction('pods', { action: legacyAction, targets, force_confirm: pendingAction.type === 'delete' })
 			const success = resp?.success
 			const total = resp?.resources_total ?? 0
 			const affected = resp?.resources_affected ?? 0
@@ -472,6 +478,9 @@ function PodsContent() {
 				resources={(pendingAction?.pods || []).map(p => ({ name: p.name, namespace: p.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+                requireTextConfirm={requireTextConfirm}
+                confirmPrompt={pendingAction?.pods?.length === 1 ? 'Type the pod name to confirm' : 'Type DELETE to confirm'}
+                confirmValue={confirmValue}
 			/>
 		</div>
 	)

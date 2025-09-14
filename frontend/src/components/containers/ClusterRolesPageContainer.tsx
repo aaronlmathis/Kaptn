@@ -21,6 +21,8 @@ import type { DashboardClusterRole, DashboardClusterRoleBinding } from "@/lib/k8
 import { ClusterRoleDetailDrawer } from "@/components/viewers/ClusterRoleDetailDrawer"
 import { ClusterRoleBindingDetailDrawer } from "@/components/viewers/ClusterRoleBindingDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
+import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Helper functions for badges
 function getClusterRoleRulesBadge(rulesCount: number) {
@@ -98,6 +100,46 @@ function ClusterRolesContent() {
 			])
 		}
 	}, [clusterId, fetchAdditional])
+
+	// Confirmation dialog state for destructive actions
+	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
+	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: 'clusterroles' | 'clusterrolebindings', items: Array<DashboardClusterRole | DashboardClusterRoleBinding> }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? (pendingAction.items[0] as any).name : 'DELETE'
+	}, [pendingAction])
+
+	const validateDelete = React.useCallback(async (scope: 'clusterroles' | 'clusterrolebindings', items: Array<DashboardClusterRole | DashboardClusterRoleBinding>) => {
+		try {
+			const targets = items.map((i: any) => ({ namespace: '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(scope, { action: 'delete', targets })
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
+
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.items.map((i: any) => ({ namespace: '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(pendingAction.scope, { action: 'delete', targets, force_confirm: true })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
 
 	// Detail drawer states
 	const [selectedClusterRoleForDetails, setSelectedClusterRoleForDetails] = React.useState<DashboardClusterRole | null>(null)
@@ -296,13 +338,12 @@ function ClusterRolesContent() {
 								namespace=""
 								resourceKind="ClusterRole"
 							>
-								<button
-									className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer"
-									style={{ background: 'transparent', border: 'none', textAlign: 'left' }}
+								<DropdownMenuItem
+									onSelect={(e) => e.preventDefault()}
 								>
-									<IconEdit className="size-4" />
+									<IconEdit className="size-4 mr-2" />
 									Edit YAML
-								</button>
+								</DropdownMenuItem>
 							</ResourceYamlEditor>
 						</IfAllowed>
 						<DropdownMenuSeparator />
@@ -313,7 +354,7 @@ function ClusterRolesContent() {
 							resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600">
+							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ scope: 'clusterroles', items: [row.original] }); setConfirmDialogOpen(true); validateDelete('clusterroles', [row.original]) }}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -428,7 +469,7 @@ function ClusterRolesContent() {
 							resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600">
+							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ scope: 'clusterrolebindings', items: [row.original] }); setConfirmDialogOpen(true); validateDelete('clusterrolebindings', [row.original]) }}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -581,6 +622,10 @@ function ClusterRolesContent() {
 											const selected = table.getFilteredSelectedRowModel().rows.map((r: { original: DashboardClusterRole }) => r.original)
 											if (a.id === 'copy-names') {
 												navigator.clipboard.writeText(selected.map((cr: DashboardClusterRole) => cr.name).join('\n'))
+											} else if (a.id === 'delete-cluster-roles') {
+												setPendingAction({ scope: 'clusterroles', items: selected })
+												setConfirmDialogOpen(true)
+												validateDelete('clusterroles', selected)
 											} else {
 												a.action()
 											}
@@ -622,6 +667,10 @@ function ClusterRolesContent() {
 											const selected = table.getFilteredSelectedRowModel().rows.map((r: { original: DashboardClusterRoleBinding }) => r.original)
 											if (a.id === 'copy-names') {
 												navigator.clipboard.writeText(selected.map((crb: DashboardClusterRoleBinding) => crb.name).join('\n'))
+											} else if (a.id === 'delete-cluster-role-bindings') {
+												setPendingAction({ scope: 'clusterrolebindings', items: selected })
+												setConfirmDialogOpen(true)
+												validateDelete('clusterrolebindings', selected)
 											} else {
 												a.action()
 											}
@@ -654,6 +703,24 @@ function ClusterRolesContent() {
 					onOpenChange={setIsClusterRoleBindingDetailDrawerOpen}
 				/>
 			)}
+
+			{/* Bulk action confirmation dialog */}
+			<ActionConfirmationDialog
+				open={confirmDialogOpen}
+				onOpenChange={setConfirmDialogOpen}
+				title={pendingAction?.scope === 'clusterroles' ? 'Delete ClusterRoles' : 'Delete ClusterRoleBindings'}
+				description={pendingAction?.scope === 'clusterroles' ? 'Are you sure you want to delete the selected ClusterRoles?' : 'Are you sure you want to delete the selected ClusterRoleBindings?'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
+				isExecuting={isConfirmExecuting}
+				onConfirm={handleConfirmAction}
+				resources={(pendingAction?.items || []).map((i: any) => ({ name: i.name }))}
+				safetyViolations={[]}
+				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
+			/>
 		</div>
 	)
 }

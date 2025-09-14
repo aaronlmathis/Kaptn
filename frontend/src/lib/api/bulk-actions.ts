@@ -59,6 +59,7 @@ class BulkActionsApi {
     return {
       action,
       dryRun: !!req.dry_run,
+      forceConfirm: !!req.force_confirm,
       resources,
       params,
     }
@@ -94,6 +95,10 @@ class BulkActionsApi {
       case 'statefulsets': return { apiVersion: 'apps/v1', kind: 'StatefulSet' }
       case 'cronjobs': return { apiVersion: 'batch/v1', kind: 'CronJob' }
       case 'nodes': return { apiVersion: 'v1', kind: 'Node' }
+      case 'clusterroles': return { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'ClusterRole' }
+      case 'clusterrolebindings': return { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'ClusterRoleBinding' }
+      case 'roles': return { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'Role' }
+      case 'rolebindings': return { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'RoleBinding' }
       default: return { apiVersion: 'v1', kind: resource }
     }
   }

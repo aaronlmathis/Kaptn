@@ -29,41 +29,56 @@ interface ActionConfirmationDialogProps {
 		namespace?: string
 	}>
 	warnings?: string[]
-	safetyViolations?: Array<{
-		rule: string
-		description: string
-		severity: "warning" | "error" | "critical"
-	}>
+    safetyViolations?: Array<{
+        rule: string
+        description: string
+        severity: "warning" | "error" | "critical"
+    }>
+    // Optional type-to-confirm UX
+    requireTextConfirm?: boolean
+    confirmPrompt?: string
+    confirmValue?: string
 }
 
 export function ActionConfirmationDialog({
-	open,
-	onOpenChange,
-	title,
-	description,
-	actionLabel,
-	variant = "default",
-	isExecuting = false,
-	onConfirm,
-	resources = [],
-	warnings = [],
-	safetyViolations = [],
+    open,
+    onOpenChange,
+    title,
+    description,
+    actionLabel,
+    variant = "default",
+    isExecuting = false,
+    onConfirm,
+    resources = [],
+    warnings = [],
+    safetyViolations = [],
+    requireTextConfirm = false,
+    confirmPrompt,
+    confirmValue,
 }: ActionConfirmationDialogProps) {
-	const handleConfirm = async () => {
-		try {
-			await onConfirm()
-		} catch (error) {
-			console.error('Action failed:', error)
-			// Error handling is done by the caller
-		}
-	}
+    const [confirmText, setConfirmText] = React.useState("")
+    React.useEffect(() => {
+        // Clear text when dialog closes or target value changes
+        if (!open) setConfirmText("")
+    }, [open])
+    const handleConfirm = async () => {
+        try {
+            await onConfirm()
+        } catch (error) {
+            console.error('Action failed:', error)
+            // Error handling is done by the caller
+        }
+    }
 
 	const hasErrors = safetyViolations.some(v => v.severity === "error" || v.severity === "critical")
 
-	return (
-		<AlertDialog open={open} onOpenChange={onOpenChange}>
-			<AlertDialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
-				<AlertDialogHeader>
+    const needsConfirm = !!requireTextConfirm && !!(confirmValue && confirmValue.length > 0)
+    const confirmOK = !needsConfirm || confirmText.trim() === (confirmValue ?? "")
+
+    return (
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+                <AlertDialogHeader>
 					<AlertDialogTitle className="flex items-center gap-2">
 						{variant === "destructive" && (
 							<IconAlertTriangle className="size-5 text-red-600" />
@@ -124,38 +139,53 @@ export function ActionConfirmationDialog({
 							</div>
 						)}
 
-						{variant === "destructive" && (
-							<div className="bg-transparent border border-destructive/20 p-3 rounded text-destructive">
-								<div className="text-sm font-medium mb-1">
-									This action cannot be undone
-								</div>
-								<div className="text-xs opacity-90">
-									Please make sure you want to proceed with this destructive action.
-								</div>
-							</div>
-						)}
-					</AlertDialogDescription>
-				</AlertDialogHeader>
-				<AlertDialogFooter>
-					<AlertDialogCancel disabled={isExecuting}>
-						Cancel
-					</AlertDialogCancel>
-					<AlertDialogAction
-						onClick={handleConfirm}
-						disabled={isExecuting || hasErrors}
-						className={variant === "destructive" ? buttonVariants({ variant: "destructive" }) : ""}
-					>
-						{isExecuting ? (
-							<>
-								<IconLoader className="size-4 mr-2 animate-spin" />
-								Processing...
-							</>
-						) : (
-							actionLabel
-						)}
-					</AlertDialogAction>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
-	)
+                        {variant === "destructive" && (
+                            <div className="bg-transparent border border-destructive/20 p-3 rounded text-destructive">
+                                <div className="text-sm font-medium mb-1">
+                                    This action cannot be undone
+                                </div>
+                                <div className="text-xs opacity-90">
+                                    Please make sure you want to proceed with this destructive action.
+                                </div>
+                            </div>
+                        )}
+
+                        {needsConfirm && (
+                            <div className="space-y-2">
+                                <div className="text-sm font-medium">{confirmPrompt || 'Type to confirm'}</div>
+                                <input
+                                    value={confirmText}
+                                    onChange={(e) => setConfirmText(e.target.value)}
+                                    placeholder={confirmValue}
+                                    className="w-full px-2 py-1.5 border rounded bg-background"
+                                />
+                                {!confirmOK && (
+                                    <div className="text-xs text-destructive">Confirmation text does not match.</div>
+                                )}
+                            </div>
+                        )}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isExecuting}>
+                        Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={handleConfirm}
+                        disabled={isExecuting || hasErrors || !confirmOK}
+                        className={variant === "destructive" ? buttonVariants({ variant: "destructive" }) : ""}
+                    >
+                        {isExecuting ? (
+                            <>
+                                <IconLoader className="size-4 mr-2 animate-spin" />
+                                Processing...
+                            </>
+                        ) : (
+                            actionLabel
+                        )}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    )
 }

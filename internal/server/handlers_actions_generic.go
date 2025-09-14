@@ -365,8 +365,8 @@ func (s *Server) executeOneAction(ctx context.Context, clients *k8s.Impersonated
 		return dto.ItemResult{Ref: ref, Status: "ok", HTTPStatus: http.StatusOK, Message: "Patched"}
 	}
 
-	// Handle generic delete via dynamic client
-	if strings.ToLower(req.Action) == "delete" {
+    // Handle generic delete via dynamic client
+    if strings.ToLower(req.Action) == "delete" {
 		// Safety pre-validation
 		mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(clients.Discovery))
 		gvk := schema.FromAPIVersionAndKind(ref.APIVersion, ref.Kind)
@@ -374,13 +374,16 @@ func (s *Server) executeOneAction(ctx context.Context, clients *k8s.Impersonated
 		if err != nil {
 			return dto.ItemResult{Ref: ref, Status: "error", HTTPStatus: http.StatusBadRequest, Message: err.Error()}
 		}
-		if s.actionCoordinator != nil {
-			if sr, err := s.actionCoordinator.ValidateSafetyForAction(ctx, clients.Client(), "delete", "delete", m.Resource.Resource, ref.Namespace, ref.Name); err == nil && sr != nil {
-				if !sr.Allowed {
-					return dto.ItemResult{Ref: ref, Status: "skipped", HTTPStatus: 428, Message: "Safety validation failed for delete", Warnings: sr.Warnings}
-				}
-			}
-		}
+        if s.actionCoordinator != nil {
+            if sr, err := s.actionCoordinator.ValidateSafetyForAction(ctx, clients.Client(), "delete", "delete", m.Resource.Resource, ref.Namespace, ref.Name); err == nil && sr != nil {
+                if !sr.Allowed {
+                    // If the request indicates explicit user confirmation, allow proceeding
+                    if !req.ForceConfirm {
+                        return dto.ItemResult{Ref: ref, Status: "skipped", HTTPStatus: 428, Message: "Safety validation failed for delete", Warnings: sr.Warnings}
+                    }
+                }
+            }
+        }
 		// RBAC: delete permission
 		if ok, _ := s.impersonationMgr.SSARHelper().CanPerformAction(ctx, clients.Client(), "delete", m.Resource.Group, m.Resource.Resource, ref.Namespace, ref.Name); !ok {
 			return dto.ItemResult{Ref: ref, Status: "error", HTTPStatus: http.StatusForbidden, Message: "RBAC: delete denied"}
@@ -578,21 +581,21 @@ func (s *Server) executeOneAction(ctx context.Context, clients *k8s.Impersonated
 	}
 
 	// Build single-target ActionRequest for coordinator
-	ar := &actions.ActionRequest{
-		ID:           fmt.Sprintf("%s:%s/%s", req.RequestID, ref.Namespace, ref.Name),
-		Action:       coordAction,
-		Verb:         verb,
-		Resource:     resourcePlural,
-		Targets:      []actions.TargetResource{{Namespace: ref.Namespace, Name: ref.Name}},
-		Params:       req.Params,
-		DryRun:       req.DryRun,
-		Timeout:      30 * time.Second,
-		User:         user,
-		UserGroups:   groups,
-		ForceConfirm: false,
-		Metadata:     map[string]string{"request_id": req.RequestID, "source": "generic_actions"},
-		Concurrency:  1,
-	}
+    ar := &actions.ActionRequest{
+        ID:           fmt.Sprintf("%s:%s/%s", req.RequestID, ref.Namespace, ref.Name),
+        Action:       coordAction,
+        Verb:         verb,
+        Resource:     resourcePlural,
+        Targets:      []actions.TargetResource{{Namespace: ref.Namespace, Name: ref.Name}},
+        Params:       req.Params,
+        DryRun:       req.DryRun,
+        Timeout:      30 * time.Second,
+        User:         user,
+        UserGroups:   groups,
+        ForceConfirm: req.ForceConfirm,
+        Metadata:     map[string]string{"request_id": req.RequestID, "source": "generic_actions"},
+        Concurrency:  1,
+    }
 
 	// Check if action coordinator is available
 	if s.actionCoordinator == nil {

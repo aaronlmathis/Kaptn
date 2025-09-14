@@ -452,7 +452,7 @@ spec:
   selector:
     istio: ingressgateway
   servers:
-  - hosts: ["dev.deepthought.sh"]
+  - hosts: ["dev.deepthought.sh", "dev.kaptn.dev"]
     port:
       name: http
       number: 80
@@ -466,7 +466,7 @@ metadata:
   namespace: kaptn
   labels: { app: kaptn }
 spec:
-  hosts: ["dev.deepthought.sh"]
+  hosts: ["dev.deepthought.sh", "dev.kaptn.dev"]
   gateways: ["kaptn-gateway"]
   http:
     - route:

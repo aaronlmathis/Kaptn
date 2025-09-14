@@ -8,6 +8,8 @@ export interface ApiResponse<T> {
 	code?: string;
 }
 
+import { notifyActionResults } from './action-notifier'
+
 export class ApiClient {
 	private baseURL = '/api/v1'; // Use proxy to backend server
 	private token: string | null = null;
@@ -203,11 +205,20 @@ export class ApiClient {
 	}
 
 	async post<T>(endpoint: string, data?: unknown): Promise<T> {
-		return this.request<T>(endpoint, {
-			method: 'POST',
-			body: data ? JSON.stringify(data) : undefined,
-		});
-	}
+    // Intercept action execution responses to display toasts centrally
+    const result = await this.request<any>(endpoint, {
+        method: 'POST',
+        body: data ? JSON.stringify(data) : undefined,
+    });
+    try {
+        if (endpoint === '/actions') {
+            notifyActionResults(result)
+        }
+    } catch {
+        // no-op: never block API flow on toast errors
+    }
+    return result as T
+    }
 
 	async put<T>(endpoint: string, data?: unknown): Promise<T> {
 		return this.request<T>(endpoint, {

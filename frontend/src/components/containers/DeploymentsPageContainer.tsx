@@ -42,6 +42,12 @@ function DeploymentsContent() {
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
 	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'restart' | 'scale', deployments: DashboardDeployment[] }>(null)
 	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+    const requireTextConfirm = React.useMemo(() => pendingAction?.type === 'delete' && (pendingAction?.deployments?.length || 0) > 0, [pendingAction])
+    const confirmValue = React.useMemo(() => {
+        if (!pendingAction || pendingAction.type !== 'delete') return ''
+        const count = pendingAction.deployments.length
+        return count === 1 ? pendingAction.deployments[0].name : 'DELETE'
+    }, [pendingAction])
 
 	// Ensure deployment-specific action capabilities are requested (default is conservative)
 	React.useEffect(() => {
@@ -350,7 +356,7 @@ function DeploymentsContent() {
 		try {
 			const targets = pendingAction.deployments.map(d => ({ namespace: d.namespace, name: d.name }))
 			const legacyAction = pendingAction.type === 'delete' ? 'delete-deployments' : pendingAction.type === 'restart' ? 'restart-deployments' : 'scale-deployments'
-			const resp = await bulkActionsApi.executeBulkAction('deployments', { action: legacyAction, targets })
+			const resp = await bulkActionsApi.executeBulkAction('deployments', { action: legacyAction, targets, force_confirm: pendingAction.type === 'delete' })
 			const success = resp?.success
 			const total = resp?.resources_total ?? 0
 			const affected = resp?.resources_affected ?? 0
@@ -436,6 +442,9 @@ function DeploymentsContent() {
 				resources={(pendingAction?.deployments || []).map(d => ({ name: d.name, namespace: d.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+                requireTextConfirm={requireTextConfirm}
+                confirmPrompt={pendingAction?.deployments?.length === 1 ? 'Type the deployment name to confirm' : 'Type DELETE to confirm'}
+                confirmValue={confirmValue}
 			/>
 
 			{selectedDeploymentForDetails && (

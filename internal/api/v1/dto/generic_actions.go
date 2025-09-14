@@ -6,6 +6,10 @@ type GenericActionRequest struct {
     RequestID       string                 `json:"requestId,omitempty"`
     Action          string                 `json:"action"`
     DryRun          bool                   `json:"dryRun"`
+    // ForceConfirm indicates the user has explicitly confirmed a destructive action
+    // (e.g., by typing the resource name). When true, safety validation failures
+    // may be overridden according to server policy.
+    ForceConfirm    bool                   `json:"forceConfirm,omitempty"`
     ContinueOnError bool                   `json:"continueOnError"`
     Concurrency     int                    `json:"concurrency,omitempty"`
     Resources       []ObjectRef            `json:"resources,omitempty"`
