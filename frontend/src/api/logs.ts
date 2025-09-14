@@ -72,7 +72,12 @@ export type StartLogStreamResponse = {
 }
 
 export async function startLogStream(body: StartLogStreamRequest): Promise<StartLogStreamResponse> {
-  return apiClient.post<StartLogStreamResponse>(`/logs/stream`, body)
+  const resp = await apiClient.post<StartLogStreamResponse>(`/logs/stream`, body)
+  try {
+    const dbgOn = (import.meta as any)?.env?.DEV || (typeof window !== 'undefined' && (window as any).__KAPTN_DEBUG__)
+    if (dbgOn) console.debug('[api/logs] startLogStream ->', resp)
+  } catch { /* noop */ }
+  return resp
 }
 
 export async function stopLogStream(streamId: string): Promise<{ success: boolean }>{
@@ -83,17 +88,28 @@ export function buildWebSocketUrl(rawUrl: string): string {
   // Ensure scheme matches current page protocol
   try {
     const url = new URL(rawUrl, window.location.href)
+    // Normalize duplicate slashes in path
+    url.pathname = url.pathname.replace(/\/{2,}/g, '/')
     if (window.location.protocol === 'https:' && url.protocol === 'ws:') {
       url.protocol = 'wss:'
     }
     if (window.location.protocol === 'http:' && url.protocol === 'wss:') {
       url.protocol = 'ws:'
     }
+    try {
+      const dbgOn = (import.meta as any)?.env?.DEV || (typeof window !== 'undefined' && (window as any).__KAPTN_DEBUG__)
+      if (dbgOn) console.debug('[api/logs] buildWebSocketUrl ->', { rawUrl, out: url.toString() })
+    } catch { /* noop */ }
     return url.toString()
   } catch {
     // Fallback: prefix with current host
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${window.location.host}${rawUrl}`
+    const normalized = rawUrl.startsWith('//') ? rawUrl.replace(/^\/+/, '/') : rawUrl
+    const out = `${protocol}//${window.location.host}${normalized}`
+    try {
+      const dbgOn = (import.meta as any)?.env?.DEV || (typeof window !== 'undefined' && (window as any).__KAPTN_DEBUG__)
+      if (dbgOn) console.debug('[api/logs] buildWebSocketUrl (fallback) ->', { rawUrl, out })
+    } catch { /* noop */ }
+    return out
   }
 }
-

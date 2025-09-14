@@ -59,9 +59,11 @@ export function RouteGuard({
   // Check authentication first (only after auth has finished loading)
   if (!isAuthenticated) {
     devLog('[route-guard] redirecting to login (unauthenticated)');
-    // Redirect to login
+    // Redirect to login; preserve intended path as query param
     if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+      const path = window.location.pathname + window.location.search;
+      const next = encodeURIComponent(path || '/');
+      window.location.href = `/login?next=${next}`;
     }
     return null;
   }

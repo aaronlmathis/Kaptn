@@ -216,9 +216,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		}
 	}
 
-	const login = () => {
-		window.location.href = '/login'
-	}
+    const login = () => {
+        const path = typeof window !== 'undefined' ? (window.location.pathname + window.location.search) : '/'
+        const next = encodeURIComponent(path || '/')
+        window.location.href = `/login?next=${next}`
+    }
 
 	const logout = async () => {
 		try {

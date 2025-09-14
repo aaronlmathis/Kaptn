@@ -815,27 +815,28 @@ func (c *LogCollector) extractWorkloadFromPod(podName string) string {
 
 // extractLogLevel attempts to extract log level from message
 func (c *LogCollector) extractLogLevel(message string) string {
-	message = strings.ToLower(message)
+    // Normalize to uppercase levels to match UI and coordinator
+    lower := strings.ToLower(message)
 
-	// Check for common log level patterns
-	if strings.Contains(message, "error") || strings.Contains(message, "err") {
-		return "error"
-	}
-	if strings.Contains(message, "warn") || strings.Contains(message, "warning") {
-		return "warn"
-	}
-	if strings.Contains(message, "debug") {
-		return "debug"
-	}
-	if strings.Contains(message, "info") {
-		return "info"
-	}
-	if strings.Contains(message, "fatal") || strings.Contains(message, "panic") {
-		return "fatal"
-	}
+    // Check for common log level patterns
+    if strings.Contains(lower, "fatal") || strings.Contains(lower, "panic") {
+        return "FATAL"
+    }
+    if strings.Contains(lower, "error") || strings.Contains(lower, "err") {
+        return "ERROR"
+    }
+    if strings.Contains(lower, "warn") || strings.Contains(lower, "warning") {
+        return "WARN"
+    }
+    if strings.Contains(lower, "debug") {
+        return "DEBUG"
+    }
+    if strings.Contains(lower, "info") {
+        return "INFO"
+    }
 
-	// Default to info
-	return "info"
+    // Default to INFO
+    return "INFO"
 }
 
 // cleanupWorker periodically cleans up stale streams

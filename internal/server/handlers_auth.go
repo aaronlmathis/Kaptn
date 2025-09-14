@@ -49,7 +49,22 @@ func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Store OIDC state in secure cookie and get the authorization URL
+    // Optionally capture intended next path (from query param or referer) into a short-lived cookie
+    if s.loginNextStore != nil {
+        next := r.URL.Query().Get("next")
+        if next == "" {
+            // Try Referer header if provided
+            next = r.Referer()
+        }
+        // Only set if we actually have a candidate (sanitization is handled in store)
+        if next != "" {
+            if err := s.loginNextStore.Set(w, next); err != nil {
+                s.logger.Warn("Failed to set login-next cookie", zap.Error(err))
+            }
+        }
+    }
+
+    // Store OIDC state in secure cookie and get the authorization URL
 	// Use the configured redirect URI from environment/config
 	redirectURI := s.config.Security.OIDC.RedirectURL
 
@@ -232,12 +247,25 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		// Log successful session creation
 		s.logAuthEvent(r, user.ID, "session_created", "Dual token session created", nil)
 
-		// Redirect to dashboard after successful login
+	// Redirect to dashboard after successful login
+		// Try to redirect back to the intended page if present
+		if s.loginNextStore != nil {
+			if nextPath, ok := s.loginNextStore.GetAndClear(w, r); ok && nextPath != "" {
+				http.Redirect(w, r, nextPath, http.StatusFound)
+				return
+			}
+		}
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	} else {
 		// Fallback for Phase 2 (until sessionManager is wired up)
 		// Still redirect to dashboard
+		if s.loginNextStore != nil {
+			if nextPath, ok := s.loginNextStore.GetAndClear(w, r); ok && nextPath != "" {
+				http.Redirect(w, r, nextPath, http.StatusFound)
+				return
+			}
+		}
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
@@ -443,12 +471,13 @@ func (s *Server) HandleDebugUser(w http.ResponseWriter, r *http.Request) {
 
 	// Get username with format applied for RBAC lookup
 	username := user.ID
-	if s.config.Security.UsernameFormat != "" {
-		format := s.config.Security.UsernameFormat
-		username = strings.ReplaceAll(format, "{sub}", user.Sub)
-		username = strings.ReplaceAll(username, "{email}", user.Email)
-		username = strings.ReplaceAll(username, "{name}", user.Name)
-	}
+    if s.config.Security.UsernameFormat != "" {
+        format := s.config.Security.UsernameFormat
+        username = strings.ReplaceAll(format, "{sub}", user.Sub)
+        username = strings.ReplaceAll(username, "{email}", user.Email)
+        username = strings.ReplaceAll(username, "{name}", user.Name)
+        username = strings.ReplaceAll(username, "{id}", user.ID)
+    }
 
 	// Get RBAC information
 	rbacInfo := s.getRBACInfo(r.Context(), r, username, user.Groups)
@@ -732,12 +761,13 @@ func (s *Server) HandleAuthzPreview(w http.ResponseWriter, r *http.Request) {
 		effectiveGroups = user.Groups
 
 		// Show what the username format would produce
-		if s.config.Security.UsernameFormat != "" {
-			format := s.config.Security.UsernameFormat
-			username = strings.ReplaceAll(format, "{sub}", user.Sub)
-			username = strings.ReplaceAll(username, "{email}", user.Email)
-			username = strings.ReplaceAll(username, "{name}", user.Name)
-		}
+    if s.config.Security.UsernameFormat != "" {
+        format := s.config.Security.UsernameFormat
+        username = strings.ReplaceAll(format, "{sub}", user.Sub)
+        username = strings.ReplaceAll(username, "{email}", user.Email)
+        username = strings.ReplaceAll(username, "{name}", user.Name)
+        username = strings.ReplaceAll(username, "{id}", user.ID)
+    }
 	} else {
 		username = user.ID
 		effectiveGroups = user.Groups

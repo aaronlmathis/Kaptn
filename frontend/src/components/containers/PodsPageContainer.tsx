@@ -280,12 +280,16 @@ function PodsContent() {
 						<IfAllowed feature="pods.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
 						>
-							<ResourceYamlEditor resourceName={row.original.name} namespace={row.original.namespace} resourceKind="Pod">
-								<button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer" style={{ background: 'transparent', border: 'none', textAlign: 'left' }}>
-									<IconEdit className="size-4" />
-									Edit YAML
-								</button>
-							</ResourceYamlEditor>
+                            <ResourceYamlEditor resourceName={row.original.name} namespace={row.original.namespace} resourceKind="Pod">
+                                {/* Use a real DropdownMenuItem so highlight matches exactly.
+                                    Prevent default onSelect to avoid the dialog immediately closing. */}
+                                <DropdownMenuItem
+                                    onSelect={(e) => e.preventDefault()}
+                                >
+                                    <IconEdit className="size-4 mr-2" />
+                                    Edit YAML
+                                </DropdownMenuItem>
+                            </ResourceYamlEditor>
 						</IfAllowed>
 
 						<IfAllowed feature="pods.logs" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}

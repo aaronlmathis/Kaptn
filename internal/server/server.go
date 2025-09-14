@@ -63,7 +63,8 @@ type Server struct {
 	searchService        *cache.SearchService
 	authMiddleware       *auth.Middleware
 	oidcClient           *auth.OIDCClient
-	oidcStateStore       *auth.OIDCStateStore
+    oidcStateStore       *auth.OIDCStateStore
+    loginNextStore       *auth.LoginNextStore
 	sessionManager       *auth.SessionManager
 	impersonationMgr     *k8s.ImpersonationManager
 	clientFactory        *client.Factory
@@ -608,6 +609,16 @@ func (s *Server) initAuth() error {
 		)
 		if err != nil {
 			return fmt.Errorf("failed to initialize OIDC state store: %w", err)
+		}
+
+		// Initialize login-next store (uses same keys) for safe post-login redirects
+		s.loginNextStore, err = auth.NewLoginNextStoreWithPaths(
+			s.logger,
+			s.config.Security.AuthKeys.OIDCStateHashKeyPath,
+			s.config.Security.AuthKeys.OIDCStateBlockKeyPath,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize login-next store: %w", err)
 		}
 
 		s.logger.Info("OIDC authentication initialized with stateless state store")

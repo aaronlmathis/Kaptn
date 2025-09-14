@@ -139,10 +139,12 @@ export class ApiClient {
 		// Clear any stored tokens
 		this.token = null;
 
-		// Redirect to login page
-		console.log('🔄 Proceeding with redirect to login...');
-		window.location.href = '/login';
-	}
+        // Redirect to login page and preserve intended path
+        console.log('🔄 Proceeding with redirect to login...');
+        const path = window.location?.pathname + window.location?.search;
+        const next = encodeURIComponent(path || '/');
+        window.location.href = `/login?next=${next}`;
+    }
 
 	private sanitizeErrorMessage(message: string): string {
 		// Remove any sensitive information from error messages

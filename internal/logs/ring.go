@@ -91,9 +91,32 @@ func (r *Ring) Query(f LogFilter) []LogEntry {
         return nil
     }
 
-	// Build and execute query plan
-	plan := r.index.BuildQueryPlan(f)
-	candidateIndices := r.index.ExecutePlan(plan, f)
+    // Build and execute query plan
+    plan := r.index.BuildQueryPlan(f)
+    candidateIndices := r.index.ExecutePlan(plan, f)
+
+    // Safety: if we only have a time filter (no field index terms), prefer a linear scan.
+    // This avoids edge cases where bucket selection might undercount and ensures correctness
+    // for broad windows like 24h at modest scales.
+    if len(plan.IndexLookups) == 0 {
+        entries := r.getAllEntriesLocked()
+        var matches []LogEntry
+        for _, re := range entries {
+            if r.matchesFilter(re.entry, f) {
+                matches = append(matches, re.entry)
+            }
+        }
+        if f.Direction == "backward" {
+            for i := 0; i < len(matches)/2; i++ {
+                j := len(matches) - 1 - i
+                matches[i], matches[j] = matches[j], matches[i]
+            }
+        }
+        if f.Limit > 0 && len(matches) > f.Limit {
+            matches = matches[:f.Limit]
+        }
+        return matches
+    }
 
     if len(candidateIndices) == 0 {
         // Fallback: if index produced no candidates, do a linear scan over ring entries
