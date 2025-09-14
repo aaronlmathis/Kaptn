@@ -36,23 +36,76 @@ import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { cronJobSchema } from "@/lib/schemas/cronjob"
 import { z } from "zod"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function CronJobsContent() {
-	const { data: cronJobs, loading: isLoading, error, isConnected } = useCronJobsWithWebSocket(true)
+	const { data: cronJobs, loading: isLoading, error } = useCronJobsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
 	const { isAllowed } = useAuthzCapabilitiesInContext(['cronjobs.get', 'cronjobs.patch', 'cronjobs.delete', 'jobs.create'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedCronJobForDetails, setSelectedCronJobForDetails] = React.useState<z.infer<typeof cronJobSchema> | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'suspend' | 'resume' | 'trigger', cronJobs: z.infer<typeof cronJobSchema>[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	// Change item type as needed per page (e.g., DashboardService, DashboardConfigMap)
+	type Item = { name: string; namespace?: string }
+	type Scope = 'pods' | 'deployments' | 'services' | 'configmaps' | 'secrets' | 'daemonsets' | 'statefulsets' | 'cronjobs' | 'nodes' |
+		'clusterroles' | 'clusterrolebindings' | 'roles' | 'rolebindings' | string
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[], actionType: 'delete' | 'suspend' | 'resume' | 'trigger' }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0 && pendingAction.actionType === 'delete', [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0 || pendingAction.actionType !== 'delete') return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[], actionType: 'delete' | 'suspend' | 'resume' | 'trigger') => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			let legacyAction = ''
+			switch (actionType) {
+				case 'delete': legacyAction = 'delete'; break
+				case 'suspend': legacyAction = 'suspend'; break
+				case 'resume': legacyAction = 'resume'; break
+				case 'trigger': legacyAction = 'trigger'; break
+			}
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: legacyAction, targets })
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
+
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			let legacyAction = ''
+			switch (pendingAction.actionType) {
+				case 'delete': legacyAction = 'delete'; break
+				case 'suspend': legacyAction = 'suspend'; break
+				case 'resume': legacyAction = 'resume'; break
+				case 'trigger': legacyAction = 'trigger'; break
+			}
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: legacyAction, targets, force_confirm: pendingAction.actionType === 'delete' })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
 
 	// Ensure cronjob-specific capabilities are requested
 	React.useEffect(() => {
@@ -143,28 +196,6 @@ function CronJobsContent() {
 
 		return result
 	}, [cronJobs, statusFilter, globalFilter])
-
-	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validateCronJobsAction = React.useCallback(async (type: 'delete' | 'suspend' | 'resume' | 'trigger', rows: z.infer<typeof cronJobSchema>[]) => {
-		try {
-			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
-			let legacyAction = ''
-			switch (type) {
-				case 'delete': legacyAction = 'delete-cronjobs'; break
-				case 'suspend': legacyAction = 'suspend-cronjobs'; break
-				case 'resume': legacyAction = 'resume-cronjobs'; break
-				case 'trigger': legacyAction = 'trigger-cronjobs'; break
-			}
-			const resp = await bulkActionsApi.validateAction('cronjobs', { action: legacyAction, targets })
-			const details = resp?.details as { results?: Array<{ warnings?: string[] }> } | undefined
-			const warnings: string[] = Array.isArray(details?.results)
-				? details.results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
-				: []
-			setConfirmWarnings(warnings)
-		} catch {
-			setConfirmWarnings([])
-		}
-	}, [])
 
 	// Build table columns
 	const columns: ColumnDef<z.infer<typeof cronJobSchema>>[] = React.useMemo(() => ([
@@ -291,9 +322,10 @@ function CronJobsContent() {
 						>
 							<DropdownMenuItem onClick={() => {
 								const action = row.original.suspend ? 'resume' : 'suspend'
-								setPendingAction({ type: action, cronJobs: [row.original] });
+								const item = row.original
+								setPendingAction({ scope: 'cronjobs', items: [{ name: item.name, namespace: item.namespace }], actionType: action });
 								setConfirmDialogOpen(true);
-								validateCronJobsAction(action, [row.original])
+								validateDelete('cronjobs', [{ name: item.name, namespace: item.namespace }], action)
 							}}>
 								{row.original.suspend ? (
 									<>
@@ -316,9 +348,10 @@ function CronJobsContent() {
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconRefresh className="size-4 mr-2" />Trigger Job</DropdownMenuItem>}
 						>
 							<DropdownMenuItem onClick={() => {
-								setPendingAction({ type: 'trigger', cronJobs: [row.original] });
+								const item = row.original
+								setPendingAction({ scope: 'cronjobs', items: [{ name: item.name, namespace: item.namespace }], actionType: 'trigger' });
 								setConfirmDialogOpen(true);
-								validateCronJobsAction('trigger', [row.original])
+								validateDelete('cronjobs', [{ name: item.name, namespace: item.namespace }], 'trigger')
 							}}>
 								<IconRefresh className="size-4 mr-2" />
 								Trigger Job
@@ -345,9 +378,10 @@ function CronJobsContent() {
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
 							<DropdownMenuItem className="text-red-600" onClick={() => {
-								setPendingAction({ type: 'delete', cronJobs: [row.original] });
+								const item = row.original
+								setPendingAction({ scope: 'cronjobs', items: [{ name: item.name, namespace: item.namespace }], actionType: 'delete' });
 								setConfirmDialogOpen(true);
-								validateCronJobsAction('delete', [row.original])
+								validateDelete('cronjobs', [{ name: item.name, namespace: item.namespace }], 'delete')
 							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
@@ -357,7 +391,7 @@ function CronJobsContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, validateCronJobsAction])
+	]), [clusterId, validateDelete])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: z.infer<typeof cronJobSchema>[]) => void | Promise<void> }[] = []
@@ -392,9 +426,10 @@ function CronJobsContent() {
 				icon: <IconPlayerPlay className="size-4" />,
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'resume', cronJobs: rows });
+					const selected = rows.map(cj => ({ name: cj.name, namespace: cj.namespace }))
+					setPendingAction({ scope: 'cronjobs', items: selected, actionType: 'resume' });
 					setConfirmDialogOpen(true);
-					validateCronJobsAction('resume', rows)
+					validateDelete('cronjobs', selected, 'resume')
 				}
 			})
 			actions.push({
@@ -403,9 +438,10 @@ function CronJobsContent() {
 				icon: <IconPlayerPause className="size-4" />,
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'suspend', cronJobs: rows });
+					const selected = rows.map(cj => ({ name: cj.name, namespace: cj.namespace }))
+					setPendingAction({ scope: 'cronjobs', items: selected, actionType: 'suspend' });
 					setConfirmDialogOpen(true);
-					validateCronJobsAction('suspend', rows)
+					validateDelete('cronjobs', selected, 'suspend')
 				}
 			})
 		}
@@ -418,9 +454,10 @@ function CronJobsContent() {
 				icon: <IconRefresh className="size-4" />,
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'trigger', cronJobs: rows });
+					const selected = rows.map(cj => ({ name: cj.name, namespace: cj.namespace }))
+					setPendingAction({ scope: 'cronjobs', items: selected, actionType: 'trigger' });
 					setConfirmDialogOpen(true);
-					validateCronJobsAction('trigger', rows)
+					validateDelete('cronjobs', selected, 'trigger')
 				}
 			})
 		}
@@ -434,41 +471,16 @@ function CronJobsContent() {
 				variant: 'destructive',
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'delete', cronJobs: rows });
+					const selected = rows.map(cj => ({ name: cj.name, namespace: cj.namespace }))
+					setPendingAction({ scope: 'cronjobs', items: selected, actionType: 'delete' });
 					setConfirmDialogOpen(true);
-					validateCronJobsAction('delete', rows)
+					validateDelete('cronjobs', selected, 'delete')
 				}
 			})
 		}
 
 		return actions
-	}, [isAllowed, validateCronJobsAction])
-
-	const handleConfirmAction = React.useCallback(async () => {
-		if (!pendingAction) return
-		setIsConfirmExecuting(true)
-		try {
-			const targets = pendingAction.cronJobs.map(cj => ({ namespace: cj.namespace, name: cj.name }))
-			let legacyAction = ''
-			switch (pendingAction.type) {
-				case 'delete': legacyAction = 'delete-cronjobs'; break
-				case 'suspend': legacyAction = 'suspend-cronjobs'; break
-				case 'resume': legacyAction = 'resume-cronjobs'; break
-				case 'trigger': legacyAction = 'trigger-cronjobs'; break
-			}
-			const resp = await bulkActionsApi.executeBulkAction('cronjobs', { action: legacyAction, targets })
-			const success = resp?.success
-			const total = resp?.resources_total ?? 0
-			const affected = resp?.resources_affected ?? 0
-			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} cronjobs processed` : `Errors: ${total - affected} failed`, description: resp?.message })
-		} catch (e: unknown) {
-			setAlert({ variant: 'error', title: 'Action failed', description: e instanceof Error ? e.message : String(e) })
-		} finally {
-			setIsConfirmExecuting(false)
-			setConfirmDialogOpen(false)
-			setPendingAction(null)
-		}
-	}, [pendingAction])
+	}, [isAllowed, validateDelete])
 
 	// Generate summary cards from cronjob data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
@@ -557,17 +569,6 @@ function CronJobsContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -608,15 +609,18 @@ function CronJobsContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title={getConfirmDialogTitle(pendingAction?.type)}
-				description={getConfirmDialogDescription(pendingAction?.type)}
-				actionLabel={getConfirmDialogActionLabel(pendingAction?.type)}
-				variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
+				title={getConfirmDialogTitle(pendingAction?.actionType)}
+				description={getConfirmDialogDescription(pendingAction?.actionType)}
+				actionLabel={getConfirmDialogActionLabel(pendingAction?.actionType)}
+				variant={pendingAction?.actionType === 'delete' ? 'destructive' : 'default'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.cronJobs || []).map(cj => ({ name: cj.name, namespace: cj.namespace }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 
 			{selectedCronJobForDetails && (

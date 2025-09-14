@@ -25,12 +25,11 @@ import type { DashboardConfigMap } from "@/lib/k8s-storage"
 import { ConfigMapDetailDrawer } from "@/components/viewers/ConfigMapDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function ConfigMapsContent() {
-	const { data: configMaps, loading: isLoading, error, isConnected } = useConfigMapsWithWebSocket(true)
+	const { data: configMaps, loading: isLoading, error } = useConfigMapsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
@@ -45,7 +44,7 @@ function ConfigMapsContent() {
 	// Change item type as needed per page (e.g., DashboardService, DashboardConfigMap)
 	type Item = { name: string; namespace?: string }
 	type Scope = 'pods' | 'deployments' | 'services' | 'configmaps' | 'secrets' | 'daemonsets' | 'statefulsets' | 'cronjobs' | 'nodes' |
-				 'clusterroles' | 'clusterrolebindings' | 'roles' | 'rolebindings' | string
+		'clusterroles' | 'clusterrolebindings' | 'roles' | 'rolebindings' | string
 
 	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
 
@@ -330,7 +329,7 @@ function ConfigMapsContent() {
 				</DropdownMenu>
 			),
 		},
-	], [handleViewDetails, clusterId, setPendingAction, setConfirmDialogOpen])
+	], [handleViewDetails, clusterId, validateDelete])
 
 	// Bulk actions for ConfigMaps
 	const bulkActions: BulkAction<DashboardConfigMap>[] = React.useMemo(() => {
@@ -380,7 +379,7 @@ function ConfigMapsContent() {
 		}
 
 		return actions
-	}, [isAllowed, setPendingAction, setConfirmDialogOpen])
+	}, [isAllowed, validateDelete])
 
 	// Remove the getBulkActionWithData function as it's no longer needed
 
@@ -532,18 +531,18 @@ function ConfigMapsContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete ConfigMaps"
-				description={`Are you sure you want to delete ${pendingAction?.configMaps.length || 0} ConfigMap(s)? This action cannot be undone.`}
-				actionLabel="Delete ConfigMaps"
-				variant="destructive"
-				resources={pendingAction?.configMaps.map(cm => ({
-					name: cm.name,
-					namespace: cm.namespace,
-				})) || []}
-				warnings={[]}
-				safetyViolations={[]}
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+				safetyViolations={[]}
+				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 		</div>
 	)
