@@ -297,13 +297,13 @@ export function ResourceYamlEditor({ resourceName, namespace, resourceKind, chil
                     </div>
                 </div>
 
-                {/* Dry run results */}
-                {dryRun && lastResponse && (
+                {/* Results: dry run or failed validation/apply */}
+                {lastResponse && (
                     <div className="px-6 pb-3 border-t border-border">
                         <div className="flex items-center justify-between py-3">
                             <div className="flex items-center gap-2">
                                 <IconFileDiff className="size-4 text-muted-foreground" />
-                                <span className="font-medium">Dry Run Results</span>
+                                <span className="font-medium">{dryRun ? 'Dry Run Results' : (lastResponse?.success ? 'Apply Results' : 'Validation Results')}</span>
                                 {lastResponse?.summary && (
                                     <span className="text-sm text-muted-foreground">
                                         {lastResponse.summary.totalResources} resources • {lastResponse.summary.updatedCount} updates • {lastResponse.summary.createdCount} creates
@@ -321,6 +321,33 @@ export function ResourceYamlEditor({ resourceName, namespace, resourceKind, chil
                         <Tabs value={resultsTab} onValueChange={(v) => setResultsTab(v as any)}>
                             <TabsContent value="summary">
                                 <div className="rounded-md border border-border overflow-hidden">
+                                    {/* Show errors (if any) at the top even when resources exist */}
+                                    {Array.isArray((lastResponse as any).errors) && (lastResponse as any).errors.length > 0 && (
+                                        <div className="p-3 space-y-2 border-b border-border bg-transparent">
+                                            <div className="text-sm font-medium text-destructive">Validation / Processing Errors:</div>
+                                            <ul className="space-y-2">
+                                                {(lastResponse as any).errors.slice(0, 8).map((e: any, i: number) => {
+                                                    const parts: string[] = []
+                                                    if (e.severity) parts.push(String(e.severity).toUpperCase())
+                                                    if (e.type) parts.push(String(e.type))
+                                                    const head = parts.length ? `[${parts.join('/')}] ` : ''
+                                                    const where: string[] = []
+                                                    if (e.resource) where.push(String(e.resource))
+                                                    if (e.field) where.push(`field ${e.field}`)
+                                                    if (typeof e.line === 'number') where.push(`line ${e.line}`)
+                                                    const whereStr = where.length ? ` (${where.join(', ')})` : ''
+                                                    return (
+                                                        <li key={i} className="text-xs text-destructive bg-transparent border border-destructive/20 p-2 rounded">
+                                                            {head}{e.message}{whereStr}
+                                                        </li>
+                                                    )
+                                                })}
+                                                {(lastResponse as any).errors.length > 8 && (
+                                                    <li className="text-xs text-muted-foreground">+{(lastResponse as any).errors.length - 8} more…</li>
+                                                )}
+                                            </ul>
+                                        </div>
+                                    )}
                                     {Array.isArray(lastResponse.resources) && lastResponse.resources.length > 0 ? (
                                         <ul className="divide-y divide-border">
                                             {lastResponse.resources.map((res: any, idx: number) => {

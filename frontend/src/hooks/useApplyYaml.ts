@@ -113,7 +113,8 @@ export function useApplyYaml() {
 		setState(prev => ({ ...prev, isLoading: true, error: null }))
 
 		try {
-			const response = await apiClient.post<ApplyConfigResponse>('/apply', request)
+			// Return structured JSON even when the server responds with 4xx containing validation errors
+			const response = await apiClient.postJSONAllowError<ApplyConfigResponse>('/apply', request)
 
 			setState(prev => ({
 				...prev,
@@ -140,9 +141,36 @@ export function useApplyYaml() {
 					toast.success(request.dryRun ? 'Dry run completed' : 'Configuration applied')
 				}
 			} else {
-				toast.error('Apply operation failed', {
-					description: response.message || 'Please check the errors and try again'
+				// Build a concise, actionable error description from validation errors
+				const errs = Array.isArray(response.errors) ? response.errors : []
+				const maxItems = 5
+				const lines = errs.slice(0, maxItems).map((e) => {
+					const parts: string[] = []
+					if (e.severity) parts.push(e.severity.toUpperCase())
+					if (e.type) parts.push(e.type)
+					const head = parts.length ? `[${parts.join('/')}] ` : ''
+					const where: string[] = []
+					if (e.resource) where.push(String(e.resource))
+					if (e.field) where.push(`field ${e.field}`)
+					if (typeof e.line === 'number') where.push(`line ${e.line}`)
+					const whereStr = where.length ? ` (${where.join(', ')})` : ''
+					return `${head}${e.message || 'Unknown error'}${whereStr}`
 				})
+
+				const more = errs.length > maxItems ? `\n• +${errs.length - maxItems} more...` : ''
+				const desc = lines.length
+					? `Encountered ${errs.length} error${errs.length === 1 ? '' : 's'}:\n• ${lines.join('\n• ')}${more}`
+					: (response.message || 'Please check the errors and try again')
+
+				toast.error('Apply operation failed', {
+					description: desc,
+				})
+
+				// Optionally surface warnings as a separate toast for visibility
+				if (Array.isArray((response as any).warnings) && (response as any).warnings.length > 0) {
+					const warns = ((response as any).warnings as string[]).slice(0, 5)
+					toast.warning('Apply warnings', { description: warns.join('\n• ') })
+				}
 			}
 
 			return response

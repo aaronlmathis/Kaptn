@@ -99,6 +99,10 @@ class BulkActionsApi {
       case 'clusterrolebindings': return { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'ClusterRoleBinding' }
       case 'roles': return { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'Role' }
       case 'rolebindings': return { apiVersion: 'rbac.authorization.k8s.io/v1', kind: 'RoleBinding' }
+      case 'endpointslices': return { apiVersion: 'discovery.k8s.io/v1', kind: 'EndpointSlice' }
+      case 'endpoints': return { apiVersion: 'v1', kind: 'Endpoints' }
+      case 'horizontalpodautoscalers': return { apiVersion: 'autoscaling/v2', kind: 'HorizontalPodAutoscaler' }
+      case 'ingressclasses': return { apiVersion: 'networking.k8s.io/v1', kind: 'IngressClass' }
       default: return { apiVersion: 'v1', kind: resource }
     }
   }

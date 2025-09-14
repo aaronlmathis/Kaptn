@@ -43,7 +43,7 @@ Now featuring Live OpsView Dashboard
 
 Quick / Detailed views for all resources including ability to quick-edit YAML and perform actions.
 
-![Kubernetes Admin - Edit YAML / Pod Details](images/kaptn_edit_yaml.png)
+![Kubernetes Admin - Edit YAML / Pod Details](images/Kaptn-Edit-Yaml.gif)
 
 **Cloud Shell Exec**
 
