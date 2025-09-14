@@ -24,7 +24,7 @@ Features may be incomplete, and you may encounter bugs or breaking changes. It i
 Note: These screenshots are outdated. More to come soon.
 
 **Latest**
-![Kubernetes OpsView Dashboard Screenshot](images/Kaptn_Latest-Tour.gif)
+![Kubernetes OpsView Dashboard Screenshot](images/Kaptn-Latest-Tour.gif)
 
 **Current Dashboard**
 
