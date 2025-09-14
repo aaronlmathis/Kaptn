@@ -33,13 +33,18 @@ export function LoginForm({
 							redirect_url: window.location.origin + "/api/v1/auth/callback"
 						};
 
-						fetch("/api/v1/auth/login", {
-							method: "POST",
-							headers: {
-								"Content-Type": "application/json",
-							},
-							body: JSON.stringify(loginData),
-						})
+                        // Forward next param from /login?next=... or use document.referrer
+                        const params = new URLSearchParams(window.location.search);
+                        const next = params.get('next') || document.referrer || '/';
+                        const url = next ? `/api/v1/auth/login?next=${encodeURIComponent(next)}` : "/api/v1/auth/login";
+
+                        fetch(url, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(loginData),
+                        })
 							.then(response => response.json())
 							.then(data => {
 								console.log("Login response:", data);

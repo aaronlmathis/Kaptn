@@ -14,6 +14,12 @@ security:
     audience: ""
     jwks_url: ""
 
+# Auth Keys Configuration (file paths for local development)
+  auth_keys:
+    oidc_state_hash_key_path: "keys/oidc_state_hash.key"
+    oidc_state_block_key_path: "keys/oidc_state_block.key"
+    jwt_private_key_path: "keys/kaptn_jwt_private.pem"
+    jwt_public_key_path: "keys/kaptn_jwt_public.pem"
 
 authz:
   mode: "idp_groups"

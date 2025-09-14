@@ -274,10 +274,12 @@ function CronJobsContent() {
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
 						>
 							<ResourceYamlEditor resourceName={row.original.name} namespace={row.original.namespace} resourceKind="CronJob">
-								<button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer" style={{ background: 'transparent', border: 'none', textAlign: 'left' }}>
-									<IconEdit className="size-4" />
+								<DropdownMenuItem
+									onSelect={(e) => e.preventDefault()}
+								>
+									<IconEdit className="size-4 mr-2" />
 									Edit YAML
-								</button>
+								</DropdownMenuItem>
 							</ResourceYamlEditor>
 						</IfAllowed>
 						<IfAllowed

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { type ColumnDef } from "@/lib/table"
-import { getLogs, type GetLogsParams, type LogEntry } from "@/api/logs"
+import { getLogs, type GetLogsParams, type LogEntry, type StartLogStreamRequest } from "@/api/logs"
 import { useLogStream } from "@/hooks/useLogStream"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -46,7 +46,9 @@ function LogsContent() {
   const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
   // WebSocket streaming
-  const { entries: liveEntries, state: streamState, setEntries: setLiveEntries } = useLogStream()
+  const { entries: liveEntries, state: streamState, setEntries: setLiveEntries, start, stop } = useLogStream()
+  const DBG = (import.meta as any)?.env?.DEV || (typeof window !== 'undefined' && (window as any).__KAPTN_DEBUG__)
+  const log = (...args: unknown[]) => { if (DBG) console.debug('[LogsPage]', ...args) }
 
   // Determine displayed data: live entries when streaming, static entries otherwise
   const displayedEntries = React.useMemo(() => {
@@ -66,7 +68,7 @@ function LogsContent() {
         entry.node.toLowerCase().includes(q)
 
       // Level filter
-      const matchesLevel = levelFilter === 'all' || entry.level === levelFilter
+      const matchesLevel = levelFilter === 'all' || (entry.level || '').toUpperCase() === levelFilter
 
       // Namespace filter
       const matchesNamespace = namespaceFilter === 'all' || entry.namespace === namespaceFilter
@@ -76,7 +78,7 @@ function LogsContent() {
   }, [displayedEntries, globalFilter, levelFilter, namespaceFilter])
 
   const levelOptions: FilterOption[] = React.useMemo(() => {
-    const levels = Array.from(new Set(displayedEntries.map(e => e.level))).filter(Boolean).sort()
+    const levels = Array.from(new Set(displayedEntries.map(e => (e.level || '').toUpperCase()))).filter(Boolean).sort()
     return levels.map(level => ({
       value: level,
       label: level,
@@ -128,11 +130,42 @@ function LogsContent() {
   React.useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (namespaceFilter !== "all") {
-        handleSearch().catch(() => { })
+        log('namespace changed -> fetching static logs', namespaceFilter)
+        handleSearch().catch((e) => { if (DBG) console.debug('[LogsPage] fetch error', e) })
       }
     }, 800) // Shorter debounce for namespace changes
 
     return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namespaceFilter])
+
+  // Start/stop live WebSocket stream (always on; all-namespaces allowed)
+  React.useEffect(() => {
+    let cancelled = false
+    const req: StartLogStreamRequest = {
+      selector: namespaceFilter && namespaceFilter !== 'all' ? { namespace: namespaceFilter } : {},
+      follow: true,
+      timestamps: true,
+      previous: false,
+      tailLines: 200,
+    }
+    ;(async () => {
+      try {
+        // Ensure we close any existing stream before starting a new one to avoid races
+        log('restarting live stream: stopping current stream (if any)')
+        await stop()
+        if (cancelled) return
+        log('restarting live stream: starting with request', req)
+        await start(req, { since: sinceFilter, limit: limitFilter })
+      } catch (e) {
+        if (DBG) console.debug('[LogsPage] restart stream failed', e)
+      }
+    })()
+    return () => {
+      cancelled = true
+      log('cleanup: stopping live stream')
+      stop().catch((e) => { if (DBG) console.debug('[LogsPage] stop stream failed', e) })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [namespaceFilter])
 
@@ -172,9 +205,14 @@ function LogsContent() {
 
     const totalLogs = filteredEntries.length
     const uniquePods = new Set(filteredEntries.map(e => e.pod)).size
-    const errorLogs = filteredEntries.filter(e => e.level === 'ERROR' || e.level === 'FATAL').length
-    const warnLogs = filteredEntries.filter(e => e.level === 'WARN').length
-    const latestLog = filteredEntries[0]?.ts ? new Date(filteredEntries[0].ts) : null
+    const errorLogs = filteredEntries.filter(e => (e.level || '').toUpperCase() === 'ERROR' || (e.level || '').toUpperCase() === 'FATAL').length
+    const warnLogs = filteredEntries.filter(e => (e.level || '').toUpperCase() === 'WARN').length
+    // Compute latest by max timestamp across entries to avoid ordering assumptions
+    const latestTs = filteredEntries.reduce((max, e) => {
+      const t = e.ts ? new Date(e.ts).getTime() : Number.NEGATIVE_INFINITY
+      return t > max ? t : max
+    }, Number.NEGATIVE_INFINITY)
+    const latestLog = latestTs > 0 ? new Date(latestTs) : null
 
     return [
       {
@@ -279,7 +317,7 @@ function LogsContent() {
       accessorKey: "level",
       header: "Level",
       cell: ({ row }: { row: { original: LogEntry } }) => {
-        const level = row.original.level as LogLevel
+        const level = (row.original.level || '').toUpperCase() as LogLevel
         return (
           <Badge
             variant="outline"
@@ -581,4 +619,3 @@ export function LogsPageContainer() {
     </RouteGuard>
   )
 }
-

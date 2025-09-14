@@ -161,11 +161,9 @@ func (s *Server) HandleStartLogStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate request parameters
-	if req.Selector.Namespace == "" && len(req.Selector.Namespaces) == 0 {
-		http.Error(w, "At least one namespace must be specified", http.StatusBadRequest)
-		return
-	}
+    // Allow empty selector to indicate all namespaces (cluster-scope).
+    // RBAC enforcement is handled in validateLogStreamAccess, which requires
+    // the user to have cluster-wide pods and pods/log access when no namespace is provided.
 
 	// Validate user has 'get' permission on 'pods/log' for requested namespaces
 	if err := s.validateLogStreamAccess(r, req.Selector); err != nil {
@@ -212,12 +210,12 @@ func (s *Server) HandleStartLogStream(w http.ResponseWriter, r *http.Request) {
 	// Get initial pod count
 	podCount := s.logsCoordinator.GetStreamPodCount(streamID)
 
-	// Build WebSocket URL
-	basePath := s.config.Server.BasePath
-	if basePath == "" {
-		basePath = ""
-	}
-	websocketURL := fmt.Sprintf("ws://%s%s/api/v1/stream/logs/%s", r.Host, basePath, streamID)
+    // Build WebSocket URL, avoiding double slashes when base_path is "/"
+    bp := strings.TrimSuffix(s.config.Server.BasePath, "/")
+    if bp == "/" || bp == "" {
+        bp = ""
+    }
+    websocketURL := fmt.Sprintf("ws://%s%s/api/v1/stream/logs/%s", r.Host, bp, streamID)
 
 	response := StartLogStreamResponse{
 		StreamID:     streamID,
