@@ -22,24 +22,48 @@ import { type ColumnDef } from "@/lib/table"
 import { VolumeSnapshotClassDetailDrawer } from "@/components/viewers/VolumeSnapshotClassDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 import type { DashboardVolumeSnapshotClass } from '@/lib/k8s-storage'
 
 // Inner component that can access the WebSocket data
 function VolumeSnapshotClassesContent() {
-	const { data: volumeSnapshotClasses, loading: isLoading, error, isConnected } = useVolumeSnapshotClassesWithWebSocket(true)
+	const { data: volumeSnapshotClasses, loading: isLoading, error } = useVolumeSnapshotClassesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
 	const { isAllowed } = useAuthzCapabilitiesInContext(['volumesnapshotclasses.get', 'volumesnapshotclasses.patch', 'volumesnapshotclasses.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedVolumeSnapshotClassForDetails, setSelectedVolumeSnapshotClassForDetails] = React.useState<DashboardVolumeSnapshotClass | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', volumeSnapshotClasses: DashboardVolumeSnapshotClass[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'volumesnapshotclasses' | string
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'delete snapshot classes'
+	}, [pendingAction])
+
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details = resp?.details as Record<string, unknown> | undefined
+			const warnings: string[] = Array.isArray(details?.results)
+				? (details.results as Array<{ warnings?: string[] }>).flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -124,21 +148,6 @@ function VolumeSnapshotClassesContent() {
 			return matchesQuery && matchesPolicy
 		}) || []
 	}, [volumeSnapshotClasses, globalFilter, policyFilter])
-
-	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validateVolumeSnapshotClassAction = React.useCallback(async (type: 'delete', rows: DashboardVolumeSnapshotClass[]) => {
-		try {
-			const targets = rows.map(r => ({ namespace: "", name: r.name }))
-			const resp = await bulkActionsApi.validateAction('volumesnapshotclasses', { action: 'delete-volumesnapshotclasses', targets })
-			const details = resp?.details as { results?: Array<{ warnings?: string[] }> }
-			const warnings: string[] = Array.isArray(details?.results)
-				? details.results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
-				: []
-			setConfirmWarnings(warnings)
-		} catch {
-			setConfirmWarnings([])
-		}
-	}, [])
 
 	// Build table columns
 	const columns: ColumnDef<DashboardVolumeSnapshotClass>[] = React.useMemo(() => ([
@@ -241,7 +250,12 @@ function VolumeSnapshotClassesContent() {
 						<IfAllowed feature="volumesnapshotclasses.delete" cluster={clusterId} namespace="" resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', volumeSnapshotClasses: [row.original] }); setConfirmDialogOpen(true); validateVolumeSnapshotClassAction('delete', [row.original]) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => {
+								const item = row.original
+								setPendingAction({ scope: 'volumesnapshotclasses', items: [{ name: item.name, namespace: '' }] })
+								setConfirmDialogOpen(true)
+								validateDelete('volumesnapshotclasses', [{ name: item.name, namespace: '' }])
+							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -250,29 +264,35 @@ function VolumeSnapshotClassesContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, validateVolumeSnapshotClassAction])
+	]), [clusterId, validateDelete])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardVolumeSnapshotClass[]) => void | Promise<void> }[] = []
 		actions.push({ id: 'copy-names', label: 'Copy Class Names', icon: <IconCopy className="size-4" />, requiresSelection: true, action: (rows) => navigator.clipboard.writeText(rows.map(r => r.name).join('\n')) })
 		actions.push({ id: 'copy-drivers', label: 'Copy Drivers', icon: <IconDatabase className="size-4" />, requiresSelection: true, action: (rows) => navigator.clipboard.writeText(Array.from(new Set(rows.map(r => r.driver))).join('\n')) })
 		actions.push({ id: 'export-yaml', label: 'Export Selected as YAML', icon: <IconDownload className="size-4" />, requiresSelection: true, action: (rows) => console.log('Export YAML for volume snapshot classes:', rows.map(vsc => vsc.name)) })
-		if (isAllowed('volumesnapshotclasses.delete')) actions.push({ id: 'delete-classes', label: 'Delete Selected Classes', icon: <IconTrash className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'delete', volumeSnapshotClasses: rows }); setConfirmDialogOpen(true); validateVolumeSnapshotClassAction('delete', rows) } })
+		if (isAllowed('volumesnapshotclasses.delete')) actions.push({
+			id: 'delete-classes',
+			label: 'Delete Selected Classes',
+			icon: <IconTrash className="size-4" />,
+			variant: 'destructive',
+			requiresSelection: true,
+			action: (rows) => {
+				const selected = rows.map(r => ({ name: r.name, namespace: '' }))
+				setPendingAction({ scope: 'volumesnapshotclasses', items: selected })
+				setConfirmDialogOpen(true)
+				validateDelete('volumesnapshotclasses', selected)
+			}
+		})
 		return actions
-	}, [isAllowed, validateVolumeSnapshotClassAction])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			const targets = pendingAction.volumeSnapshotClasses.map(vsc => ({ namespace: "", name: vsc.name }))
-			const resp = await bulkActionsApi.executeBulkAction('volumesnapshotclasses', { action: 'delete-volumesnapshotclasses', targets })
-			const success = resp?.success
-			const total = resp?.resources_total ?? 0
-			const affected = resp?.resources_affected ?? 0
-			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} volume snapshot classes processed` : `Errors: ${total - affected} failed`, description: resp?.message })
-		} catch (e: unknown) {
-			setAlert({ variant: 'error', title: 'Action failed', description: e instanceof Error ? e.message : String(e) })
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
@@ -293,17 +313,6 @@ function VolumeSnapshotClassesContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -340,19 +349,21 @@ function VolumeSnapshotClassesContent() {
 				/>
 			</div>
 
-			{/* Bulk action confirmation dialog */}
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Volume Snapshot Classes"
-				description="Are you sure you want to delete the selected volume snapshot classes? This action cannot be undone."
-				actionLabel="Delete Classes"
-				variant="destructive"
+				title={'Delete Volume Snapshot Classes'}
+				description={'This action will permanently delete the selected volume snapshot classes. This operation cannot be undone.'}
+				actionLabel={'Delete Classes'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.volumeSnapshotClasses || []).map(vsc => ({ name: vsc.name, namespace: "" }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'To confirm deletion, type the resource name in the box below:' : 'To confirm deletion, type "delete snapshot classes" in the box below:'}
+				confirmValue={confirmValue}
 			/>
 
 			{selectedVolumeSnapshotClassForDetails && (

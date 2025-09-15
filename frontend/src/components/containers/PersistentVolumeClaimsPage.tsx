@@ -34,11 +34,38 @@ function PersistentVolumeClaimsContent() {
 	const { isAllowed } = useAuthzCapabilitiesInContext(['persistentvolumeclaims.get', 'persistentvolumeclaims.patch', 'persistentvolumeclaims.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedPVCForDetails, setSelectedPVCForDetails] = React.useState<DashboardPersistentVolumeClaim | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', pvcs: DashboardPersistentVolumeClaim[] }>(null)
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'persistentvolumeclaims'
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
 	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details: unknown = resp?.details
+			const warnings: string[] = Array.isArray((details as any)?.results)
+				? (details as any).results.flatMap((r: unknown) => Array.isArray((r as any)?.warnings) ? (r as any).warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
 
 	// Ensure PVC-specific action capabilities are requested
 	React.useEffect(() => {
@@ -163,21 +190,57 @@ function PersistentVolumeClaimsContent() {
 		}
 	}
 
-	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validatePVCsAction = React.useCallback(async (type: 'delete', rows: DashboardPersistentVolumeClaim[]) => {
-		try {
-			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
-			const legacyAction = 'delete-pvcs'
-			const resp = await bulkActionsApi.validateAction('persistentvolumeclaims', { action: legacyAction, targets })
-			const details = resp?.details as { results?: Array<{ warnings?: string[] }> }
-			const warnings: string[] = Array.isArray(details?.results)
-				? details.results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
-				: []
-			setConfirmWarnings(warnings)
-		} catch {
-			setConfirmWarnings([])
+	// Helper function to format age display in human-readable format
+	function formatAge(age: string): string {
+		if (!age) return '-'
+
+		// Extract total hours from strings like "575h8m56.550161696s"
+		const hourMatch = age.match(/(\d+)h/)
+		const dayMatch = age.match(/(\d+)d/)
+		const minuteMatch = age.match(/(\d+)m/)
+		const secondMatch = age.match(/(\d+)s/)
+
+		let totalHours = 0
+		let extraMinutes = 0
+
+		if (dayMatch) {
+			totalHours += parseInt(dayMatch[1]) * 24
 		}
-	}, [])
+		if (hourMatch) {
+			totalHours += parseInt(hourMatch[1])
+		}
+		if (minuteMatch) {
+			extraMinutes = parseInt(minuteMatch[1])
+		}
+
+		// Convert large hour values to human-readable formats
+		if (totalHours >= 8760) { // 365 days
+			const years = Math.floor(totalHours / 8760)
+			const remainingDays = Math.floor((totalHours % 8760) / 24)
+			return remainingDays > 0 ? `${years}y${remainingDays}d` : `${years}y`
+		} else if (totalHours >= 720) { // 30 days
+			const months = Math.floor(totalHours / 720)
+			const remainingDays = Math.floor((totalHours % 720) / 24)
+			return remainingDays > 0 ? `${months}mo${remainingDays}d` : `${months}mo`
+		} else if (totalHours >= 168) { // 7 days
+			const weeks = Math.floor(totalHours / 168)
+			const remainingDays = Math.floor((totalHours % 168) / 24)
+			return remainingDays > 0 ? `${weeks}w${remainingDays}d` : `${weeks}w`
+		} else if (totalHours >= 24) {
+			const days = Math.floor(totalHours / 24)
+			const remainingHours = totalHours % 24
+			return remainingHours > 0 ? `${days}d${remainingHours}h` : `${days}d`
+		} else if (totalHours > 0) {
+			return extraMinutes > 0 ? `${totalHours}h${extraMinutes}m` : `${totalHours}h`
+		} else if (extraMinutes > 0) {
+			return `${extraMinutes}m`
+		} else if (secondMatch) {
+			return `${secondMatch[1]}s`
+		}
+
+		// Fallback - return original if we can't parse it
+		return age
+	}
 
 	// Build table columns
 	const columns: ColumnDef<DashboardPersistentVolumeClaim>[] = React.useMemo(() => ([
@@ -247,7 +310,7 @@ function PersistentVolumeClaimsContent() {
 			accessorKey: 'age',
 			header: 'Age',
 			cell: ({ row }: { row: { original: DashboardPersistentVolumeClaim } }) => (
-				<div className="font-mono text-sm">{row.original.age}</div>
+				<div className="font-mono text-sm">{formatAge(row.original.age)}</div>
 			)
 		},
 		{
@@ -285,7 +348,12 @@ function PersistentVolumeClaimsContent() {
 						<IfAllowed feature="persistentvolumeclaims.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', pvcs: [row.original] }); setConfirmDialogOpen(true); validatePVCsAction('delete', [row.original]) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => {
+								const item = { name: row.original.name, namespace: row.original.namespace }
+								setPendingAction({ scope: 'persistentvolumeclaims', items: [item] })
+								setConfirmDialogOpen(true)
+								validateDelete('persistentvolumeclaims', [item])
+							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -294,7 +362,7 @@ function PersistentVolumeClaimsContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, setSelectedPVCForDetails, setDetailDrawerOpen, setPendingAction, setConfirmDialogOpen, validatePVCsAction])
+	]), [clusterId, validateDelete])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardPersistentVolumeClaim[]) => void | Promise<void> }[] = []
@@ -329,23 +397,23 @@ function PersistentVolumeClaimsContent() {
 				variant: 'destructive',
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'delete', pvcs: rows });
-					setConfirmDialogOpen(true);
-					validatePVCsAction('delete', rows)
+					const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+					setPendingAction({ scope: 'persistentvolumeclaims', items: selected })
+					setConfirmDialogOpen(true)
+					validateDelete('persistentvolumeclaims', selected)
 				}
 			})
 		}
 
 		return actions
-	}, [isAllowed, validatePVCsAction])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			const targets = pendingAction.pvcs.map(pvc => ({ namespace: pvc.namespace, name: pvc.name }))
-			const legacyAction = 'delete-pvcs'
-			const resp = await bulkActionsApi.executeBulkAction('persistentvolumeclaims', { action: legacyAction, targets })
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 			const success = resp?.success
 			const total = resp?.resources_total ?? 0
 			const affected = resp?.resources_affected ?? 0
@@ -421,15 +489,18 @@ function PersistentVolumeClaimsContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Persistent Volume Claims"
-				description="Are you sure you want to delete the selected persistent volume claims? This action cannot be undone."
-				actionLabel="Delete PVCs"
-				variant="destructive"
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.pvcs || []).map(pvc => ({ name: pvc.name, namespace: pvc.namespace }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 
 			{selectedPVCForDetails && (

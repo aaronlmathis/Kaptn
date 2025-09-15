@@ -309,6 +309,39 @@ data:
       summary_ttl: "60s"
       search_cache_ttl: "300s"
       search_cache_max_size: 100000
+      
+    # Logs cache (in-memory ring + pub/sub)
+      logs_cache:
+        # Retention window and capacities (tune per cluster size)
+        ttl: "24h"                  # Keep 24 hours of logs in memory
+        max_global: 500000          # Global ring capacity (entries)
+        max_per_scope: 40000        # Per-scope ring capacity
+        max_subscribers: 1000       # Max WS/log streams
+        buffer_size: 1000           # Per-subscriber channel buffer
+
+        # Eviction/cleanup cadence
+        eviction_interval: "10m"
+        cleanup_interval: "5m"
+
+        # Background log collection
+        background_collection_enabled: true
+        background_collection_retention: "1h"
+        background_collection_mode: "poll"             # follow live logs (recommended)
+        background_collection_poll_interval: "15s"       # used if mode="poll"
+        background_collection_tail_lines: 200
+
+        # Safety/robustness
+        max_log_line_bytes: 262144   # 256KB per-line cap
+        informer_resync: "0s"        # disable periodic resync bursts
+
+        # Operational limits
+        max_streams_per_user: 100
+        max_query_limit: 20000
+        max_export_size: 209715200   # 200MB
+        max_concurrent_queries: 50
+        rate_limit_per_second: 2000
+        backpressure_threshold: 80   # Percentage
+        degraded_mode_timeout: "2m"
 
     jobs:
       persistence_enabled: true

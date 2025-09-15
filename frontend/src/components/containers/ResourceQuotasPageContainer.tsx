@@ -6,7 +6,6 @@ import { DataTableFilters, type FilterOption } from "@/components/ui/data-table-
 import { SummaryCards } from "@/components/SummaryCards"
 import { useResourceQuotasWithWebSocket } from "@/hooks/useResourceQuotasWithWebSocket"
 import {
-	getConnectionStatusBadge,
 	getHealthTrendBadge,
 	getReplicaStatusBadge
 } from "@/lib/summary-card-utils"
@@ -23,16 +22,61 @@ import { ResourceQuotaDetailDrawer } from "@/components/viewers/ResourceQuotaDet
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { Badge } from "@/components/ui/badge"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function ResourceQuotasContent() {
-	const { data: resourceQuotas, loading: isLoading, error, isConnected } = useResourceQuotasWithWebSocket(true)
+	const { data: resourceQuotas, loading: isLoading, error } = useResourceQuotasWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [resourceTypeFilter, setResourceTypeFilter] = React.useState<string>("all")
 	const [selectedResourceQuotaForDetails, setSelectedResourceQuotaForDetails] = React.useState<DashboardResourceQuota | null>(null)
+
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
-	const [pendingAction, setPendingAction] = React.useState<{ type: 'delete', items: DashboardResourceQuota[] } | null>(null)
+	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'resourcequotas'
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details: unknown = resp?.details
+			const warnings: string[] = Array.isArray((details as { results?: Array<{ warnings?: string[] }> })?.results)
+				? (details as { results: Array<{ warnings?: string[] }> }).results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
+
+	// Confirm handler — executes with `force_confirm: true`
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
 
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
@@ -245,8 +289,10 @@ function ResourceQuotasContent() {
 							<DropdownMenuItem
 								className="text-red-600"
 								onClick={() => {
-									setPendingAction({ type: 'delete', items: [row.original] })
+									const item = row.original
+									setPendingAction({ scope: 'resourcequotas', items: [{ name: item.name, namespace: item.namespace }] })
 									setConfirmDialogOpen(true)
+									validateDelete('resourcequotas', [{ name: item.name, namespace: item.namespace }])
 								}}
 							>
 								<IconTrash className="size-4 mr-2" />
@@ -257,7 +303,7 @@ function ResourceQuotasContent() {
 				</DropdownMenu>
 			),
 		},
-	], [clusterId])
+	], [clusterId, validateDelete])
 
 	// Bulk actions
 	const bulkActions: BulkAction<DashboardResourceQuota>[] = React.useMemo(() => [
@@ -287,50 +333,15 @@ function ResourceQuotasContent() {
 			label: "Delete Selected ResourceQuotas",
 			icon: <IconTrash className="size-4" />,
 			action: (selectedResourceQuotas: DashboardResourceQuota[]) => {
-				setPendingAction({ type: 'delete', items: selectedResourceQuotas })
+				const selected = selectedResourceQuotas.map(r => ({ name: r.name, namespace: r.namespace }))
+				setPendingAction({ scope: 'resourcequotas', items: selected })
 				setConfirmDialogOpen(true)
+				validateDelete('resourcequotas', selected)
 			},
 			variant: "destructive" as const,
 			requiresSelection: true,
 		},
-	], [])
-
-	// Handle delete confirmation
-	const handleDeleteConfirm = async () => {
-		if (!pendingAction || pendingAction.type !== 'delete') return
-
-		try {
-			// Use the standard bulk action API pattern like other resources
-			const targets = pendingAction.items.map(item => ({
-				namespace: item.namespace,
-				name: item.name,
-			}))
-
-			// For now, use individual API calls until ResourceQuotas bulk API is available
-			await Promise.all(
-				targets.map(target =>
-					fetch(`/api/v1/resources`, {
-						method: 'DELETE',
-						headers: {
-							'Content-Type': 'application/json',
-							'X-CSRF-Token': document.cookie.split('; ').find(row => row.startsWith('csrf_token='))?.split('=')[1] || '',
-						},
-						credentials: 'include',
-						body: JSON.stringify({
-							kind: 'ResourceQuota',
-							namespace: target.namespace,
-							name: target.name,
-						})
-					})
-				)
-			)
-		} catch (error) {
-			console.error('Error deleting resource quotas:', error)
-		} finally {
-			setConfirmDialogOpen(false)
-			setPendingAction(null)
-		}
-	}
+	], [validateDelete])
 
 	// Generate summary cards from resource quota data
 	const summaryData = React.useMemo(() => {
@@ -371,7 +382,7 @@ function ResourceQuotasContent() {
 				value: totalQuotas,
 				subtitle: `${totalQuotas} quota${totalQuotas !== 1 ? 's' : ''}`,
 				footer: totalQuotas > 0 ? "Resource quotas across all namespaces" : "No resource quotas found",
-				badge: getConnectionStatusBadge(isConnected)
+				badge: getHealthTrendBadge(totalQuotas > 0 ? 100 : 0)
 			},
 			{
 				title: "Active Quotas",
@@ -395,7 +406,7 @@ function ResourceQuotasContent() {
 				badge: getHealthTrendBadge(resourceQuotas.reduce((sum, q) => sum + q.hardLimits.length, 0) > 0 ? 100 : 0)
 			}
 		]
-	}, [resourceQuotas, isConnected])
+	}, [resourceQuotas])
 
 	return (
 		<>
@@ -459,20 +470,18 @@ function ResourceQuotasContent() {
 				<ActionConfirmationDialog
 					open={confirmDialogOpen}
 					onOpenChange={setConfirmDialogOpen}
-					title={pendingAction.type === 'delete' ? 'Delete Resource Quotas' : 'Confirm Action'}
-					description={
-						pendingAction.type === 'delete'
-							? `Are you sure you want to delete ${pendingAction.items.length} resource quota${pendingAction.items.length === 1 ? '' : 's'}? This action cannot be undone.`
-							: 'Are you sure you want to perform this action?'
-					}
-					actionLabel={pendingAction.type === 'delete' ? 'Delete' : 'Confirm'}
-					variant={pendingAction.type === 'delete' ? 'destructive' : 'default'}
-					resources={pendingAction.items.map(item => ({
-						name: item.name,
-						namespace: item.namespace,
-						kind: 'ResourceQuota'
-					}))}
-					onConfirm={handleDeleteConfirm}
+					title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+					description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+					actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+					variant={'destructive'}
+					isExecuting={isConfirmExecuting}
+					onConfirm={handleConfirmAction}
+					resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+					safetyViolations={[]}
+					warnings={confirmWarnings}
+					requireTextConfirm={requireTextConfirm}
+					confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+					confirmValue={confirmValue}
 				/>
 			)}
 		</>

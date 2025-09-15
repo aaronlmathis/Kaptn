@@ -47,11 +47,38 @@ function NodesContent() {
 	const { isAllowed } = useAuthzCapabilitiesInContext(['nodes.get', 'nodes.patch', 'nodes.update'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedNodeForDetails, setSelectedNodeForDetails] = React.useState<NodeTableRow | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'cordon' | 'drain', nodes: NodeTableRow[] }>(null)
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'nodes'
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[], actionType?: 'delete' | 'cordon' | 'drain' }>(null)
 	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0 && pendingAction.actionType === 'delete', [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0 || pendingAction.actionType !== 'delete') return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details: unknown = resp?.details
+			const warnings: string[] = Array.isArray((details as any)?.results)
+				? (details as any).results.flatMap((r: unknown) => Array.isArray((r as any)?.warnings) ? (r as any).warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
 
 	// Ensure node-specific action capabilities are requested (cluster-scoped)
 	React.useEffect(() => {
@@ -260,7 +287,11 @@ function NodesContent() {
 						<IfAllowed feature="nodes.update" cluster={clusterId} namespace="" resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconPlayerPause className="size-4 mr-2" />Cordon</DropdownMenuItem>}
 						>
-							<DropdownMenuItem onClick={() => { setPendingAction({ type: 'cordon', nodes: [row.original] }); setConfirmDialogOpen(true); setConfirmWarnings([]) }}>
+							<DropdownMenuItem onClick={() => {
+								setPendingAction({ scope: 'nodes', items: [{ name: row.original.name, namespace: '' }], actionType: 'cordon' });
+								setConfirmDialogOpen(true);
+								setConfirmWarnings([])
+							}}>
 								<IconPlayerPause className="size-4 mr-2" />
 								Cordon
 							</DropdownMenuItem>
@@ -268,7 +299,11 @@ function NodesContent() {
 						<IfAllowed feature="nodes.update" cluster={clusterId} namespace="" resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconDroplets className="size-4 mr-2" />Drain</DropdownMenuItem>}
 						>
-							<DropdownMenuItem onClick={() => { setPendingAction({ type: 'drain', nodes: [row.original] }); setConfirmDialogOpen(true); setConfirmWarnings([]) }}>
+							<DropdownMenuItem onClick={() => {
+								setPendingAction({ scope: 'nodes', items: [{ name: row.original.name, namespace: '' }], actionType: 'drain' });
+								setConfirmDialogOpen(true);
+								setConfirmWarnings([])
+							}}>
 								<IconDroplets className="size-4 mr-2" />
 								Drain
 							</DropdownMenuItem>
@@ -277,7 +312,12 @@ function NodesContent() {
 						<IfAllowed feature="nodes.update" cluster={clusterId} namespace="" resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', nodes: [row.original] }); setConfirmDialogOpen(true); setConfirmWarnings([]) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => {
+								const item = { name: row.original.name, namespace: '' }
+								setPendingAction({ scope: 'nodes', items: [item], actionType: 'delete' })
+								setConfirmDialogOpen(true)
+								validateDelete('nodes', [item])
+							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -286,17 +326,53 @@ function NodesContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId])
+	]), [clusterId, validateDelete])
 
 	// Bulk actions
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: NodeTableRow[]) => void | Promise<void> }[] = []
 		actions.push({ id: 'copy-names', label: 'Copy Node Names', icon: <IconCopy className="size-4" />, requiresSelection: true, action: (rows) => navigator.clipboard.writeText(rows.map(r => r.name).join('\n')) })
 		actions.push({ id: 'export-yaml', label: 'Export Selected as YAML', icon: <IconDownload className="size-4" />, requiresSelection: true, action: (rows) => console.log('Export YAML for nodes:', rows.map(n => n.name)) })
-		if (isAllowed('nodes.update')) actions.push({ id: 'cordon-nodes', label: 'Cordon Selected Nodes', icon: <IconPlayerPause className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'cordon', nodes: rows }); setConfirmDialogOpen(true); setConfirmWarnings([]) } })
-		if (isAllowed('nodes.update')) actions.push({ id: 'drain-nodes', label: 'Drain Selected Nodes', icon: <IconDroplets className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'drain', nodes: rows }); setConfirmDialogOpen(true); setConfirmWarnings([]) } })
+		if (isAllowed('nodes.update')) actions.push({
+			id: 'cordon-nodes',
+			label: 'Cordon Selected Nodes',
+			icon: <IconPlayerPause className="size-4" />,
+			requiresSelection: true,
+			action: (rows) => {
+				const selected = rows.map(r => ({ name: r.name, namespace: '' }))
+				setPendingAction({ scope: 'nodes', items: selected, actionType: 'cordon' })
+				setConfirmDialogOpen(true)
+				setConfirmWarnings([])
+			}
+		})
+		if (isAllowed('nodes.update')) actions.push({
+			id: 'drain-nodes',
+			label: 'Drain Selected Nodes',
+			icon: <IconDroplets className="size-4" />,
+			variant: 'destructive',
+			requiresSelection: true,
+			action: (rows) => {
+				const selected = rows.map(r => ({ name: r.name, namespace: '' }))
+				setPendingAction({ scope: 'nodes', items: selected, actionType: 'drain' })
+				setConfirmDialogOpen(true)
+				setConfirmWarnings([])
+			}
+		})
+		if (isAllowed('nodes.update')) actions.push({
+			id: 'delete-nodes',
+			label: 'Delete Selected Nodes',
+			icon: <IconTrash className="size-4" />,
+			variant: 'destructive',
+			requiresSelection: true,
+			action: (rows) => {
+				const selected = rows.map(r => ({ name: r.name, namespace: '' }))
+				setPendingAction({ scope: 'nodes', items: selected, actionType: 'delete' })
+				setConfirmDialogOpen(true)
+				validateDelete('nodes', selected)
+			}
+		})
 		return actions
-	}, [isAllowed])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
@@ -304,33 +380,33 @@ function NodesContent() {
 		try {
 			let success = false
 			let affected = 0
-			const total = pendingAction.nodes.length
+			const total = pendingAction.items.length
 
-			if (pendingAction.type === 'cordon') {
-				for (const node of pendingAction.nodes) {
+			if (pendingAction.actionType === 'cordon') {
+				for (const item of pendingAction.items) {
 					try {
-						const result = await k8sService.cordonNode(node.name)
+						const result = await k8sService.cordonNode(item.name)
 						if (result.success) affected++
 					} catch (e) {
-						console.error('Failed to cordon node:', node.name, e)
+						console.error('Failed to cordon node:', item.name, e)
 					}
 				}
 				success = affected > 0
-			} else if (pendingAction.type === 'drain') {
-				for (const node of pendingAction.nodes) {
+			} else if (pendingAction.actionType === 'drain') {
+				for (const item of pendingAction.items) {
 					try {
-						await k8sService.drainNode(node.name)
+						await k8sService.drainNode(item.name)
 						affected++
 					} catch (e) {
-						console.error('Failed to drain node:', node.name, e)
+						console.error('Failed to drain node:', item.name, e)
 					}
 				}
 				success = affected > 0
-			} else if (pendingAction.type === 'delete') {
-				// Note: Node deletion is typically handled via bulk API
-				const targets = pendingAction.nodes.map(n => ({ namespace: '', name: n.name }))
-				const resp = await bulkActionsApi.executeBulkAction('nodes', { action: 'delete-nodes', targets })
-				success = resp?.success
+			} else if (pendingAction.actionType === 'delete') {
+				// Node deletion via bulk API
+				const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+				const resp = await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+				success = resp?.success ?? false
 				affected = resp?.resources_affected ?? 0
 			}
 
@@ -412,15 +488,18 @@ function NodesContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title={pendingAction?.type === 'cordon' ? 'Cordon Nodes' : pendingAction?.type === 'drain' ? 'Drain Nodes' : 'Delete Nodes'}
-				description={pendingAction?.type === 'cordon' ? 'Are you sure you want to cordon the selected nodes? This will prevent new pods from being scheduled on them.' : pendingAction?.type === 'drain' ? 'Are you sure you want to drain the selected nodes? This will evict all pods and cordon the nodes.' : 'Are you sure you want to delete the selected nodes? This action cannot be undone.'}
-				actionLabel={pendingAction?.type === 'cordon' ? 'Cordon Nodes' : pendingAction?.type === 'drain' ? 'Drain Nodes' : 'Delete Nodes'}
-				variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
+				title={pendingAction?.actionType === 'cordon' ? 'Cordon Nodes' : pendingAction?.actionType === 'drain' ? 'Drain Nodes' : 'Delete Nodes'}
+				description={pendingAction?.actionType === 'cordon' ? 'Are you sure you want to cordon the selected nodes? This will prevent new pods from being scheduled on them.' : pendingAction?.actionType === 'drain' ? 'Are you sure you want to drain the selected nodes? This will evict all pods and cordon the nodes.' : 'Are you sure you want to delete the selected nodes? This action cannot be undone.'}
+				actionLabel={pendingAction?.actionType === 'cordon' ? 'Cordon Nodes' : pendingAction?.actionType === 'drain' ? 'Drain Nodes' : pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={pendingAction?.actionType === 'delete' ? 'destructive' : 'default'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.nodes || []).map(n => ({ name: n.name, namespace: '' }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 && pendingAction.actionType === 'delete' ? 'Type the resource name to confirm' : pendingAction?.actionType === 'delete' ? 'Type DELETE to confirm' : undefined}
+				confirmValue={confirmValue}
 			/>
 
 			{selectedNodeForDetails && (

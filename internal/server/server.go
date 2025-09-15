@@ -34,6 +34,7 @@ import (
 	"go.uber.org/zap"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned"
 	metricsv1beta1typed "k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1"
 )
@@ -63,8 +64,8 @@ type Server struct {
 	searchService        *cache.SearchService
 	authMiddleware       *auth.Middleware
 	oidcClient           *auth.OIDCClient
-    oidcStateStore       *auth.OIDCStateStore
-    loginNextStore       *auth.LoginNextStore
+	oidcStateStore       *auth.OIDCStateStore
+	loginNextStore       *auth.LoginNextStore
 	sessionManager       *auth.SessionManager
 	impersonationMgr     *k8s.ImpersonationManager
 	clientFactory        *client.Factory
@@ -341,13 +342,13 @@ func (s *Server) initKubernetesClient() error {
 	s.logsService = k8slogs.NewStreamManager(s.logger, s.kubeClient)
 
 	// Initialize logs cache service
-	s.logger.Info("🗂️ Initializing logs cache service")
+	s.logger.Info("Initializing logs cache service")
 	logsCacheConfig, err := s.config.GetLogsServiceConfig()
 	if err != nil {
 		return fmt.Errorf("failed to create logs cache config: %w", err)
 	}
 
-	s.logger.Info("📋 Logs cache config loaded",
+	s.logger.Info("Logs cache config loaded",
 		zap.Bool("background_collection_enabled", logsCacheConfig.BackgroundCollectionEnabled),
 		zap.String("background_collection_retention", logsCacheConfig.BackgroundCollectionRetention),
 		zap.String("note", "Using reliable V3 collector with informer-based design"))
@@ -363,11 +364,34 @@ func (s *Server) initKubernetesClient() error {
 	}
 
 	// Set up background log collection
-	s.logger.Info("🔧 Setting up background log collection")
-	if err := reliableService.SetupLogCollector(s.kubeClient, clusterName); err != nil {
+	s.logger.Info("Setting up background log collection")
+
+	// Use a separate, rate-limited Kubernetes client for the background log collector
+	// to avoid starving interactive API requests (e.g., /authz/capabilities) under load.
+	logsREST := rest.CopyConfig(s.clientFactory.RESTConfig())
+	// Apply configured QPS/Burst for logs client, falling back to safe defaults
+	logsREST.QPS = s.config.Kubernetes.LogsQPS
+	logsREST.Burst = s.config.Kubernetes.LogsBurst
+	if logsREST.QPS <= 0 {
+		logsREST.QPS = 20
+	}
+	if logsREST.Burst <= 0 {
+		logsREST.Burst = 40
+	}
+	var logsKubeClient kubernetes.Interface
+	clientset, clientErr := kubernetes.NewForConfig(logsREST)
+	if clientErr != nil {
+		s.logger.Warn("Failed to create separate logs Kubernetes client; falling back to main client",
+			zap.Error(clientErr))
+		logsKubeClient = s.kubeClient
+	} else {
+		logsKubeClient = clientset
+	}
+
+	if err := reliableService.SetupLogCollector(logsKubeClient, clusterName); err != nil {
 		return fmt.Errorf("failed to set up background log collector: %w", err)
 	}
-	s.logger.Info("✅ Background log collector setup complete")
+	s.logger.Info("Background log collector setup complete")
 
 	s.logsCoordinator = k8slogs.NewStreamCoordinator(s.logger, s.kubeClient, s.logsCacheService, s.wsHub, clusterName)
 
@@ -644,7 +668,7 @@ func (s *Server) initAuth() error {
 	// Set authentication middleware on WebSocket hub
 	s.wsHub.SetAuthMiddleware(s.authMiddleware)
 
-	// Initialize new middleware components (PR 2)
+	// Initialize new middleware components
 	permissionChecker := middleware.NewSSARPermissionChecker(s.logger, s.config, s.impersonationMgr)
 	s.permissionMiddleware = middleware.NewPermissionMiddleware(s.logger, s.config, permissionChecker)
 	s.impersonationMiddleware = middleware.NewImpersonationMiddleware(s.logger, s.config, s.impersonationMgr, s.authMiddleware)

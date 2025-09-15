@@ -43,23 +43,48 @@ import { virtualServiceSchema } from "@/types/virtual-service"
 import { VirtualServiceDetailDrawer } from "@/components/viewers/VirtualServiceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function VirtualServicesContent() {
 	const { istioInstalled, istio, loading: featuresLoading } = useClusterFeatures()
-	const { data: virtualServices, loading: isLoading, error, isConnected } = useVirtualServicesWithWebSocket(true)
+	const { data: virtualServices, loading: isLoading, error } = useVirtualServicesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedVirtualServiceForDetails, setSelectedVirtualServiceForDetails] = React.useState<z.infer<typeof virtualServiceSchema> | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', virtualServices: z.infer<typeof virtualServiceSchema>[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'virtualservices' | string
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	// Validate delete action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details = resp?.details as Record<string, unknown> | undefined
+			const warnings: string[] = Array.isArray(details?.results)
+				? (details.results as Array<{ warnings?: string[] }>).flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
 
 	// Filters
 	const [globalFilter, setGlobalFilter] = React.useState("")
@@ -80,16 +105,6 @@ function VirtualServicesContent() {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [virtualServices])
-
-	// Auto-hide alert after 5 seconds
-	React.useEffect(() => {
-		if (alert) {
-			const timer = setTimeout(() => {
-				setAlert(null)
-			}, 5000)
-			return () => clearTimeout(timer)
-		}
-	}, [alert])
 
 	// Helper function to get badge for gateway type in filter options
 	const getGatewayTypeBadge = React.useCallback((type: string) => {
@@ -362,8 +377,10 @@ function VirtualServicesContent() {
 							</DropdownMenuItem>
 						}>
 							<DropdownMenuItem className="text-red-600" onClick={() => {
-								setPendingAction({ type: 'delete', virtualServices: [row.original] })
+								const item = row.original
+								setPendingAction({ scope: 'virtualservices', items: [{ name: item.name, namespace: item.namespace }] })
 								setConfirmDialogOpen(true)
+								validateDelete('virtualservices', [{ name: item.name, namespace: item.namespace }])
 							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
@@ -373,7 +390,7 @@ function VirtualServicesContent() {
 				</DropdownMenu>
 			),
 		},
-	], [handleViewDetails, clusterId])
+	], [handleViewDetails, clusterId, validateDelete])
 
 	// Bulk actions
 	const bulkActions = React.useMemo(() => [
@@ -422,45 +439,22 @@ function VirtualServicesContent() {
 			label: "Delete Selected Virtual Services",
 			icon: <IconTrash className="size-4" />,
 			action: (virtualServices: z.infer<typeof virtualServiceSchema>[]) => {
-				setPendingAction({ type: 'delete', virtualServices })
+				const selected = virtualServices.map(vs => ({ name: vs.name, namespace: vs.namespace }))
+				setPendingAction({ scope: 'virtualservices', items: selected })
 				setConfirmDialogOpen(true)
+				validateDelete('virtualservices', selected)
 			},
 			variant: "destructive" as const,
 			requiresSelection: true,
 		},
-	], [])
+	], [validateDelete])
 
-	// Handle confirmation of destructive actions
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
-
 		setIsConfirmExecuting(true)
-		setConfirmWarnings([])
-
 		try {
-			if (pendingAction.type === 'delete') {
-				const targets = pendingAction.virtualServices.map(vs => ({
-					namespace: vs.namespace,
-					name: vs.name,
-				}))
-
-				await bulkActionsApi.executeBulkAction('virtualservices', {
-					action: 'delete',
-					targets,
-				})
-
-				setAlert({
-					variant: 'success',
-					title: `Deleted ${pendingAction.virtualServices.length} virtual service(s)`,
-					description: `Successfully deleted: ${pendingAction.virtualServices.map(vs => vs.name).join(', ')}`
-				})
-			}
-		} catch (err) {
-			setAlert({
-				variant: 'error',
-				title: 'Action failed',
-				description: err instanceof Error ? err.message : 'Unknown error occurred'
-			})
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
@@ -572,17 +566,6 @@ function VirtualServicesContent() {
 
 			{/* Virtual Services Data Table */}
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filteredData}
 					columns={columns}
@@ -621,30 +604,22 @@ function VirtualServicesContent() {
 				/>
 			</div>
 
-			{/* Confirmation dialog for destructive actions */}
-			{pendingAction && (
-				<ActionConfirmationDialog
-					open={confirmDialogOpen}
-					onOpenChange={setConfirmDialogOpen}
-					onConfirm={handleConfirmAction}
-					isExecuting={isConfirmExecuting}
-					variant={pendingAction.type === 'delete' ? 'destructive' : 'default'}
-					title={pendingAction.type === 'delete' ? 'Delete Virtual Services' : 'Confirm Action'}
-					description={
-						pendingAction.type === 'delete'
-							? `Are you sure you want to delete ${pendingAction.virtualServices.length} virtual service(s)? This action cannot be undone.`
-							: 'Are you sure you want to perform this action?'
-					}
-					actionLabel={pendingAction.type === 'delete' ? 'Delete Virtual Services' : 'Confirm'}
-					resources={pendingAction.virtualServices.map(vs => ({
-						kind: 'VirtualService',
-						namespace: vs.namespace,
-						name: vs.name,
-					}))}
-					warnings={confirmWarnings}
-					safetyViolations={[]}
-				/>
-			)}
+			<ActionConfirmationDialog
+				open={confirmDialogOpen}
+				onOpenChange={setConfirmDialogOpen}
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
+				isExecuting={isConfirmExecuting}
+				onConfirm={handleConfirmAction}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+				safetyViolations={[]}
+				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
+			/>
 
 			{/* Detail drawer */}
 			{selectedVirtualServiceForDetails && (

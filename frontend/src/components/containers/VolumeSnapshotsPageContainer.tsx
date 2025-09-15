@@ -38,7 +38,7 @@ import {
 
 // Inner component that can access the namespace context
 function VolumeSnapshotsContent() {
-	const { data: volumeSnapshots, loading: isLoading, error, isConnected } = useVolumeSnapshotsWithWebSocket(true)
+	const { data: volumeSnapshots, loading: isLoading, error } = useVolumeSnapshotsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
@@ -174,8 +174,8 @@ function VolumeSnapshotsContent() {
 		return result
 	}, [volumeSnapshots, statusFilter, globalFilter])
 
-	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validateSnapshotsAction = React.useCallback(async (type: 'delete', rows: DashboardVolumeSnapshot[]) => {
+	// Standardized validation function for bulk delete confirmation pattern
+	const validateDelete = React.useCallback(async (rows: DashboardVolumeSnapshot[]) => {
 		try {
 			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
 			const resp = await bulkActionsApi.validateAction('volumesnapshots', { action: 'delete-volumesnapshots', targets })
@@ -289,7 +289,7 @@ function VolumeSnapshotsContent() {
 						<IfAllowed feature="volumesnapshots.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', snapshots: [row.original] }); setConfirmDialogOpen(true); validateSnapshotsAction('delete', [row.original]) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', snapshots: [row.original] }); setConfirmDialogOpen(true); validateDelete([row.original]) }}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -298,7 +298,7 @@ function VolumeSnapshotsContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, validateSnapshotsAction])
+	]), [clusterId, validateDelete])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardVolumeSnapshot[]) => void | Promise<void> }[] = []
@@ -351,13 +351,13 @@ function VolumeSnapshotsContent() {
 				action: (rows) => {
 					setPendingAction({ type: 'delete', snapshots: rows });
 					setConfirmDialogOpen(true);
-					validateSnapshotsAction('delete', rows)
+					validateDelete(rows)
 				}
 			})
 		}
 
 		return actions
-	}, [isAllowed, validateSnapshotsAction])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
@@ -444,7 +444,7 @@ function VolumeSnapshotsContent() {
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
 				title={'Delete Volume Snapshots'}
-				description={'Are you sure you want to delete the selected volume snapshots? This action cannot be undone.'}
+				description={'This action will permanently delete the selected volume snapshots. This operation cannot be undone.'}
 				actionLabel={'Delete Snapshots'}
 				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
@@ -452,6 +452,17 @@ function VolumeSnapshotsContent() {
 				resources={(pendingAction?.snapshots || []).map(s => ({ name: s.name, namespace: s.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={true}
+				confirmPrompt={
+					(pendingAction?.snapshots?.length || 0) === 1
+						? 'To confirm deletion, type the resource name in the box below:'
+						: 'To confirm deletion, type "delete snapshots" in the box below:'
+				}
+				confirmValue={
+					(pendingAction?.snapshots?.length || 0) === 1
+						? (pendingAction?.snapshots?.[0]?.name || '')
+						: 'delete snapshots'
+				}
 			/>
 
 			{/* Controlled detail drawer */}

@@ -19,8 +19,8 @@ import { useIngressesWithWebSocket } from "@/hooks/useIngressesWithWebSocket"
 import { useCapabilities } from "@/hooks/use-capabilities"
 import { Badge } from "@/components/ui/badge"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
+import { toast } from "sonner"
 import {
     getResourceIcon,
     getReplicaStatusBadge
@@ -28,7 +28,7 @@ import {
 
 // Inner component that can access the namespace context
 function IngressesContent() {
-    const { data: ingresses, loading: isLoading, error, isConnected } = useIngressesWithWebSocket(true)
+    const { data: ingresses, loading: isLoading, error } = useIngressesWithWebSocket(true)
     const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
     const { fetchAdditional } = useCapabilities()
     const { clusterId } = useCluster()
@@ -37,25 +37,11 @@ function IngressesContent() {
     const [selectedIngressForDetails, setSelectedIngressForDetails] = React.useState<DashboardIngress | null>(null)
     const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
     const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-    const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-    const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', ingresses: DashboardIngress[] }>(null)
-    const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
-    // Bulk actions: preflight validate to show warnings in confirmation dialog
-    const validateIngressesAction = React.useCallback(async (type: 'delete', rows: DashboardIngress[]) => {
-        try {
-            const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
-            const legacyAction = 'delete-ingresses'
-            const resp = await bulkActionsApi.validateAction('ingresses', { action: legacyAction, targets })
-            const details: any = resp?.details
-            const warnings: string[] = Array.isArray(details?.results)
-                ? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
-                : []
-            setConfirmWarnings(warnings)
-        } catch {
-            setConfirmWarnings([])
-        }
-    }, [])
+    // Confirmation dialog state for destructive actions
+    type Item = { name: string; namespace: string }
+    type Scope = 'ingresses'
+    const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
 
     // Ensure ingress-specific action capabilities are requested
     React.useEffect(() => {
@@ -73,6 +59,17 @@ function IngressesContent() {
             setLastUpdated(new Date().toISOString())
         }
     }, [ingresses])
+
+    // Validation function for delete actions
+    const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+        try {
+            const targets = items.map(i => ({ namespace: i.namespace, name: i.name }))
+            await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+            // Validation successful - any warnings will be shown in the confirmation dialog
+        } catch {
+            // Validation failed - handled by dialog
+        }
+    }, [])
 
     // Filters
     const [globalFilter, setGlobalFilter] = React.useState("")
@@ -198,8 +195,10 @@ function IngressesContent() {
                             fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
                         >
                             <DropdownMenuItem className="text-red-600" onClick={() => {
-                                setPendingAction({ type: 'delete', ingresses: [row.original] });
-                                setConfirmDialogOpen(true);
+                                const item = row.original
+                                setPendingAction({ scope: 'ingresses', items: [{ name: item.name, namespace: item.namespace }] })
+                                setConfirmDialogOpen(true)
+                                validateDelete('ingresses', [{ name: item.name, namespace: item.namespace }])
                             }}>
                                 <IconTrash className="size-4 mr-2" />
                                 Delete
@@ -209,7 +208,7 @@ function IngressesContent() {
                 </DropdownMenu>
             )
         }
-    ]), [clusterId, handleViewDetails, setPendingAction, setConfirmDialogOpen])
+    ]), [clusterId, handleViewDetails, validateDelete])
 
     // Bulk actions (capability-aware)
     const bulkActions = React.useMemo(() => {
@@ -243,46 +242,48 @@ function IngressesContent() {
                 variant: 'destructive',
                 requiresSelection: true,
                 action: (rows) => {
-                    setPendingAction({ type: 'delete', ingresses: rows });
-                    setConfirmDialogOpen(true);
+                    const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+                    setPendingAction({ scope: 'ingresses', items: selected })
+                    setConfirmDialogOpen(true)
+                    validateDelete('ingresses', selected)
                 },
             })
         }
 
         return actions
-    }, [isAllowed, setPendingAction, setConfirmDialogOpen])
+    }, [isAllowed, setPendingAction, setConfirmDialogOpen, validateDelete])
 
     // Handle confirmation dialog
     const handleConfirmAction = React.useCallback(async () => {
-        if (!pendingAction) return
+        if (!pendingAction || pendingAction.items.length === 0) {
+            setPendingAction(null)
+            setConfirmDialogOpen(false)
+            return
+        }
+
         setIsConfirmExecuting(true)
         try {
-            const targets = pendingAction.ingresses.map(i => ({ namespace: i.namespace, name: i.name }))
-            // Using a mock delete API call - replace with actual API call
-            console.log('Deleting ingresses:', targets)
+            const targets = pendingAction.items.map(item => ({
+                name: item.name,
+                namespace: item.namespace,
+            }))
 
-            // Simulate API response for now
-            const affected = targets.length
-            const total = targets.length
-            setAlert({
-                variant: 'success',
-                title: `Success: ${affected}/${total} ingresses deleted`,
-                description: 'The selected ingresses have been successfully deleted.'
+            await bulkActionsApi.executeBulkAction('ingresses', {
+                action: 'delete',
+                targets,
+                force_confirm: true,
             })
-        } catch (e: unknown) {
-            setAlert({
-                variant: 'error',
-                title: 'Delete failed',
-                description: e instanceof Error ? e.message : String(e)
-            })
+
+            toast.success(`Successfully deleted ${targets.length} ingress${targets.length > 1 ? 'es' : ''}`)
+        } catch (error) {
+            console.error('Error deleting ingresses:', error)
+            toast.error('Failed to delete ingresses')
         } finally {
             setIsConfirmExecuting(false)
             setConfirmDialogOpen(false)
             setPendingAction(null)
         }
-    }, [pendingAction, setIsConfirmExecuting, setConfirmDialogOpen, setPendingAction, setAlert])
-
-    // Generate summary cards from ingress data
+    }, [pendingAction, setIsConfirmExecuting, setConfirmDialogOpen, setPendingAction])    // Generate summary cards from ingress data
     const summaryData: SummaryCard[] = React.useMemo(() => {
         if (!ingresses || ingresses.length === 0) {
             return [
@@ -375,17 +376,6 @@ function IngressesContent() {
             />
 
             <div className="px-4 lg:px-6 space-y-3">
-                {alert && (
-                    <Alert
-                        className={alert.variant === 'success'
-                            ? 'bg-transparent border-green-600 text-green-700'
-                            : 'bg-transparent border-red-600 text-red-700'}
-                        variant='default'
-                    >
-                        <AlertTitle>{alert.title}</AlertTitle>
-                        {alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-                    </Alert>
-                )}
                 <UniversalDataTable
                     data={filtered}
                     columns={columns}
@@ -432,9 +422,20 @@ function IngressesContent() {
                 variant="destructive"
                 isExecuting={isConfirmExecuting}
                 onConfirm={handleConfirmAction}
-                resources={(pendingAction?.ingresses || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+                resources={pendingAction?.items || []}
                 safetyViolations={[]}
                 warnings={[]}
+                requireTextConfirm={!!pendingAction && pendingAction.items.length > 1}
+                confirmPrompt={
+                    pendingAction?.items.length === 1
+                        ? `Type "${pendingAction.items[0].name}" to confirm deletion`
+                        : "Type 'DELETE' to confirm deletion of these ingresses"
+                }
+                confirmValue={
+                    pendingAction?.items.length === 1
+                        ? pendingAction.items[0].name
+                        : "DELETE"
+                }
             />
 
             {selectedIngressForDetails && (

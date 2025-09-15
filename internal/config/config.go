@@ -105,13 +105,16 @@ type SQLiteBinding struct {
 
 // KubernetesConfig represents the Kubernetes configuration
 type KubernetesConfig struct {
-	Mode             string  `yaml:"mode"`
-	KubeconfigPath   string  `yaml:"kubeconfig_path"`
-	NamespaceDefault string  `yaml:"namespace_default"`
-	ClusterName      string  `yaml:"cluster_name"`
-	InsecureTLS      bool    `yaml:"insecure_tls"` // Skip TLS verification for development environments
-	QPS              float32 `yaml:"qps"`          // Queries per second allowed to API server
-	Burst            int     `yaml:"burst"`        // Maximum burst for throttle
+    Mode             string  `yaml:"mode"`
+    KubeconfigPath   string  `yaml:"kubeconfig_path"`
+    NamespaceDefault string  `yaml:"namespace_default"`
+    ClusterName      string  `yaml:"cluster_name"`
+    InsecureTLS      bool    `yaml:"insecure_tls"` // Skip TLS verification for development environments
+    QPS              float32 `yaml:"qps"`          // Queries per second allowed to API server
+    Burst            int     `yaml:"burst"`        // Maximum burst for throttle
+    // Separate client used by background logs collector to avoid starving interactive traffic
+    LogsQPS          float32 `yaml:"logs_qps"`
+    LogsBurst        int     `yaml:"logs_burst"`
 }
 
 // FeaturesConfig represents the features configuration
@@ -299,15 +302,18 @@ func loadWithDefaults(configPath string) (*Config, error) {
 				DSN: getEnv("KAPTN_BINDINGS_SQLITE_DSN", "file:/data/kaptn.db?_fk=1"),
 			},
 		},
-		Kubernetes: KubernetesConfig{
-			Mode:             getEnv("KAPTN_KUBE_MODE", "kubeconfig"),
-			KubeconfigPath:   getEnv("KUBECONFIG", ""),
-			NamespaceDefault: getEnv("KAPTN_NAMESPACE_DEFAULT", "default"),
-			ClusterName:      getEnv("KAPTN_CLUSTER_NAME", "default"),
-			InsecureTLS:      getEnvBool("KAPTN_KUBE_INSECURE_TLS", false),
-			QPS:              float32(getEnvInt("KAPTN_KUBE_QPS", 100)), // Default 100 QPS
-			Burst:            getEnvInt("KAPTN_KUBE_BURST", 200),        // Default 200 burst
-		},
+        Kubernetes: KubernetesConfig{
+            Mode:             getEnv("KAPTN_KUBE_MODE", "kubeconfig"),
+            KubeconfigPath:   getEnv("KUBECONFIG", ""),
+            NamespaceDefault: getEnv("KAPTN_NAMESPACE_DEFAULT", "default"),
+            ClusterName:      getEnv("KAPTN_CLUSTER_NAME", "default"),
+            InsecureTLS:      getEnvBool("KAPTN_KUBE_INSECURE_TLS", false),
+            QPS:              float32(getEnvInt("KAPTN_KUBE_QPS", 100)), // Default 100 QPS
+            Burst:            getEnvInt("KAPTN_KUBE_BURST", 200),        // Default 200 burst
+            // Defaults chosen to isolate background collection at a lower rate
+            LogsQPS:          float32(getEnvInt("KAPTN_LOGS_KUBE_QPS", 20)),
+            LogsBurst:        getEnvInt("KAPTN_LOGS_KUBE_BURST", 40),
+        },
 		Features: FeaturesConfig{
 			EnableApply:               getEnvBool("KAPTN_ENABLE_APPLY", true),
 			EnableNodeActions:         getEnvBool("KAPTN_ENABLE_NODE_ACTIONS", true),
@@ -518,11 +524,21 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 			result.Kubernetes.QPS = float32(parsed)
 		}
 	}
-	if envValue := os.Getenv("KAPTN_KUBE_BURST"); envValue != "" {
-		if parsed, err := strconv.Atoi(envValue); err == nil {
-			result.Kubernetes.Burst = parsed
-		}
-	}
+    if envValue := os.Getenv("KAPTN_KUBE_BURST"); envValue != "" {
+        if parsed, err := strconv.Atoi(envValue); err == nil {
+            result.Kubernetes.Burst = parsed
+        }
+    }
+    if envValue := os.Getenv("KAPTN_LOGS_KUBE_QPS"); envValue != "" {
+        if parsed, err := strconv.Atoi(envValue); err == nil {
+            result.Kubernetes.LogsQPS = float32(parsed)
+        }
+    }
+    if envValue := os.Getenv("KAPTN_LOGS_KUBE_BURST"); envValue != "" {
+        if parsed, err := strconv.Atoi(envValue); err == nil {
+            result.Kubernetes.LogsBurst = parsed
+        }
+    }
 	if envValue := os.Getenv("LOG_LEVEL"); envValue != "" {
 		result.Logging.Level = envValue
 	}
@@ -686,6 +702,17 @@ func (c *Config) Validate() error {
 	}
 	if c.Kubernetes.Burst > 0 && c.Kubernetes.QPS > 0 && float32(c.Kubernetes.Burst) < c.Kubernetes.QPS {
 		return fmt.Errorf("kubernetes burst (%d) must be greater than or equal to QPS (%.1f)", c.Kubernetes.Burst, c.Kubernetes.QPS)
+	}
+
+	// Validate logs client rate limiting configuration (optional)
+	if c.Kubernetes.LogsQPS < 0 {
+		return fmt.Errorf("kubernetes logs_qps must be non-negative")
+	}
+	if c.Kubernetes.LogsBurst < 0 {
+		return fmt.Errorf("kubernetes logs_burst must be non-negative")
+	}
+	if c.Kubernetes.LogsBurst > 0 && c.Kubernetes.LogsQPS > 0 && float32(c.Kubernetes.LogsBurst) < c.Kubernetes.LogsQPS {
+		return fmt.Errorf("kubernetes logs_burst (%d) must be greater than or equal to logs_qps (%.1f)", c.Kubernetes.LogsBurst, c.Kubernetes.LogsQPS)
 	}
 
 	if c.Security.AuthMode != "none" && c.Security.AuthMode != "header" && c.Security.AuthMode != "oidc" {

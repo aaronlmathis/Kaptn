@@ -102,7 +102,20 @@ class BulkActionsApi {
       case 'endpointslices': return { apiVersion: 'discovery.k8s.io/v1', kind: 'EndpointSlice' }
       case 'endpoints': return { apiVersion: 'v1', kind: 'Endpoints' }
       case 'horizontalpodautoscalers': return { apiVersion: 'autoscaling/v2', kind: 'HorizontalPodAutoscaler' }
+      case 'hpas': return { apiVersion: 'autoscaling/v2', kind: 'HorizontalPodAutoscaler' }
       case 'ingressclasses': return { apiVersion: 'networking.k8s.io/v1', kind: 'IngressClass' }
+      case 'ingresses': return { apiVersion: 'networking.k8s.io/v1', kind: 'Ingress' }
+      case 'jobs': return { apiVersion: 'batch/v1', kind: 'Job' }
+      case 'gateways': return { apiVersion: 'gateway.networking.k8s.io/v1', kind: 'Gateway' }
+      case 'networkpolicies': return { apiVersion: 'networking.k8s.io/v1', kind: 'NetworkPolicy' }
+      case 'persistentvolumeclaims': return { apiVersion: 'v1', kind: 'PersistentVolumeClaim' }
+      case 'persistentvolumes': return { apiVersion: 'v1', kind: 'PersistentVolume' }
+      case 'replicasets': return { apiVersion: 'apps/v1', kind: 'ReplicaSet' }
+      case 'resourcequotas': return { apiVersion: 'v1', kind: 'ResourceQuota' }
+      case 'storageclasses': return { apiVersion: 'storage.k8s.io/v1', kind: 'StorageClass' }
+      case 'virtualservices': return { apiVersion: 'networking.istio.io/v1beta1', kind: 'VirtualService' }
+      case 'volumesnapshotclasses': return { apiVersion: 'snapshot.storage.k8s.io/v1', kind: 'VolumeSnapshotClass' }
+      case 'volumesnapshots': return { apiVersion: 'snapshot.storage.k8s.io/v1', kind: 'VolumeSnapshot' }
       default: return { apiVersion: 'v1', kind: resource }
     }
   }

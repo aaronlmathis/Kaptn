@@ -16,7 +16,6 @@ import { usePersistentVolumesWithWebSocket } from "@/hooks/usePersistentVolumesW
 import { useCapabilities } from "@/hooks/use-capabilities"
 import { Badge } from "@/components/ui/badge"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 import {
 	getPersistentVolumeStatusBadge,
@@ -26,18 +25,29 @@ import { PersistentVolumeDetailDrawer } from "@/components/viewers/PersistentVol
 import type { DashboardPersistentVolume } from "@/lib/k8s-storage"
 
 function PersistentVolumesContent() {
-	const { data: persistentVolumes, loading: isLoading, error, isConnected } = usePersistentVolumesWithWebSocket(true)
+	const { data: persistentVolumes, loading: isLoading, error } = usePersistentVolumesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
 	const { isAllowed } = useAuthzCapabilitiesInContext(['persistentvolumes.get', 'persistentvolumes.patch', 'persistentvolumes.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedPVForDetails, setSelectedPVForDetails] = React.useState<DashboardPersistentVolume | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', pvs: DashboardPersistentVolume[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'persistentvolumes'
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
 
 	// Ensure PV-specific action capabilities are requested
 	React.useEffect(() => {
@@ -170,21 +180,34 @@ function PersistentVolumesContent() {
 		}
 	}
 
-	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validatePVsAction = React.useCallback(async (type: 'delete', rows: DashboardPersistentVolume[]) => {
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
 		try {
-			const targets = rows.map(r => ({ name: r.name }))
-			const legacyAction = 'delete-pvs'
-			const resp = await bulkActionsApi.validateAction('persistentvolumes', { action: legacyAction, targets })
-			const details = resp?.details as { results?: Array<{ warnings?: string[] }> }
-			const warnings: string[] = Array.isArray(details?.results)
-				? details.results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details: unknown = resp?.details
+			const warnings: string[] = Array.isArray((details as { results?: Array<{ warnings?: string[] }> })?.results)
+				? (details as { results: Array<{ warnings?: string[] }> }).results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
 				: []
 			setConfirmWarnings(warnings)
 		} catch {
 			setConfirmWarnings([])
 		}
 	}, [])
+
+	// Confirm handler — executes with `force_confirm: true`
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
 
 	// Column definitions
 	const columns: ColumnDef<DashboardPersistentVolume, unknown>[] = React.useMemo(() => [
@@ -320,9 +343,10 @@ function PersistentVolumesContent() {
 							<DropdownMenuItem
 								className="text-red-600"
 								onClick={() => {
-									setPendingAction({ type: 'delete', pvs: [row.original] })
-									validatePVsAction('delete', [row.original])
+									const item = row.original
+									setPendingAction({ scope: 'persistentvolumes', items: [{ name: item.name, namespace: '' }] })
 									setConfirmDialogOpen(true)
+									validateDelete('persistentvolumes', [{ name: item.name, namespace: '' }])
 								}}
 							>
 								<IconTrash className="mr-2 h-4 w-4" />
@@ -333,7 +357,7 @@ function PersistentVolumesContent() {
 				</DropdownMenu>
 			)
 		}
-	], [clusterId, validatePVsAction])
+	], [clusterId, validateDelete])
 
 	// Bulk Actions
 	const bulkActions = React.useMemo(() => {
@@ -369,36 +393,16 @@ function PersistentVolumesContent() {
 				variant: 'destructive',
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'delete', pvs: rows });
-					validatePVsAction('delete', rows);
+					const selected = rows.map(r => ({ name: r.name, namespace: '' }))
+					setPendingAction({ scope: 'persistentvolumes', items: selected })
 					setConfirmDialogOpen(true)
+					validateDelete('persistentvolumes', selected)
 				}
 			})
 		}
 
 		return actions
-	}, [isAllowed, setPendingAction, setConfirmDialogOpen, validatePVsAction])
-
-	// Confirm action handler
-	const handleConfirmAction = React.useCallback(async () => {
-		if (!pendingAction) return
-		setIsConfirmExecuting(true)
-
-		try {
-			if (pendingAction.type === 'delete') {
-				console.log('Deleting PVs:', pendingAction.pvs.map(pv => pv.name))
-				// TODO: Implement actual deletion logic
-				setAlert({ variant: 'success', title: 'Success', description: `Deleted ${pendingAction.pvs.length} persistent volume(s)` })
-			}
-			setPendingAction(null)
-			setConfirmDialogOpen(false)
-		} catch (error) {
-			console.error('Action failed:', error)
-			setAlert({ variant: 'error', title: 'Error', description: 'Failed to complete action' })
-		} finally {
-			setIsConfirmExecuting(false)
-		}
-	}, [pendingAction])
+	}, [isAllowed, validateDelete])
 
 	return (
 		<div className="space-y-6">
@@ -413,17 +417,6 @@ function PersistentVolumesContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -478,15 +471,18 @@ function PersistentVolumesContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Persistent Volumes"
-				description="Are you sure you want to delete the selected persistent volumes? This action cannot be undone."
-				actionLabel="Delete PVs"
-				variant="destructive"
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.pvs || []).map(pv => ({ name: pv.name }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 
 

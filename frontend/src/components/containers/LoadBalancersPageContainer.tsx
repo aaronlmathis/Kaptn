@@ -24,23 +24,33 @@ import type { LoadBalancer } from "@/lib/schemas/loadbalancer"
 import { LoadBalancerDetailDrawer } from "@/components/viewers/LoadBalancerDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function LoadBalancersContent() {
-	const { data: loadBalancers, loading: isLoading, error, isConnected } = useLoadBalancersWithWebSocket(true)
+	const { data: loadBalancers, loading: isLoading, error } = useLoadBalancersWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
 	const { isAllowed } = useAuthzCapabilitiesInContext(['services.get', 'services.patch', 'services.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedLoadBalancerForDetails, setSelectedLoadBalancerForDetails] = React.useState<LoadBalancer | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', loadBalancers: LoadBalancer[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'services'
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -157,28 +167,15 @@ function LoadBalancersContent() {
 		return filtered
 	}, [loadBalancers, statusFilter, globalFilter])
 
-	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validateLoadBalancersAction = React.useCallback(async (type: 'delete', rows: LoadBalancer[]) => {
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
 		try {
-			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
-			const resp = await bulkActionsApi.validateAction('services', { action: 'delete-services', targets })
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
 			const details: unknown = resp?.details
-
-			// Type-safe extraction of warnings
-			let warnings: string[] = []
-			if (details && typeof details === 'object' && 'results' in details) {
-				const results = (details as { results: unknown }).results
-				if (Array.isArray(results)) {
-					warnings = results.flatMap((r: unknown) => {
-						if (r && typeof r === 'object' && 'warnings' in r) {
-							const itemWarnings = (r as { warnings: unknown }).warnings
-							return Array.isArray(itemWarnings) ? itemWarnings : []
-						}
-						return []
-					})
-				}
-			}
-
+			const warnings: string[] = Array.isArray((details as any)?.results)
+				? (details as any).results.flatMap((r: unknown) => Array.isArray((r as any)?.warnings) ? (r as any).warnings : [])
+				: []
 			setConfirmWarnings(warnings)
 		} catch {
 			setConfirmWarnings([])
@@ -298,7 +295,12 @@ function LoadBalancersContent() {
 						<IfAllowed feature="services.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', loadBalancers: [row.original] }); setConfirmDialogOpen(true); validateLoadBalancersAction('delete', [row.original]) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => {
+								const item = row.original
+								setPendingAction({ scope: 'services', items: [{ name: item.name, namespace: item.namespace }] })
+								setConfirmDialogOpen(true)
+								validateDelete('services', [{ name: item.name, namespace: item.namespace }])
+							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -307,7 +309,7 @@ function LoadBalancersContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, setSelectedLoadBalancerForDetails, setDetailDrawerOpen, setPendingAction, setConfirmDialogOpen, validateLoadBalancersAction])
+	]), [clusterId, validateDelete])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: LoadBalancer[]) => void | Promise<void> }[] = []
@@ -337,40 +339,35 @@ function LoadBalancersContent() {
 
 		if (isAllowed('services.delete')) {
 			actions.push({
-				id: 'delete-loadbalancers',
-				label: 'Delete Selected LoadBalancers',
+				id: 'delete-services',
+				label: 'Delete Selected Services',
 				icon: <IconTrash className="size-4" />,
 				variant: 'destructive',
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'delete', loadBalancers: rows })
+					const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+					setPendingAction({ scope: 'services', items: selected })
 					setConfirmDialogOpen(true)
-					validateLoadBalancersAction('delete', rows)
+					validateDelete('services', selected)
 				},
 			})
 		}
 
 		return actions
-	}, [isAllowed, validateLoadBalancersAction, setPendingAction, setConfirmDialogOpen])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			const targets = pendingAction.loadBalancers.map(lb => ({ namespace: lb.namespace, name: lb.name }))
-			const resp = await bulkActionsApi.executeBulkAction('services', { action: 'delete-services', targets })
-			const success = resp?.success
-			const total = resp?.resources_total ?? 0
-			const affected = resp?.resources_affected ?? 0
-			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} load balancers processed` : `Errors: ${total - affected} failed`, description: resp?.message })
-		} catch (e: unknown) {
-			setAlert({ variant: 'error', title: 'Action failed', description: (e as Error)?.message ?? String(e) })
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
 			setPendingAction(null)
 		}
-	}, [pendingAction, setIsConfirmExecuting, setAlert, setConfirmDialogOpen, setPendingAction])
+	}, [pendingAction])
 
 	// Generate summary cards from load balancer data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
@@ -460,17 +457,6 @@ function LoadBalancersContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -526,15 +512,18 @@ function LoadBalancersContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Load Balancers"
-				description="Are you sure you want to delete the selected load balancers? This action cannot be undone."
-				actionLabel="Delete Load Balancers"
-				variant="destructive"
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.loadBalancers || []).map(lb => ({ name: lb.name, namespace: lb.namespace }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 		</div>
 	)

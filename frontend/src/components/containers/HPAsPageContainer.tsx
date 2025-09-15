@@ -19,6 +19,7 @@ import { DataTableFilters, type FilterOption } from "@/components/ui/data-table-
 import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 import { IconTrash, IconCopy, IconDownload } from "@tabler/icons-react"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
+import { HPADetailDrawer } from "@/components/viewers/HPADetailDrawer"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 function statusBadge(status: DashboardHPA['status']) {
@@ -39,18 +40,58 @@ function HPAsContent() {
   const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
   const { fetchAdditional } = useCapabilities()
 
-  // Confirmation dialog state
-  const [confirmationState, setConfirmationState] = React.useState<{
-    isOpen: boolean
-    scope: string
-    items: Array<{ name: string; namespace?: string }>
-  }>({
-    isOpen: false,
-    scope: '',
-    items: []
-  })
+  // Confirmation dialog state for destructive actions
+  const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
+  const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+  const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
 
-  // Fetch additional capabilities for HPA actions
+  type Item = { name: string; namespace?: string }
+  type Scope = 'pods' | 'deployments' | 'services' | 'configmaps' | 'secrets' | 'daemonsets' | 'statefulsets' | 'cronjobs' | 'nodes' |
+    'clusterroles' | 'clusterrolebindings' | 'roles' | 'rolebindings' | 'horizontalpodautoscalers' | string
+
+  const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+  // Detail drawer state
+  const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
+  const [selectedHPAForDetails, setSelectedHPAForDetails] = React.useState<DashboardHPA | null>(null)
+
+  const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+  const confirmValue = React.useMemo(() => {
+    if (!pendingAction || pendingAction.items.length === 0) return ''
+    const count = pendingAction.items.length
+    return count === 1 ? pendingAction.items[0].name : 'DELETE'
+  }, [pendingAction])
+
+  // Validate function — sets warnings on dialog before running destructive action
+  const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+    try {
+      const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+      const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const details: any = resp?.details
+      const warnings: string[] = Array.isArray(details?.results)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+        : []
+      setConfirmWarnings(warnings)
+    } catch {
+      setConfirmWarnings([])
+    }
+  }, [])
+
+  // Confirm handler — executes with `force_confirm: true`
+  const handleConfirmAction = React.useCallback(async () => {
+    if (!pendingAction) return
+    setIsConfirmExecuting(true)
+    try {
+      const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+      await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+    } finally {
+      setIsConfirmExecuting(false)
+      setConfirmDialogOpen(false)
+      setPendingAction(null)
+    }
+  }, [pendingAction])
   React.useEffect(() => {
     fetchAdditional([
       'horizontalpodautoscalers.get',
@@ -67,44 +108,6 @@ function HPAsContent() {
   React.useEffect(() => {
     if (hpas.length > 0) setLastUpdated(new Date().toISOString())
   }, [hpas])
-
-  // Confirm handler for executing delete actions
-  const handleConfirmAction = React.useCallback(async () => {
-    if (confirmationState.items.length === 0) {
-      setConfirmationState(prev => ({ ...prev, isOpen: false }))
-      return
-    }
-
-    const targets = confirmationState.items.map(item => ({
-      name: item.name,
-      namespace: item.namespace,
-    }))
-
-    try {
-      await bulkActionsApi.executeBulkAction('horizontalpodautoscalers', {
-        action: 'delete',
-        targets,
-        force_confirm: true,
-      })
-    } catch (error) {
-      console.error('Failed to execute delete action:', error)
-    } finally {
-      setConfirmationState({ isOpen: false, scope: '', items: [] })
-    }
-  }, [confirmationState.items])
-
-  const initiateDelete = React.useCallback((items: DashboardHPA[]) => {
-    const deleteItems = items.map(item => ({
-      name: item.name,
-      namespace: item.namespace,
-    }))
-
-    setConfirmationState({
-      isOpen: true,
-      scope: 'horizontalpodautoscalers',
-      items: deleteItems,
-    })
-  }, [])
 
   // Summary Cards
   const summaryData: SummaryCard[] = React.useMemo(() => {
@@ -164,7 +167,12 @@ function HPAsContent() {
           resourceName={row.original.name}
           fallback={<span>{row.original.name}</span>}
         >
-          <span className="hover:underline cursor-pointer">{row.original.name}</span>
+          <button
+            onClick={() => { setSelectedHPAForDetails(row.original); setDetailDrawerOpen(true) }}
+            className="text-left hover:underline focus:underline focus:outline-none"
+          >
+            {row.original.name}
+          </button>
         </IfAllowed>
       ),
     },
@@ -206,7 +214,7 @@ function HPAsContent() {
                 </DropdownMenuItem>
               }
             >
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setSelectedHPAForDetails(row.original); setDetailDrawerOpen(true) }}>
                 <IconEye className="size-4 mr-2" />
                 View Details
               </DropdownMenuItem>
@@ -244,7 +252,12 @@ function HPAsContent() {
               resourceName={row.original.name}
               fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
             >
-              <DropdownMenuItem className="text-red-600" onClick={() => initiateDelete([row.original])}>
+              <DropdownMenuItem className="text-red-600" onClick={() => {
+                const item = row.original
+                setPendingAction({ scope: 'horizontalpodautoscalers', items: [{ name: item.name, namespace: item.namespace }] })
+                setConfirmDialogOpen(true)
+                validateDelete('horizontalpodautoscalers', [{ name: item.name, namespace: item.namespace }])
+              }}>
                 <IconTrash className="size-4 mr-2" />
                 Delete
               </DropdownMenuItem>
@@ -253,7 +266,7 @@ function HPAsContent() {
         </DropdownMenu>
       )
     }
-  ]), [clusterId, initiateDelete])
+  ]), [clusterId, validateDelete])
 
   // Bulk actions
   const { isAllowed } = useAuthzCapabilitiesInContext([
@@ -307,34 +320,16 @@ function HPAsContent() {
         variant: 'destructive',
         requiresSelection: true,
         action: (rows) => {
-          initiateDelete(rows)
+          const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+          setPendingAction({ scope: 'horizontalpodautoscalers', items: selected })
+          setConfirmDialogOpen(true)
+          validateDelete('horizontalpodautoscalers', selected)
         },
       })
     }
 
     return actions
-  }, [isAllowed, initiateDelete])
-
-  // Compute confirmation dialog props
-  const requireTextConfirm = React.useMemo(() => {
-    return confirmationState.items.length > 1
-  }, [confirmationState.items.length])
-
-  const confirmPrompt = React.useMemo(() => {
-    if (confirmationState.items.length === 1) {
-      return `Type "${confirmationState.items[0].name}" to confirm deletion:`
-    } else {
-      return `Type "DELETE" to confirm deletion of ${confirmationState.items.length} HPAs:`
-    }
-  }, [confirmationState.items])
-
-  const confirmValue = React.useMemo(() => {
-    if (confirmationState.items.length === 1) {
-      return confirmationState.items[0].name
-    } else {
-      return 'DELETE'
-    }
-  }, [confirmationState.items])
+  }, [isAllowed, validateDelete])
 
   return (
     <>
@@ -380,26 +375,32 @@ function HPAsContent() {
       </div>
 
       <ActionConfirmationDialog
-        open={confirmationState.isOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setConfirmationState(prev => ({ ...prev, isOpen: false }))
-          }
-        }}
+        open={confirmDialogOpen}
+        onOpenChange={setConfirmDialogOpen}
+        title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+        description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+        actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+        variant={'destructive'}
+        isExecuting={isConfirmExecuting}
         onConfirm={handleConfirmAction}
-        title={`Delete ${confirmationState.items.length === 1 ? 'HPA' : 'HPAs'}`}
-        description={
-          confirmationState.items.length === 1
-            ? `This will permanently delete the HPA "${confirmationState.items[0]?.name}". This action cannot be undone.`
-            : `This will permanently delete ${confirmationState.items.length} HPAs. This action cannot be undone.`
-        }
-        actionLabel={`Delete ${confirmationState.items.length === 1 ? 'HPA' : 'HPAs'}`}
-        variant="destructive"
-        resources={confirmationState.items}
+        resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+        safetyViolations={[]}
+        warnings={confirmWarnings}
         requireTextConfirm={requireTextConfirm}
-        confirmPrompt={confirmPrompt}
+        confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
         confirmValue={confirmValue}
       />
+
+      {selectedHPAForDetails && (
+        <HPADetailDrawer
+          item={selectedHPAForDetails}
+          open={detailDrawerOpen}
+          onOpenChange={(open) => {
+            setDetailDrawerOpen(open)
+            if (!open) setSelectedHPAForDetails(null)
+          }}
+        />
+      )}
     </>
   )
 }
