@@ -19,7 +19,6 @@ import { useStatefulSetsWithWebSocket } from "@/hooks/useStatefulSetsWithWebSock
 import { useCapabilities } from "@/hooks/use-capabilities"
 import { Badge } from "@/components/ui/badge"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 import {
 	getReplicaStatusBadge,
@@ -40,8 +39,18 @@ function StatefulSetsContent() {
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'restart' | 'scale', statefulSets: DashboardStatefulSet[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	type Item = { name: string; namespace?: string }
+	type Scope = string
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -239,6 +248,41 @@ function StatefulSetsContent() {
 		}
 	}, [])
 
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
+
+	// Confirm handler — executes with `force_confirm: true`
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
+
+	React.useEffect(() => {
+		// Auto-refresh logic can be added here if needed
+	}, [])
+
 	// Build table columns
 	const columns: ColumnDef<DashboardStatefulSet>[] = React.useMemo(() => ([
 		{
@@ -319,7 +363,12 @@ function StatefulSetsContent() {
 						<IfAllowed feature="statefulsets.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', statefulSets: [row.original] }); setConfirmDialogOpen(true); validateStatefulSetsAction('delete', [row.original]) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => {
+								const item = { name: row.original.name, namespace: row.original.namespace }
+								setPendingAction({ scope: 'statefulsets', items: [item] })
+								setConfirmDialogOpen(true)
+								validateDelete('statefulsets', [item])
+							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -328,7 +377,7 @@ function StatefulSetsContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, validateStatefulSetsAction])
+	]), [clusterId, validateDelete])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardStatefulSet[]) => void | Promise<void> }[] = []
@@ -336,29 +385,21 @@ function StatefulSetsContent() {
 		if (isAllowed('statefulsets.get')) actions.push({ id: 'export-yaml', label: 'Export Selected as YAML', icon: <IconDownload className="size-4" />, requiresSelection: true, action: (rows) => console.log('Export YAML for StatefulSets:', rows.map(ss => ss.name)) })
 		if (isAllowed('statefulsets.scale.update')) actions.push({ id: 'scale-statefulsets', label: 'Scale Selected StatefulSets', icon: <IconScale className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'scale', statefulSets: rows }); setConfirmDialogOpen(true); validateStatefulSetsAction('scale', rows) } })
 		if (isAllowed('statefulsets.patch')) actions.push({ id: 'restart-statefulsets', label: 'Restart Selected StatefulSets', icon: <IconRefresh className="size-4" />, requiresSelection: true, action: (rows) => { setPendingAction({ type: 'restart', statefulSets: rows }); setConfirmDialogOpen(true); validateStatefulSetsAction('restart', rows) } })
-		if (isAllowed('statefulsets.delete')) actions.push({ id: 'delete-statefulsets', label: 'Delete Selected StatefulSets', icon: <IconTrash className="size-4" />, variant: 'destructive', requiresSelection: true, action: (rows) => { setPendingAction({ type: 'delete', statefulSets: rows }); setConfirmDialogOpen(true); validateStatefulSetsAction('delete', rows) } })
+		if (isAllowed('statefulsets.delete')) actions.push({
+			id: 'delete-statefulsets',
+			label: 'Delete Selected StatefulSets',
+			icon: <IconTrash className="size-4" />,
+			variant: 'destructive',
+			requiresSelection: true,
+			action: (rows) => {
+				const items = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+				setPendingAction({ scope: 'statefulsets', items })
+				setConfirmDialogOpen(true)
+				validateDelete('statefulsets', items)
+			}
+		})
 		return actions
-	}, [isAllowed, validateStatefulSetsAction])
-
-	const handleConfirmAction = React.useCallback(async () => {
-		if (!pendingAction) return
-		setIsConfirmExecuting(true)
-		try {
-			const targets = pendingAction.statefulSets.map(ss => ({ namespace: ss.namespace, name: ss.name }))
-			const legacyAction = pendingAction.type === 'delete' ? 'delete-statefulsets' : pendingAction.type === 'restart' ? 'restart-statefulsets' : 'scale-statefulsets'
-			const resp = await bulkActionsApi.executeBulkAction('statefulsets', { action: legacyAction, targets })
-			const success = resp?.success
-			const total = resp?.resources_total ?? 0
-			const affected = resp?.resources_affected ?? 0
-			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} statefulsets processed` : `Errors: ${total - affected} failed`, description: resp?.message })
-		} catch (e: unknown) {
-			setAlert({ variant: 'error', title: 'Action failed', description: (e as Error)?.message ?? String(e) })
-		} finally {
-			setIsConfirmExecuting(false)
-			setConfirmDialogOpen(false)
-			setPendingAction(null)
-		}
-	}, [pendingAction])
+	}, [isAllowed, validateDelete, validateStatefulSetsAction])
 
 	return (
 		<div className="space-y-6">
@@ -372,17 +413,6 @@ function StatefulSetsContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -412,20 +442,25 @@ function StatefulSetsContent() {
 				/>
 			</div>
 
-			{/* Bulk action confirmation dialog */}
-			<ActionConfirmationDialog
-				open={confirmDialogOpen}
-				onOpenChange={setConfirmDialogOpen}
-				title={pendingAction?.type === 'restart' ? 'Restart StatefulSets' : pendingAction?.type === 'scale' ? 'Scale StatefulSets' : 'Delete StatefulSets'}
-				description={pendingAction?.type === 'restart' ? 'Are you sure you want to restart the selected statefulsets? This will terminate and recreate them.' : pendingAction?.type === 'scale' ? 'Are you sure you want to scale the selected statefulsets?' : 'Are you sure you want to delete the selected statefulsets? This action cannot be undone.'}
-				actionLabel={pendingAction?.type === 'restart' ? 'Restart StatefulSets' : pendingAction?.type === 'scale' ? 'Scale StatefulSets' : 'Delete StatefulSets'}
-				variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
-				isExecuting={isConfirmExecuting}
-				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.statefulSets || []).map(ss => ({ name: ss.name, namespace: ss.namespace }))}
-				safetyViolations={[]}
-				warnings={confirmWarnings}
-			/>
+			{/* Confirmation dialog for destructive actions */}
+			{pendingAction && pendingAction.scope === 'statefulsets' && (
+				<ActionConfirmationDialog
+					open={confirmDialogOpen}
+					onOpenChange={setConfirmDialogOpen}
+					title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+					description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+					actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+					variant={'destructive'}
+					isExecuting={isConfirmExecuting}
+					onConfirm={handleConfirmAction}
+					resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+					safetyViolations={[]}
+					warnings={confirmWarnings}
+					requireTextConfirm={requireTextConfirm}
+					confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+					confirmValue={confirmValue}
+				/>
+			)}
 
 			{selectedStatefulSetForDetails && (
 				<StatefulSetDetailDrawer

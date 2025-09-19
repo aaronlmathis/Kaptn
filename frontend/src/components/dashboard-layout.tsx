@@ -4,7 +4,7 @@ import * as React from "react"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
-
+import { AuthGuard } from "@/components/auth-guard"
 interface DashboardLayoutProps {
 	children: React.ReactNode
 }
@@ -17,7 +17,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 	}, []);
 
 	return (
-		<div
+		<AuthGuard>
+			<div
 				className="sidebar-layout"
 				style={{
 					"--sidebar-width": "calc(var(--spacing) * 72)",
@@ -51,5 +52,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 					</div>
 				)}
 			</div>
+		</AuthGuard>
 	)
 }

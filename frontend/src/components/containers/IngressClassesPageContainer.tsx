@@ -19,7 +19,6 @@ import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useIngressClassesWithWebSocket } from "@/hooks/useIngressClassesWithWebSocket"
 import { useCapabilities } from "@/hooks/use-capabilities"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 import {
 	getResourceIcon,
@@ -28,7 +27,7 @@ import {
 
 // Inner component that can access the namespace context
 function IngressClassesContent() {
-	const { data: ingressClasses, loading: isLoading, error, isConnected } = useIngressClassesWithWebSocket(true)
+	const { data: ingressClasses, loading: isLoading, error } = useIngressClassesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
@@ -37,8 +36,19 @@ function IngressClassesContent() {
 	const [selectedIngressClassForDetails, setSelectedIngressClassForDetails] = React.useState<DashboardIngressClass | null>(null)
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', ingressClasses: DashboardIngressClass[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+
+	// Confirmation dialog state for destructive actions
+	type Item = { name: string; namespace?: string }
+	type Scope = 'ingressclasses'
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 1, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
 
 	// Ensure ingress class-specific action capabilities are requested
 	React.useEffect(() => {
@@ -56,6 +66,21 @@ function IngressClassesContent() {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [ingressClasses])
+
+	// Validation function for delete actions
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details = resp?.details as { results?: { warnings?: string[] }[] } | undefined
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
 
 	// Filters
 	const [globalFilter, setGlobalFilter] = React.useState("")
@@ -180,7 +205,12 @@ function IngressClassesContent() {
 						<IfAllowed feature="ingressclasses.delete" cluster={clusterId} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', ingressClasses: [row.original] }); setConfirmDialogOpen(true) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => {
+								const item = row.original
+								setPendingAction({ scope: 'ingressclasses', items: [{ name: item.name }] })
+								setConfirmDialogOpen(true)
+								validateDelete('ingressclasses', [{ name: item.name }])
+							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -189,7 +219,7 @@ function IngressClassesContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, handleViewDetails, setPendingAction, setConfirmDialogOpen])
+	]), [clusterId, handleViewDetails, validateDelete])
 
 	// Bulk actions (capability-aware)
 	const bulkActions = React.useMemo(() => {
@@ -255,27 +285,27 @@ function IngressClassesContent() {
 				icon: <IconTrash className="size-4" />,
 				variant: 'destructive',
 				requiresSelection: true,
-				action: (rows) => { setPendingAction({ type: 'delete', ingressClasses: rows }); setConfirmDialogOpen(true) }
+				action: (rows) => {
+					const selected = rows.map(r => ({ name: r.name }))
+					setPendingAction({ scope: 'ingressclasses', items: selected })
+					setConfirmDialogOpen(true)
+					validateDelete('ingressclasses', selected)
+				}
 			})
 		}
 
 		return actions
-	}, [isAllowed, setPendingAction, setConfirmDialogOpen])
+	}, [isAllowed, validateDelete])
 
 	// Handle confirmation dialog
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			const targets = pendingAction.ingressClasses.map(ic => ({ name: ic.name }))
-			const resp = await bulkActionsApi.executeBulkAction('ingressclasses', { action: 'delete-ingressclasses', targets })
-			const success = resp?.success
-			const total = resp?.resources_total ?? 0
-			const affected = resp?.resources_affected ?? 0
-			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} ingress classes processed` : `Errors: ${total - affected} failed`, description: resp?.message })
+			const targets = pendingAction.items.map(i => ({ name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 		} catch (e: unknown) {
-			const errorMessage = e instanceof Error ? e.message : String(e)
-			setAlert({ variant: 'error', title: 'Action failed', description: errorMessage })
+			console.error('Failed to execute delete action:', e)
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
@@ -372,17 +402,6 @@ function IngressClassesContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -419,15 +438,18 @@ function IngressClassesContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Ingress Classes"
-				description="Are you sure you want to delete the selected ingress classes? This action cannot be undone."
-				actionLabel="Delete Ingress Classes"
-				variant="destructive"
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.ingressClasses || []).map(ic => ({ name: ic.name }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
-				warnings={[]}
+				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 
 			{selectedIngressClassForDetails && (

@@ -9,7 +9,7 @@ import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimpl
 import { useCluster } from "@/hooks/useCluster"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { IconDotsVertical, IconEye, IconTrash, IconDownload, IconCopy, IconEdit, IconRefresh, IconCircleCheckFilled, IconLoader, IconAlertTriangle } from "@tabler/icons-react"
+import { IconDotsVertical, IconEye, IconTrash, IconDownload, IconCopy, IconEdit, IconCircleCheckFilled, IconLoader, IconAlertTriangle } from "@tabler/icons-react"
 import { type ColumnDef } from "@/lib/table"
 import type { DashboardDaemonSet } from "@/lib/k8s-workloads"
 import { DaemonSetDetailDrawer } from "@/components/viewers/DaemonSetDetailDrawer"
@@ -19,7 +19,6 @@ import { useDaemonSetsWithWebSocket } from "@/hooks/useDaemonSetsWithWebSocket"
 import { useCapabilities } from "@/hooks/use-capabilities"
 import { Badge } from "@/components/ui/badge"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 import {
 	getReplicaStatusBadge,
@@ -30,18 +29,28 @@ import {
 
 // Inner component that can access the namespace context
 function DaemonSetsContent() {
-	const { data: daemonSets, loading: isLoading, error, isConnected } = useDaemonSetsWithWebSocket(true)
+	const { data: daemonSets, loading: isLoading, error } = useDaemonSetsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
 	const { isAllowed } = useAuthzCapabilitiesInContext(['daemonsets.get', 'daemonsets.patch', 'daemonsets.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedDaemonSetForDetails, setSelectedDaemonSetForDetails] = React.useState<DashboardDaemonSet | null>(null)
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'restart', daemonSets: DashboardDaemonSet[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	type Item = { name: string; namespace: string }
+	type Scope = 'daemonsets'
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
 
 	// Ensure daemonset-specific action capabilities are requested
 	React.useEffect(() => {
@@ -221,11 +230,10 @@ function DaemonSetsContent() {
 	}
 
 	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validateDaemonSetsAction = React.useCallback(async (type: 'delete' | 'restart', rows: DashboardDaemonSet[]) => {
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
 		try {
-			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
-			const legacyAction = type === 'delete' ? 'delete-daemonsets' : 'restart-daemonsets'
-			const resp = await bulkActionsApi.validateAction('daemonsets', { action: legacyAction, targets })
+			const targets = items.map(i => ({ namespace: i.namespace, name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
 			const details = resp?.details as { results?: { warnings?: string[] }[] } | undefined
 			const warnings: string[] = Array.isArray(details?.results)
 				? details.results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
@@ -338,19 +346,13 @@ function DaemonSetsContent() {
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconEdit className="size-4 mr-2" />Edit YAML</DropdownMenuItem>}
 						>
 							<ResourceYamlEditor resourceName={row.original.name} namespace={row.original.namespace} resourceKind="DaemonSet">
-								<button className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent rounded-sm cursor-pointer" style={{ background: 'transparent', border: 'none', textAlign: 'left' }}>
-									<IconEdit className="size-4" />
+								<DropdownMenuItem
+									onSelect={(e) => e.preventDefault()}
+								>
+									<IconEdit className="size-4 mr-2" />
 									Edit YAML
-								</button>
+								</DropdownMenuItem>
 							</ResourceYamlEditor>
-						</IfAllowed>
-						<IfAllowed feature="daemonsets.patch" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
-							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconRefresh className="size-4 mr-2" />Restart</DropdownMenuItem>}
-						>
-							<DropdownMenuItem onClick={() => { setPendingAction({ type: 'restart', daemonSets: [row.original] }); setConfirmDialogOpen(true); validateDaemonSetsAction('restart', [row.original]) }}>
-								<IconRefresh className="size-4 mr-2" />
-								Restart
-							</DropdownMenuItem>
 						</IfAllowed>
 						<IfAllowed feature="daemonsets.get" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconDownload className="size-4 mr-2" />Export YAML</DropdownMenuItem>}
@@ -364,7 +366,15 @@ function DaemonSetsContent() {
 						<IfAllowed feature="daemonsets.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', daemonSets: [row.original] }); setConfirmDialogOpen(true); validateDaemonSetsAction('delete', [row.original]) }}>
+							<DropdownMenuItem
+								className="text-red-600"
+								onClick={() => {
+									const item = row.original
+									setPendingAction({ scope: 'daemonsets', items: [{ name: item.name, namespace: item.namespace }] })
+									setConfirmDialogOpen(true)
+									validateDelete('daemonsets', [{ name: item.name, namespace: item.namespace }])
+								}}
+							>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -373,7 +383,7 @@ function DaemonSetsContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, setSelectedDaemonSetForDetails, setDetailDrawerOpen, setPendingAction, setConfirmDialogOpen, validateDaemonSetsAction])
+	]), [clusterId, validateDelete])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardDaemonSet[]) => void | Promise<void> }[] = []
@@ -396,16 +406,6 @@ function DaemonSetsContent() {
 			})
 		}
 
-		if (isAllowed('daemonsets.patch')) {
-			actions.push({
-				id: 'restart-daemonsets',
-				label: 'Restart Selected DaemonSets',
-				icon: <IconRefresh className="size-4" />,
-				requiresSelection: true,
-				action: (rows) => { setPendingAction({ type: 'restart', daemonSets: rows }); setConfirmDialogOpen(true); validateDaemonSetsAction('restart', rows) }
-			})
-		}
-
 		if (isAllowed('daemonsets.delete')) {
 			actions.push({
 				id: 'delete-daemonsets',
@@ -413,31 +413,24 @@ function DaemonSetsContent() {
 				icon: <IconTrash className="size-4" />,
 				variant: 'destructive',
 				requiresSelection: true,
-				action: (rows) => { setPendingAction({ type: 'delete', daemonSets: rows }); setConfirmDialogOpen(true); validateDaemonSetsAction('delete', rows) }
+				action: (rows) => {
+					const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+					setPendingAction({ scope: 'daemonsets', items: selected })
+					setConfirmDialogOpen(true)
+					validateDelete('daemonsets', selected)
+				}
 			})
 		}
 
 		return actions
-	}, [isAllowed, validateDaemonSetsAction])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			const targets = pendingAction.daemonSets.map(ds => ({ namespace: ds.namespace, name: ds.name }))
-			const legacyAction = pendingAction.type === 'delete' ? 'delete-daemonsets' : 'restart-daemonsets'
-			const resp = await bulkActionsApi.executeBulkAction('daemonsets', { action: legacyAction, targets })
-			const success = resp?.success
-			const total = resp?.resources_total ?? 0
-			const affected = resp?.resources_affected ?? 0
-			setAlert({
-				variant: success ? 'success' : 'error',
-				title: success ? `Success: ${affected}/${total} daemon sets processed` : `Errors: ${total - affected} failed`,
-				description: resp?.message
-			})
-		} catch (e) {
-			const error = e as Error
-			setAlert({ variant: 'error', title: 'Action failed', description: error?.message ?? String(e) })
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace, name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
@@ -456,17 +449,6 @@ function DaemonSetsContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -507,15 +489,18 @@ function DaemonSetsContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title={pendingAction?.type === 'restart' ? 'Restart DaemonSets' : 'Delete DaemonSets'}
-				description={pendingAction?.type === 'restart' ? 'Are you sure you want to restart the selected DaemonSets? This will trigger a rolling update.' : 'Are you sure you want to delete the selected DaemonSets? This action cannot be undone.'}
-				actionLabel={pendingAction?.type === 'restart' ? 'Restart DaemonSets' : 'Delete DaemonSets'}
-				variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.daemonSets || []).map(ds => ({ name: ds.name, namespace: ds.namespace }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 
 			{selectedDaemonSetForDetails && (

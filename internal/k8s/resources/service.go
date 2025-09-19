@@ -1,16 +1,17 @@
 package resources
 
 import (
-	"context"
-	"fmt"
-	"strings"
+    "context"
+    "fmt"
+    "strings"
 
-	"go.uber.org/zap"
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	v1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
+    "go.uber.org/zap"
+    autoscalingv2 "k8s.io/api/autoscaling/v2"
+    appsv1 "k8s.io/api/apps/v1"
+    batchv1 "k8s.io/api/batch/v1"
+    v1 "k8s.io/api/core/v1"
+    networkingv1 "k8s.io/api/networking/v1"
+    rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1044,44 +1045,47 @@ func (rm *ResourceManager) convertToUnstructured(obj interface{}) *unstructured.
 	result := &unstructured.Unstructured{Object: unstructuredObj}
 
 	// Manually set apiVersion and kind as they are stripped by the converter
-	switch obj.(type) {
-	case *v1.Pod:
-		result.SetAPIVersion("v1")
-		result.SetKind("Pod")
-	case *appsv1.Deployment:
-		result.SetAPIVersion("apps/v1")
-		result.SetKind("Deployment")
-	case *appsv1.StatefulSet:
-		result.SetAPIVersion("apps/v1")
-		result.SetKind("StatefulSet")
-	case *appsv1.DaemonSet:
-		result.SetAPIVersion("apps/v1")
-		result.SetKind("DaemonSet")
-	case *appsv1.ReplicaSet:
-		result.SetAPIVersion("apps/v1")
-		result.SetKind("ReplicaSet")
-	case *batchv1.Job:
-		result.SetAPIVersion("batch/v1")
-		result.SetKind("Job")
-	case *batchv1.CronJob:
-		result.SetAPIVersion("batch/v1")
-		result.SetKind("CronJob")
-	case *v1.Service:
-		result.SetAPIVersion("v1")
-		result.SetKind("Service")
-	case *v1.ConfigMap:
-		result.SetAPIVersion("v1")
-		result.SetKind("ConfigMap")
-	case *v1.Secret:
-		result.SetAPIVersion("v1")
-		result.SetKind("Secret")
-	case *v1.Endpoints:
-		result.SetAPIVersion("v1")
-		result.SetKind("Endpoints")
-	case *storagev1.StorageClass:
-		result.SetAPIVersion("storage.k8s.io/v1")
-		result.SetKind("StorageClass")
-	}
+    switch obj.(type) {
+        case *v1.Pod:
+            result.SetAPIVersion("v1")
+            result.SetKind("Pod")
+        case *appsv1.Deployment:
+            result.SetAPIVersion("apps/v1")
+            result.SetKind("Deployment")
+        case *appsv1.StatefulSet:
+            result.SetAPIVersion("apps/v1")
+            result.SetKind("StatefulSet")
+        case *appsv1.DaemonSet:
+            result.SetAPIVersion("apps/v1")
+            result.SetKind("DaemonSet")
+        case *appsv1.ReplicaSet:
+            result.SetAPIVersion("apps/v1")
+            result.SetKind("ReplicaSet")
+        case *batchv1.Job:
+            result.SetAPIVersion("batch/v1")
+            result.SetKind("Job")
+        case *batchv1.CronJob:
+            result.SetAPIVersion("batch/v1")
+            result.SetKind("CronJob")
+        case *v1.Service:
+            result.SetAPIVersion("v1")
+            result.SetKind("Service")
+        case *v1.ConfigMap:
+            result.SetAPIVersion("v1")
+            result.SetKind("ConfigMap")
+        case *v1.Secret:
+            result.SetAPIVersion("v1")
+            result.SetKind("Secret")
+        case *v1.Endpoints:
+            result.SetAPIVersion("v1")
+            result.SetKind("Endpoints")
+        case *storagev1.StorageClass:
+            result.SetAPIVersion("storage.k8s.io/v1")
+            result.SetKind("StorageClass")
+        case *autoscalingv2.HorizontalPodAutoscaler:
+            result.SetAPIVersion("autoscaling/v2")
+            result.SetKind("HorizontalPodAutoscaler")
+    }
 
 	return result
 }

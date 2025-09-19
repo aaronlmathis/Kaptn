@@ -204,20 +204,82 @@ export class ApiClient {
 		return this.request<T>(endpoint);
 	}
 
-	async post<T>(endpoint: string, data?: unknown): Promise<T> {
-    // Intercept action execution responses to display toasts centrally
-    const result = await this.request<any>(endpoint, {
-        method: 'POST',
-        body: data ? JSON.stringify(data) : undefined,
-    });
-    try {
-        if (endpoint === '/actions') {
-            notifyActionResults(result)
+    async post<T>(endpoint: string, data?: unknown): Promise<T> {
+        // Intercept action execution responses to display toasts centrally
+        const result = await this.request<any>(endpoint, {
+            method: 'POST',
+            body: data ? JSON.stringify(data) : undefined,
+        });
+        try {
+            if (endpoint === '/actions') {
+                notifyActionResults(result)
+            }
+        } catch {
+            // no-op: never block API flow on toast errors
         }
-    } catch {
-        // no-op: never block API flow on toast errors
+        return result as T
     }
-    return result as T
+
+    // Special-case helper: return JSON body even when the server responds with a non-2xx status
+    // Useful for endpoints that intentionally return structured error payloads (e.g., /apply)
+    async postJSONAllowError<T>(endpoint: string, data?: unknown): Promise<T> {
+        const url = `${this.baseURL}${endpoint}`
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        }
+        if (this.token) headers.Authorization = `Bearer ${this.token}`
+        // CSRF for state-changing ops
+        const csrf = this.getCSRFTokenFromCookie()
+        if (csrf) headers['X-CSRF-Token'] = csrf
+
+        const defaultOptions: RequestInit = {
+            method: 'POST',
+            credentials: 'include',
+            headers,
+            body: data ? JSON.stringify(data) : undefined,
+        }
+
+        // First attempt
+        let response = await fetch(url, defaultOptions)
+
+        // 401 refresh logic consistent with request()
+        if (response.status === 401 && !endpoint.includes('/auth/refresh') && !endpoint.includes('/auth/login')) {
+            const session = typeof window !== 'undefined' ? (window as any).__KAPTN_SESSION__ : null
+            if (session?.authMode !== 'none') {
+                try {
+                    const refreshResponse = await fetch('/api/v1/auth/refresh', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                    })
+                    if (refreshResponse.ok) {
+                        response = await fetch(url, defaultOptions)
+                    } else {
+                        this.redirectToLogin()
+                        throw new Error('Authentication session expired')
+                    }
+                } catch (e) {
+                    this.redirectToLogin()
+                    throw new Error('Authentication session expired')
+                }
+            }
+        }
+
+        const contentType = response.headers.get('content-type') || ''
+        const isJSON = contentType.includes('application/json')
+        if (isJSON) {
+            const json = await response.json()
+            // For /apply, we want the structured payload regardless of status
+            return json as T
+        }
+        if (!response.ok) {
+            throw new Error(this.getGenericErrorMessage(response.status))
+        }
+        // Fallbacks for non-JSON success responses
+        if (contentType.includes('text/')) {
+            return (await response.text()) as unknown as T
+        }
+        return (await response.arrayBuffer()) as unknown as T
     }
 
 	async put<T>(endpoint: string, data?: unknown): Promise<T> {

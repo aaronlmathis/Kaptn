@@ -39,88 +39,6 @@ import {
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries"
 import { getNodes, type Node } from "@/lib/k8s-cluster"
 
-/** Mock fallbacks (kept only as fallback if live data unavailable) */
-function useMockCapacityVsUsage() {
-	return Array.from({ length: 30 }).map((_, i) => ({
-		t: Date.now() - (30 - i) * 60_000,
-		cpuAlloc: 10,
-		cpuReq: 3.2 + Math.sin(i / 4) * 0.4,
-		cpuUsed: 1.1 + Math.sin(i / 6) * 0.6,
-		memAlloc: 19.1,
-		memReq: 6.2 + Math.sin(i / 3) * 0.8,
-		memUsed: 7.2 + Math.sin(i / 5) * 0.6,
-	}))
-}
-function useNodePressure() {
-	const nodes = ["ip-10-0-1-10", "ip-10-0-1-11", "ip-10-0-1-12", "ip-10-0-1-13", "ip-10-0-1-14"]
-	return nodes.map((name, idx) => ({
-		name,
-		ready: idx !== 3,
-		cordoned: idx === 2,
-		taints: idx === 2 ? ["NoSchedule"] : [],
-		values: { cpu: 0.18 + idx * 0.07, mem: 0.32 + idx * 0.05, disk: 0.22 + idx * 0.03, pid: 0.12 + idx * 0.02 },
-	}))
-}
-function useNamespaceUsage() {
-	return [
-		{ ns: "kube-system", cpu: 1.8, mem: 3.2, pods: 42, restarts: 11, quota: 0.41 },
-		{ ns: "default", cpu: 0.8, mem: 1.1, pods: 8, restarts: 0, quota: 0.28 },
-		{ ns: "monitoring", cpu: 2.4, mem: 4.7, pods: 12, restarts: 3, quota: 0.72 },
-		{ ns: "ingress", cpu: 0.9, mem: 1.5, pods: 6, restarts: 1, quota: 0.51 },
-		{ ns: "apps", cpu: 1.1, mem: 2.0, pods: 18, restarts: 5, quota: 0.46 },
-	]
-}
-function _usePodStatus() {
-	return [
-		{ status: "Running", count: 48 },
-		{ status: "Pending", count: 3 },
-		{ status: "CrashLoopBackOff", count: 2 },
-		{ status: "ImagePullBackOff", count: 1 },
-		{ status: "Evicted", count: 0 },
-	]
-}
-function useControlPlane() {
-	return Array.from({ length: 48 }).map((_, i) => ({
-		t: i,
-		apiP50: 18 + Math.sin(i / 4) * 4,
-		apiP95: 46 + Math.sin(i / 5) * 8,
-		rps: 120 + Math.sin(i / 6) * 30,
-		schedQ: 2 + Math.max(0, Math.sin(i / 7) * 2),
-		ctrlQ: 3 + Math.max(0, Math.sin(i / 8) * 2),
-	}))
-}
-function useCRDs() {
-	return {
-		summary: { total: 36, groups: 9, versions: 18 },
-		top: [
-			{ kind: "PrometheusRule", objects: 120, versions: ["v1"], skew: false },
-			{ kind: "Alertmanager", objects: 4, versions: ["v1beta1", "v1"], skew: true },
-			{ kind: "GrafanaDashboard", objects: 55, versions: ["v1alpha1"], skew: false },
-			{ kind: "Certificate", objects: 31, versions: ["v1"], skew: false },
-			{ kind: "IngressRoute", objects: 22, versions: ["v1alpha1", "v1"], skew: true },
-			{ kind: "Canary", objects: 12, versions: ["v1alpha1"], skew: false },
-			{ kind: "KEDA", objects: 9, versions: ["v1alpha1", "v1"], skew: true },
-			{ kind: "KafkaTopic", objects: 7, versions: ["v1beta1"], skew: false },
-		],
-	}
-}
-function _useEvents() {
-	return [
-		{ ts: "10:12:04", type: "Warning", reason: "FailedScheduling", obj: "pod/web-7d8f", ns: "apps", msg: "0/5 nodes are available: 3 Insufficient cpu." },
-		{ ts: "10:10:37", type: "Warning", reason: "BackOff", obj: "pod/api-64bc", ns: "default", msg: "Back-off restarting failed container" },
-		{ ts: "10:09:50", type: "Normal", reason: "Pulled", obj: "pod/agent-2b1c", ns: "monitoring", msg: "Successfully pulled image" },
-	]
-}
-function _useObjectGrowth() {
-	return Array.from({ length: 30 }).map((_, i) => ({
-		t: i,
-		pods: 40 + Math.floor(Math.sin(i / 4) * 5),
-		deployments: 12 + Math.floor(Math.sin(i / 6) * 2),
-		services: 18 + Math.floor(Math.sin(i / 7) * 2),
-		crs: 210 + Math.floor(Math.sin(i / 5) * 10),
-	}))
-}
-
 /** Helpers */
 function Delta({ value }: { value: number }) {
 	const up = value >= 0
@@ -269,7 +187,8 @@ export default function ClusterDashboard() {
 	]), [live.seriesData])
 
 	// Fallbacks if no live data yet
-	const cap = capCpu.length > 0 && capMem.length > 0 ? undefined : useMockCapacityVsUsage()
+	// Fallback empty data if live data unavailable
+	const cap = capCpu.length > 0 && capMem.length > 0 ? undefined : []
 	// --- Node Health & Pressure (live) ---
 	const [nodeList, setNodeList] = React.useState<Node[]>([])
 	React.useEffect(() => {
@@ -331,9 +250,10 @@ export default function ClusterDashboard() {
 			}
 		})
 	}, [nodeList, nodeLive])
-	const ns = useNamespaceUsage()
-	const cp = useControlPlane()
-	const crds = useCRDs()
+	// TODO: Replace with real data
+	const ns = []
+	const cp = []
+	const crds = { summary: { total: 0, groups: 0, versions: 0 }, top: [] }
 
 	// Calculate latest values for health footers
 	const latestCpu = (capCpu.length ? capCpu[capCpu.length - 1] : (cap ? cap[cap.length - 1] : undefined)) as any

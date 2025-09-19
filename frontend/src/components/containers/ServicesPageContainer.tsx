@@ -45,10 +45,22 @@ function ServicesContent() {
 	const { isAllowed } = useAuthzCapabilitiesInContext(['services.get', 'services.patch', 'services.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedServiceForDetails, setSelectedServiceForDetails] = React.useState<z.infer<typeof serviceSchema> | null>(null)
+
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', services: z.infer<typeof serviceSchema>[] }>(null)
+
+	type Item = { name: string; namespace?: string }
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: 'services', items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
 	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
 	// Ensure service-specific capabilities are requested
@@ -59,6 +71,21 @@ function ServicesContent() {
 			'services.delete',
 		]).catch(() => { /* noop */ })
 		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// Validate function for destructive actions
+	const validateDelete = React.useCallback(async (items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction('services', { action: 'delete', targets })
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
 	}, [])
 
 	// Update lastUpdated when services change
@@ -149,22 +176,6 @@ function ServicesContent() {
 
 		return result
 	}, [services, typeFilter, globalFilter])
-
-	// Bulk actions: preflight validate to show warnings in confirmation dialog
-	const validateServicesAction = React.useCallback(async (type: 'delete', rows: z.infer<typeof serviceSchema>[]) => {
-		try {
-			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
-			const legacyAction = 'delete-services'
-			const resp = await bulkActionsApi.validateAction('services', { action: legacyAction, targets })
-			const details = resp?.details as { results?: Array<{ warnings?: string[] }> } | undefined
-			const warnings: string[] = Array.isArray(details?.results)
-				? details.results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
-				: []
-			setConfirmWarnings(warnings)
-		} catch {
-			setConfirmWarnings([])
-		}
-	}, [])
 
 	// Build table columns
 	const columns: ColumnDef<z.infer<typeof serviceSchema>>[] = React.useMemo(() => ([
@@ -292,9 +303,10 @@ function ServicesContent() {
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
 							<DropdownMenuItem className="text-red-600" onClick={() => {
-								setPendingAction({ type: 'delete', services: [row.original] });
-								setConfirmDialogOpen(true);
-								validateServicesAction('delete', [row.original])
+								const item = row.original
+								setPendingAction({ scope: 'services', items: [{ name: item.name, namespace: item.namespace }] })
+								setConfirmDialogOpen(true)
+								validateDelete([{ name: item.name, namespace: item.namespace }])
 							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
@@ -304,7 +316,7 @@ function ServicesContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, validateServicesAction])
+	]), [clusterId, validateDelete])
 
 	const bulkActions = React.useMemo(() => {
 		const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: z.infer<typeof serviceSchema>[]) => void | Promise<void> }[] = []
@@ -340,29 +352,22 @@ function ServicesContent() {
 				variant: 'destructive',
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'delete', services: rows });
-					setConfirmDialogOpen(true);
-					validateServicesAction('delete', rows)
+					setPendingAction({ scope: 'services', items: rows.map(r => ({ name: r.name, namespace: r.namespace })) })
+					setConfirmDialogOpen(true)
+					validateDelete(rows.map(r => ({ name: r.name, namespace: r.namespace })))
 				}
 			})
 		}
 
 		return actions
-	}, [isAllowed, validateServicesAction])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			const targets = pendingAction.services.map(svc => ({ namespace: svc.namespace, name: svc.name }))
-			const legacyAction = 'delete-services'
-			const resp = await bulkActionsApi.executeBulkAction('services', { action: legacyAction, targets })
-			const success = resp?.success
-			const total = resp?.resources_total ?? 0
-			const affected = resp?.resources_affected ?? 0
-			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} services processed` : `Errors: ${total - affected} failed`, description: resp?.message })
-		} catch (e: unknown) {
-			setAlert({ variant: 'error', title: 'Action failed', description: e instanceof Error ? e.message : String(e) })
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction('services', { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
@@ -499,15 +504,18 @@ function ServicesContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Services"
-				description="Are you sure you want to delete the selected services? This action cannot be undone."
-				actionLabel="Delete Services"
-				variant="destructive"
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.services || []).map(svc => ({ name: svc.name, namespace: svc.namespace }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 
 			{selectedServiceForDetails && (

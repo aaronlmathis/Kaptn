@@ -33,7 +33,6 @@ type ServerConfig struct {
 	BasePath     string     `yaml:"base_path"`
 	CORS         CORSConfig `yaml:"cors"`
 	CookieSecret string     `yaml:"cookie_secret"`
-	SessionTTL   string     `yaml:"session_ttl"`
 }
 
 // CORSConfig represents the CORS configuration
@@ -44,11 +43,13 @@ type CORSConfig struct {
 
 // SecurityConfig represents the security configuration
 type SecurityConfig struct {
-	AuthMode       string         `yaml:"auth_mode"`
-	OIDC           OIDCConfig     `yaml:"oidc"`
-	TLS            TLSConfig      `yaml:"tls"`
-	AuthKeys       AuthKeysConfig `yaml:"auth_keys"`
-	UsernameFormat string         `yaml:"username_format"`
+	AuthMode        string         `yaml:"auth_mode"`
+	SessionTTL      string         `yaml:"session_ttl"`
+	RefreshTokenTTL string         `yaml:"refresh_token_ttl"`
+	OIDC            OIDCConfig     `yaml:"oidc"`
+	TLS             TLSConfig      `yaml:"tls"`
+	AuthKeys        AuthKeysConfig `yaml:"auth_keys"`
+	UsernameFormat  string         `yaml:"username_format"`
 }
 
 // OIDCConfig represents the OIDC configuration
@@ -112,6 +113,9 @@ type KubernetesConfig struct {
 	InsecureTLS      bool    `yaml:"insecure_tls"` // Skip TLS verification for development environments
 	QPS              float32 `yaml:"qps"`          // Queries per second allowed to API server
 	Burst            int     `yaml:"burst"`        // Maximum burst for throttle
+	// Separate client used by background logs collector to avoid starving interactive traffic
+	LogsQPS   float32 `yaml:"logs_qps"`
+	LogsBurst int     `yaml:"logs_burst"`
 }
 
 // FeaturesConfig represents the features configuration
@@ -172,17 +176,17 @@ type LogsCacheConfig struct {
 	EvictionInterval string `yaml:"eviction_interval"`
 	CleanupInterval  string `yaml:"cleanup_interval"`
 
-    // Background log collection configuration
-    BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
-    BackgroundCollectionRetention string `yaml:"background_collection_retention"`
-    // Collection mode: "stream" (default, follow) or "poll"
-    BackgroundCollectionMode       string `yaml:"background_collection_mode"`
-    BackgroundCollectionPollInterval string `yaml:"background_collection_poll_interval"`
-    BackgroundCollectionTailLines    int    `yaml:"background_collection_tail_lines"`
-    // Maximum per-line bytes to read/emit from logs (protects memory)
-    MaxLogLineBytes int `yaml:"max_log_line_bytes"`
-    // Optional informer resync period override (advanced)
-    InformerResync string `yaml:"informer_resync"`
+	// Background log collection configuration
+	BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
+	BackgroundCollectionRetention string `yaml:"background_collection_retention"`
+	// Collection mode: "stream" (default, follow) or "poll"
+	BackgroundCollectionMode         string `yaml:"background_collection_mode"`
+	BackgroundCollectionPollInterval string `yaml:"background_collection_poll_interval"`
+	BackgroundCollectionTailLines    int    `yaml:"background_collection_tail_lines"`
+	// Maximum per-line bytes to read/emit from logs (protects memory)
+	MaxLogLineBytes int `yaml:"max_log_line_bytes"`
+	// Optional informer resync period override (advanced)
+	InformerResync string `yaml:"informer_resync"`
 
 	// Operational limits (Phase 10)
 	MaxStreamsPerUser     int    `yaml:"max_streams_per_user"`
@@ -255,15 +259,16 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			Addr:         getEnv("KAPTN_SERVER_ADDR", "0.0.0.0:8080"),
 			BasePath:     getEnv("KAPTN_BASE_PATH", "/"),
 			CookieSecret: getEnv("KAPTN_COOKIE_SECRET", ""), // Required in production
-			SessionTTL:   getEnv("KAPTN_SESSION_TTL", "12h"),
 			CORS: CORSConfig{
 				AllowOrigins: []string{"*"},
 				AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			},
 		},
 		Security: SecurityConfig{
-			AuthMode:       getEnv("KAPTN_AUTH_MODE", "oidc"),
-			UsernameFormat: getEnv("KAPTN_USERNAME_FORMAT", "oidc:{sub}"), // prefer sub over email
+			AuthMode:        getEnv("KAPTN_AUTH_MODE", "oidc"),
+			SessionTTL:      getEnv("KAPTN_SESSION_TTL", "12h"),
+			RefreshTokenTTL: getEnv("KAPTN_REFRESH_TOKEN_TTL", "7d"),
+			UsernameFormat:  getEnv("KAPTN_USERNAME_FORMAT", "oidc:{sub}"), // prefer sub over email
 			OIDC: OIDCConfig{
 				Issuer:       getEnv("KAPTN_OIDC_ISSUER", ""),
 				ClientID:     getEnv("KAPTN_OIDC_CLIENT_ID", ""),
@@ -307,6 +312,9 @@ func loadWithDefaults(configPath string) (*Config, error) {
 			InsecureTLS:      getEnvBool("KAPTN_KUBE_INSECURE_TLS", false),
 			QPS:              float32(getEnvInt("KAPTN_KUBE_QPS", 100)), // Default 100 QPS
 			Burst:            getEnvInt("KAPTN_KUBE_BURST", 200),        // Default 200 burst
+			// Defaults chosen to isolate background collection at a lower rate
+			LogsQPS:   float32(getEnvInt("KAPTN_LOGS_KUBE_QPS", 20)),
+			LogsBurst: getEnvInt("KAPTN_LOGS_KUBE_BURST", 40),
 		},
 		Features: FeaturesConfig{
 			EnableApply:               getEnvBool("KAPTN_ENABLE_APPLY", true),
@@ -488,7 +496,10 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 		result.Server.CookieSecret = envValue
 	}
 	if envValue := os.Getenv("KAPTN_SESSION_TTL"); envValue != "" {
-		result.Server.SessionTTL = envValue
+		result.Security.SessionTTL = envValue
+	}
+	if envValue := os.Getenv("KAPTN_REFRESH_TOKEN_TTL"); envValue != "" {
+		result.Security.RefreshTokenTTL = envValue
 	}
 	if envValue := os.Getenv("KAPTN_AUTH_MODE"); envValue != "" {
 		result.Security.AuthMode = envValue
@@ -521,6 +532,16 @@ func mergeConfigs(envConfig, fileConfig *Config) *Config {
 	if envValue := os.Getenv("KAPTN_KUBE_BURST"); envValue != "" {
 		if parsed, err := strconv.Atoi(envValue); err == nil {
 			result.Kubernetes.Burst = parsed
+		}
+	}
+	if envValue := os.Getenv("KAPTN_LOGS_KUBE_QPS"); envValue != "" {
+		if parsed, err := strconv.Atoi(envValue); err == nil {
+			result.Kubernetes.LogsQPS = float32(parsed)
+		}
+	}
+	if envValue := os.Getenv("KAPTN_LOGS_KUBE_BURST"); envValue != "" {
+		if parsed, err := strconv.Atoi(envValue); err == nil {
+			result.Kubernetes.LogsBurst = parsed
 		}
 	}
 	if envValue := os.Getenv("LOG_LEVEL"); envValue != "" {
@@ -688,6 +709,17 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("kubernetes burst (%d) must be greater than or equal to QPS (%.1f)", c.Kubernetes.Burst, c.Kubernetes.QPS)
 	}
 
+	// Validate logs client rate limiting configuration (optional)
+	if c.Kubernetes.LogsQPS < 0 {
+		return fmt.Errorf("kubernetes logs_qps must be non-negative")
+	}
+	if c.Kubernetes.LogsBurst < 0 {
+		return fmt.Errorf("kubernetes logs_burst must be non-negative")
+	}
+	if c.Kubernetes.LogsBurst > 0 && c.Kubernetes.LogsQPS > 0 && float32(c.Kubernetes.LogsBurst) < c.Kubernetes.LogsQPS {
+		return fmt.Errorf("kubernetes logs_burst (%d) must be greater than or equal to logs_qps (%.1f)", c.Kubernetes.LogsBurst, c.Kubernetes.LogsQPS)
+	}
+
 	if c.Security.AuthMode != "none" && c.Security.AuthMode != "header" && c.Security.AuthMode != "oidc" {
 		return fmt.Errorf("auth mode must be 'none', 'header', or 'oidc'")
 	}
@@ -791,14 +823,14 @@ type LogsServiceConfig struct {
 	EvictionInterval time.Duration `yaml:"eviction_interval"`
 	CleanupInterval  time.Duration `yaml:"cleanup_interval"`
 
-    // Background collection (V2 is event-driven)
-    BackgroundCollectionEnabled   bool   `yaml:"background_collection_enabled"`
-    BackgroundCollectionRetention string `yaml:"background_collection_retention"`
-    BackgroundCollectionMode       string        `yaml:"background_collection_mode"`
-    BackgroundCollectionPollInterval time.Duration `yaml:"background_collection_poll_interval"`
-    BackgroundCollectionTailLines    int           `yaml:"background_collection_tail_lines"`
-    MaxLogLineBytes                  int           `yaml:"max_log_line_bytes"`
-    InformerResync                   time.Duration `yaml:"informer_resync"`
+	// Background collection (V2 is event-driven)
+	BackgroundCollectionEnabled      bool          `yaml:"background_collection_enabled"`
+	BackgroundCollectionRetention    string        `yaml:"background_collection_retention"`
+	BackgroundCollectionMode         string        `yaml:"background_collection_mode"`
+	BackgroundCollectionPollInterval time.Duration `yaml:"background_collection_poll_interval"`
+	BackgroundCollectionTailLines    int           `yaml:"background_collection_tail_lines"`
+	MaxLogLineBytes                  int           `yaml:"max_log_line_bytes"`
+	InformerResync                   time.Duration `yaml:"informer_resync"`
 
 	// Phase 10: Operational guardrails
 	MaxStreamsPerUser     int           `yaml:"max_streams_per_user"`
@@ -817,11 +849,11 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		c.Caching.LogsCache.BackgroundCollectionEnabled,
 		c.Caching.LogsCache.BackgroundCollectionRetention)
 
-    // Set defaults for empty values
-    ttl := c.Caching.LogsCache.TTL
-    if ttl == "" {
-        ttl = "1h" // Default 1 hour
-    }
+	// Set defaults for empty values
+	ttl := c.Caching.LogsCache.TTL
+	if ttl == "" {
+		ttl = "1h" // Default 1 hour
+	}
 
 	evictionIntervalStr := c.Caching.LogsCache.EvictionInterval
 	if evictionIntervalStr == "" {
@@ -859,11 +891,11 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		return LogsServiceConfig{}, fmt.Errorf("invalid logs cache degraded mode timeout: %w", err)
 	}
 
-    // Set default values for numeric fields if they're zero
-    maxGlobal := c.Caching.LogsCache.MaxGlobal
-    if maxGlobal == 0 {
-        maxGlobal = 250000 // Default
-    }
+	// Set default values for numeric fields if they're zero
+	maxGlobal := c.Caching.LogsCache.MaxGlobal
+	if maxGlobal == 0 {
+		maxGlobal = 250000 // Default
+	}
 
 	maxPerScope := c.Caching.LogsCache.MaxPerScope
 	if maxPerScope == 0 {
@@ -875,68 +907,68 @@ func (c *Config) GetLogsServiceConfig() (LogsServiceConfig, error) {
 		maxSubscribers = 200 // Default
 	}
 
-    bufferSize := c.Caching.LogsCache.BufferSize
-    if bufferSize == 0 {
-        bufferSize = 100 // Default
-    }
+	bufferSize := c.Caching.LogsCache.BufferSize
+	if bufferSize == 0 {
+		bufferSize = 100 // Default
+	}
 
-    // Background collection mode defaults
-    bgMode := c.Caching.LogsCache.BackgroundCollectionMode
-    if bgMode == "" {
-        bgMode = "stream"
-    }
+	// Background collection mode defaults
+	bgMode := c.Caching.LogsCache.BackgroundCollectionMode
+	if bgMode == "" {
+		bgMode = "stream"
+	}
 
-    pollIntervalStr := c.Caching.LogsCache.BackgroundCollectionPollInterval
-    if pollIntervalStr == "" {
-        pollIntervalStr = "10s"
-    }
-    pollInterval, err := time.ParseDuration(pollIntervalStr)
-    if err != nil {
-        return LogsServiceConfig{}, fmt.Errorf("invalid logs collection poll interval: %w", err)
-    }
+	pollIntervalStr := c.Caching.LogsCache.BackgroundCollectionPollInterval
+	if pollIntervalStr == "" {
+		pollIntervalStr = "10s"
+	}
+	pollInterval, err := time.ParseDuration(pollIntervalStr)
+	if err != nil {
+		return LogsServiceConfig{}, fmt.Errorf("invalid logs collection poll interval: %w", err)
+	}
 
-    tailLines := c.Caching.LogsCache.BackgroundCollectionTailLines
-    if tailLines <= 0 {
-        tailLines = 100
-    }
+	tailLines := c.Caching.LogsCache.BackgroundCollectionTailLines
+	if tailLines <= 0 {
+		tailLines = 100
+	}
 
-    maxLineBytes := c.Caching.LogsCache.MaxLogLineBytes
-    if maxLineBytes <= 0 {
-        maxLineBytes = 256 * 1024 // 256KB default per line
-    }
+	maxLineBytes := c.Caching.LogsCache.MaxLogLineBytes
+	if maxLineBytes <= 0 {
+		maxLineBytes = 256 * 1024 // 256KB default per line
+	}
 
-    informerResyncStr := c.Caching.LogsCache.InformerResync
-    if informerResyncStr == "" {
-        informerResyncStr = "0s" // default no resync bursts
-    }
-    informerResync, err := time.ParseDuration(informerResyncStr)
-    if err != nil {
-        return LogsServiceConfig{}, fmt.Errorf("invalid logs informer resync: %w", err)
-    }
+	informerResyncStr := c.Caching.LogsCache.InformerResync
+	if informerResyncStr == "" {
+		informerResyncStr = "0s" // default no resync bursts
+	}
+	informerResync, err := time.ParseDuration(informerResyncStr)
+	if err != nil {
+		return LogsServiceConfig{}, fmt.Errorf("invalid logs informer resync: %w", err)
+	}
 
-    return LogsServiceConfig{
-        GlobalMaxEntries: maxGlobal,
-        GlobalMaxAge:     globalMaxAge,
-        ScopeMaxEntries:  maxPerScope,
-        ScopeMaxAge:      globalMaxAge, // Use same TTL for scoped rings
-        MaxSubscribers:   maxSubscribers,
-        BufferSize:       bufferSize,
-        EvictionInterval: evictionInterval,
-        CleanupInterval:  cleanupInterval,
+	return LogsServiceConfig{
+		GlobalMaxEntries: maxGlobal,
+		GlobalMaxAge:     globalMaxAge,
+		ScopeMaxEntries:  maxPerScope,
+		ScopeMaxAge:      globalMaxAge, // Use same TTL for scoped rings
+		MaxSubscribers:   maxSubscribers,
+		BufferSize:       bufferSize,
+		EvictionInterval: evictionInterval,
+		CleanupInterval:  cleanupInterval,
 
-        // Background collection
-        BackgroundCollectionEnabled:       c.Caching.LogsCache.BackgroundCollectionEnabled,
-        BackgroundCollectionRetention:     c.Caching.LogsCache.BackgroundCollectionRetention,
-        BackgroundCollectionMode:           bgMode,
-        BackgroundCollectionPollInterval:   pollInterval,
-        BackgroundCollectionTailLines:      tailLines,
-        MaxLogLineBytes:                    maxLineBytes,
-        InformerResync:                     informerResync,
-        // Note: V2 collector is event-driven, no interval field needed
+		// Background collection
+		BackgroundCollectionEnabled:      c.Caching.LogsCache.BackgroundCollectionEnabled,
+		BackgroundCollectionRetention:    c.Caching.LogsCache.BackgroundCollectionRetention,
+		BackgroundCollectionMode:         bgMode,
+		BackgroundCollectionPollInterval: pollInterval,
+		BackgroundCollectionTailLines:    tailLines,
+		MaxLogLineBytes:                  maxLineBytes,
+		InformerResync:                   informerResync,
+		// Note: V2 collector is event-driven, no interval field needed
 
-        // Phase 10: Operational guardrails
-        MaxStreamsPerUser:     c.Caching.LogsCache.MaxStreamsPerUser,
-        MaxQueryLimit:         c.Caching.LogsCache.MaxQueryLimit,
+		// Phase 10: Operational guardrails
+		MaxStreamsPerUser:     c.Caching.LogsCache.MaxStreamsPerUser,
+		MaxQueryLimit:         c.Caching.LogsCache.MaxQueryLimit,
 		MaxExportSize:         c.Caching.LogsCache.MaxExportSize,
 		MaxConcurrentQueries:  c.Caching.LogsCache.MaxConcurrentQueries,
 		RateLimitPerSecond:    c.Caching.LogsCache.RateLimitPerSecond,

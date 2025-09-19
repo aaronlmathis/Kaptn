@@ -33,17 +33,32 @@ type DashboardReplicaSet = z.infer<typeof replicaSetSchema>
 
 // Inner component that can access the namespace context
 function ReplicaSetsContent() {
-  const { data: replicaSets, loading: isLoading, error, isConnected, refetch } = useReplicaSetsWithWebSocket(true)
+  const { data: replicaSets, loading: isLoading, error, refetch } = useReplicaSetsWithWebSocket(true)
   const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
   const { fetchAdditional } = useCapabilities()
   const { clusterId } = useCluster()
   const { isAllowed } = useAuthzCapabilitiesInContext(['replicasets.get', 'replicasets.patch', 'replicasets.delete', 'replicasets.scale.update'])
   const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
   const [selectedReplicaSetForDetails, setSelectedReplicaSetForDetails] = React.useState<DashboardReplicaSet | null>(null)
+  // Confirmation dialog state for destructive actions (delete only)
   const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
   const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
   const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-  const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'restart' | 'scale', replicaSets: DashboardReplicaSet[] }>(null)
+
+  type Item = { name: string; namespace?: string }
+  type Scope = 'replicasets'
+
+  const [pendingDeleteAction, setPendingDeleteAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+  const requireTextConfirm = React.useMemo(() => !!pendingDeleteAction && pendingDeleteAction.items.length > 0, [pendingDeleteAction])
+  const confirmValue = React.useMemo(() => {
+    if (!pendingDeleteAction || pendingDeleteAction.items.length === 0) return ''
+    const count = pendingDeleteAction.items.length
+    return count === 1 ? pendingDeleteAction.items[0].name : 'DELETE'
+  }, [pendingDeleteAction])
+
+  // Legacy action state for non-delete operations
+  const [pendingAction, setPendingAction] = React.useState<null | { type: 'restart' | 'scale', replicaSets: DashboardReplicaSet[] }>(null)
   const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
 
   // Ensure replicaset-specific action capabilities are requested
@@ -222,6 +237,35 @@ function ReplicaSetsContent() {
       )
     }
   }
+
+  // Validate function for delete actions — sets warnings on dialog before running destructive action
+  const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+    try {
+      const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+      const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+      const details: unknown = resp?.details
+      const warnings: string[] = Array.isArray((details as { results?: Array<{ warnings?: string[] }> })?.results)
+        ? (details as { results: Array<{ warnings?: string[] }> }).results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
+        : []
+      setConfirmWarnings(warnings)
+    } catch {
+      setConfirmWarnings([])
+    }
+  }, [])
+
+  // Confirm handler for delete — executes with `force_confirm: true`
+  const handleConfirmDeleteAction = React.useCallback(async () => {
+    if (!pendingDeleteAction) return
+    setIsConfirmExecuting(true)
+    try {
+      const targets = pendingDeleteAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+      await bulkActionsApi.executeBulkAction(String(pendingDeleteAction.scope), { action: 'delete', targets, force_confirm: true })
+    } finally {
+      setIsConfirmExecuting(false)
+      setConfirmDialogOpen(false)
+      setPendingDeleteAction(null)
+    }
+  }, [pendingDeleteAction])
 
   // Bulk actions: preflight validate to show warnings in confirmation dialog
   const validateReplicaSetsAction = React.useCallback(async (type: 'delete' | 'restart' | 'scale', rows: DashboardReplicaSet[]) => {
@@ -403,7 +447,12 @@ function ReplicaSetsContent() {
               resourceName={row.original.name}
               fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
             >
-              <DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', replicaSets: [row.original] }); setConfirmDialogOpen(true); validateReplicaSetsAction('delete', [row.original]) }}>
+              <DropdownMenuItem className="text-red-600" onClick={() => {
+                const item = row.original
+                setPendingDeleteAction({ scope: 'replicasets', items: [{ name: item.name, namespace: item.namespace }] })
+                setConfirmDialogOpen(true)
+                validateDelete('replicasets', [{ name: item.name, namespace: item.namespace }])
+              }}>
                 <IconTrash className="size-4 mr-2" />
                 Delete
               </DropdownMenuItem>
@@ -412,7 +461,7 @@ function ReplicaSetsContent() {
         </DropdownMenu>
       )
     }
-  ]), [clusterId, validateReplicaSetsAction])
+  ]), [clusterId, validateReplicaSetsAction, validateDelete])
 
   const bulkActions = React.useMemo(() => {
     const actions: { id: string, label: string, icon?: React.ReactNode, variant?: 'default' | 'destructive', requiresSelection?: boolean, action: (rows: DashboardReplicaSet[]) => void | Promise<void> }[] = []
@@ -476,23 +525,24 @@ function ReplicaSetsContent() {
         icon: <IconTrash className="size-4" />,
         variant: 'destructive',
         action: (rows) => {
-          setPendingAction({ type: 'delete', replicaSets: rows });
-          setConfirmDialogOpen(true);
-          validateReplicaSetsAction('delete', rows)
+          const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+          setPendingDeleteAction({ scope: 'replicasets', items: selected })
+          setConfirmDialogOpen(true)
+          validateDelete('replicasets', selected)
         },
         requiresSelection: true,
       })
     }
 
     return actions
-  }, [isAllowed, validateReplicaSetsAction])
+  }, [isAllowed, validateReplicaSetsAction, validateDelete])
 
   const handleConfirmAction = React.useCallback(async () => {
     if (!pendingAction) return
     setIsConfirmExecuting(true)
     try {
       const targets = pendingAction.replicaSets.map(rs => ({ namespace: rs.namespace, name: rs.name }))
-      const legacyAction = pendingAction.type === 'delete' ? 'delete-replicasets' : pendingAction.type === 'restart' ? 'restart-replicasets' : 'scale-replicasets'
+      const legacyAction = pendingAction.type === 'restart' ? 'restart-replicasets' : 'scale-replicasets'
       const resp = await bulkActionsApi.executeBulkAction('replicasets', { action: legacyAction, targets })
       const success = resp?.success
       const total = resp?.resources_total ?? 0
@@ -580,21 +630,40 @@ function ReplicaSetsContent() {
       <ActionConfirmationDialog
         open={confirmDialogOpen}
         onOpenChange={setConfirmDialogOpen}
-        title={pendingAction?.type === 'restart' ? 'Restart ReplicaSets' : pendingAction?.type === 'scale' ? 'Scale ReplicaSets' : 'Delete ReplicaSets'}
-        description={
-          pendingAction?.type === 'restart'
-            ? 'Are you sure you want to restart the selected replicasets? This will terminate and recreate their pods.'
-            : pendingAction?.type === 'scale'
-              ? 'Are you sure you want to scale the selected replicasets? This will modify their replica count.'
-              : 'Are you sure you want to delete the selected replicasets? This action cannot be undone.'
+        title={
+          pendingDeleteAction
+            ? `Delete ${pendingDeleteAction.scope}`
+            : pendingAction?.type === 'restart'
+              ? 'Restart ReplicaSets'
+              : 'Scale ReplicaSets'
         }
-        actionLabel={pendingAction?.type === 'restart' ? 'Restart ReplicaSets' : pendingAction?.type === 'scale' ? 'Scale ReplicaSets' : 'Delete ReplicaSets'}
-        variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
+        description={
+          pendingDeleteAction
+            ? 'Are you sure you want to delete the selected items? This action cannot be undone.'
+            : pendingAction?.type === 'restart'
+              ? 'Are you sure you want to restart the selected replicasets? This will terminate and recreate their pods.'
+              : 'Are you sure you want to scale the selected replicasets? This will modify their replica count.'
+        }
+        actionLabel={
+          pendingDeleteAction
+            ? (pendingDeleteAction.items && pendingDeleteAction.items.length > 1 ? 'Delete Selected' : 'Delete')
+            : pendingAction?.type === 'restart'
+              ? 'Restart ReplicaSets'
+              : 'Scale ReplicaSets'
+        }
+        variant={pendingDeleteAction ? 'destructive' : 'default'}
         isExecuting={isConfirmExecuting}
-        onConfirm={handleConfirmAction}
-        resources={(pendingAction?.replicaSets || []).map(rs => ({ name: rs.name, namespace: rs.namespace }))}
+        onConfirm={pendingDeleteAction ? handleConfirmDeleteAction : handleConfirmAction}
+        resources={
+          pendingDeleteAction
+            ? (pendingDeleteAction.items || []).map(i => ({ name: i.name, namespace: i.namespace }))
+            : (pendingAction?.replicaSets || []).map(rs => ({ name: rs.name, namespace: rs.namespace }))
+        }
         safetyViolations={[]}
         warnings={confirmWarnings}
+        requireTextConfirm={pendingDeleteAction ? requireTextConfirm : undefined}
+        confirmPrompt={pendingDeleteAction ? (pendingDeleteAction.items && pendingDeleteAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm') : undefined}
+        confirmValue={pendingDeleteAction ? confirmValue : undefined}
       />
 
       {selectedReplicaSetForDetails && (

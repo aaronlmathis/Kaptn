@@ -55,10 +55,20 @@ function SecretsContent() {
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [typeFilter, setTypeFilter] = React.useState<string>("all")
 
-	// Confirmation dialog state
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', secrets: DashboardSecret[] }>(null)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+
+	type Item = { name: string; namespace?: string }
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: 'secrets', items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -69,6 +79,21 @@ function SecretsContent() {
 			'secrets.create',
 		]).catch(() => { /* noop */ })
 		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// Validate function for destructive actions
+	const validateDelete = React.useCallback(async (items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction('secrets', { action: 'delete', targets })
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
 	}, [])
 
 	// Update lastUpdated when secrets change
@@ -113,25 +138,6 @@ function SecretsContent() {
 		setSelectedSecretForEdit(secret)
 		setFormDrawerOpen(true)
 	}, [])
-
-	const handleDeleteSecret = React.useCallback(async (secret: DashboardSecret) => {
-		try {
-			await bulkActionsApi.deleteSecrets([{
-				namespace: secret.namespace,
-				name: secret.name
-			}])
-			toast.success("Secret deleted", {
-				description: `Secret "${secret.name}" has been deleted successfully`,
-				duration: 3000,
-			})
-			refetch()
-		} catch (error) {
-			toast.error("Failed to delete secret", {
-				description: error instanceof Error ? error.message : "An unexpected error occurred",
-				duration: 4000,
-			})
-		}
-	}, [refetch])
 
 	const handleFormSave = React.useCallback(() => {
 		refetch()
@@ -323,7 +329,12 @@ function SecretsContent() {
 						>
 							<DropdownMenuItem
 								className="text-red-600"
-								onClick={() => handleDeleteSecret(row.original)}
+								onClick={() => {
+									const item = row.original
+									setPendingAction({ scope: 'secrets', items: [{ name: item.name, namespace: item.namespace }] })
+									setConfirmDialogOpen(true)
+									validateDelete([{ name: item.name, namespace: item.namespace }])
+								}}
 							>
 								<IconTrash className="size-4 mr-2" />
 								Delete
@@ -333,7 +344,7 @@ function SecretsContent() {
 				</DropdownMenu>
 			),
 		},
-	], [clusterId, getSecretTypeBadge, handleViewDetails, handleEditSecret, handleDeleteSecret])
+	], [clusterId, getSecretTypeBadge, handleViewDetails, handleEditSecret, validateDelete, setPendingAction, setConfirmDialogOpen])
 
 	// Bulk actions
 	const bulkActions = React.useMemo(() => {
@@ -386,8 +397,9 @@ function SecretsContent() {
 				label: "Delete Selected Secrets",
 				icon: <IconTrash className="size-4" />,
 				action: (selectedSecrets: DashboardSecret[]) => {
-					setPendingAction({ type: 'delete', secrets: selectedSecrets })
+					setPendingAction({ scope: 'secrets', items: selectedSecrets })
 					setConfirmDialogOpen(true)
+					validateDelete(selectedSecrets)
 				},
 				variant: "destructive" as const,
 				requiresSelection: true,
@@ -395,31 +407,21 @@ function SecretsContent() {
 		}
 
 		return actions
-	}, [isAllowed, setPendingAction, setConfirmDialogOpen])
+	}, [isAllowed, setPendingAction, setConfirmDialogOpen, validateDelete])
 
-	// Confirmation action execution
-	const executeConfirmation = React.useCallback(async () => {
+	// Confirm handler for destructive actions
+	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
-
 		setIsConfirmExecuting(true)
 		try {
-			if (pendingAction.type === 'delete') {
-				await bulkActionsApi.deleteSecrets(
-					pendingAction.secrets.map(s => ({ namespace: s.namespace, name: s.name }))
-				)
-				toast.success(`Deleted ${pendingAction.secrets.length} secrets successfully`)
-				refetch()
-			}
-		} catch (error) {
-			toast.error("Operation failed", {
-				description: error instanceof Error ? error.message : "An unexpected error occurred",
-			})
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction('secrets', { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
 			setPendingAction(null)
 		}
-	}, [pendingAction, refetch])
+	}, [pendingAction])
 
 	// Update lastUpdated when secrets change
 	React.useEffect(() => {
@@ -624,25 +626,19 @@ function SecretsContent() {
 			{/* Confirmation dialog for destructive actions */}
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
-				onOpenChange={(open) => {
-					setConfirmDialogOpen(open)
-					if (!open) {
-						setPendingAction(null)
-					}
-				}}
-				title={pendingAction?.type === 'delete' ? 'Delete Secrets' : 'Confirm Action'}
-				description={
-					pendingAction?.type === 'delete'
-						? `Are you sure you want to delete ${pendingAction.secrets.length} secret(s)? This action cannot be undone and will permanently remove the secrets and all their data.`
-						: 'Are you sure you want to perform this action?'
-				}
-				variant={pendingAction?.type === 'delete' ? 'destructive' : 'default'}
-				actionLabel={pendingAction?.type === 'delete' ? 'Delete Secrets' : 'Confirm'}
-				resources={pendingAction?.secrets?.map(s => ({ name: s.name, namespace: s.namespace })) || []}
-				warnings={[]}
-				safetyViolations={[]}
-				onConfirm={executeConfirmation}
+				onOpenChange={setConfirmDialogOpen}
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
+				onConfirm={handleConfirmAction}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+				safetyViolations={[]}
+				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 		</div>
 	)

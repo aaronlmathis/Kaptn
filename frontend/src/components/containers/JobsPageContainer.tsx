@@ -7,9 +7,8 @@ import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { useJobsWithWebSocket } from "@/hooks/useJobsWithWebSocket"
 import { JobDetailDrawer } from "@/components/viewers/JobDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
-import { ActionConfirmationDialog } from "@/components/ActionConfirmationDialog"
+import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
 	getReplicaStatusBadge,
 	getUpdateStatusBadge,
@@ -97,14 +96,54 @@ function JobsContent() {
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [statusFilter, setStatusFilter] = React.useState<string>("all")
 
-	// Confirmation dialog state
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
-	const [pendingAction, setPendingAction] = React.useState<{ type: 'delete' | 'restart', items: DashboardJob[] } | null>(null)
-	const [_isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-	const [_confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
 
-	// Ensure job-specific action capabilities are requested
+	type Item = { name: string; namespace?: string }
+	type Scope = 'pods' | 'deployments' | 'services' | 'configmaps' | 'secrets' | 'daemonsets' | 'statefulsets' | 'cronjobs' | 'nodes' |
+		'clusterroles' | 'clusterrolebindings' | 'roles' | 'rolebindings' | 'jobs' | string
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
+
+	// Confirm handler — executes with `force_confirm: true`
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
 	React.useEffect(() => {
 		fetchAdditional([
 			'jobs.get',
@@ -160,21 +199,6 @@ function JobsContent() {
 		return filtered
 	}, [jobs, statusFilter, globalFilter])
 
-	const validateJobsAction = React.useCallback(async (type: 'delete' | 'restart', rows: DashboardJob[]) => {
-		try {
-			const targets = rows.map(r => ({ namespace: r.namespace, name: r.name }))
-			const legacyAction = type === 'delete' ? 'delete-job' : 'restart-job'
-			const resp = await bulkActionsApi.validateAction('jobs', { action: legacyAction, targets })
-			const details: any = resp?.details
-			const warnings: string[] = Array.isArray(details?.results)
-				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
-				: []
-			setConfirmWarnings(warnings)
-		} catch {
-			setConfirmWarnings([])
-		}
-	}, [])
-
 	// Bulk actions (capability-aware)
 	const bulkActions: BulkAction<DashboardJob>[] = React.useMemo(() => {
 		const actions: BulkAction<DashboardJob>[] = []
@@ -212,9 +236,9 @@ function JobsContent() {
 				label: 'Restart Selected Jobs',
 				icon: <IconRefresh className="size-4" />,
 				action: (rows) => {
-					setPendingAction({ type: 'restart', items: rows })
+					const items = rows.map(r => ({ name: r.name || '', namespace: r.namespace })) as Item[]
+					setPendingAction({ scope: 'jobs', items })
 					setConfirmDialogOpen(true)
-					validateJobsAction('restart', rows)
 				},
 				requiresSelection: true,
 			})
@@ -228,16 +252,17 @@ function JobsContent() {
 				icon: <IconTrash className="size-4" />,
 				variant: 'destructive' as const,
 				action: (rows) => {
-					setPendingAction({ type: 'delete', items: rows })
+					const items = rows.map(r => ({ name: r.name || '', namespace: r.namespace })) as Item[]
+					setPendingAction({ scope: 'jobs', items })
 					setConfirmDialogOpen(true)
-					validateJobsAction('delete', rows)
+					validateDelete('jobs', items)
 				},
 				requiresSelection: true,
 			})
 		}
 
 		return actions
-	}, [isAllowed, validateJobsAction])
+	}, [isAllowed, validateDelete])
 
 	// Table columns
 	const columns: ColumnDef<DashboardJob>[] = React.useMemo(() => [
@@ -374,7 +399,8 @@ function JobsContent() {
 							}
 						>
 							<DropdownMenuItem onClick={() => {
-								setPendingAction({ type: 'restart', items: [row.original] })
+								const item = { name: row.original.name || '', namespace: row.original.namespace }
+								setPendingAction({ scope: 'jobs', items: [item] })
 								setConfirmDialogOpen(true)
 							}}>
 								<IconRefresh className="size-4 mr-2" />
@@ -420,8 +446,10 @@ function JobsContent() {
 							<DropdownMenuItem
 								className="text-red-600"
 								onClick={() => {
-									setPendingAction({ type: 'delete', items: [row.original] })
+									const item = { name: row.original.name || '', namespace: row.original.namespace }
+									setPendingAction({ scope: 'jobs', items: [item] })
 									setConfirmDialogOpen(true)
+									validateDelete('jobs', [item])
 								}}
 							>
 								<IconTrash className="size-4 mr-2" />
@@ -432,28 +460,7 @@ function JobsContent() {
 				</DropdownMenu>
 			),
 		},
-	], [handleViewDetails, clusterId])
-
-	// Handle confirmation dialog actions
-	const handleConfirmAction = React.useCallback(async () => {
-		if (!pendingAction) return
-		setIsConfirmExecuting(true)
-		try {
-			const targets = pendingAction.items.map(j => ({ namespace: j.namespace, name: j.name }))
-			const legacyAction = pendingAction.type === 'delete' ? 'delete-job' : 'restart-job'
-			const resp = await bulkActionsApi.executeBulkAction('jobs', { action: legacyAction, targets })
-			const success = resp?.success
-			const total = resp?.resources_total ?? 0
-			const affected = resp?.resources_affected ?? 0
-			setAlert({ variant: success ? 'success' : 'error', title: success ? `Success: ${affected}/${total} jobs processed` : `Errors: ${total - affected} failed`, description: resp?.message })
-		} catch (e: any) {
-			setAlert({ variant: 'error', title: 'Action failed', description: e?.message ?? String(e) })
-		} finally {
-			setIsConfirmExecuting(false)
-			setConfirmDialogOpen(false)
-			setPendingAction(null)
-		}
-	}, [pendingAction])
+	], [handleViewDetails, clusterId, validateDelete])
 
 	// Generate summary cards from jobs data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
@@ -591,30 +598,25 @@ function JobsContent() {
 				/>
 			)}
 
-			{/* Action result alert */}
-			{alert && (
-				<Alert
-					className={alert.variant === 'success'
-						? 'bg-transparent border-green-600 text-green-700'
-						: 'bg-transparent border-red-600 text-red-700'}
-					variant='default'
-				>
-					<AlertTitle>{alert.title}</AlertTitle>
-					{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-				</Alert>
-			)}
-
 			{/* Confirmation dialog for destructive actions */}
-			<ActionConfirmationDialog
-				open={confirmDialogOpen}
-				action={pendingAction?.type === 'delete' ? 'delete-job' : 'restart-job'}
-				resources={pendingAction?.items?.map(job => `${job.namespace}/${job.name}`) || []}
-				onConfirm={handleConfirmAction}
-				onCancel={() => {
-					setConfirmDialogOpen(false)
-					setPendingAction(null)
-				}}
-			/>
+			{pendingAction && (
+				<ActionConfirmationDialog
+					open={confirmDialogOpen}
+					onOpenChange={setConfirmDialogOpen}
+					title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+					description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+					actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+					variant={'destructive'}
+					isExecuting={isConfirmExecuting}
+					onConfirm={handleConfirmAction}
+					resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+					safetyViolations={[]}
+					warnings={confirmWarnings}
+					requireTextConfirm={requireTextConfirm}
+					confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+					confirmValue={confirmValue}
+				/>
+			)}
 		</div>
 	)
 }

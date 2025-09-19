@@ -24,21 +24,49 @@ import type { DashboardNetworkPolicy } from "@/lib/k8s-services"
 import { NetworkPolicyDetailDrawer } from "@/components/viewers/NetworkPolicyDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function NetworkPoliciesContent() {
-	const { data: networkPolicies, loading: isLoading, error, isConnected } = useNetworkPoliciesWithWebSocket(true)
+	const { data: networkPolicies, loading: isLoading, error } = useNetworkPoliciesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
 	const { isAllowed } = useAuthzCapabilitiesInContext(['networkpolicies.get', 'networkpolicies.patch', 'networkpolicies.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedNetworkPolicyForDetails, setSelectedNetworkPolicyForDetails] = React.useState<DashboardNetworkPolicy | null>(null)
+
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', policies: DashboardNetworkPolicy[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'networkpolicies'
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details: unknown = resp?.details
+			const warnings: string[] = Array.isArray((details as any)?.results)
+				? (details as any).results.flatMap((r: unknown) => Array.isArray((r as any)?.warnings) ? (r as any).warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -301,7 +329,12 @@ function NetworkPoliciesContent() {
 						<IfAllowed feature="networkpolicies.delete" cluster={clusterId} namespace={row.original.namespace} resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', policies: [row.original] }); setConfirmDialogOpen(true) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => {
+								const item = row.original
+								setPendingAction({ scope: 'networkpolicies', items: [{ name: item.name, namespace: item.namespace }] })
+								setConfirmDialogOpen(true)
+								validateDelete('networkpolicies', [{ name: item.name, namespace: item.namespace }])
+							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -310,7 +343,7 @@ function NetworkPoliciesContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, handleViewDetails])
+	]), [clusterId, handleViewDetails, validateDelete])
 
 	// Bulk actions based on original NetworkPoliciesDataTable
 	const bulkActions = React.useMemo(() => {
@@ -338,27 +371,29 @@ function NetworkPoliciesContent() {
 
 		if (isAllowed('networkpolicies.delete')) {
 			actions.push({
-				id: 'delete-policies',
+				id: 'delete-networkpolicies',
 				label: 'Delete Selected Policies',
 				icon: <IconTrash className="size-4" />,
 				variant: 'destructive',
 				requiresSelection: true,
-				action: (rows) => { setPendingAction({ type: 'delete', policies: rows }); setConfirmDialogOpen(true) }
+				action: (rows) => {
+					const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+					setPendingAction({ scope: 'networkpolicies', items: selected })
+					setConfirmDialogOpen(true)
+					validateDelete('networkpolicies', selected)
+				}
 			})
 		}
 
 		return actions
-	}, [isAllowed])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			// Simulate API call for deleting network policies
-			console.log('Delete network policies:', pendingAction.policies.map(p => `${p.name} in ${p.namespace}`))
-			setAlert({ variant: 'success', title: `Success: ${pendingAction.policies.length} network policies deleted` })
-		} catch (e: unknown) {
-			setAlert({ variant: 'error', title: 'Action failed', description: e instanceof Error ? e.message : String(e) })
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
@@ -379,17 +414,6 @@ function NetworkPoliciesContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -444,15 +468,18 @@ function NetworkPoliciesContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Network Policies"
-				description="Are you sure you want to delete the selected network policies? This action cannot be undone."
-				actionLabel="Delete Policies"
-				variant="destructive"
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.policies || []).map(p => ({ name: p.name, namespace: p.namespace }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
-				warnings={[]}
+				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 		</div>
 	)

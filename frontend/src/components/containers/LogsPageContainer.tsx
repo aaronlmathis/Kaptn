@@ -13,9 +13,12 @@ import { getLogs, type GetLogsParams, type LogEntry, type StartLogStreamRequest 
 import { useLogStream } from "@/hooks/useLogStream"
 import { SummaryCards, type SummaryCard } from "@/components/SummaryCards"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { IconDownload, IconRefresh, IconCircleCheckFilled, IconAlertTriangle, IconClock, IconFileText } from "@tabler/icons-react"
+import { IconDownload, IconRefresh, IconCircleCheckFilled, IconAlertTriangle, IconClock, IconFileText, IconDotsVertical, IconEye } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import { useNamespace } from "@/contexts/namespace-context"
+import { CopyTooltip } from "@/components/ui/copy-tooltip"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { LogDetailDrawer } from "@/components/viewers/LogDetailDrawer"
 
 type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL"
 
@@ -44,6 +47,10 @@ function LogsContent() {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+  // Detail drawer states
+  const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
+  const [selectedLogForDetails, setSelectedLogForDetails] = React.useState<LogEntry | null>(null)
 
   // WebSocket streaming
   const { entries: liveEntries, state: streamState, setEntries: setLiveEntries, start, stop } = useLogStream()
@@ -149,18 +156,18 @@ function LogsContent() {
       previous: false,
       tailLines: 200,
     }
-    ;(async () => {
-      try {
-        // Ensure we close any existing stream before starting a new one to avoid races
-        log('restarting live stream: stopping current stream (if any)')
-        await stop()
-        if (cancelled) return
-        log('restarting live stream: starting with request', req)
-        await start(req, { since: sinceFilter, limit: limitFilter })
-      } catch (e) {
-        if (DBG) console.debug('[LogsPage] restart stream failed', e)
-      }
-    })()
+      ; (async () => {
+        try {
+          // Ensure we close any existing stream before starting a new one to avoid races
+          log('restarting live stream: stopping current stream (if any)')
+          await stop()
+          if (cancelled) return
+          log('restarting live stream: starting with request', req)
+          await start(req, { since: sinceFilter, limit: limitFilter })
+        } catch (e) {
+          if (DBG) console.debug('[LogsPage] restart stream failed', e)
+        }
+      })()
     return () => {
       cancelled = true
       log('cleanup: stopping live stream')
@@ -369,11 +376,32 @@ function LogsContent() {
       accessorKey: "msg",
       header: "Message",
       cell: ({ row }: { row: { original: LogEntry } }) => (
-        <div className="font-mono text-sm whitespace-pre-wrap break-words max-w-[400px]">
-          {row.original.msg}
-        </div>
+        <CopyTooltip message={row.original.msg}>
+          <div className="font-mono text-sm truncate max-w-[480px]" title={row.original.msg}>
+            {row.original.msg}
+          </div>
+        </CopyTooltip>
       ),
-      size: 400,
+      size: 480,
+    },
+    {
+      id: 'actions',
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="data-[state=open]:bg-muted text-muted-foreground flex size-8">
+              <IconDotsVertical />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={() => { setSelectedLogForDetails(row.original); setDetailDrawerOpen(true) }}>
+              <IconEye className="size-4 mr-2" />
+              View Details
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
     },
   ]), [])
 
@@ -477,6 +505,9 @@ function LogsContent() {
           getRowId={(row) => `${row.cluster}-${row.namespace}-${row.pod}-${row.container}-${row.ts}`}
           initialPageSize={50}
           initialSorting={[{ id: "ts", desc: true }]}
+          renderDetailDrawer={({ item, open, onOpenChange }) => (
+            <LogDetailDrawer entry={item as LogEntry} open={open} onOpenChange={onOpenChange} />
+          )}
           renderFilters={({ table, selectedCount, totalCount }) => (
             <div className="space-y-4">
               {/* All Filters in One Responsive Row */}
@@ -605,6 +636,17 @@ function LogsContent() {
           )}
         />
       </div>
+
+      {selectedLogForDetails && (
+        <LogDetailDrawer
+          entry={selectedLogForDetails}
+          open={detailDrawerOpen}
+          onOpenChange={(open) => {
+            setDetailDrawerOpen(open)
+            if (!open) setSelectedLogForDetails(null)
+          }}
+        />
+      )}
     </div>
   )
 }

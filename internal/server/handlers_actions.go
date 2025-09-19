@@ -168,7 +168,7 @@ func (s *Server) HandleApplyYAML(w http.ResponseWriter, r *http.Request) {
 	clients, err := s.GetImpersonatedClients(r)
 	if err != nil {
 		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
-		http.Error(w, "Failed to get user permissions", http.StatusInternalServerError)
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 
@@ -543,13 +543,13 @@ func (s *Server) HandleApplyConfig(w http.ResponseWriter, r *http.Request) {
 			Success: false,
 			Errors: []ValidationError{{
 				Type:     "authentication",
-				Message:  "Failed to get user permissions",
+				Message:  "Authentication required",
 				Severity: "error",
 			}},
-			Message: "Authentication error",
+			Message: "Authentication required",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(response)
 		return
 	}

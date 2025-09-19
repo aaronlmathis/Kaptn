@@ -25,21 +25,49 @@ import type { DashboardNamespace } from "@/lib/k8s-cluster"
 import { NamespaceDetailDrawer } from "@/components/viewers/NamespaceDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function NamespacesContent() {
-	const { data: namespaces, loading: isLoading, error, isConnected } = useNamespacesWithWebSocket(true)
+	const { data: namespaces, loading: isLoading, error } = useNamespacesWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
 	const { isAllowed } = useAuthzCapabilitiesInContext(['namespaces.get', 'namespaces.patch', 'namespaces.delete'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedNamespaceForDetails, setSelectedNamespaceForDetails] = React.useState<DashboardNamespace | null>(null)
+
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', namespaces: DashboardNamespace[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+
+	type Item = { name: string; namespace?: string }
+	type Scope = 'namespaces'
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
+
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details: unknown = resp?.details
+			const warnings: string[] = Array.isArray((details as any)?.results)
+				? (details as any).results.flatMap((r: unknown) => Array.isArray((r as any)?.warnings) ? (r as any).warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
 
 	// Ensure namespace-specific capabilities are requested (cluster-scoped)
 	React.useEffect(() => {
@@ -276,7 +304,12 @@ function NamespacesContent() {
 						<IfAllowed feature="namespaces.delete" cluster={clusterId} namespace="" resourceName={row.original.name}
 							fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
 						>
-							<DropdownMenuItem className="text-red-600" onClick={() => { setPendingAction({ type: 'delete', namespaces: [row.original] }); setConfirmDialogOpen(true) }}>
+							<DropdownMenuItem className="text-red-600" onClick={() => {
+								const item = row.original
+								setPendingAction({ scope: 'namespaces', items: [{ name: item.name, namespace: '' }] })
+								setConfirmDialogOpen(true)
+								validateDelete('namespaces', [{ name: item.name, namespace: '' }])
+							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
 							</DropdownMenuItem>
@@ -285,7 +318,7 @@ function NamespacesContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, handleViewDetails])
+	]), [clusterId, handleViewDetails, validateDelete])
 
 	// Bulk actions based on original NamespacesDataTable
 	const bulkActions = React.useMemo(() => {
@@ -318,22 +351,24 @@ function NamespacesContent() {
 				icon: <IconTrash className="size-4" />,
 				variant: 'destructive',
 				requiresSelection: true,
-				action: (rows) => { setPendingAction({ type: 'delete', namespaces: rows }); setConfirmDialogOpen(true) }
+				action: (rows) => {
+					const selected = rows.map(r => ({ name: r.name, namespace: '' }))
+					setPendingAction({ scope: 'namespaces', items: selected })
+					setConfirmDialogOpen(true)
+					validateDelete('namespaces', selected)
+				}
 			})
 		}
 
 		return actions
-	}, [isAllowed])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			// Simulate API call for deleting namespaces
-			console.log('Delete namespaces:', pendingAction.namespaces.map(ns => ns.name))
-			setAlert({ variant: 'success', title: `Success: ${pendingAction.namespaces.length} namespaces deleted` })
-		} catch (e: unknown) {
-			setAlert({ variant: 'error', title: 'Action failed', description: e instanceof Error ? e.message : String(e) })
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
@@ -353,17 +388,6 @@ function NamespacesContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -418,15 +442,18 @@ function NamespacesContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Namespaces"
-				description="Are you sure you want to delete the selected namespaces? This action cannot be undone."
-				actionLabel="Delete Namespaces"
-				variant="destructive"
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.namespaces || []).map(ns => ({ name: ns.name, namespace: '' }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
-				warnings={[]}
+				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 		</div>
 	)

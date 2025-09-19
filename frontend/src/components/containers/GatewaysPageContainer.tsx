@@ -41,13 +41,12 @@ import { gatewaySchema } from "@/types/gateway"
 import { GatewayDetailDrawer } from "@/components/viewers/GatewayDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function GatewaysContent() {
 	const { istioInstalled, istio, loading: featuresLoading } = useClusterFeatures()
-	const { data: gateways, loading: isLoading, error, isConnected } = useGatewaysWithWebSocket(true)
+	const { data: gateways, loading: isLoading, error } = useGatewaysWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
@@ -56,12 +55,55 @@ function GatewaysContent() {
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', gateways: z.infer<typeof gatewaySchema>[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+
+	// Confirmation dialog state for destructive actions
+	type Item = { name: string; namespace?: string }
+	type Scope = 'pods' | 'deployments' | 'services' | 'configmaps' | 'secrets' | 'daemonsets' | 'statefulsets' | 'cronjobs' | 'nodes' |
+		'clusterroles' | 'clusterrolebindings' | 'roles' | 'rolebindings' | 'gateways' | string
+
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
 
 	// Filters
 	const [globalFilter, setGlobalFilter] = React.useState("")
 	const [protocolFilter, setProtocolFilter] = React.useState<string>("all")
+
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const details: any = resp?.details
+			const warnings: string[] = Array.isArray(details?.results)
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
+	}, [])
+
+	// Confirm handler — executes with `force_confirm: true`
+	const handleConfirmAction = React.useCallback(async () => {
+		if (!pendingAction) return
+		setIsConfirmExecuting(true)
+		try {
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+		} finally {
+			setIsConfirmExecuting(false)
+			setConfirmDialogOpen(false)
+			setPendingAction(null)
+		}
+	}, [pendingAction])
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -78,16 +120,6 @@ function GatewaysContent() {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [gateways])
-
-	// Auto-hide alert after 5 seconds
-	React.useEffect(() => {
-		if (alert) {
-			const timer = setTimeout(() => {
-				setAlert(null)
-			}, 5000)
-			return () => clearTimeout(timer)
-		}
-	}, [alert])
 
 	// Helper function to get badge for gateway type in filter options
 	const getGatewayTypeBadge = React.useCallback((type: string) => {
@@ -200,7 +232,7 @@ function GatewaysContent() {
 	}, [gateways, protocolFilter, globalFilter])
 
 	// Helper function to get gateway protocol type badge
-	const getGatewayServerTypeBadge = React.useCallback((ports: Array<{ name?: string; protocol: string }>) => {
+	const getGatewayServerTypeBadge = React.useCallback((ports: Array<{ name?: string; protocol?: string }>) => {
 		if (!ports || ports.length === 0) {
 			return (
 				<Badge variant="outline" className="text-muted-foreground border-border bg-transparent px-1.5">
@@ -395,8 +427,10 @@ function GatewaysContent() {
 							</DropdownMenuItem>
 						}>
 							<DropdownMenuItem className="text-red-600" onClick={() => {
-								setPendingAction({ type: 'delete', gateways: [row.original] })
+								const item = row.original
+								setPendingAction({ scope: 'gateways', items: [{ name: item.name, namespace: item.namespace }] })
 								setConfirmDialogOpen(true)
+								validateDelete('gateways', [{ name: item.name, namespace: item.namespace }])
 							}}>
 								<IconTrash className="size-4 mr-2" />
 								Delete
@@ -406,7 +440,7 @@ function GatewaysContent() {
 				</DropdownMenu>
 			),
 		},
-	], [handleViewDetails, getGatewayServerTypeBadge, clusterId])
+	], [handleViewDetails, getGatewayServerTypeBadge, clusterId, validateDelete])
 
 	// Bulk actions
 	const bulkActions = React.useMemo(() => [
@@ -455,51 +489,15 @@ function GatewaysContent() {
 			label: "Delete Selected Gateways",
 			icon: <IconTrash className="size-4" />,
 			action: (gateways: z.infer<typeof gatewaySchema>[]) => {
-				setPendingAction({ type: 'delete', gateways })
+				const selected = gateways.map(g => ({ name: g.name, namespace: g.namespace }))
+				setPendingAction({ scope: 'gateways', items: selected })
 				setConfirmDialogOpen(true)
+				validateDelete('gateways', selected)
 			},
 			variant: "destructive" as const,
 			requiresSelection: true,
 		},
-	], [])
-
-	// Handle confirmation of destructive actions
-	const handleConfirmAction = React.useCallback(async () => {
-		if (!pendingAction) return
-
-		setIsConfirmExecuting(true)
-		setConfirmWarnings([])
-
-		try {
-			if (pendingAction.type === 'delete') {
-				const targets = pendingAction.gateways.map(gateway => ({
-					namespace: gateway.namespace,
-					name: gateway.name,
-				}))
-
-				await bulkActionsApi.executeBulkAction('gateways', {
-					action: 'delete',
-					targets,
-				})
-
-				setAlert({
-					variant: 'success',
-					title: `Deleted ${pendingAction.gateways.length} gateway(s)`,
-					description: `Successfully deleted: ${pendingAction.gateways.map(g => g.name).join(', ')}`
-				})
-			}
-		} catch (err) {
-			setAlert({
-				variant: 'error',
-				title: 'Action failed',
-				description: err instanceof Error ? err.message : 'Unknown error occurred'
-			})
-		} finally {
-			setIsConfirmExecuting(false)
-			setConfirmDialogOpen(false)
-			setPendingAction(null)
-		}
-	}, [pendingAction])
+	], [validateDelete])
 
 	// Generate summary cards from gateway data
 	const summaryData: SummaryCard[] = React.useMemo(() => {
@@ -605,17 +603,6 @@ function GatewaysContent() {
 
 			{/* Gateways Data Table */}
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
 				<UniversalDataTable
 					data={filteredData}
 					columns={columns}
@@ -658,23 +645,18 @@ function GatewaysContent() {
 				<ActionConfirmationDialog
 					open={confirmDialogOpen}
 					onOpenChange={setConfirmDialogOpen}
-					onConfirm={handleConfirmAction}
+					title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+					description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+					actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+					variant={'destructive'}
 					isExecuting={isConfirmExecuting}
-					variant={pendingAction.type === 'delete' ? 'destructive' : 'default'}
-					title={pendingAction.type === 'delete' ? 'Delete Gateways' : 'Confirm Action'}
-					description={
-						pendingAction.type === 'delete'
-							? `Are you sure you want to delete ${pendingAction.gateways.length} gateway(s)? This action cannot be undone.`
-							: 'Are you sure you want to perform this action?'
-					}
-					actionLabel={pendingAction.type === 'delete' ? 'Delete Gateways' : 'Confirm'}
-					resources={pendingAction.gateways.map(g => ({
-						kind: 'Gateway',
-						namespace: g.namespace,
-						name: g.name,
-					}))}
-					warnings={confirmWarnings}
+					onConfirm={handleConfirmAction}
+					resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 					safetyViolations={[]}
+					warnings={confirmWarnings}
+					requireTextConfirm={requireTextConfirm}
+					confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+					confirmValue={confirmValue}
 				/>
 			)}
 

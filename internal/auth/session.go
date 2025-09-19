@@ -40,17 +40,25 @@ func NewSessionManager(logger *zap.Logger, secret string, sessionTTL time.Durati
 
 // NewSessionManagerWithAuthKeys creates a new session manager with specified auth key paths
 func NewSessionManagerWithAuthKeys(logger *zap.Logger, secret string, sessionTTL time.Duration, privateKeyPath, publicKeyPath string) (*SessionManager, error) {
+	return NewSessionManagerWithAuthKeysAndRefreshTTL(logger, secret, sessionTTL, 7*24*time.Hour, privateKeyPath, publicKeyPath)
+}
+
+// NewSessionManagerWithAuthKeysAndRefreshTTL creates a new session manager with specified auth key paths and refresh token TTL
+func NewSessionManagerWithAuthKeysAndRefreshTTL(logger *zap.Logger, secret string, sessionTTL, refreshTokenTTL time.Duration, privateKeyPath, publicKeyPath string) (*SessionManager, error) {
 	if len(secret) < 32 {
 		return nil, fmt.Errorf("session secret must be at least 32 characters")
 	}
 
-    // Create token manager with access token TTL derived from configured session TTL
-    // and longer refresh tokens for silent renewal.
-    accessTokenTTL := sessionTTL
-    if accessTokenTTL <= 0 {
-        accessTokenTTL = 4 * time.Hour // sensible default if misconfigured
-    }
-    refreshTokenTTL := 7 * 24 * time.Hour // 7 day refresh tokens
+	// Create token manager with access token TTL derived from configured session TTL
+	// and configurable refresh tokens for silent renewal.
+	accessTokenTTL := sessionTTL
+	if accessTokenTTL <= 0 {
+		accessTokenTTL = 15 * time.Minute // sensible default if misconfigured
+	}
+
+	if refreshTokenTTL <= 0 {
+		refreshTokenTTL = 7 * 24 * time.Hour // sensible default if misconfigured
+	}
 
 	tokenManager, err := NewTokenManagerWithPaths(logger, accessTokenTTL, refreshTokenTTL, privateKeyPath, publicKeyPath)
 	if err != nil {
@@ -103,8 +111,13 @@ func (sm *SessionManager) CreateDualTokenSession(user *User, r *http.Request) (a
 		return "", "", fmt.Errorf("failed to create access token: %w", err)
 	}
 
+	var sessionExpiry time.Time
+	if sm.sessionTTL > 0 {
+		sessionExpiry = time.Now().Add(sm.sessionTTL)
+	}
+
 	// Create refresh token
-	refreshToken, _, err = sm.tokenManager.CreateRefreshToken(user, clientHash, "")
+	refreshToken, _, err = sm.tokenManager.CreateRefreshToken(user, clientHash, sessionExpiry, "")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create refresh token: %w", err)
 	}

@@ -100,14 +100,14 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 					accessToken, _ := tokenManager.GetTokensFromCookies(r)
 					if accessToken != "" {
 						if claims, tokenErr := tokenManager.ValidateAccessToken(accessToken); tokenErr == nil {
-                        user = &User{
-                            ID:      claims.UserID,
-                            Sub:     claims.UserID,
-                            Email:   claims.Email,
-                            Name:    claims.Name,
-                            Picture: claims.Picture,
-                            Groups:  claims.Roles, // Use roles as groups
-                            Claims: map[string]interface{}{
+							user = &User{
+								ID:      claims.UserID,
+								Sub:     claims.UserID,
+								Email:   claims.Email,
+								Name:    claims.Name,
+								Picture: claims.Picture,
+								Groups:  claims.Roles, // Use roles as groups
+								Claims: map[string]interface{}{
 									"sub":         claims.UserID,
 									"email":       claims.Email,
 									"name":        claims.Name,
@@ -140,65 +140,94 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 				}
 			}
 
-				// If no session cookie or access token, attempt a silent refresh using refresh token cookie (server-side)
-				if user == nil && m.sessionManager != nil {
-					// Avoid looping on auth endpoints
-					path := r.URL.Path
-					if !strings.Contains(path, "/auth/refresh") && !strings.Contains(path, "/auth/login") && !strings.Contains(path, "/auth/callback") {
-						if newAccess, newRefresh, _, rerr := m.sessionManager.RefreshSessionFromToken(r); rerr == nil && newAccess != "" {
-							// Set new cookies and validate the fresh access token to build user context
-							m.sessionManager.SetDualTokenCookies(w, newAccess, newRefresh, r.TLS != nil)
-							if claims, vErr := m.sessionManager.GetTokenManager().ValidateAccessToken(newAccess); vErr == nil {
-                            user = &User{
-                                ID:      claims.UserID,
-                                Sub:     claims.UserID,
-                                Email:   claims.Email,
-                                Name:    claims.Name,
-                                Picture: claims.Picture,
-                                Groups:  claims.Roles, // Treat roles as groups for K8s RBAC gating
-                                Claims: map[string]interface{}{
-                                    "sub":      claims.UserID,
-                                    "email":    claims.Email,
-                                    "name":     claims.Name,
-                                    "picture":  claims.Picture,
-                                    "roles":    claims.Roles,
-                                    "perms":    claims.Perms,
-                                    "jti":      claims.JTI,
-                                    "trace_id": claims.TraceID,
-                                },
-                            }
-								m.logger.Debug("Authenticated via silent refresh", zap.String("userId", user.ID))
-							} else if vErr != nil {
-								m.logger.Debug("Silent refresh produced invalid access token", zap.Error(vErr))
-							}
-						} else if rerr != nil {
-							m.logger.Debug("Silent refresh not possible", zap.Error(rerr))
-						}
-					}
-				}
+			// If no session cookie or access token, attempt a silent refresh using refresh token cookie (server-side)
+			if user == nil && m.sessionManager != nil {
+				// Avoid looping on auth endpoints
+				path := r.URL.Path
+				if !strings.Contains(path, "/auth/refresh") && !strings.Contains(path, "/auth/login") && !strings.Contains(path, "/auth/callback") {
+					m.logger.Debug("Attempting silent refresh for expired session",
+						zap.String("path", path),
+						zap.String("remote_addr", r.RemoteAddr))
 
-				// If still no user, try Bearer token
-				if user == nil {
-					user, err = m.authenticateFromToken(ctx, r)
-					if err != nil {
-						m.logger.Debug("Token authentication failed", zap.Error(err))
-						// Don't immediately fail here - some endpoints may not require auth
+					if newAccess, newRefresh, _, rerr := m.sessionManager.RefreshSessionFromToken(r); rerr == nil && newAccess != "" {
+						// Set new cookies and validate the fresh access token to build user context
+						m.sessionManager.SetDualTokenCookies(w, newAccess, newRefresh, r.TLS != nil)
+						if claims, vErr := m.sessionManager.GetTokenManager().ValidateAccessToken(newAccess); vErr == nil {
+							user = &User{
+								ID:      claims.UserID,
+								Sub:     claims.UserID,
+								Email:   claims.Email,
+								Name:    claims.Name,
+								Picture: claims.Picture,
+								Groups:  claims.Roles, // Treat roles as groups for K8s RBAC gating
+								Claims: map[string]interface{}{
+									"sub":      claims.UserID,
+									"email":    claims.Email,
+									"name":     claims.Name,
+									"picture":  claims.Picture,
+									"roles":    claims.Roles,
+									"perms":    claims.Perms,
+									"jti":      claims.JTI,
+									"trace_id": claims.TraceID,
+								},
+							}
+							m.logger.Info("Silent refresh successful",
+								zap.String("userId", user.ID),
+								zap.String("jti", claims.JTI),
+								zap.String("path", path))
+						} else {
+							m.logger.Warn("Silent refresh produced invalid access token",
+								zap.Error(vErr),
+								zap.String("path", path))
+						}
+					} else {
+						m.logger.Debug("Silent refresh not possible",
+							zap.Error(rerr),
+							zap.String("path", path))
 					}
-					if user != nil {
-						m.logger.Debug("Authenticated via Bearer token", zap.String("userId", user.ID))
-					}
+				} else {
+					m.logger.Debug("Skipping silent refresh on auth endpoint",
+						zap.String("path", path))
 				}
+			}
+
+			// If still no user, try Bearer token
+			if user == nil {
+				user, err = m.authenticateFromToken(ctx, r)
+				if err != nil {
+					m.logger.Debug("Token authentication failed", zap.Error(err))
+					// Don't immediately fail here - some endpoints may not require auth
+				}
+				if user != nil {
+					m.logger.Debug("Authenticated via Bearer token", zap.String("userId", user.ID))
+				}
+			}
 
 			if user != nil {
 				// Resolve authorization using the configured resolver
 				if m.authzResolver != nil {
-					authzResult, authzErr := m.authzResolver.ResolveAuthorization(ctx, user, m.usernameFormat)
+					// Try authorization resolution with a single retry for transient failures
+					authzResult, authzErr := m.tryResolveAuthorizationWithRetry(ctx, user, m.usernameFormat)
 					if authzErr != nil {
-						m.logger.Warn("Authorization resolution failed",
+						m.logger.Warn("Authorization resolution failed after retry",
 							zap.String("userId", user.ID),
 							zap.String("email", user.Email),
 							zap.Error(authzErr))
-						// Still allow the user through with original groups, but log the issue
+
+						// For user_bindings mode, authorization resolution failure means the user
+						// has no valid binding - this should block access rather than fallback
+						if m.authzResolver.IsUserBindingsMode() {
+							m.logger.Error("User has no valid binding in user_bindings mode",
+								zap.String("userId", user.ID),
+								zap.String("email", user.Email))
+							// Don't set user in context - this will cause auth required errors
+							user = nil
+						} else {
+							// For idp_groups mode, still allow the user through with original groups
+							m.logger.Debug("Proceeding with original IdP groups",
+								zap.String("userId", user.ID),
+								zap.Strings("original_groups", user.Groups))
+						}
 					} else {
 						// Update user with resolved authorization info
 						user.Groups = authzResult.Groups
@@ -210,7 +239,9 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 					}
 				}
 
-				ctx = WithUser(ctx, user)
+				if user != nil {
+					ctx = WithUser(ctx, user)
+				}
 			}
 
 		default:
@@ -829,4 +860,40 @@ func (m *Middleware) GetUserBinding(ctx context.Context, username string) (*User
 	}
 
 	return nil, fmt.Errorf("user bindings not available with current resolver type")
+}
+
+// tryResolveAuthorizationWithRetry attempts authorization resolution with a single retry
+// This helps handle transient failures that can occur after session timeout and re-authentication
+func (m *Middleware) tryResolveAuthorizationWithRetry(ctx context.Context, user *User, usernameFormat string) (*AuthzResult, error) {
+	// First attempt
+	authzResult, authzErr := m.authzResolver.ResolveAuthorization(ctx, user, usernameFormat)
+	if authzErr == nil {
+		return authzResult, nil
+	}
+
+	// Log first failure and check if we should retry
+	m.logger.Debug("First authorization resolution attempt failed, retrying",
+		zap.String("userId", user.ID),
+		zap.Error(authzErr))
+
+	// Only retry for user_bindings mode where transient ConfigMap access issues might occur
+	if !m.authzResolver.IsUserBindingsMode() {
+		return nil, authzErr
+	}
+
+	// Brief delay before retry to allow for transient issues to resolve
+	time.Sleep(100 * time.Millisecond)
+
+	// Second attempt
+	authzResult, retryErr := m.authzResolver.ResolveAuthorization(ctx, user, usernameFormat)
+	if retryErr != nil {
+		m.logger.Debug("Second authorization resolution attempt also failed",
+			zap.String("userId", user.ID),
+			zap.Error(retryErr))
+		return nil, retryErr
+	}
+
+	m.logger.Debug("Authorization resolution succeeded on retry",
+		zap.String("userId", user.ID))
+	return authzResult, nil
 }

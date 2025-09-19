@@ -33,30 +33,30 @@ func (s *Server) HandleAuthzCapabilities(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-    // Prefer impersonated client attached by middleware; fall back to building one
-    kubeClient, err := s.GetImpersonatedClient(r)
-    if err != nil || kubeClient == nil {
-        // Fall back to building clients from user
-        usernameFormat := s.config.Security.UsernameFormat
-        impersonatedClients, buildErr := s.impersonationMgr.BuildClientsFromUser(user, usernameFormat)
-        if buildErr != nil {
-            s.logger.Error("Failed to get impersonated clients",
-                zap.Error(buildErr),
-                zap.String("user_id", user.ID))
-            http.Error(w, "Failed to create impersonated client", http.StatusInternalServerError)
-            return
-        }
-        kubeClient = impersonatedClients.Client()
-    }
+	// Prefer impersonated client attached by middleware; fall back to building one
+	kubeClient, err := s.GetImpersonatedClient(r)
+	if err != nil || kubeClient == nil {
+		// Fall back to building clients from user
+		usernameFormat := s.config.Security.UsernameFormat
+		impersonatedClients, buildErr := s.impersonationMgr.BuildClientsFromUser(user, usernameFormat)
+		if buildErr != nil {
+			s.logger.Error("Failed to get impersonated clients",
+				zap.Error(buildErr),
+				zap.String("user_id", user.ID))
+			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			return
+		}
+		kubeClient = impersonatedClients.Client()
+	}
 
 	// Check capabilities using the capability service
-    result, err := s.capabilityService.CheckCapabilities(
-        r.Context(),
-        kubeClient,
-        req,
-        user.ID,
-        user.Groups,
-    )
+	result, err := s.capabilityService.CheckCapabilities(
+		r.Context(),
+		kubeClient,
+		req,
+		user.ID,
+		user.Groups,
+	)
 	if err != nil {
 		s.logger.Error("Failed to check capabilities",
 			zap.Error(err),

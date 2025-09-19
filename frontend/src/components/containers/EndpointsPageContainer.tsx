@@ -25,11 +25,11 @@ import { type DashboardEndpoints } from "@/lib/k8s-services"
 import { EndpointDetailDrawer } from "@/components/viewers/EndpointDetailDrawer"
 import { ResourceYamlEditor } from "@/components/ResourceYamlEditor"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 // Inner component that can access the namespace context
 function EndpointsContent() {
-	const { data: endpoints, loading: isLoading, error, isConnected } = useEndpointsWithWebSocket(true)
+	const { data: endpoints, loading: isLoading, error } = useEndpointsWithWebSocket(true)
 	const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
 	const { fetchAdditional } = useCapabilities()
 	const { clusterId } = useCluster()
@@ -38,10 +38,22 @@ function EndpointsContent() {
 	])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedEndpointForDetails, setSelectedEndpointForDetails] = React.useState<DashboardEndpoints | null>(null)
+
+	// Confirmation dialog state for destructive actions
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
-	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete', endpoints: DashboardEndpoints[] }>(null)
-	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+
+	type Item = { name: string; namespace: string }
+	type Scope = 'endpoints'
+	const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+	const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.items.length === 0) return ''
+		const count = pendingAction.items.length
+		return count === 1 ? pendingAction.items[0].name : 'DELETE'
+	}, [pendingAction])
 
 	React.useEffect(() => {
 		fetchAdditional([
@@ -50,6 +62,21 @@ function EndpointsContent() {
 			'endpoints.delete',
 		]).catch(() => { /* noop */ })
 		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
+	// Validate function — sets warnings on dialog before running destructive action
+	const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+		try {
+			const targets = items.map(i => ({ namespace: i.namespace, name: i.name }))
+			const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+			const details = resp?.details as { results?: { warnings?: string[] }[] } | undefined
+			const warnings: string[] = Array.isArray(details?.results)
+				? details.results.flatMap((r) => Array.isArray(r.warnings) ? r.warnings : [])
+				: []
+			setConfirmWarnings(warnings)
+		} catch {
+			setConfirmWarnings([])
+		}
 	}, [])
 
 	// Update lastUpdated when endpoints change
@@ -315,8 +342,10 @@ function EndpointsContent() {
 							<DropdownMenuItem
 								className="text-red-600"
 								onClick={() => {
-									setPendingAction({ type: 'delete', endpoints: [row.original] });
+									const item = row.original
+									setPendingAction({ scope: 'endpoints', items: [{ name: item.name, namespace: item.namespace }] })
 									setConfirmDialogOpen(true)
+									validateDelete('endpoints', [{ name: item.name, namespace: item.namespace }])
 								}}
 							>
 								<IconTrash className="size-4 mr-2" />
@@ -327,7 +356,7 @@ function EndpointsContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId])
+	]), [clusterId, validateDelete])
 
 	// Bulk actions (preserving original EndpointsDataTable actions)
 	const bulkActions = React.useMemo(() => {
@@ -384,56 +413,23 @@ function EndpointsContent() {
 				variant: 'destructive',
 				requiresSelection: true,
 				action: (rows) => {
-					setPendingAction({ type: 'delete', endpoints: rows })
+					const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+					setPendingAction({ scope: 'endpoints', items: selected })
 					setConfirmDialogOpen(true)
+					validateDelete('endpoints', selected)
 				}
 			})
 		}
 
 		return actions
-	}, [isAllowed])
+	}, [isAllowed, validateDelete])
 
 	const handleConfirmAction = React.useCallback(async () => {
 		if (!pendingAction) return
 		setIsConfirmExecuting(true)
 		try {
-			const targets = pendingAction.endpoints.map(ep => ({
-				kind: 'Endpoints',
-				namespace: ep.namespace,
-				name: ep.name
-			}))
-
-			const response = await fetch('/api/v1/resources', {
-				method: 'DELETE',
-				headers: {
-					'Content-Type': 'application/json',
-					'X-CSRF-Token': document.cookie.split('; ').find(row => row.startsWith('csrf-token='))?.split('=')[1] || ''
-				},
-				credentials: 'include',
-				body: JSON.stringify(targets)
-			})
-
-			if (response.ok) {
-				const data = await response.json()
-				setAlert({
-					variant: 'success',
-					title: `Success: ${data.deleted || targets.length} endpoints deleted`,
-					description: data.message
-				})
-			} else {
-				const errorData = await response.json()
-				setAlert({
-					variant: 'error',
-					title: 'Delete failed',
-					description: errorData.message || 'Failed to delete endpoints'
-				})
-			}
-		} catch (e: unknown) {
-			setAlert({
-				variant: 'error',
-				title: 'Action failed',
-				description: e instanceof Error ? e.message : String(e)
-			})
+			const targets = pendingAction.items.map(i => ({ namespace: i.namespace, name: i.name }))
+			await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
 		} finally {
 			setIsConfirmExecuting(false)
 			setConfirmDialogOpen(false)
@@ -453,18 +449,6 @@ function EndpointsContent() {
 			/>
 
 			<div className="px-4 lg:px-6 space-y-3">
-				{alert && (
-					<Alert
-						className={alert.variant === 'success'
-							? 'bg-transparent border-green-600 text-green-700'
-							: 'bg-transparent border-red-600 text-red-700'}
-						variant='default'
-					>
-						<AlertTitle>{alert.title}</AlertTitle>
-						{alert.description && <AlertDescription>{alert.description}</AlertDescription>}
-					</Alert>
-				)}
-
 				<UniversalDataTable
 					data={filtered}
 					columns={columns}
@@ -506,15 +490,18 @@ function EndpointsContent() {
 			<ActionConfirmationDialog
 				open={confirmDialogOpen}
 				onOpenChange={setConfirmDialogOpen}
-				title="Delete Endpoints"
-				description="Are you sure you want to delete the selected endpoints? This action cannot be undone."
-				actionLabel="Delete Endpoints"
-				variant="destructive"
+				title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+				description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+				actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+				variant={'destructive'}
 				isExecuting={isConfirmExecuting}
 				onConfirm={handleConfirmAction}
-				resources={(pendingAction?.endpoints || []).map(ep => ({ name: ep.name, namespace: ep.namespace }))}
+				resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
 				safetyViolations={[]}
-				warnings={[]}
+				warnings={confirmWarnings}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 
 			{/* Controlled detail drawer for full endpoint details */}

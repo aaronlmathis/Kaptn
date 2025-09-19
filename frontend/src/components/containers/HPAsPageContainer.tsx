@@ -18,6 +18,9 @@ import { useCluster } from "@/hooks/useCluster"
 import { DataTableFilters, type FilterOption } from "@/components/ui/data-table-filters"
 import { useAuthzCapabilitiesInContext } from "@/hooks/useAuthzCapabilitiesSimple"
 import { IconTrash, IconCopy, IconDownload } from "@tabler/icons-react"
+import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
+import { HPADetailDrawer } from "@/components/viewers/HPADetailDrawer"
+import { bulkActionsApi } from "@/lib/api/bulk-actions"
 
 function statusBadge(status: DashboardHPA['status']) {
   switch (status) {
@@ -33,11 +36,62 @@ function statusBadge(status: DashboardHPA['status']) {
 }
 
 function HPAsContent() {
-  const { data: hpas, loading: isLoading, error, isConnected } = useHPAsWithWebSocket(true)
+  const { data: hpas, loading: isLoading, error } = useHPAsWithWebSocket(true)
   const [lastUpdated, setLastUpdated] = React.useState<string | null>(null)
   const { fetchAdditional } = useCapabilities()
 
-  // Fetch additional capabilities for HPA actions
+  // Confirmation dialog state for destructive actions
+  const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
+  const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
+  const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
+
+  type Item = { name: string; namespace?: string }
+  type Scope = 'pods' | 'deployments' | 'services' | 'configmaps' | 'secrets' | 'daemonsets' | 'statefulsets' | 'cronjobs' | 'nodes' |
+    'clusterroles' | 'clusterrolebindings' | 'roles' | 'rolebindings' | 'horizontalpodautoscalers' | string
+
+  const [pendingAction, setPendingAction] = React.useState<null | { scope: Scope, items: Item[] }>(null)
+
+  // Detail drawer state
+  const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
+  const [selectedHPAForDetails, setSelectedHPAForDetails] = React.useState<DashboardHPA | null>(null)
+
+  const requireTextConfirm = React.useMemo(() => !!pendingAction && pendingAction.items.length > 0, [pendingAction])
+  const confirmValue = React.useMemo(() => {
+    if (!pendingAction || pendingAction.items.length === 0) return ''
+    const count = pendingAction.items.length
+    return count === 1 ? pendingAction.items[0].name : 'DELETE'
+  }, [pendingAction])
+
+  // Validate function — sets warnings on dialog before running destructive action
+  const validateDelete = React.useCallback(async (scope: Scope, items: Item[]) => {
+    try {
+      const targets = items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+      const resp = await bulkActionsApi.validateAction(String(scope), { action: 'delete', targets })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const details: any = resp?.details
+      const warnings: string[] = Array.isArray(details?.results)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ? details.results.flatMap((r: any) => Array.isArray(r.warnings) ? r.warnings : [])
+        : []
+      setConfirmWarnings(warnings)
+    } catch {
+      setConfirmWarnings([])
+    }
+  }, [])
+
+  // Confirm handler — executes with `force_confirm: true`
+  const handleConfirmAction = React.useCallback(async () => {
+    if (!pendingAction) return
+    setIsConfirmExecuting(true)
+    try {
+      const targets = pendingAction.items.map(i => ({ namespace: i.namespace ?? '', name: i.name }))
+      await bulkActionsApi.executeBulkAction(String(pendingAction.scope), { action: 'delete', targets, force_confirm: true })
+    } finally {
+      setIsConfirmExecuting(false)
+      setConfirmDialogOpen(false)
+      setPendingAction(null)
+    }
+  }, [pendingAction])
   React.useEffect(() => {
     fetchAdditional([
       'horizontalpodautoscalers.get',
@@ -108,11 +162,17 @@ function HPAsContent() {
       cell: ({ row }) => (
         <IfAllowed
           feature="horizontalpodautoscalers.get"
+          cluster={clusterId}
           namespace={row.original.namespace}
           resourceName={row.original.name}
           fallback={<span>{row.original.name}</span>}
         >
-          <span className="hover:underline cursor-pointer">{row.original.name}</span>
+          <button
+            onClick={() => { setSelectedHPAForDetails(row.original); setDetailDrawerOpen(true) }}
+            className="text-left hover:underline focus:underline focus:outline-none"
+          >
+            {row.original.name}
+          </button>
         </IfAllowed>
       ),
     },
@@ -154,7 +214,7 @@ function HPAsContent() {
                 </DropdownMenuItem>
               }
             >
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setSelectedHPAForDetails(row.original); setDetailDrawerOpen(true) }}>
                 <IconEye className="size-4 mr-2" />
                 View Details
               </DropdownMenuItem>
@@ -192,7 +252,12 @@ function HPAsContent() {
               resourceName={row.original.name}
               fallback={<DropdownMenuItem disabled className="text-muted-foreground"><IconTrash className="size-4 mr-2" />Delete</DropdownMenuItem>}
             >
-              <DropdownMenuItem className="text-red-600" onClick={() => deleteSelectedHPAs([row.original])}>
+              <DropdownMenuItem className="text-red-600" onClick={() => {
+                const item = row.original
+                setPendingAction({ scope: 'horizontalpodautoscalers', items: [{ name: item.name, namespace: item.namespace }] })
+                setConfirmDialogOpen(true)
+                validateDelete('horizontalpodautoscalers', [{ name: item.name, namespace: item.namespace }])
+              }}>
                 <IconTrash className="size-4 mr-2" />
                 Delete
               </DropdownMenuItem>
@@ -201,41 +266,13 @@ function HPAsContent() {
         </DropdownMenu>
       )
     }
-  ]), [])
+  ]), [clusterId, validateDelete])
 
   // Bulk actions
   const { isAllowed } = useAuthzCapabilitiesInContext([
     'horizontalpodautoscalers.get',
     'horizontalpodautoscalers.delete',
   ])
-
-  const getCSRF = React.useCallback(() => {
-    if (typeof document === 'undefined') return null
-    const name = 'kaptn_csrf='
-    const cookies = decodeURIComponent(document.cookie).split(';')
-    for (let c of cookies) {
-      c = c.trim()
-      if (c.indexOf(name) === 0) return c.substring(name.length)
-    }
-    return null
-  }, [])
-
-  const deleteSelectedHPAs = React.useCallback(async (rows: DashboardHPA[]) => {
-    const csrf = getCSRF()
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (csrf) headers['X-CSRF-Token'] = csrf
-    await Promise.all(rows.map(row => fetch('/api/v1/resources', {
-      method: 'DELETE',
-      credentials: 'include',
-      headers,
-      body: JSON.stringify({
-        namespace: row.namespace,
-        name: row.name,
-        kind: 'HorizontalPodAutoscaler',
-        deletePods: false,
-      })
-    })))
-  }, [getCSRF])
 
   type HpaBulkAction = {
     id: string
@@ -247,7 +284,7 @@ function HPAsContent() {
   }
 
   const hpaBulkActions: HpaBulkAction[] = React.useMemo(() => {
-    const actions: BulkAction<DashboardHPA>[] = []
+    const actions: HpaBulkAction[] = []
 
     // Copy names (always available)
     actions.push({
@@ -282,14 +319,17 @@ function HPAsContent() {
         icon: <IconTrash className="size-4" />,
         variant: 'destructive',
         requiresSelection: true,
-        action: async (rows) => {
-          await deleteSelectedHPAs(rows)
+        action: (rows) => {
+          const selected = rows.map(r => ({ name: r.name, namespace: r.namespace }))
+          setPendingAction({ scope: 'horizontalpodautoscalers', items: selected })
+          setConfirmDialogOpen(true)
+          validateDelete('horizontalpodautoscalers', selected)
         },
       })
     }
 
     return actions
-  }, [isAllowed, deleteSelectedHPAs])
+  }, [isAllowed, validateDelete])
 
   return (
     <>
@@ -326,13 +366,41 @@ function HPAsContent() {
                   requiresSelection: a.requiresSelection,
                   action: () => a.action(table.getFilteredSelectedRowModel().rows.map(r => r.original as DashboardHPA)),
                 }))}
-                table={table as any}
+                table={table}
                 showColumnToggle={true}
               />
             </div>
           )}
         />
       </div>
+
+      <ActionConfirmationDialog
+        open={confirmDialogOpen}
+        onOpenChange={setConfirmDialogOpen}
+        title={'Delete ' + (pendingAction?.scope ?? 'Resources')}
+        description={'Are you sure you want to delete the selected items? This action cannot be undone.'}
+        actionLabel={pendingAction?.items && pendingAction.items.length > 1 ? 'Delete Selected' : 'Delete'}
+        variant={'destructive'}
+        isExecuting={isConfirmExecuting}
+        onConfirm={handleConfirmAction}
+        resources={(pendingAction?.items || []).map(i => ({ name: i.name, namespace: i.namespace }))}
+        safetyViolations={[]}
+        warnings={confirmWarnings}
+        requireTextConfirm={requireTextConfirm}
+        confirmPrompt={pendingAction?.items && pendingAction.items.length === 1 ? 'Type the resource name to confirm' : 'Type DELETE to confirm'}
+        confirmValue={confirmValue}
+      />
+
+      {selectedHPAForDetails && (
+        <HPADetailDrawer
+          item={selectedHPAForDetails}
+          open={detailDrawerOpen}
+          onOpenChange={(open) => {
+            setDetailDrawerOpen(open)
+            if (!open) setSelectedHPAForDetails(null)
+          }}
+        />
+      )}
     </>
   )
 }

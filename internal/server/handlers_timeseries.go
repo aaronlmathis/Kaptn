@@ -112,6 +112,7 @@ type TimeSeriesWSClient struct {
 	Subscriptions    map[string]TimeSeriesSubscription // GroupID -> Subscription
 	LastActivity     time.Time
 	TotalSeriesCount int
+	mu               sync.RWMutex // Protects Subscriptions, TotalSeriesCount, and LastActivity
 }
 
 type TimeSeriesSubscription struct {
@@ -163,6 +164,7 @@ func (m *TimeSeriesWSManager) broadcastToSubscribers(key string, point TimeSerie
 	for _, client := range clientsCopy {
 		// Check if client is subscribed to this series
 		isSubscribed := false
+		client.mu.RLock()
 		for _, subscription := range client.Subscriptions {
 			for _, seriesKey := range subscription.Series {
 				if seriesKey == key {
@@ -174,6 +176,7 @@ func (m *TimeSeriesWSManager) broadcastToSubscribers(key string, point TimeSerie
 				break
 			}
 		}
+		client.mu.RUnlock()
 
 		if isSubscribed {
 			select {
@@ -417,8 +420,14 @@ func (s *Server) sendTimeSeriesHello(client *TimeSeriesWSClient) {
 		// Check if client is still connected and has no subscriptions
 		s.timeSeriesWSManager.mu.RLock()
 		stillConnected := s.timeSeriesWSManager.clients[client.ID] != nil
-		hasSubscriptions := len(client.Subscriptions) > 0
 		s.timeSeriesWSManager.mu.RUnlock()
+
+		var hasSubscriptions bool
+		if stillConnected {
+			client.mu.RLock()
+			hasSubscriptions = len(client.Subscriptions) > 0
+			client.mu.RUnlock()
+		}
 
 		if stillConnected && !hasSubscriptions {
 			s.logger.Info("Client has no subscriptions, sending default subscription", zap.String("clientId", client.ID))
@@ -479,7 +488,9 @@ func (s *Server) timeSeriesWSClientReader(client *TimeSeriesWSClient) {
 			break
 		}
 
+		client.mu.Lock()
 		client.LastActivity = time.Now()
+		client.mu.Unlock()
 
 		// Parse message type first
 		var baseMessage struct {
@@ -617,6 +628,7 @@ func (s *Server) HandleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 
 		// Check if this is a new series for this client
 		isNew := true
+		client.mu.RLock()
 		for _, sub := range client.Subscriptions {
 			for _, existingKey := range sub.Series {
 				if existingKey == key {
@@ -628,6 +640,7 @@ func (s *Server) HandleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 				break
 			}
 		}
+		client.mu.RUnlock()
 
 		if isNew {
 			newSeriesCount++
@@ -636,7 +649,11 @@ func (s *Server) HandleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 	}
 
 	// Check series limit
-	if client.TotalSeriesCount+newSeriesCount > s.config.Timeseries.MaxSeries {
+	client.mu.RLock()
+	totalSeriesCount := client.TotalSeriesCount
+	client.mu.RUnlock()
+
+	if totalSeriesCount+newSeriesCount > s.config.Timeseries.MaxSeries {
 		s.sendTimeSeriesError(client, fmt.Sprintf("Series limit exceeded. Maximum %d series per client", s.config.Timeseries.MaxSeries))
 		return
 	}
@@ -649,8 +666,10 @@ func (s *Server) HandleTimeSeriesSubscribe(client *TimeSeriesWSClient, messageBy
 		Series:     accepted,
 	}
 
+	client.mu.Lock()
 	client.Subscriptions[subscribeMsg.GroupID] = subscription
 	client.TotalSeriesCount += newSeriesCount
+	client.mu.Unlock()
 
 	// Send acknowledgment
 	ack := TimeSeriesAckMessage{
@@ -676,6 +695,9 @@ func (s *Server) HandleTimeSeriesUnsubscribe(client *TimeSeriesWSClient, message
 		s.sendTimeSeriesError(client, "Invalid unsubscribe message format")
 		return
 	}
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
 
 	// Find and update subscription
 	if subscription, exists := client.Subscriptions[unsubscribeMsg.GroupID]; exists {
