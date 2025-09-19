@@ -194,7 +194,7 @@ func (s *Server) HandlePermissionsCheck(w http.ResponseWriter, r *http.Request) 
 	clients, err := s.GetImpersonatedClients(r)
 	if err != nil {
 		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
-		http.Error(w, "Impersonated clients not available", http.StatusInternalServerError)
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 

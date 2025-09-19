@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/aaronlmathis/kaptn/internal/config"
@@ -43,9 +44,9 @@ func (s *SSARPermissionChecker) Can(ctx context.Context, user *auth.User, verb, 
 	clients, ok := k8s.ImpersonatedClientsFromContext(ctx)
 	if !ok {
 		return &PermissionError{
-			Code:    "IMPERSONATION_FAILED",
-			Message: "No impersonated clients found in request context",
-			Status:  http.StatusInternalServerError,
+			Code:    "UNAUTHORIZED",
+			Message: "Authentication required - no impersonated clients found",
+			Status:  http.StatusUnauthorized,
 		}
 	}
 
@@ -60,6 +61,18 @@ func (s *SSARPermissionChecker) Can(ctx context.Context, user *auth.User, verb, 
 			zap.String("resource", resource),
 			zap.String("namespace", namespace),
 			zap.String("name", name))
+
+		// Check if this is an authentication/authorization error
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "forbidden") || strings.Contains(errMsg, "unauthorized") ||
+			strings.Contains(errMsg, "authentication") || strings.Contains(errMsg, "token") {
+			return &PermissionError{
+				Code:    "UNAUTHORIZED",
+				Message: "Authentication required",
+				Status:  http.StatusUnauthorized,
+			}
+		}
+
 		return &PermissionError{
 			Code:    "PERMISSION_CHECK_FAILED",
 			Message: "Failed to check permissions",

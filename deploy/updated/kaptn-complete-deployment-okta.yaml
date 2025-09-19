@@ -259,6 +259,8 @@ data:
 
     security:
       auth_mode: "oidc"
+      session_ttl: "4m"  # Short TTL for testing token refresh behavior
+      refresh_token_ttl: "7d"  # How long refresh tokens last (7 days default)
       username_format: "email:{email}"
       oidc:
         issuer: "${OKTA_ISSUER}"

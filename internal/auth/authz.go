@@ -92,41 +92,41 @@ func (a *AuthzResolver) ResolveAuthorization(ctx context.Context, userInfo *User
 
 // formatUsername applies the configured username format
 func (a *AuthzResolver) formatUsername(userInfo *User, format string) string {
-    // Default to a stable identifier if no format configured
-    if strings.TrimSpace(format) == "" {
-        return userInfo.ID
-    }
+	// Default to a stable identifier if no format configured
+	if strings.TrimSpace(format) == "" {
+		return userInfo.ID
+	}
 
-    // If required placeholders are missing, gracefully fall back to user.ID
-    if strings.Contains(format, "{email}") && userInfo.Email == "" {
-        a.logger.Warn("Username format requires email but claim is missing; falling back to user ID",
-            zap.String("format", format),
-            zap.String("userID", userInfo.ID))
-        return userInfo.ID
-    }
-    if strings.Contains(format, "{sub}") && userInfo.Sub == "" {
-        a.logger.Warn("Username format requires sub but claim is missing; falling back to user ID",
-            zap.String("format", format),
-            zap.String("userID", userInfo.ID))
-        return userInfo.ID
-    }
+	// If required placeholders are missing, gracefully fall back to user.ID
+	if strings.Contains(format, "{email}") && userInfo.Email == "" {
+		a.logger.Warn("Username format requires email but claim is missing; falling back to user ID",
+			zap.String("format", format),
+			zap.String("userID", userInfo.ID))
+		return userInfo.ID
+	}
+	if strings.Contains(format, "{sub}") && userInfo.Sub == "" {
+		a.logger.Warn("Username format requires sub but claim is missing; falling back to user ID",
+			zap.String("format", format),
+			zap.String("userID", userInfo.ID))
+		return userInfo.ID
+	}
 
-    // Replace placeholders in the format string
-    username := format
-    username = strings.ReplaceAll(username, "{sub}", userInfo.Sub)
-    username = strings.ReplaceAll(username, "{email}", userInfo.Email)
-    username = strings.ReplaceAll(username, "{name}", userInfo.Name)
-    username = strings.ReplaceAll(username, "{id}", userInfo.ID)
+	// Replace placeholders in the format string
+	username := format
+	username = strings.ReplaceAll(username, "{sub}", userInfo.Sub)
+	username = strings.ReplaceAll(username, "{email}", userInfo.Email)
+	username = strings.ReplaceAll(username, "{name}", userInfo.Name)
+	username = strings.ReplaceAll(username, "{id}", userInfo.ID)
 
-    // If unrecognized placeholders remain, log and fall back to ID
-    if strings.Contains(username, "{") {
-        a.logger.Warn("Unknown placeholder in username format; using user ID",
-            zap.String("format", format),
-            zap.String("result", username))
-        return userInfo.ID
-    }
+	// If unrecognized placeholders remain, log and fall back to ID
+	if strings.Contains(username, "{") {
+		a.logger.Warn("Unknown placeholder in username format; using user ID",
+			zap.String("format", format),
+			zap.String("result", username))
+		return userInfo.ID
+	}
 
-    return username
+	return username
 }
 
 // ValidateGroups checks that the resolved groups match expected Kaptn groups
@@ -155,6 +155,11 @@ func (a *AuthzResolver) ValidateGroups(groups []string) []string {
 	}
 
 	return validGroups
+}
+
+// IsUserBindingsMode returns true if the resolver is configured for user_bindings mode
+func (a *AuthzResolver) IsUserBindingsMode() bool {
+	return a.config != nil && a.config.Mode == "user_bindings"
 }
 
 // CreateSampleConfigMap creates a sample ConfigMap with user bindings for testing

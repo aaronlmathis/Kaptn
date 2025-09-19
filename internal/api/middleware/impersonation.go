@@ -49,22 +49,29 @@ func (im *ImpersonationMiddleware) Middleware(next http.Handler) http.Handler {
 			username = strings.ReplaceAll(username, "{name}", user.Name)
 		}
 
-    // Try to get resolved groups from user bindings only when authz.mode == "user_bindings"
-    effectiveGroups := user.Groups // default to original groups from IdP
-    if im.authMiddleware != nil && im.config != nil && im.config.Authz.Mode == "user_bindings" {
-        if binding, err := im.authMiddleware.GetUserBinding(r.Context(), username); err == nil {
-            effectiveGroups = binding.Groups
-            im.logger.Debug("Using resolved groups from ConfigMap for impersonation",
-                zap.String("username", username),
-                zap.Strings("original_groups", user.Groups),
-                zap.Strings("resolved_groups", effectiveGroups))
-        } else {
-            // In user_bindings mode, a missing binding is expected for unknown users; keep it debug-level
-            im.logger.Debug("Could not resolve groups from ConfigMap, using original groups",
-                zap.String("username", username),
-                zap.Error(err))
-        }
-    }
+		// Use the groups already resolved by the auth middleware
+		// The auth middleware has already done the group resolution, so we should trust those results
+		effectiveGroups := user.Groups
+
+		// Only do additional resolution if the auth middleware hasn't already resolved groups
+		// This prevents double-resolution and race conditions
+		if im.authMiddleware != nil && im.config != nil && im.config.Authz.Mode == "user_bindings" && len(user.Groups) == 0 {
+			// Only try additional resolution if the user has no groups (indicating auth middleware failed)
+			if binding, err := im.authMiddleware.GetUserBinding(r.Context(), username); err == nil {
+				effectiveGroups = binding.Groups
+				im.logger.Debug("Fallback: Using resolved groups from ConfigMap for impersonation",
+					zap.String("username", username),
+					zap.Strings("resolved_groups", effectiveGroups))
+			} else {
+				im.logger.Warn("No groups resolved and ConfigMap lookup failed - user may have no permissions",
+					zap.String("username", username),
+					zap.Error(err))
+			}
+		} else {
+			im.logger.Debug("Using groups from auth middleware",
+				zap.String("username", username),
+				zap.Strings("effective_groups", effectiveGroups))
+		}
 
 		// Build impersonated clients with the correct groups
 		clients, err := im.impersonationMgr.BuildClientsFromUserWithGroups(user, im.config.Security.UsernameFormat, effectiveGroups)

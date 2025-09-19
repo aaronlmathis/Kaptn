@@ -318,7 +318,7 @@ function NamespacesContent() {
 				</DropdownMenu>
 			)
 		}
-	]), [clusterId, handleViewDetails])
+	]), [clusterId, handleViewDetails, validateDelete])
 
 	// Bulk actions based on original NamespacesDataTable
 	const bulkActions = React.useMemo(() => {

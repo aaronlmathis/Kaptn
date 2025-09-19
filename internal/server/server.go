@@ -587,16 +587,23 @@ func (s *Server) initAuth() error {
 
 	// Initialize session manager if we have a cookie secret
 	if s.config.Server.CookieSecret != "" {
-		sessionTTL, err := time.ParseDuration(s.config.Server.SessionTTL)
+		sessionTTL, err := time.ParseDuration(s.config.Security.SessionTTL)
 		if err != nil {
-			s.logger.Warn("Invalid session TTL, using default 12h", zap.String("ttl", s.config.Server.SessionTTL))
+			s.logger.Warn("Invalid session TTL, using default 12h", zap.String("ttl", s.config.Security.SessionTTL))
 			sessionTTL = 12 * time.Hour
 		}
 
-		s.sessionManager, err = auth.NewSessionManagerWithAuthKeys(
+		refreshTokenTTL, err := time.ParseDuration(s.config.Security.RefreshTokenTTL)
+		if err != nil {
+			s.logger.Warn("Invalid refresh token TTL, using default 7d", zap.String("ttl", s.config.Security.RefreshTokenTTL))
+			refreshTokenTTL = 7 * 24 * time.Hour
+		}
+
+		s.sessionManager, err = auth.NewSessionManagerWithAuthKeysAndRefreshTTL(
 			s.logger,
 			s.config.Server.CookieSecret,
 			sessionTTL,
+			refreshTokenTTL,
 			s.config.Security.AuthKeys.JWTPrivateKeyPath,
 			s.config.Security.AuthKeys.JWTPublicKeyPath,
 		)
@@ -604,7 +611,9 @@ func (s *Server) initAuth() error {
 			return fmt.Errorf("failed to initialize session manager: %w", err)
 		}
 
-		s.logger.Info("Session manager initialized", zap.Duration("ttl", sessionTTL))
+		s.logger.Info("Session manager initialized",
+			zap.Duration("session_ttl", sessionTTL),
+			zap.Duration("refresh_token_ttl", refreshTokenTTL))
 	}
 
 	// Initialize OIDC client if auth mode is OIDC

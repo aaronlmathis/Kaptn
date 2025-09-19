@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/aaronlmathis/kaptn/internal/auth"
 	"github.com/aaronlmathis/kaptn/internal/k8s"
@@ -37,7 +36,7 @@ func (s *Server) HandleCheckPermission(w http.ResponseWriter, r *http.Request) {
 	clients, err := s.GetImpersonatedClients(r)
 	if err != nil {
 		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
-		http.Error(w, "Impersonated clients not available", http.StatusInternalServerError)
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 
@@ -85,7 +84,7 @@ func (s *Server) HandleGetActionPermissions(w http.ResponseWriter, r *http.Reque
 	clients, err := s.GetImpersonatedClients(r)
 	if err != nil {
 		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
-		http.Error(w, "Impersonated clients not available", http.StatusInternalServerError)
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 
@@ -130,7 +129,7 @@ func (s *Server) HandleCheckPageAccess(w http.ResponseWriter, r *http.Request) {
 	clients, err := s.GetImpersonatedClients(r)
 	if err != nil {
 		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
-		http.Error(w, "Impersonated clients not available", http.StatusInternalServerError)
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 
@@ -183,7 +182,7 @@ func (s *Server) HandleBulkPermissionCheck(w http.ResponseWriter, r *http.Reques
 	clients, err := s.GetImpersonatedClients(r)
 	if err != nil {
 		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
-		http.Error(w, "Impersonated clients not available", http.StatusInternalServerError)
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 
@@ -204,202 +203,6 @@ func (s *Server) HandleBulkPermissionCheck(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// Phase 6 Test Page Handler - creates a test page for demonstrating SSAR UI integration
-func (s *Server) HandlePhase6TestPage(w http.ResponseWriter, r *http.Request) {
-	// Get authenticated user - this should be your Google user with resolved groups
-	user, ok := auth.UserFromContext(r.Context())
-	if !ok || user == nil {
-		// Redirect to login if not authenticated
-		http.Redirect(w, r, "/test-login", http.StatusSeeOther)
-		return
-	}
-
-	// Get namespace from query parameter, default to "default"
-	namespace := r.URL.Query().Get("namespace")
-	if namespace == "" {
-		namespace = "default"
-	}
-
-	// Get impersonated clients
-	clients, err := s.GetImpersonatedClients(r)
-	if err != nil {
-		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
-		http.Error(w, "Impersonated clients not available", http.StatusInternalServerError)
-		return
-	}
-
-	// Get action permissions for the test page
-	permissionHelper := s.impersonationMgr.PermissionHelper()
-	permissions, err := permissionHelper.GetActionPermissions(r.Context(), clients.Client(), namespace)
-	if err != nil {
-		s.logger.Error("Failed to get action permissions", zap.Error(err))
-		http.Error(w, "Failed to get permissions", http.StatusInternalServerError)
-		return
-	}
-
-	// Create test page HTML
-	html := `<!DOCTYPE html>
-<html>
-<head>
-    <title>Phase 6 - SSAR UI Gating Test</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        .action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-        .action-card { border: 1px solid #ddd; border-radius: 8px; padding: 20px; }
-        .allowed { background: #d4edda; border-color: #c3e6cb; }
-        .denied { background: #f8d7da; border-color: #f5c6cb; }
-        .button { padding: 10px 20px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
-        .button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .success { background: #28a745; color: white; }
-        .danger { background: #dc3545; color: white; }
-        .secondary { background: #6c757d; color: white; }
-        .test-results { margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>🚀 Phase 6 Complete - SSAR UI Gating Test</h1>
-        <p><strong>User:</strong> ` + user.Email + `</p>
-        <p><strong>Namespace:</strong> ` + namespace + `</p>
-        <p><strong>Groups:</strong> ` + strings.Join(user.Groups, ", ") + `</p>
-    </div>
-
-    <div class="action-grid">
-        <div class="action-card ` + getCardClass(permissions.CanDeploy) + `">
-            <h3>📦 Deploy Applications</h3>
-            <p>Create deployments in namespace</p>
-            <button class="button ` + getButtonClass(permissions.CanDeploy) + `" ` + getDisabled(permissions.CanDeploy) + `>
-                Deploy App
-            </button>
-        </div>
-
-        <div class="action-card ` + getCardClass(permissions.CanScale) + `">
-            <h3>📈 Scale Resources</h3>
-            <p>Scale deployments up/down</p>
-            <button class="button ` + getButtonClass(permissions.CanScale) + `" ` + getDisabled(permissions.CanScale) + `>
-                Scale Resource
-            </button>
-        </div>
-
-        <div class="action-card ` + getCardClass(permissions.CanDelete) + `">
-            <h3>🗑️ Delete Resources</h3>
-            <p>Delete pods and other resources</p>
-            <button class="button ` + getButtonClass(permissions.CanDelete) + `" ` + getDisabled(permissions.CanDelete) + `>
-                Delete Resource
-            </button>
-        </div>
-
-        <div class="action-card ` + getCardClass(permissions.CanEditSecrets) + `">
-            <h3>🔐 Manage Secrets</h3>
-            <p>Create/update secrets</p>
-            <button class="button ` + getButtonClass(permissions.CanEditSecrets) + `" ` + getDisabled(permissions.CanEditSecrets) + `>
-                Edit Secrets
-            </button>
-        </div>
-
-        <div class="action-card ` + getCardClass(permissions.CanCreateNamespace) + `">
-            <h3>🏗️ Create Namespaces</h3>
-            <p>Create new namespaces</p>
-            <button class="button ` + getButtonClass(permissions.CanCreateNamespace) + `" ` + getDisabled(permissions.CanCreateNamespace) + `>
-                Create Namespace
-            </button>
-        </div>
-
-        <div class="action-card ` + getCardClass(permissions.CanViewLogs) + `">
-            <h3>📋 View Logs</h3>
-            <p>View pod logs</p>
-            <button class="button ` + getButtonClass(permissions.CanViewLogs) + `" ` + getDisabled(permissions.CanViewLogs) + `>
-                View Logs
-            </button>
-        </div>
-
-        <div class="action-card ` + getCardClass(permissions.CanExec) + `">
-            <h3>💻 Execute Commands</h3>
-            <p>Exec into pods</p>
-            <button class="button ` + getButtonClass(permissions.CanExec) + `" ` + getDisabled(permissions.CanExec) + `>
-                Exec into Pod
-            </button>
-        </div>
-    </div>
-
-    <div class="test-results">
-        <h3>Test Individual Permissions</h3>
-        <button onclick="testPermission('list', 'pods', '` + namespace + `')" class="button secondary">
-            Test: List Pods
-        </button>
-        <button onclick="testPermission('create', 'deployments', '` + namespace + `')" class="button secondary">
-            Test: Create Deployment
-        </button>
-        <button onclick="testPermission('delete', 'pods', '` + namespace + `')" class="button secondary">
-            Test: Delete Pod
-        </button>
-        <button onclick="testPageAccess('pods', '` + namespace + `')" class="button secondary">
-            Test: Page Access (Pods)
-        </button>
-        <div id="test-output" style="margin-top: 10px; white-space: pre-wrap; font-family: monospace;"></div>
-    </div>
-
-    <script>
-        async function testPermission(verb, resource, namespace) {
-            try {
-                const url = '/api/v1/permissions/check?verb=' + verb + '&resource=' + resource + '&namespace=' + namespace;
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                document.getElementById('test-output').textContent = 
-                    'Permission Check: ' + verb + ' ' + resource + ' in ' + namespace + '\n' +
-                    'Allowed: ' + data.allowed + '\n' +
-                    'Response: ' + JSON.stringify(data, null, 2);
-            } catch (error) {
-                document.getElementById('test-output').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        async function testPageAccess(resource, namespace) {
-            try {
-                const url = '/api/v1/permissions/page-access?resource=' + resource + '&namespace=' + namespace;
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                document.getElementById('test-output').textContent = 
-                    'Page Access Check: ' + resource + ' in ' + namespace + '\n' +
-                    'Allowed: ' + data.allowed + '\n' +
-                    'Response: ' + JSON.stringify(data, null, 2);
-            } catch (error) {
-                document.getElementById('test-output').textContent = 'Error: ' + error.message;
-            }
-        }
-    </script>
-</body>
-</html>`
-
-	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(html))
-}
-
-// Helper functions for the test page
-func getCardClass(allowed bool) string {
-	if allowed {
-		return "allowed"
-	}
-	return "denied"
-}
-
-func getButtonClass(allowed bool) string {
-	if allowed {
-		return "success"
-	}
-	return "danger"
-}
-
-func getDisabled(allowed bool) string {
-	if allowed {
-		return ""
-	}
-	return "disabled"
-}
-
 // handleGetUserNamespacePermissions returns granular namespace-scoped permissions for the current user
 func (s *Server) HandleGetUserNamespacePermissions(w http.ResponseWriter, r *http.Request) {
 	// Get authenticated user
@@ -413,7 +216,7 @@ func (s *Server) HandleGetUserNamespacePermissions(w http.ResponseWriter, r *htt
 	clients, err := s.GetImpersonatedClients(r)
 	if err != nil {
 		s.logger.Error("Failed to get impersonated clients", zap.Error(err))
-		http.Error(w, "Impersonated clients not available", http.StatusInternalServerError)
+		http.Error(w, "Authentication required", http.StatusUnauthorized)
 		return
 	}
 

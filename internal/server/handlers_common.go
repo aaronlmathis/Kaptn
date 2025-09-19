@@ -228,9 +228,9 @@ func (s *Server) getSecurityContext(r *http.Request) (*SecurityContext, error) {
 			zap.Error(err),
 			zap.String("user", user.Email))
 		return nil, &SecurityError{
-			Code:    "IMPERSONATION_FAILED",
-			Message: "Failed to create impersonated client",
-			Status:  http.StatusInternalServerError,
+			Code:    "UNAUTHORIZED",
+			Message: "Authentication required",
+			Status:  http.StatusUnauthorized,
 		}
 	}
 

@@ -40,6 +40,12 @@ type RefreshTokenFamily struct {
 	Used          bool      `json:"used"`
 	Invalidated   bool      `json:"invalidated"`
 	ParentTokenID string    `json:"parent_token_id,omitempty"`
+	Email         string    `json:"email,omitempty"`
+	Name          string    `json:"name,omitempty"`
+	Picture       string    `json:"picture,omitempty"`
+	Roles         []string  `json:"roles,omitempty"`
+	Perms         []string  `json:"perms,omitempty"`
+	SessionExpiry time.Time `json:"session_expiry,omitempty"`
 }
 
 // SessionVersion represents a user's session version for invalidation
@@ -65,10 +71,16 @@ type AccessTokenClaims struct {
 
 // RefreshTokenClaims represents the claims in a refresh token
 type RefreshTokenClaims struct {
-	UserID     string `json:"sub"`
-	FamilyID   string `json:"family_id"`
-	TokenID    string `json:"token_id"`
-	ClientHash string `json:"client_hash"`
+	UserID     string   `json:"sub"`
+	FamilyID   string   `json:"family_id"`
+	TokenID    string   `json:"token_id"`
+	ClientHash string   `json:"client_hash"`
+	Email      string   `json:"email,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	Picture    string   `json:"picture,omitempty"`
+	Roles      []string `json:"roles,omitempty"`
+	Perms      []string `json:"perms,omitempty"`
+	SessionExp int64    `json:"session_expiry,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -279,7 +291,7 @@ func (tm *TokenManager) CreateAccessToken(user *User, sessionVer int64, traceID 
 }
 
 // CreateRefreshToken creates a new refresh token and family
-func (tm *TokenManager) CreateRefreshToken(user *User, clientHash string, parentTokenID string) (string, *RefreshTokenFamily, error) {
+func (tm *TokenManager) CreateRefreshToken(user *User, clientHash string, sessionExpiry time.Time, parentTokenID string) (string, *RefreshTokenFamily, error) {
 	now := time.Now()
 	tokenID := uuid.New().String()
 	familyID := uuid.New().String()
@@ -296,6 +308,8 @@ func (tm *TokenManager) CreateRefreshToken(user *User, clientHash string, parent
 		tm.mutex.RUnlock()
 	}
 
+	rolesSnapshot, permsSnapshot := tm.extractRolesAndPerms(user.Groups)
+
 	family := &RefreshTokenFamily{
 		FamilyID:      familyID,
 		TokenID:       tokenID,
@@ -306,6 +320,14 @@ func (tm *TokenManager) CreateRefreshToken(user *User, clientHash string, parent
 		Used:          false,
 		Invalidated:   false,
 		ParentTokenID: parentTokenID,
+		Email:         user.Email,
+		Name:          user.Name,
+		Picture:       user.Picture,
+		Roles:         append([]string{}, rolesSnapshot...),
+		Perms:         append([]string{}, permsSnapshot...),
+	}
+	if !sessionExpiry.IsZero() {
+		family.SessionExpiry = sessionExpiry
 	}
 
 	claims := RefreshTokenClaims{
@@ -313,6 +335,11 @@ func (tm *TokenManager) CreateRefreshToken(user *User, clientHash string, parent
 		FamilyID:   familyID,
 		TokenID:    tokenID,
 		ClientHash: clientHash,
+		Email:      user.Email,
+		Name:       user.Name,
+		Picture:    user.Picture,
+		Roles:      append([]string{}, rolesSnapshot...),
+		Perms:      append([]string{}, permsSnapshot...),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "kaptn",
 			Subject:   user.ID,
@@ -320,6 +347,9 @@ func (tm *TokenManager) CreateRefreshToken(user *User, clientHash string, parent
 			ExpiresAt: jwt.NewNumericDate(now.Add(tm.refreshTokenTTL)),
 			NotBefore: jwt.NewNumericDate(now),
 		},
+	}
+	if !sessionExpiry.IsZero() {
+		claims.SessionExp = sessionExpiry.Unix()
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
@@ -385,11 +415,14 @@ func (tm *TokenManager) ValidateAccessToken(tokenString string) (*AccessTokenCla
 	}
 	tm.mutex.RUnlock()
 
-	// Skip session version validation for now to allow graceful recovery
-	// TODO: Re-enable once session versioning is stabilized
-	// if !tm.validateSessionVersion(claims.UserID, claims.SessionVer) {
-	// 	return nil, fmt.Errorf("session version invalid")
-	// }
+	// Validate session version - re-enabled to properly handle expired sessions
+	if !tm.validateSessionVersion(claims.UserID, claims.SessionVer) {
+		tm.logger.Warn("Session version mismatch - user session was invalidated",
+			zap.String("user_id", claims.UserID),
+			zap.Int64("token_version", claims.SessionVer),
+			zap.Int64("current_version", tm.GetSessionVersion(claims.UserID)))
+		return nil, fmt.Errorf("session expired - please re-authenticate")
+	}
 
 	return claims, nil
 }
@@ -438,14 +471,24 @@ func (tm *TokenManager) ValidateRefreshToken(tokenString string, clientHash stri
 			zap.String("token_id", claims.TokenID),
 			zap.String("family_id", claims.FamilyID))
 
+		issuedAt := time.Now()
+		if claims.IssuedAt != nil {
+			issuedAt = claims.IssuedAt.Time
+		}
+
+		expiresAt := issuedAt.Add(tm.refreshTokenTTL)
+		if claims.ExpiresAt != nil {
+			expiresAt = claims.ExpiresAt.Time
+		}
+
 		// Create a minimal family entry for this token
 		family = &RefreshTokenFamily{
 			FamilyID:    claims.FamilyID,
 			TokenID:     claims.TokenID,
 			UserID:      claims.UserID,
 			ClientHash:  clientHash,
-			IssuedAt:    time.Now(),
-			ExpiresAt:   time.Now().Add(tm.refreshTokenTTL),
+			IssuedAt:    issuedAt,
+			ExpiresAt:   expiresAt,
 			Used:        false,
 			Invalidated: false,
 		}
@@ -453,6 +496,20 @@ func (tm *TokenManager) ValidateRefreshToken(tokenString string, clientHash stri
 		tm.mutex.Lock()
 		tm.refreshFamilies[claims.TokenID] = family
 		tm.mutex.Unlock()
+	}
+
+	// Ensure family metadata stays in sync with the refresh token claims
+	tm.hydrateFamilyMetadataFromClaims(family, claims)
+
+	if family.SessionExpiry.IsZero() {
+		tm.logger.Warn("Refresh token missing session expiry metadata; forcing re-authentication",
+			zap.String("user_id", family.UserID),
+			zap.String("family_id", family.FamilyID))
+		return nil, nil, fmt.Errorf("session expired - please re-authenticate")
+	}
+
+	if !family.SessionExpiry.IsZero() && time.Now().After(family.SessionExpiry) {
+		return nil, nil, fmt.Errorf("session expired - please re-authenticate")
 	}
 
 	if family.Used {
@@ -503,8 +560,8 @@ func (tm *TokenManager) RefreshTokens(refreshTokenString string, clientHash stri
 		return "", "", fmt.Errorf("failed to create access token: %w", err)
 	}
 
-	// Create new refresh token
-	newRefreshToken, _, err := tm.CreateRefreshToken(user, clientHash, claims.TokenID)
+	// Create new refresh token (preserve original session expiry)
+	newRefreshToken, _, err := tm.CreateRefreshToken(user, clientHash, family.SessionExpiry, claims.TokenID)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create refresh token: %w", err)
 	}
@@ -534,14 +591,35 @@ func (tm *TokenManager) RefreshTokensWithoutUser(refreshTokenString string, clie
 	// Get user ID from refresh token claims
 	userID := claims.UserID
 
+	// Ensure we have sufficient metadata to rebuild the user context
+	if len(family.Roles) == 0 {
+		tm.logger.Warn("Refresh token missing role metadata; forcing re-authentication",
+			zap.String("user_id", userID),
+			zap.String("family_id", family.FamilyID))
+		return "", "", "", fmt.Errorf("refresh token missing role metadata")
+	}
+
 	// Get current session version
 	sessionVer := tm.GetSessionVersion(userID)
 
-	// Create minimal user object for token creation (we only need ID for new tokens)
+	// Create user object using stored metadata so new tokens preserve context
 	user := &User{
-		ID: userID,
-		// Other fields will be populated from the original session context when needed
+		ID:      userID,
+		Sub:     userID,
+		Email:   family.Email,
+		Name:    family.Name,
+		Picture: family.Picture,
+		Groups:  append([]string{}, family.Roles...),
+		Claims: map[string]interface{}{
+			"sub":     userID,
+			"email":   family.Email,
+			"name":    family.Name,
+			"picture": family.Picture,
+			"roles":   append([]string{}, family.Roles...),
+			"perms":   append([]string{}, family.Perms...),
+		},
 	}
+	user.Claims["session_ver"] = sessionVer
 
 	// Create new access token
 	accessToken, err := tm.CreateAccessToken(user, sessionVer, traceID)
@@ -549,8 +627,8 @@ func (tm *TokenManager) RefreshTokensWithoutUser(refreshTokenString string, clie
 		return "", "", "", fmt.Errorf("failed to create access token: %w", err)
 	}
 
-	// Create new refresh token
-	newRefreshToken, _, err := tm.CreateRefreshToken(user, clientHash, claims.TokenID)
+	// Create new refresh token (use original session expiry)
+	newRefreshToken, _, err := tm.CreateRefreshToken(user, clientHash, family.SessionExpiry, claims.TokenID)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to create refresh token: %w", err)
 	}
@@ -671,58 +749,58 @@ func (tm *TokenManager) SetRefreshTokenCookie(w http.ResponseWriter, token strin
 
 // ClearAuthCookies clears both access and refresh token cookies
 func (tm *TokenManager) ClearAuthCookies(w http.ResponseWriter) {
-    // Clear cookies at the same path and attributes used when setting them
-    // Primary deletion (matches current cookie settings)
-    http.SetCookie(w, &http.Cookie{
-        Name:     "kaptn-access-token",
-        Value:    "",
-        HttpOnly: true,
-        Secure:   true,
-        SameSite: http.SameSiteLaxMode,
-        Path:     "/",
-        MaxAge:   -1,
-    })
-    http.SetCookie(w, &http.Cookie{
-        Name:     "kaptn-refresh-token",
-        Value:    "",
-        HttpOnly: true,
-        Secure:   true,
-        SameSite: http.SameSiteLaxMode,
-        Path:     "/",
-        MaxAge:   -1,
-    })
+	// Clear cookies at the same path and attributes used when setting them
+	// Primary deletion (matches current cookie settings)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "kaptn-access-token",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     "kaptn-refresh-token",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
 
-    // Backward-compat cleanup: also clear potential legacy paths/attributes
-    // Non-secure variants (for local dev over http)
-    http.SetCookie(w, &http.Cookie{
-        Name:     "kaptn-access-token",
-        Value:    "",
-        HttpOnly: true,
-        Secure:   false,
-        SameSite: http.SameSiteLaxMode,
-        Path:     "/",
-        MaxAge:   -1,
-    })
-    http.SetCookie(w, &http.Cookie{
-        Name:     "kaptn-refresh-token",
-        Value:    "",
-        HttpOnly: true,
-        Secure:   false,
-        SameSite: http.SameSiteLaxMode,
-        Path:     "/",
-        MaxAge:   -1,
-    })
+	// Backward-compat cleanup: also clear potential legacy paths/attributes
+	// Non-secure variants (for local dev over http)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "kaptn-access-token",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     "kaptn-refresh-token",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
 
-    // Old incorrect path that may have been used previously
-    http.SetCookie(w, &http.Cookie{
-        Name:     "kaptn-refresh-token",
-        Value:    "",
-        HttpOnly: true,
-        Secure:   true,
-        SameSite: http.SameSiteStrictMode,
-        Path:     "/api/v1/auth/refresh",
-        MaxAge:   -1,
-    })
+	// Old incorrect path that may have been used previously
+	http.SetCookie(w, &http.Cookie{
+		Name:     "kaptn-refresh-token",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/api/v1/auth/refresh",
+		MaxAge:   -1,
+	})
 }
 
 // GetTokensFromCookies extracts tokens from request cookies
@@ -817,6 +895,48 @@ func (tm *TokenManager) extractRolesAndPerms(groups []string) ([]string, []strin
 	perms = removeDuplicates(perms)
 
 	return roles, perms
+}
+
+func (tm *TokenManager) hydrateFamilyMetadataFromClaims(family *RefreshTokenFamily, claims *RefreshTokenClaims) {
+	if family == nil || claims == nil {
+		return
+	}
+
+	if claims.Email != "" {
+		family.Email = claims.Email
+	} else if family.Email != "" {
+		claims.Email = family.Email
+	}
+
+	if claims.Name != "" {
+		family.Name = claims.Name
+	} else if family.Name != "" {
+		claims.Name = family.Name
+	}
+
+	if claims.Picture != "" {
+		family.Picture = claims.Picture
+	} else if family.Picture != "" {
+		claims.Picture = family.Picture
+	}
+
+	if len(claims.Roles) > 0 {
+		family.Roles = append([]string{}, claims.Roles...)
+	} else if len(family.Roles) > 0 {
+		claims.Roles = append([]string{}, family.Roles...)
+	}
+
+	if len(claims.Perms) > 0 {
+		family.Perms = append([]string{}, claims.Perms...)
+	} else if len(family.Perms) > 0 {
+		claims.Perms = append([]string{}, family.Perms...)
+	}
+
+	if claims.SessionExp > 0 {
+		family.SessionExpiry = time.Unix(claims.SessionExp, 0)
+	} else if !family.SessionExpiry.IsZero() {
+		claims.SessionExp = family.SessionExpiry.Unix()
+	}
 }
 
 // startCleanup starts the cleanup goroutine
