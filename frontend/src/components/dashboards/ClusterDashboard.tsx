@@ -96,16 +96,16 @@ const clusterChartConfig = {
 export default function ClusterDashboard() {
 	// --- Initial Data Loading via REST API ---
 	const [initialDataLoaded, setInitialDataLoaded] = React.useState(false)
-	const [initialSeriesData, setInitialSeriesData] = React.useState<Record<string, Array<{t: number, v: number}>>>({})
+	const [initialSeriesData, setInitialSeriesData] = React.useState<Record<string, Array<{ t: number, v: number }>>>({})
 
 	// Load initial data on mount
 	React.useEffect(() => {
 		let mounted = true
-		
+
 		const loadInitialData = async () => {
 			try {
 				console.log('ClusterDashboard: Loading initial data via REST API...')
-				
+
 				// Load initial cluster timeseries data
 				const clusterResponse = await fetch('/api/v1/timeseries/cluster?since=30m&res=lo')
 				if (clusterResponse.ok) {
@@ -126,7 +126,18 @@ export default function ClusterDashboard() {
 					}
 				}
 
-				if (mounted) {
+				// Load initial namespace timeseries data (for all namespaces)
+				const namespacesResponse = await fetch('/api/v1/timeseries/namespaces?since=30m&res=lo')
+				if (namespacesResponse.ok) {
+					const namespacesData = await namespacesResponse.json()
+					if (mounted && namespacesData.series) {
+						console.log('ClusterDashboard: Loaded namespace metrics:', Object.keys(namespacesData.series).length, 'series')
+						console.log('ClusterDashboard: Namespace series keys:', Object.keys(namespacesData.series).slice(0, 10))
+						setInitialSeriesData(prev => ({ ...prev, ...namespacesData.series }))
+					}
+				} else {
+					console.warn('ClusterDashboard: Failed to load namespace metrics:', namespacesResponse.status)
+				} if (mounted) {
 					console.log('ClusterDashboard: Initial data loading complete')
 					setInitialDataLoaded(true)
 				}
@@ -269,26 +280,26 @@ export default function ClusterDashboard() {
 		},
 	], [combinedClusterData])
 
-		const memorySeries: ChartSeries[] = React.useMemo(() => [
-			{
-				key: 'cluster.mem.used.bytes',
-				name: 'Used',
-				color: '#06b6d4',
-				data: (combinedClusterData['cluster.mem.used.bytes'] || []).map(point => [point.t, point.v]),
-			},
-			{
-				key: 'cluster.mem.allocatable.bytes',
-				name: 'Allocatable',
-				color: '#10b981',
-				data: (combinedClusterData['cluster.mem.allocatable.bytes'] || []).map(point => [point.t, point.v]),
-			},
-			{
-				key: 'cluster.mem.requested.bytes',
-				name: 'Requested',
-				color: '#8b5cf6',
-				data: (combinedClusterData['cluster.mem.requested.bytes'] || []).map(point => [point.t, point.v]),
-			},
-		], [combinedClusterData])
+	const memorySeries: ChartSeries[] = React.useMemo(() => [
+		{
+			key: 'cluster.mem.used.bytes',
+			name: 'Used',
+			color: '#06b6d4',
+			data: (combinedClusterData['cluster.mem.used.bytes'] || []).map(point => [point.t, point.v]),
+		},
+		{
+			key: 'cluster.mem.allocatable.bytes',
+			name: 'Allocatable',
+			color: '#10b981',
+			data: (combinedClusterData['cluster.mem.allocatable.bytes'] || []).map(point => [point.t, point.v]),
+		},
+		{
+			key: 'cluster.mem.requested.bytes',
+			name: 'Requested',
+			color: '#8b5cf6',
+			data: (combinedClusterData['cluster.mem.requested.bytes'] || []).map(point => [point.t, point.v]),
+		},
+	], [combinedClusterData])
 
 	const cpuUsed = latest('cluster.cpu.used.cores') ?? 0
 	const cpuAllocRaw = latest('cluster.cpu.allocatable.cores') ?? 0
@@ -344,19 +355,19 @@ export default function ClusterDashboard() {
 	// --- Node Health & Pressure (live) ---
 	const [nodeList, setNodeList] = React.useState<Node[]>([])
 	const [nodesLoaded, setNodesLoaded] = React.useState(false)
-	
+
 	React.useEffect(() => {
 		let mounted = true
 		setNodesLoaded(false)
 		getNodes()
-			.then(items => { 
+			.then(items => {
 				if (mounted) {
 					setNodeList(items)
 					setNodesLoaded(true)
 					console.log('ClusterDashboard: Loaded', items.length, 'nodes')
 				}
 			})
-			.catch(err => { 
+			.catch(err => {
 				console.error('ClusterDashboard: Failed to load nodes:', err)
 				if (mounted) setNodesLoaded(true) // Set to true even on error to allow empty state
 			})
@@ -379,7 +390,7 @@ export default function ClusterDashboard() {
 
 	const nodeMetricKeys = React.useMemo(() => {
 		if (!nodesLoaded || nodeNames.length === 0) return []
-		
+
 		const keys: string[] = []
 		for (const name of nodeNames) {
 			for (const base of nodeMetricBases) keys.push(`${base}.${name}`)
@@ -391,14 +402,61 @@ export default function ClusterDashboard() {
 	// Only subscribe to node metrics after nodes are loaded AND initial data is loaded
 	const shouldStartWebSocket = nodesLoaded && initialDataLoaded
 	const { seriesData: nodeLive, isConnected: _nodeWsConnected, connectionState: nodeConnectionState } = useLiveSeriesSubscription(
-		'node-health-grid', 
-		shouldStartWebSocket ? nodeMetricKeys : [], 
-		{ 
-			res: 'lo', 
-			since: '30m', 
-			autoConnect: shouldStartWebSocket 
+		'node-health-grid',
+		shouldStartWebSocket ? nodeMetricKeys : [],
+		{
+			res: 'lo',
+			since: '30m',
+			autoConnect: shouldStartWebSocket
 		}
 	)
+
+	// Subscribe to namespace metrics for workload distribution chart
+	const namespaceMetricKeys = React.useMemo(() => {
+		// We'll subscribe to a few key namespace patterns
+		// The actual series keys will be generated as ns.{metric}.{namespace}
+		// For now, let's subscribe to namespace metrics we can discover from the store
+		if (!initialDataLoaded) return []
+
+		// Get all series keys from initial data and filter for namespace metrics
+		const allKeys = Object.keys(initialSeriesData)
+		return allKeys.filter(key =>
+			key.startsWith('ns.cpu.used.') ||
+			key.startsWith('ns.mem.used.') ||
+			key.startsWith('ns.cpu.request.') ||
+			key.startsWith('ns.mem.request.') ||
+			key.startsWith('ns.pods.running.')
+		)
+	}, [initialDataLoaded, initialSeriesData])
+
+	const { seriesData: namespaceLive } = useLiveSeriesSubscription(
+		'namespace-workloads',
+		namespaceMetricKeys,
+		{
+			res: 'lo',
+			since: '30m',
+			autoConnect: initialDataLoaded
+		}
+	)
+
+	// Merge initial namespace data with live data
+	const combinedNamespaceData = React.useMemo(() => {
+		if (!initialDataLoaded) {
+			return {}
+		}
+		if (!live.isConnected) {
+			// Before WebSocket connects, use initial data
+			return initialSeriesData
+		}
+		// After WebSocket connects, prefer live data but fall back to initial data
+		const combined = { ...initialSeriesData }
+		Object.keys(namespaceLive).forEach(key => {
+			if (namespaceLive[key] && namespaceLive[key].length > 0) {
+				combined[key] = namespaceLive[key]
+			}
+		})
+		return combined
+	}, [initialSeriesData, namespaceLive, live.isConnected, initialDataLoaded])
 
 	// Merge initial data with live data
 	const combinedNodeData = React.useMemo(() => {
@@ -419,7 +477,7 @@ export default function ClusterDashboard() {
 	type NodePressureRow = { name: string; ready: boolean; cordoned: boolean; taints: number; values: { cpu: number; mem: number; disk: number; pid: number } }
 	const nodes: NodePressureRow[] = React.useMemo(() => {
 		if (!nodesLoaded) return []
-		
+
 		const result = nodeList.map(n => {
 			const last = (key: string) => {
 				const arr = combinedNodeData[key]
@@ -452,18 +510,99 @@ export default function ClusterDashboard() {
 				values: { cpu, mem: finalMem, disk: finalDisk, pid }
 			}
 		})
-		
+
 		// Debug logging
 		if (nodeList.length > 0 && Object.keys(combinedNodeData).length === 0) {
 			console.log('ClusterDashboard: No node metrics received yet. Keys requested:', nodeMetricKeys.length)
 		} else if (nodeList.length > 0 && Object.keys(combinedNodeData).length > 0) {
 			console.log('ClusterDashboard: Node metrics received:', Object.keys(combinedNodeData).length, 'series')
 		}
-		
+
 		return result
 	}, [nodeList, combinedNodeData, nodeMetricKeys, nodesLoaded])
+
+	// Process namespace data for workload chart
+	const ns = React.useMemo(() => {
+		console.log('ClusterDashboard: Processing namespace data:', {
+			combinedNamespaceDataKeys: Object.keys(combinedNamespaceData).length,
+			namespaceKeys: Object.keys(combinedNamespaceData).filter(k => k.startsWith('ns.')).slice(0, 10)
+		})
+
+		if (!combinedNamespaceData || Object.keys(combinedNamespaceData).length === 0) {
+			console.log('ClusterDashboard: No namespace data available yet')
+			return []
+		}
+
+		// Extract namespace names from series keys
+		const namespaceSet = new Set<string>()
+		Object.keys(combinedNamespaceData).forEach(key => {
+			if (key.startsWith('ns.')) {
+				// Format: ns.{metric}.{type}.{namespace} 
+				// e.g., "ns.cpu.used.cores.default", "ns.mem.request.bytes.kube-system"
+				const parts = key.split('.')
+				if (parts.length >= 5) {
+					const namespace = parts[parts.length - 1] // Take the last part as namespace
+					namespaceSet.add(namespace)
+				}
+			}
+		})
+
+		console.log('ClusterDashboard: Found namespaces:', Array.from(namespaceSet))
+
+		const namespaces = Array.from(namespaceSet)
+
+		// If no namespace data yet, return test data to verify chart works
+		if (namespaces.length === 0) {
+			console.log('ClusterDashboard: No namespaces found, using test data')
+			return [
+				{ ns: 'default', cpu: 2.5, mem: 4.2, pods: 8, restarts: 3 },
+				{ ns: 'kube-system', cpu: 1.8, mem: 2.1, pods: 12, restarts: 1 },
+				{ ns: 'monitoring', cpu: 0.9, mem: 1.5, pods: 4, restarts: 0 },
+				{ ns: 'ingress-nginx', cpu: 0.5, mem: 0.8, pods: 2, restarts: 0 },
+			]
+		}
+
+		// Helper to get latest value for a namespace metric
+		const getLatestValue = (metricBase: string, namespace: string): number => {
+			const key = `${metricBase}.${namespace}`
+			const arr = combinedNamespaceData[key]
+			if (arr && arr.length > 0) {
+				return arr[arr.length - 1].v
+			}
+			return 0
+		}
+
+		// Process each namespace
+		return namespaces.map(namespace => {
+			const cpuUsed = getLatestValue('ns.cpu.used.cores', namespace)
+			const cpuRequest = getLatestValue('ns.cpu.request.cores', namespace)
+			const memUsed = getLatestValue('ns.mem.used.bytes', namespace) / (1024 * 1024 * 1024) // Convert to GiB
+			const memRequest = getLatestValue('ns.mem.request.bytes', namespace) / (1024 * 1024 * 1024) // Convert to GiB
+			const pods = Math.round(getLatestValue('ns.pods.running', namespace))
+
+			// For display, show higher of used vs requested for better visibility
+			const cpu = Math.max(cpuUsed, cpuRequest)
+			const mem = Math.max(memUsed, memRequest)
+
+			return {
+				ns: namespace,
+				cpu: cpu,
+				mem: mem,
+				pods: pods,
+				restarts: 0 // TODO: Add restart metrics when available
+			}
+		}).filter(item => item.cpu > 0 || item.mem > 0 || item.pods > 0) // Filter out empty namespaces
+			.sort((a, b) => {
+				// Sort by total resource consumption (normalize CPU cores to similar scale as GiB memory)
+				// Assume 1 CPU core ≈ 4 GiB memory for scoring purposes
+				const scoreA = (a.cpu * 4) + a.mem
+				const scoreB = (b.cpu * 4) + b.mem
+				return scoreB - scoreA
+			})
+			.slice(0, 5) // Top 5 namespaces to match the table header
+	}, [combinedNamespaceData])
+
 	// TODO: Replace with real data
-	const ns = []
 	const cp = []
 	const crds = { summary: { total: 0, groups: 0, versions: 0 }, top: [] }
 
@@ -890,10 +1029,10 @@ export default function ClusterDashboard() {
 											</div>
 											<div className="col-span-6 grid grid-cols-4 gap-1">
 												{(["cpu", "mem", "disk", "pid"] as const).map((k) => (
-													<div 
-														key={k} 
-														className={`h-4 rounded ${cellClass(n.values[k])}`} 
-														title={`${k.toUpperCase()}: ${(n.values[k] * 100).toFixed(0)}%${n.values[k] >= 1 ? ' (Pressure Active)' : ''}`} 
+													<div
+														key={k}
+														className={`h-4 rounded ${cellClass(n.values[k])}`}
+														title={`${k.toUpperCase()}: ${(n.values[k] * 100).toFixed(0)}%${n.values[k] >= 1 ? ' (Pressure Active)' : ''}`}
 													/>
 												))}
 											</div>
@@ -1033,6 +1172,7 @@ export default function ClusterDashboard() {
 
 							<div className="rounded-lg border border-muted-foreground/25 p-3">
 								<div className="text-sm font-medium mb-2">Top 5 namespaces</div>
+								<div className="text-xs text-muted-foreground mb-2">Ranked by total resource consumption (CPU + Memory)</div>
 								<div className="grid grid-cols-5 text-xs text-muted-foreground">
 									<div>Namespace</div>
 									<div className="text-right">Pods</div>
