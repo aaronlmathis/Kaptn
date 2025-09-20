@@ -8,6 +8,8 @@ server:
 security:
   # enable one of: "none", "header", "oidc"
   auth_mode: "none"
+  session_ttl: "12h"     # How long access tokens last
+  refresh_token_ttl: "7d" # How long refresh tokens last
   oidc:
     issuer: ""
     client_id: ""

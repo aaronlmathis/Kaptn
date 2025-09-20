@@ -259,9 +259,9 @@ data:
 
     security:
       auth_mode: "oidc"
-      session_ttl: "4m"  # Short TTL for testing token refresh behavior
+      session_ttl: "4h"  # Short TTL for testing token refresh behavior
       refresh_token_ttl: "7d"  # How long refresh tokens last (7 days default)
-      username_format: "email:{email}"
+      username_format: "sub:{sub}"
       oidc:
         issuer: "${OKTA_ISSUER}"
         client_id: "${OKTA_CLIENT_ID}"
@@ -271,18 +271,23 @@ data:
         jwks_url: ""
         scopes: ["openid", "profile", "email"]
 
+      auth_keys:
+        oidc_state_hash_key_path: "keys/oidc_state_hash.key"
+        oidc_state_block_key_path: "keys/oidc_state_block.key"
+        jwt_private_key_path: "keys/kaptn_jwt_private.pem"
+        jwt_public_key_path: "keys/kaptn_jwt_public.pem"
+
     authz:
       mode: "idp_groups"
       groups_prefix_allowlist: ["kaptn-"]
       default_groups: [""]
-
-    kubernetes:
-      mode: "incluster"        # or "incluster"
-      kubeconfig_path: ""       # used if mode=kubeconfig, defaults to $KUBECONFIG
-      namespace_default: "default"
-      insecure_tls: false       # skip TLS verification for development environments
-      qps: 100                  # queries per second allowed to Kubernetes API server
-      burst: 200                # maximum burst for throttle
+        kubernetes:
+          mode: "incluster"        # or "incluster"
+          kubeconfig_path: ""       # used if mode=kubeconfig, defaults to $KUBECONFIG
+          namespace_default: "default"
+          insecure_tls: false       # skip TLS verification for development environments
+          qps: 100                  # queries per second allowed to Kubernetes API server
+          burst: 200                # maximum burst for throttle
 
     features:
       enable_apply: true
@@ -328,7 +333,7 @@ data:
         # Background log collection
         background_collection_enabled: true
         background_collection_retention: "1h"
-        background_collection_mode: "poll"             # follow live logs (recommended)
+        background_collection_mode: "stream"             # follow live logs (recommended)
         background_collection_poll_interval: "15s"       # used if mode="poll"
         background_collection_tail_lines: 200
 

@@ -11,6 +11,7 @@ import {
   AreaChart,
   Bar,
   BarChart,
+  ComposedChart,
   Line,
   LineChart,
   Scatter,
@@ -239,7 +240,7 @@ function getChartTypeInfo(type: 'area' | 'bar' | 'radial' | 'radar' | 'line') {
 /**
  * Chart Card Wrapper (with footerExtra)
  */
-function ChartCard({
+export function ChartCard({
   title,
   subtitle,
   children,
@@ -542,6 +543,13 @@ export function MetricAreaChart({
 /**
  * Bar Chart Component (for top-N data)
  */
+type OverlaySeries = {
+  key: string;
+  name: string;
+  color?: string;
+  values: Array<{ name: string; value: number }>;
+};
+
 export function MetricBarChart({
   title,
   subtitle,
@@ -560,29 +568,53 @@ export function MetricBarChart({
   timespanLabel,
   resolutionLabel,
   layout = "horizontal",
+  overlaySeries,
   footerExtra,
   ...actions
-}: BaseChartProps & ChartActions & { layout?: "horizontal" | "vertical" }) {
+}: BaseChartProps & ChartActions & { layout?: "horizontal" | "vertical"; overlaySeries?: OverlaySeries[] }) {
   // For bar charts, we typically want aggregated data, not time series
-  const chartData = React.useMemo(() => {
-    if (series.length === 0) return [];
+  const { chartData, composedData, overlayDefs } = React.useMemo(() => {
+    if (series.length === 0) {
+      return { chartData: [] as Array<{ name: string; value: number; key: string }>, composedData: [] as Record<string, any>[], overlayDefs: [] as Array<OverlaySeries & { color: string; map: Map<string, number> }> };
+    }
 
-    // Aggregate each series to get latest or average values
-    return series.map(s => {
+    const base = series.map(s => {
       const values = s.data.map(([, value]) => value).filter(Number.isFinite);
-      const aggregatedValue = values.length > 0
-        ? values[values.length - 1] // Use latest value
-        : 0;
-
+      const aggregatedValue = values.length > 0 ? values[values.length - 1] : 0;
       return {
         name: s.name,
         value: aggregatedValue,
         key: s.key,
       };
-    }).sort((a, b) => b.value - a.value); // Sort by value descending
-  }, [series]);
+    }).sort((a, b) => b.value - a.value);
 
-  const chartConfig = React.useMemo(() => generateChartConfig(series), [series]);
+    const overlayDefs = (overlaySeries ?? []).map((ov, idx) => ({
+      ...ov,
+      color: ov.color || getChartColor(ov.key, series.length + idx),
+      map: new Map(ov.values.map(item => [item.name, item.value])),
+    }));
+
+    const enriched = base.map(row => {
+      const dataPoint: Record<string, any> = { ...row };
+      overlayDefs.forEach(def => {
+        dataPoint[def.key] = def.map.get(row.name) ?? 0;
+      });
+      return dataPoint;
+    });
+
+    return { chartData: base, composedData: enriched, overlayDefs };
+  }, [series, overlaySeries]);
+
+  const chartConfig = React.useMemo(() => {
+    const config = generateChartConfig(series);
+    overlayDefs.forEach(def => {
+      config[def.key] = {
+        label: def.name,
+        color: def.color,
+      };
+    });
+    return config;
+  }, [series, overlayDefs]);
 
   const valueFormatter = React.useMemo(() => {
     if (formatter) return formatter;
@@ -627,43 +659,91 @@ export function MetricBarChart({
 
     return (
       <ChartContainer config={chartConfig} className="h-[250px] w-full">
-        <BarChart
-          data={chartData}
-          layout={layout}
-          margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
-        >
-          {showGrid && <CartesianGrid strokeDasharray="3 3" />}
+        {overlayDefs.length > 0 ? (
+          <ComposedChart
+            data={composedData}
+            layout={layout}
+            margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+          >
+            {showGrid && <CartesianGrid strokeDasharray="3 3" />}
 
-          {layout === "horizontal" ? (
-            <>
-              <XAxis type="number" tickFormatter={valueFormatter} style={{ fontSize: '10px' }} />
-              <YAxis type="category" dataKey="name" width={100} style={{ fontSize: '10px' }} />
-            </>
-          ) : (
-            <>
-              <XAxis type="category" dataKey="name" style={{ fontSize: '10px' }} />
-              <YAxis type="number" tickFormatter={valueFormatter} width={40} style={{ fontSize: '10px' }} />
-            </>
-          )}
+            {layout === "horizontal" ? (
+              <>
+                <XAxis type="number" tickFormatter={valueFormatter} style={{ fontSize: '10px' }} />
+                <YAxis type="category" dataKey="name" width={100} style={{ fontSize: '10px' }} />
+              </>
+            ) : (
+              <>
+                <XAxis type="category" dataKey="name" style={{ fontSize: '10px' }} />
+                <YAxis type="number" tickFormatter={valueFormatter} width={40} style={{ fontSize: '10px' }} />
+              </>
+            )}
 
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value) => valueFormatter(Number(value))}
-                labelKey="name"
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  formatter={(value) => valueFormatter(Number(value))}
+                  labelKey="name"
+                />
+              }
+            />
+
+            <Bar
+              dataKey="value"
+              fill="hsl(var(--chart-1))"
+              radius={layout === "horizontal" ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+            />
+
+            {overlayDefs.map(def => (
+              <Line
+                key={def.key}
+                type="monotone"
+                dataKey={def.key}
+                stroke={def.color}
+                strokeWidth={2}
+                dot={false}
               />
-            }
-          />
+            ))}
+          </ComposedChart>
+        ) : (
+          <BarChart
+            data={chartData}
+            layout={layout}
+            margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
+          >
+            {showGrid && <CartesianGrid strokeDasharray="3 3" />}
 
-          <Bar
-            dataKey="value"
-            fill="hsl(var(--chart-1))"
-            radius={layout === "horizontal" ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-          />
-        </BarChart>
+            {layout === "horizontal" ? (
+              <>
+                <XAxis type="number" tickFormatter={valueFormatter} style={{ fontSize: '10px' }} />
+                <YAxis type="category" dataKey="name" width={100} style={{ fontSize: '10px' }} />
+              </>
+            ) : (
+              <>
+                <XAxis type="category" dataKey="name" style={{ fontSize: '10px' }} />
+                <YAxis type="number" tickFormatter={valueFormatter} width={40} style={{ fontSize: '10px' }} />
+              </>
+            )}
+
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  formatter={(value) => valueFormatter(Number(value))}
+                  labelKey="name"
+                />
+              }
+            />
+
+            <Bar
+              dataKey="value"
+              fill="hsl(var(--chart-1))"
+              radius={layout === "horizontal" ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+            />
+          </BarChart>
+        )}
       </ChartContainer>
     );
-  }, [isLoading, error, chartData, chartConfig, valueFormatter, unit, showGrid, emptyMessage, layout]);
+  }, [isLoading, error, chartData, composedData, chartConfig, valueFormatter, unit, showGrid, emptyMessage, layout, overlayDefs]);
 
   return (
     <ChartCard
