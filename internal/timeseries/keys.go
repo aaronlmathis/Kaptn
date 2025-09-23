@@ -38,6 +38,14 @@ const (
 	ClusterPodsUnschedulable    = "cluster.pods.unschedulable"
 	ClusterFsImageUsedBytes     = "cluster.fs.image.used.bytes"
 	ClusterFsImageCapacityBytes = "cluster.fs.image.capacity.bytes"
+
+	// API Server and Control Plane metrics
+	ClusterAPIServerErrorsRate    = "cluster.apiserver.errors.rate"      // API server error rate (errors/sec)
+	ClusterAPIServerLatencyP50    = "cluster.apiserver.latency.p50"      // API server 50th percentile latency (ms)
+	ClusterAPIServerLatencyP95    = "cluster.apiserver.latency.p95"      // API server 95th percentile latency (ms)
+	ClusterAPIServerRequestsRate  = "cluster.apiserver.requests.rate"    // API server request rate (req/sec)
+	ClusterSchedulerQueueDepth    = "cluster.scheduler.queue.depth"      // Scheduler work queue depth
+	ClusterControllerQueueDepth   = "cluster.controller.queue.depth"     // Controller manager work queue depth
 )
 
 // Node-level metric base keys (will be combined with node names)
@@ -270,6 +278,13 @@ func AllSeriesKeys() []string {
 		ClusterPodsUnschedulable,
 		ClusterFsImageUsedBytes,
 		ClusterFsImageCapacityBytes,
+		// API Server and Control Plane metrics
+		ClusterAPIServerErrorsRate,
+		ClusterAPIServerLatencyP50,
+		ClusterAPIServerLatencyP95,
+		ClusterAPIServerRequestsRate,
+		ClusterSchedulerQueueDepth,
+		ClusterControllerQueueDepth,
 		// Namespace base keys
 		NamespaceCPUUsedBase,
 		NamespaceCPURequestBase,

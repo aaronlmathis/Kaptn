@@ -22,7 +22,7 @@ func TestNewAggregator(t *testing.T) {
 	restConfig := &rest.Config{}
 	config := DefaultConfig()
 
-	aggregator := NewAggregator(logger, store, kubeClient, metricsClient, restConfig, config)
+	aggregator := NewAggregator(logger, store, kubeClient, metricsClient, restConfig, nil, config)
 
 	assert.NotNil(t, aggregator)
 	assert.Equal(t, logger, aggregator.logger)
@@ -51,7 +51,7 @@ func TestAggregatorStartStop(t *testing.T) {
 	config := DefaultConfig()
 	config.Enabled = false // Disable to prevent actual collection during test
 
-	aggregator := NewAggregator(logger, store, kubeClient, metricsClient, restConfig, config)
+	aggregator := NewAggregator(logger, store, kubeClient, metricsClient, restConfig, nil, config)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -72,7 +72,7 @@ func TestHostSnapUpdate(t *testing.T) {
 	restConfig := &rest.Config{}
 	config := DefaultConfig()
 
-	aggregator := NewAggregator(logger, store, kubeClient, metricsClient, restConfig, config)
+	aggregator := NewAggregator(logger, store, kubeClient, metricsClient, restConfig, nil, config)
 
 	// Test updating host snapshot
 	aggregator.mu.Lock()

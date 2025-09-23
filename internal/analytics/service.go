@@ -52,8 +52,8 @@ func NewAnalyticsService(logger *zap.Logger, prometheusClient *PrometheusClient,
 	return &AnalyticsService{
 		logger:           logger,
 		prometheusClient: prometheusClient,
-		cacheTTL:         cacheTTL,
 		cache:            NewCache(),
+		cacheTTL:         cacheTTL,
 	}
 }
 
@@ -63,8 +63,8 @@ func NewCache() *Cache {
 		items: make(map[string]*CacheItem),
 	}
 
-	// Start cleanup goroutine
-	go cache.cleanup()
+	// Start background cleanup goroutine
+	go cache.startCleanup()
 
 	return cache
 }
@@ -80,6 +80,7 @@ func (c *Cache) Get(key string) (interface{}, bool) {
 	}
 
 	if time.Now().After(item.ExpiresAt) {
+		delete(c.items, key)
 		return nil, false
 	}
 
@@ -95,6 +96,28 @@ func (c *Cache) Set(key string, data interface{}, ttl time.Duration) {
 		Data:      data,
 		ExpiresAt: time.Now().Add(ttl),
 	}
+}
+
+// startCleanup runs periodic cleanup of expired items
+func (c *Cache) startCleanup() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		c.mutex.Lock()
+		now := time.Now()
+		for key, item := range c.items {
+			if now.After(item.ExpiresAt) {
+				delete(c.items, key)
+			}
+		}
+		c.mutex.Unlock()
+	}
+}
+
+// GetPrometheusClient returns the underlying Prometheus client
+func (s *AnalyticsService) GetPrometheusClient() *PrometheusClient {
+	return s.prometheusClient
 }
 
 // cleanup removes expired items from the cache
