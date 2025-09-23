@@ -605,7 +605,7 @@ export default function ClusterDashboard() {
 	// Component metrics keys for API & Control Plane chart
 	const componentMetricKeys = React.useMemo(() => [
 		'cluster.apiserver.latency.p50',
-		'cluster.apiserver.latency.p95', 
+		'cluster.apiserver.latency.p95',
 		'cluster.apiserver.requests.rate',
 		'cluster.scheduler.queue.depth',
 		'cluster.controller.queue.depth',
@@ -638,7 +638,7 @@ export default function ClusterDashboard() {
 
 		// Process real component data
 		const processedData: { [timestamp: number]: Record<string, number> } = {}
-		
+
 		// Map metric keys to chart dataKeys
 		const keyMapping: Record<string, string> = {
 			'cluster.apiserver.latency.p50': 'apiP50',

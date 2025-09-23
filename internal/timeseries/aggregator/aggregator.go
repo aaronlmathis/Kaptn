@@ -47,10 +47,10 @@ type Aggregator struct {
 	kubeClient kubernetes.Interface
 
 	// Kubernetes adapters
-	nodesAdapter         *kubemetrics.NodesAdapter
-	apiMetricsAdapter    *kubemetrics.APIMetricsAdapter
-	summaryAdapter       *kubemetrics.SummaryStatsAdapter
-	componentAdapter     *kubemetrics.ComponentMetricsAdapter
+	nodesAdapter      *kubemetrics.NodesAdapter
+	apiMetricsAdapter *kubemetrics.APIMetricsAdapter
+	summaryAdapter    *kubemetrics.SummaryStatsAdapter
+	componentAdapter  *kubemetrics.ComponentMetricsAdapter
 
 	// State management
 	mu                  sync.RWMutex
@@ -58,10 +58,10 @@ type Aggregator struct {
 	lastCapacityRefresh time.Time
 
 	// New: poll interval tracking for gating expensive operations
-	lastResourcePoll    time.Time
-	lastSummaryPoll     time.Time
-	lastStateRecon      time.Time
-	lastComponentPoll   time.Time
+	lastResourcePoll  time.Time
+	lastSummaryPoll   time.Time
+	lastStateRecon    time.Time
+	lastComponentPoll time.Time
 
 	// New: restart tracking for rate calculation
 	lastRestartsTotal int64
@@ -1951,14 +1951,14 @@ func (a *Aggregator) collectComponentMetrics(ctx context.Context, now time.Time)
 func (a *Aggregator) generateTestComponentMetrics(now time.Time) *kubemetrics.ComponentMetrics {
 	// Use time-based variations to create realistic-looking test data
 	t := float64(now.Unix())
-	
+
 	return &kubemetrics.ComponentMetrics{
-		APIServerErrorsRate:    0.1 + 0.05*math.Sin(t/300),              // ~0.05-0.15 errors/sec
-		APIServerLatencyP50:    12 + 3*math.Sin(t/200),                  // ~9-15ms P50 latency
-		APIServerLatencyP95:    35 + 10*math.Sin(t/180),                 // ~25-45ms P95 latency
-		APIServerRequestsRate:  120 + 30*math.Sin(t/240),                // ~90-150 req/sec
-		SchedulerQueueDepth:    math.Max(0, 1+0.5*math.Sin(t/150)),      // ~0.5-1.5 queue depth
-		ControllerQueueDepth:   math.Max(0, 2+1*math.Sin(t/180)),        // ~1-3 queue depth
+		APIServerErrorsRate:   0.1 + 0.05*math.Sin(t/300),         // ~0.05-0.15 errors/sec
+		APIServerLatencyP50:   12 + 3*math.Sin(t/200),             // ~9-15ms P50 latency
+		APIServerLatencyP95:   35 + 10*math.Sin(t/180),            // ~25-45ms P95 latency
+		APIServerRequestsRate: 120 + 30*math.Sin(t/240),           // ~90-150 req/sec
+		SchedulerQueueDepth:   math.Max(0, 1+0.5*math.Sin(t/150)), // ~0.5-1.5 queue depth
+		ControllerQueueDepth:  math.Max(0, 2+1*math.Sin(t/180)),   // ~1-3 queue depth
 	}
 }
 
