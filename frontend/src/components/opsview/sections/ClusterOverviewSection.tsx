@@ -26,6 +26,7 @@ import {
 	Copy,
 	Download,
 	Trash,
+	AlertTriangle,
 } from "lucide-react";
 import {
 	IconGripVertical,

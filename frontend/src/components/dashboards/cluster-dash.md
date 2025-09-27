@@ -27,9 +27,9 @@ Component: Tall card with:
 
 Top: Status pills (Ready/NotReady/Cordoned/Tainted counts).
 
-Middle: Mini heatmap (Apex heatmap) of nodes × signals (CPU, Mem, DiskPressure, PIDPressure), color-coded.
+Middle: Mini heatmap (Shadcn Chart heatmap) of nodes × signals (CPU, Mem, DiskPressure, PIDPressure), color-coded.
 
-Bottom: “Worst 5 nodes” table: name, pressure badge(s), utilization %, age since issue.
+Bottom: “Worst 5 nodes” UniversalDataTable: name, pressure badge(s), utilization %, age since issue.
 
 Interaction: Row click → Node detail. Hover cell → exact value + last change.
 

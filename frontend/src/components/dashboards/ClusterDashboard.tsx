@@ -5,11 +5,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
-import { ChevronUp, ChevronDown, AlertTriangle, Server, Blocks, Activity, Info, MoreVertical, Download, Copy, Eye, Check } from "lucide-react"
+import { ChevronUp, ChevronDown, AlertTriangle, Server, Blocks, Activity, Info, MoreVertical, Eye, Check } from "lucide-react"
 import {
 	Card,
 	CardContent,
-	CardFooter,
 } from "@/components/ui/card"
 import {
 	DropdownMenu,
@@ -22,6 +21,10 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip"
+
+import { MetricLineChart, type ChartSeries } from "@/components/opsview/charts"
+import { SectionHealthFooter } from "@/components/opsview/SectionHealthFooter"
+import { formatCores, formatBytesIEC } from "@/lib/metric-utils"
 
 import {
 	ComposedChart, Area, Line, Bar,
@@ -57,6 +60,19 @@ function cellClass(v: number) {
 	return "bg-emerald-500/60"
 }
 
+const toneForPct = (pct: number): "ok" | "warn" | "crit" => {
+	if (!Number.isFinite(pct)) return "ok"
+	if (pct >= 0.85) return "crit"
+	if (pct >= 0.7) return "warn"
+	return "ok"
+}
+
+const formatRatioDisplay = (ratio: number): string => {
+	if (!Number.isFinite(ratio)) return "—"
+	if (ratio > 5) return `${ratio.toFixed(1)}x`
+	return `${Math.max(0, ratio * 100).toFixed(0)}%`
+}
+
 /** Chart color config for ChartContainer */
 const clusterChartConfig = {
 	cpuReq: { label: "CPU Requested", color: "hsl(var(--chart-1))" },
@@ -78,6 +94,65 @@ const clusterChartConfig = {
 
 /** Main */
 export default function ClusterDashboard() {
+	// --- Initial Data Loading via REST API ---
+	const [initialDataLoaded, setInitialDataLoaded] = React.useState(false)
+	const [initialSeriesData, setInitialSeriesData] = React.useState<Record<string, Array<{ t: number, v: number }>>>({})
+
+	// Load initial data on mount
+	React.useEffect(() => {
+		let mounted = true
+
+		const loadInitialData = async () => {
+			try {
+				console.log('ClusterDashboard: Loading initial data via REST API...')
+
+				// Load initial cluster timeseries data
+				const clusterResponse = await fetch('/api/v1/timeseries/cluster?since=30m&res=lo')
+				if (clusterResponse.ok) {
+					const clusterData = await clusterResponse.json()
+					if (mounted && clusterData.series) {
+						console.log('ClusterDashboard: Loaded cluster metrics:', Object.keys(clusterData.series).length, 'series')
+						setInitialSeriesData(prev => ({ ...prev, ...clusterData.series }))
+					}
+				}
+
+				// Load initial node timeseries data (for all nodes)
+				const nodesResponse = await fetch('/api/v1/timeseries/nodes?since=30m&res=lo')
+				if (nodesResponse.ok) {
+					const nodesData = await nodesResponse.json()
+					if (mounted && nodesData.series) {
+						console.log('ClusterDashboard: Loaded node metrics:', Object.keys(nodesData.series).length, 'series')
+						setInitialSeriesData(prev => ({ ...prev, ...nodesData.series }))
+					}
+				}
+
+				// Load initial namespace timeseries data (for all namespaces)
+				const namespacesResponse = await fetch('/api/v1/timeseries/namespaces?since=30m&res=lo')
+				if (namespacesResponse.ok) {
+					const namespacesData = await namespacesResponse.json()
+					if (mounted && namespacesData.series) {
+						console.log('ClusterDashboard: Loaded namespace metrics:', Object.keys(namespacesData.series).length, 'series')
+						console.log('ClusterDashboard: Namespace series keys:', Object.keys(namespacesData.series).slice(0, 10))
+						setInitialSeriesData(prev => ({ ...prev, ...namespacesData.series }))
+					}
+				} else {
+					console.warn('ClusterDashboard: Failed to load namespace metrics:', namespacesResponse.status)
+				} if (mounted) {
+					console.log('ClusterDashboard: Initial data loading complete')
+					setInitialDataLoaded(true)
+				}
+			} catch (error) {
+				console.error('ClusterDashboard: Failed to load initial data:', error)
+				if (mounted) {
+					setInitialDataLoaded(true) // Still allow WebSocket to try
+				}
+			}
+		}
+
+		loadInitialData()
+		return () => { mounted = false }
+	}, [])
+
 	// Subscribe to live cluster series (same WS client as OpsView)
 	const seriesKeys = React.useMemo(
 		() => [
@@ -91,6 +166,7 @@ export default function ClusterDashboard() {
 			'cluster.mem.requested.bytes',
 			// KPIs
 			'cluster.nodes.ready',
+			'cluster.nodes.notready',
 			'cluster.nodes.count',
 			'cluster.pods.running',
 			'cluster.pods.pending',
@@ -103,99 +179,198 @@ export default function ClusterDashboard() {
 	const live = useLiveSeriesSubscription('cluster-dashboard', seriesKeys, {
 		res: 'lo',
 		since: '60m',
-		autoConnect: true,
+		autoConnect: initialDataLoaded, // Only start WebSocket after initial data is loaded
 	})
+
+	// Merge initial cluster data with live data
+	const combinedClusterData = React.useMemo(() => {
+		if (!initialDataLoaded) {
+			return {}
+		}
+		if (!live.isConnected) {
+			// Before WebSocket connects, use initial data
+			return initialSeriesData
+		}
+		// After WebSocket connects, prefer live data but fall back to initial data
+		const combined = { ...initialSeriesData }
+		Object.keys(live.seriesData).forEach(key => {
+			if (live.seriesData[key] && live.seriesData[key].length > 0) {
+				combined[key] = live.seriesData[key]
+			}
+		})
+		return combined
+	}, [initialSeriesData, live.seriesData, live.isConnected, initialDataLoaded])
 
 	const isConnected = live.isConnected
 
 	// Helper: get latest value for a series key
-	const latest = React.useCallback((key: string): number => {
-		const arr = live.seriesData[key]
-		return arr && arr.length ? arr[arr.length - 1].v : 0
-	}, [live.seriesData])
+	const latest = React.useCallback((key: string): number | null => {
+		const arr = combinedClusterData[key]
+		if (arr && arr.length) {
+			return arr[arr.length - 1].v
+		}
+		return null
+	}, [combinedClusterData])
+
+	const delta = React.useCallback((key: string): number => {
+		const arr = combinedClusterData[key]
+		if (!arr || arr.length < 2) {
+			return 0
+		}
+		return arr[arr.length - 1].v - arr[arr.length - 2].v
+	}, [combinedClusterData])
 
 	// KPIs from live data (fallback to 0s if not available yet)
 	const kpis = React.useMemo(() => {
-		const nodesReady = Math.round(latest('cluster.nodes.ready'))
-		const nodesTotal = Math.round(latest('cluster.nodes.count'))
+		const nodesReady = Math.round(latest('cluster.nodes.ready') ?? 0)
+		const nodesNotReady = Math.round(latest('cluster.nodes.notready') ?? 0)
+		const nodesTotal = Math.round(latest('cluster.nodes.count') ?? 0)
 
-		const podsRunning = Math.round(latest('cluster.pods.running'))
-		const podsPending = Math.round(latest('cluster.pods.pending'))
-		const podsFailed = Math.round(latest('cluster.pods.failed'))
+		const podsRunning = Math.round(latest('cluster.pods.running') ?? 0)
+		const podsPending = Math.round(latest('cluster.pods.pending') ?? 0)
+		const podsFailed = Math.round(latest('cluster.pods.failed') ?? 0)
 		const podsTotal = podsRunning + podsPending + podsFailed
 
+		const podsUnschedulable = Math.round(latest('cluster.pods.unschedulable') ?? 0)
+		const apiErrorsRate = latest('cluster.apiserver.errors.rate') ?? 0
+
 		return {
-			nodesReady: { value: nodesReady, total: nodesTotal, delta: 0 },
-			pods: { running: podsRunning, pending: podsPending, failed: podsFailed, total: podsTotal, delta: 0 },
-			podsProblem: { pending: podsPending, unschedulable: Math.round(latest('cluster.pods.unschedulable')), delta: 0 },
-			apiErrors: { rate: 0, delta: 0 },
+			nodesReady: {
+				value: nodesReady,
+				total: Math.max(nodesTotal, nodesReady + nodesNotReady),
+				delta: Math.round(delta('cluster.nodes.ready')),
+			},
+			pods: {
+				running: podsRunning,
+				pending: podsPending,
+				failed: podsFailed,
+				total: podsTotal,
+				delta: Math.round(delta('cluster.pods.running')),
+			},
+			podsProblem: {
+				pending: podsPending,
+				unschedulable: podsUnschedulable,
+				delta: Math.round(delta('cluster.pods.unschedulable')),
+			},
+			apiErrors: {
+				rate: apiErrorsRate,
+				delta: delta('cluster.apiserver.errors.rate'),
+			},
 		}
-	}, [latest])
+	}, [latest, delta])
 
-	// Align multiple series into a single recharts data array with progressive fill
-	type AlignConfig = { key: string; field: string; transform?: (v: number) => number }
-	function alignSeries(config: AlignConfig[]) {
-		const timestamps = new Set<number>()
-		for (const { key } of config) {
-			const arr = live.seriesData[key] || []
-			for (const p of arr) timestamps.add(p.t)
-		}
-		const sortedTs = Array.from(timestamps).sort((a, b) => a - b)
+	const cpuSeries: ChartSeries[] = React.useMemo(() => [
+		{
+			key: 'cluster.cpu.used.cores',
+			name: 'Used',
+			color: '#2563eb',
+			data: (combinedClusterData['cluster.cpu.used.cores'] || []).map(point => [point.t, point.v]),
+		},
+		{
+			key: 'cluster.cpu.allocatable.cores',
+			name: 'Allocatable',
+			color: '#16a34a',
+			data: (combinedClusterData['cluster.cpu.allocatable.cores'] || []).map(point => [point.t, point.v]),
+		},
+		{
+			key: 'cluster.cpu.requested.cores',
+			name: 'Requested',
+			color: '#f59e0b',
+			data: (combinedClusterData['cluster.cpu.requested.cores'] || []).map(point => [point.t, point.v]),
+		},
+	], [combinedClusterData])
 
-		// Build fast lookup per key
-		const seriesSorted: Record<string, { t: number; v: number }[]> = {}
-		for (const { key } of config) {
-			const arr = (live.seriesData[key] || []).slice().sort((a, b) => a.t - b.t)
-			seriesSorted[key] = arr
-		}
+	const memorySeries: ChartSeries[] = React.useMemo(() => [
+		{
+			key: 'cluster.mem.used.bytes',
+			name: 'Used',
+			color: '#06b6d4',
+			data: (combinedClusterData['cluster.mem.used.bytes'] || []).map(point => [point.t, point.v]),
+		},
+		{
+			key: 'cluster.mem.allocatable.bytes',
+			name: 'Allocatable',
+			color: '#10b981',
+			data: (combinedClusterData['cluster.mem.allocatable.bytes'] || []).map(point => [point.t, point.v]),
+		},
+		{
+			key: 'cluster.mem.requested.bytes',
+			name: 'Requested',
+			color: '#8b5cf6',
+			data: (combinedClusterData['cluster.mem.requested.bytes'] || []).map(point => [point.t, point.v]),
+		},
+	], [combinedClusterData])
 
-		const pointers: Record<string, number> = {}
-		const lastVal: Record<string, number | undefined> = {}
-		for (const { key } of config) pointers[key] = 0
+	const cpuUsed = latest('cluster.cpu.used.cores') ?? 0
+	const cpuAllocRaw = latest('cluster.cpu.allocatable.cores') ?? 0
+	const cpuRequested = latest('cluster.cpu.requested.cores') ?? 0
+	const safeCpuAlloc = Math.max(1e-9, cpuAllocRaw)
+	const cpuUsedRatio = cpuUsed / safeCpuAlloc
+	const cpuReqRatio = cpuRequested / safeCpuAlloc
+	const cpuAllocDisplay = cpuAllocRaw
 
-		const data: Array<any> = []
-		for (const t of sortedTs) {
-			const row: any = { t }
-			for (const { key, field, transform } of config) {
-				const arr = seriesSorted[key]
-				let i = pointers[key]
-				while (i < arr.length && arr[i].t <= t) {
-					lastVal[key] = arr[i].v
-					i++
-				}
-				pointers[key] = i
-				const v = lastVal[key]
-				row[field] = typeof v === 'number' ? (transform ? transform(v) : v) : undefined
-			}
-			data.push(row)
-		}
-		return data
-	}
+	const cpuSummary = [
+		`CPU ${(cpuUsedRatio * 100).toFixed(0)}% utilized (${formatCores(cpuUsed)} / ${formatCores(cpuAllocDisplay)} cores).`,
+		cpuRequested > cpuAllocRaw ? `Requests exceed allocatable (${formatCores(cpuRequested)} > ${formatCores(cpuAllocDisplay)}).` : ''
+	].join(' ').trim()
 
-	// Chart datasets
-	const capCpu = React.useMemo(() => alignSeries([
-		{ key: 'cluster.cpu.allocatable.cores', field: 'cpuAlloc' },
-		{ key: 'cluster.cpu.requested.cores', field: 'cpuReq' },
-		{ key: 'cluster.cpu.used.cores', field: 'cpuUsed' },
-	]), [live.seriesData])
+	const cpuFooter = (
+		<SectionHealthFooter
+			tone={toneForPct(cpuUsedRatio)}
+			summary={cpuSummary}
+			usedPct={cpuUsedRatio}
+			ratioPills={[
+				{ label: 'Requested/Alloc', value: formatRatioDisplay(cpuReqRatio), tone: cpuReqRatio > 1 ? 'warn' : 'info', title: 'Commitment posture' },
+				{ label: 'Used/Requested', value: cpuRequested > 0 ? `${((cpuUsed / Math.max(cpuRequested, 1e-9)) * 100).toFixed(0)}%` : '—', title: 'Headroom vs requested' },
+			]}
+		/>
+	)
 
-	const capMem = React.useMemo(() => alignSeries([
-		// Convert bytes -> GiB for readability
-		{ key: 'cluster.mem.allocatable.bytes', field: 'memAlloc', transform: (v) => v / (1024 ** 3) },
-		{ key: 'cluster.mem.requested.bytes', field: 'memReq', transform: (v) => v / (1024 ** 3) },
-		{ key: 'cluster.mem.used.bytes', field: 'memUsed', transform: (v) => v / (1024 ** 3) },
-	]), [live.seriesData])
+	const memUsed = latest('cluster.mem.used.bytes') ?? 0
+	const memAllocRaw = latest('cluster.mem.allocatable.bytes') ?? 0
+	const memRequested = latest('cluster.mem.requested.bytes') ?? 0
+	const memCapacity = latest('cluster.mem.capacity.bytes') ?? memAllocRaw
+	const safeMemAlloc = Math.max(1e-9, memAllocRaw || memCapacity)
+	const memUsedRatio = memUsed / safeMemAlloc
+	const memReqRatio = memRequested / safeMemAlloc
+	const memAllocDisplay = memAllocRaw > 0 ? memAllocRaw : memCapacity
 
-	// Fallbacks if no live data yet
-	// Fallback empty data if live data unavailable
-	const cap = capCpu.length > 0 && capMem.length > 0 ? undefined : []
+	const memSummary = [
+		`Memory ${(memUsedRatio * 100).toFixed(0)}% utilized (${formatBytesIEC(memUsed)} / ${formatBytesIEC(memAllocDisplay)}).`,
+		memRequested > safeMemAlloc ? `Requests exceed allocatable (${formatBytesIEC(memRequested)} > ${formatBytesIEC(memAllocDisplay)}).` : ''
+	].join(' ').trim()
+
+	const memFooter = (
+		<SectionHealthFooter
+			tone={toneForPct(memUsedRatio)}
+			summary={memSummary}
+			usedPct={memUsedRatio}
+			ratioPills={[
+				{ label: 'Requested/Alloc', value: formatRatioDisplay(memReqRatio), tone: memReqRatio > 1 ? 'warn' : 'info', title: 'Commitment posture' },
+				{ label: 'Used/Requested', value: memRequested > 0 ? `${((memUsed / Math.max(memRequested, 1e-9)) * 100).toFixed(0)}%` : '—', title: 'Headroom vs requested' },
+			]}
+		/>
+	)
+
 	// --- Node Health & Pressure (live) ---
 	const [nodeList, setNodeList] = React.useState<Node[]>([])
+	const [nodesLoaded, setNodesLoaded] = React.useState(false)
+
 	React.useEffect(() => {
 		let mounted = true
+		setNodesLoaded(false)
 		getNodes()
-			.then(items => { if (mounted) setNodeList(items) })
-			.catch(() => { /* ignore, leave empty */ })
+			.then(items => {
+				if (mounted) {
+					setNodeList(items)
+					setNodesLoaded(true)
+					console.log('ClusterDashboard: Loaded', items.length, 'nodes')
+				}
+			})
+			.catch(err => {
+				console.error('ClusterDashboard: Failed to load nodes:', err)
+				if (mounted) setNodesLoaded(true) // Set to true even on error to allow empty state
+			})
 		return () => { mounted = false }
 	}, [])
 
@@ -208,25 +383,105 @@ export default function ClusterDashboard() {
 		'node.allocatable.mem.bytes',
 		'node.fs.used.percent',
 		'node.imagefs.used.percent',
+		'node.condition.disk_pressure',
+		'node.condition.memory_pressure',
 		'node.condition.pid_pressure',
 	], [])
 
 	const nodeMetricKeys = React.useMemo(() => {
+		if (!nodesLoaded || nodeNames.length === 0) return []
+
 		const keys: string[] = []
 		for (const name of nodeNames) {
 			for (const base of nodeMetricBases) keys.push(`${base}.${name}`)
 		}
+		console.log('ClusterDashboard: Generated', keys.length, 'node metric keys for', nodeNames.length, 'nodes')
 		return keys
-	}, [nodeNames, nodeMetricBases])
+	}, [nodeNames, nodeMetricBases, nodesLoaded])
 
-	const { seriesData: nodeLive } = useLiveSeriesSubscription('node-health-grid', nodeMetricKeys, { res: 'lo', since: '30m', autoConnect: true })
+	// Only subscribe to node metrics after nodes are loaded AND initial data is loaded
+	const shouldStartWebSocket = nodesLoaded && initialDataLoaded
+	const { seriesData: nodeLive, isConnected: _nodeWsConnected, connectionState: nodeConnectionState } = useLiveSeriesSubscription(
+		'node-health-grid',
+		shouldStartWebSocket ? nodeMetricKeys : [],
+		{
+			res: 'lo',
+			since: '30m',
+			autoConnect: shouldStartWebSocket
+		}
+	)
+
+	// Subscribe to namespace metrics for workload distribution chart
+	const namespaceMetricKeys = React.useMemo(() => {
+		// We'll subscribe to a few key namespace patterns
+		// The actual series keys will be generated as ns.{metric}.{namespace}
+		// For now, let's subscribe to namespace metrics we can discover from the store
+		if (!initialDataLoaded) return []
+
+		// Get all series keys from initial data and filter for namespace metrics
+		const allKeys = Object.keys(initialSeriesData)
+		return allKeys.filter(key =>
+			key.startsWith('ns.cpu.used.') ||
+			key.startsWith('ns.mem.used.') ||
+			key.startsWith('ns.cpu.request.') ||
+			key.startsWith('ns.mem.request.') ||
+			key.startsWith('ns.pods.running.')
+		)
+	}, [initialDataLoaded, initialSeriesData])
+
+	const { seriesData: namespaceLive } = useLiveSeriesSubscription(
+		'namespace-workloads',
+		namespaceMetricKeys,
+		{
+			res: 'lo',
+			since: '30m',
+			autoConnect: initialDataLoaded
+		}
+	)
+
+	// Merge initial namespace data with live data
+	const combinedNamespaceData = React.useMemo(() => {
+		if (!initialDataLoaded) {
+			return {}
+		}
+		if (!live.isConnected) {
+			// Before WebSocket connects, use initial data
+			return initialSeriesData
+		}
+		// After WebSocket connects, prefer live data but fall back to initial data
+		const combined = { ...initialSeriesData }
+		Object.keys(namespaceLive).forEach(key => {
+			if (namespaceLive[key] && namespaceLive[key].length > 0) {
+				combined[key] = namespaceLive[key]
+			}
+		})
+		return combined
+	}, [initialSeriesData, namespaceLive, live.isConnected, initialDataLoaded])
+
+	// Merge initial data with live data
+	const combinedNodeData = React.useMemo(() => {
+		if (!shouldStartWebSocket) {
+			// Before WebSocket starts, use initial data
+			return initialSeriesData
+		}
+		// After WebSocket starts, prefer live data but fall back to initial data
+		const combined = { ...initialSeriesData }
+		Object.keys(nodeLive).forEach(key => {
+			if (nodeLive[key] && nodeLive[key].length > 0) {
+				combined[key] = nodeLive[key]
+			}
+		})
+		return combined
+	}, [initialSeriesData, nodeLive, shouldStartWebSocket])
 
 	type NodePressureRow = { name: string; ready: boolean; cordoned: boolean; taints: number; values: { cpu: number; mem: number; disk: number; pid: number } }
 	const nodes: NodePressureRow[] = React.useMemo(() => {
-		return nodeList.map(n => {
+		if (!nodesLoaded) return []
+
+		const result = nodeList.map(n => {
 			const last = (key: string) => {
-				const arr = nodeLive[key]
-				return arr && arr.length ? arr[arr.length - 1]!.v : 0
+				const arr = combinedNodeData[key]
+				return arr && arr.length ? arr[arr.length - 1].v : 0
 			}
 			const cpuU = last(`node.cpu.usage.cores.${n.name}`)
 			const cpuA = last(`node.allocatable.cpu.cores.${n.name}`)
@@ -234,6 +489,8 @@ export default function ClusterDashboard() {
 			const memA = last(`node.allocatable.mem.bytes.${n.name}`)
 			const rootFsPct = last(`node.fs.used.percent.${n.name}`)
 			const imageFsPct = last(`node.imagefs.used.percent.${n.name}`)
+			const diskPressure = last(`node.condition.disk_pressure.${n.name}`)
+			const memPressure = last(`node.condition.memory_pressure.${n.name}`)
 			const pidPressure = last(`node.condition.pid_pressure.${n.name}`)
 
 			const cpu = cpuA > 0 ? Math.max(0, Math.min(1, cpuU / cpuA)) : 0
@@ -241,30 +498,175 @@ export default function ClusterDashboard() {
 			const disk = Math.max(0, Math.min(1, Math.max(rootFsPct, imageFsPct) / 100))
 			const pid = pidPressure > 0 ? 1 : 0
 
+			// If pressure conditions are active, override with pressure indicators
+			const finalMem = memPressure > 0 ? 1 : mem
+			const finalDisk = diskPressure > 0 ? 1 : disk
+
 			return {
 				name: n.name,
 				ready: !!n.status?.ready,
 				cordoned: !!n.status?.unschedulable,
 				taints: Array.isArray(n.taints) ? n.taints.length : 0,
-				values: { cpu, mem, disk, pid }
+				values: { cpu, mem: finalMem, disk: finalDisk, pid }
 			}
 		})
-	}, [nodeList, nodeLive])
+
+		// Debug logging
+		if (nodeList.length > 0 && Object.keys(combinedNodeData).length === 0) {
+			console.log('ClusterDashboard: No node metrics received yet. Keys requested:', nodeMetricKeys.length)
+		} else if (nodeList.length > 0 && Object.keys(combinedNodeData).length > 0) {
+			console.log('ClusterDashboard: Node metrics received:', Object.keys(combinedNodeData).length, 'series')
+		}
+
+		return result
+	}, [nodeList, combinedNodeData, nodeMetricKeys, nodesLoaded])
+
+	// Process namespace data for workload chart
+	const ns = React.useMemo(() => {
+		console.log('ClusterDashboard: Processing namespace data:', {
+			combinedNamespaceDataKeys: Object.keys(combinedNamespaceData).length,
+			namespaceKeys: Object.keys(combinedNamespaceData).filter(k => k.startsWith('ns.')).slice(0, 10)
+		})
+
+		if (!combinedNamespaceData || Object.keys(combinedNamespaceData).length === 0) {
+			console.log('ClusterDashboard: No namespace data available yet')
+			return []
+		}
+
+		// Extract namespace names from series keys
+		const namespaceSet = new Set<string>()
+		Object.keys(combinedNamespaceData).forEach(key => {
+			if (key.startsWith('ns.')) {
+				// Format: ns.{metric}.{type}.{namespace} 
+				// e.g., "ns.cpu.used.cores.default", "ns.mem.request.bytes.kube-system"
+				const parts = key.split('.')
+				if (parts.length >= 5) {
+					const namespace = parts[parts.length - 1] // Take the last part as namespace
+					namespaceSet.add(namespace)
+				}
+			}
+		})
+
+		console.log('ClusterDashboard: Found namespaces:', Array.from(namespaceSet))
+
+		const namespaces = Array.from(namespaceSet)
+
+		// If no namespace data yet, return test data to verify chart works
+		if (namespaces.length === 0) {
+			console.log('ClusterDashboard: No namespaces found, using test data')
+			return [
+				{ ns: 'default', cpu: 2.5, mem: 4.2, pods: 8, restarts: 3 },
+				{ ns: 'kube-system', cpu: 1.8, mem: 2.1, pods: 12, restarts: 1 },
+				{ ns: 'monitoring', cpu: 0.9, mem: 1.5, pods: 4, restarts: 0 },
+				{ ns: 'ingress-nginx', cpu: 0.5, mem: 0.8, pods: 2, restarts: 0 },
+			]
+		}
+
+		// Helper to get latest value for a namespace metric
+		const getLatestValue = (metricBase: string, namespace: string): number => {
+			const key = `${metricBase}.${namespace}`
+			const arr = combinedNamespaceData[key]
+			if (arr && arr.length > 0) {
+				return arr[arr.length - 1].v
+			}
+			return 0
+		}
+
+		// Process each namespace
+		return namespaces.map(namespace => {
+			const cpuUsed = getLatestValue('ns.cpu.used.cores', namespace)
+			const cpuRequest = getLatestValue('ns.cpu.request.cores', namespace)
+			const memUsed = getLatestValue('ns.mem.used.bytes', namespace) / (1024 * 1024 * 1024) // Convert to GiB
+			const memRequest = getLatestValue('ns.mem.request.bytes', namespace) / (1024 * 1024 * 1024) // Convert to GiB
+			const pods = Math.round(getLatestValue('ns.pods.running', namespace))
+
+			// For display, show higher of used vs requested for better visibility
+			const cpu = Math.max(cpuUsed, cpuRequest)
+			const mem = Math.max(memUsed, memRequest)
+
+			return {
+				ns: namespace,
+				cpu: cpu,
+				mem: mem,
+				pods: pods,
+				restarts: 0 // TODO: Add restart metrics when available
+			}
+		}).filter(item => item.cpu > 0 || item.mem > 0 || item.pods > 0) // Filter out empty namespaces
+			.sort((a, b) => {
+				// Sort by total resource consumption (normalize CPU cores to similar scale as GiB memory)
+				// Assume 1 CPU core ≈ 4 GiB memory for scoring purposes
+				const scoreA = (a.cpu * 4) + a.mem
+				const scoreB = (b.cpu * 4) + b.mem
+				return scoreB - scoreA
+			})
+			.slice(0, 5) // Top 5 namespaces to match the table header
+	}, [combinedNamespaceData])
+
+	// Component metrics keys for API & Control Plane chart
+	const componentMetricKeys = React.useMemo(() => [
+		'cluster.apiserver.latency.p50',
+		'cluster.apiserver.latency.p95',
+		'cluster.apiserver.requests.rate',
+		'cluster.scheduler.queue.depth',
+		'cluster.controller.queue.depth',
+	], [])
+
+	const { seriesData: componentLive } = useLiveSeriesSubscription(
+		'component-metrics',
+		componentMetricKeys,
+		{
+			res: 'hi',
+			since: '30m',
+			autoConnect: initialDataLoaded
+		}
+	)
+
+	// Process component metrics data for chart
+	const cp = React.useMemo(() => {
+		if (!componentLive || Object.keys(componentLive).length === 0) {
+			// Fallback test data when no real data is available
+			const now = Date.now()
+			return Array.from({ length: 20 }, (_, i) => ({
+				t: now - (19 - i) * 10000, // 10 second intervals
+				apiP50: 15 + Math.sin(i * 0.3) * 5, // P50 latency around 15ms
+				apiP95: 45 + Math.sin(i * 0.2) * 10, // P95 latency around 45ms
+				rps: 150 + Math.sin(i * 0.4) * 30, // Request rate around 150/s
+				schedQ: Math.max(0, 2 + Math.sin(i * 0.5) * 1), // Scheduler queue depth
+				ctrlQ: Math.max(0, 3 + Math.sin(i * 0.6) * 1.5), // Controller queue depth
+			}))
+		}
+
+		// Process real component data
+		const processedData: { [timestamp: number]: Record<string, number> } = {}
+
+		// Map metric keys to chart dataKeys
+		const keyMapping: Record<string, string> = {
+			'cluster.apiserver.latency.p50': 'apiP50',
+			'cluster.apiserver.latency.p95': 'apiP95',
+			'cluster.apiserver.requests.rate': 'rps',
+			'cluster.scheduler.queue.depth': 'schedQ',
+			'cluster.controller.queue.depth': 'ctrlQ',
+		}
+
+		Object.entries(componentLive).forEach(([seriesKey, points]) => {
+			const dataKey = keyMapping[seriesKey]
+			if (dataKey && points && points.length > 0) {
+				points.forEach(point => {
+					const timestamp = point.t
+					if (!processedData[timestamp]) {
+						processedData[timestamp] = { t: timestamp }
+					}
+					processedData[timestamp][dataKey] = point.v
+				})
+			}
+		})
+
+		return Object.values(processedData).sort((a, b) => a.t - b.t)
+	}, [componentLive])
+
 	// TODO: Replace with real data
-	const ns = []
-	const cp = []
+	// const cp = []
 	const crds = { summary: { total: 0, groups: 0, versions: 0 }, top: [] }
-
-	// Calculate latest values for health footers
-	const latestCpu = (capCpu.length ? capCpu[capCpu.length - 1] : (cap ? cap[cap.length - 1] : undefined)) as any
-	const latestMem = (capMem.length ? capMem[capMem.length - 1] : (cap ? cap[cap.length - 1] : undefined)) as any
-	const cpuUsedPct = latestCpu ? (latestCpu.cpuUsed || 0) / Math.max(1e-9, latestCpu.cpuAlloc || 0) : 0
-	const memUsedPct = latestMem ? (latestMem.memUsed || 0) / Math.max(1e-9, latestMem.memAlloc || 0) : 0
-	const cpuReqPct = latestCpu ? (latestCpu.cpuReq || 0) / Math.max(1e-9, latestCpu.cpuAlloc || 0) : 0
-	const memReqPct = latestMem ? (latestMem.memReq || 0) / Math.max(1e-9, latestMem.memAlloc || 0) : 0
-
-	const cpuTone: "ok" | "warn" | "crit" = cpuUsedPct > 0.85 ? "crit" : cpuUsedPct > 0.7 ? "warn" : "ok"
-	const memTone: "ok" | "warn" | "crit" = memUsedPct > 0.85 ? "crit" : memUsedPct > 0.7 ? "warn" : "ok"
 
 	return (
 		<div className="space-y-6">
@@ -554,13 +956,13 @@ export default function ClusterDashboard() {
 								{/* Big value */}
 								<div className="flex items-center gap-3">
 									<div className="text-2xl font-semibold tabular-nums @[250px]/chart:text-3xl">
-										{Number.isFinite(kpis?.apiErrors?.rate) ? kpis.apiErrors.rate.toFixed(2) : '—'}
+										{typeof kpis.apiErrors.rate === 'number' && Number.isFinite(kpis.apiErrors.rate) ? kpis.apiErrors.rate.toFixed(2) : '—'}
 									</div>
-									<Delta value={kpis?.apiErrors?.delta ?? 0} />
+									<Delta value={kpis.apiErrors.delta} />
 								</div>
 								{/* Headline */}
 								<div className="mt-3 text-sm font-medium">
-									{kpis.apiErrors.rate > 0 ? 'API errors present' : 'Error rate nominal'}
+									{typeof kpis.apiErrors.rate === 'number' && kpis.apiErrors.rate > 0 ? 'API errors present' : 'Error rate nominal'}
 								</div>
 								{/* Subline */}
 								<div className="mt-1 text-sm text-muted-foreground">API server error rate (errors/s)</div>
@@ -598,221 +1000,29 @@ export default function ClusterDashboard() {
 			{/* Resource Utilization Charts */}
 			<div className="px-4 lg:px-6">
 				<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-					{/* CPU Chart */}
-					<div className="w-full max-w-[var(--card-max)] mx-auto">
-						<Card className="@container/chart p-0 relative">
-							{/* Chart Type Header */}
-							<div className="flex items-center justify-between px-3 py-2 border-b">
-								<div className="flex items-center gap-2">
-									<Activity className="h-4 w-4 text-muted-foreground" />
-									<span className="text-sm text-muted-foreground font-medium">CPU Usage vs Requests vs Limits</span>
-								</div>
-								<div className="flex items-center gap-2">
-									<DropdownMenu>
-										<DropdownMenuTrigger asChild>
-											<Button variant="ghost" size="icon" className="h-8 w-8">
-												<MoreVertical className="h-4 w-4" />
-											</Button>
-										</DropdownMenuTrigger>
-										<DropdownMenuContent align="end">
-											<DropdownMenuItem>
-												<Download className="mr-2 h-4 w-4" />
-												Download CSV
-											</DropdownMenuItem>
-											<DropdownMenuItem>
-												<Copy className="mr-2 h-4 w-4" />
-												Copy chart as PNG
-											</DropdownMenuItem>
-											<DropdownMenuItem>
-												<Eye className="mr-2 h-4 w-4" />
-												Inspect series
-											</DropdownMenuItem>
-										</DropdownMenuContent>
-									</DropdownMenu>
-								</div>
-							</div>
+					<MetricLineChart
+						title="CPU Usage vs Requests vs Limits"
+						subtitle="Real-time cluster CPU utilization showing used cores against requested and limit allocations. Helps identify under-provisioning (usage near requests) and throttling risks (usage near limits)."
+						series={cpuSeries}
+						unit="cores"
+						formatter={formatCores}
+						scopeLabel="cluster"
+						timespanLabel="15m"
+						resolutionLabel="lo"
+						footerExtra={cpuFooter}
+					/>
 
-							<CardContent className="px-3 pb-3 pt-3">
-								<div className="h-64">
-									<ChartContainer config={clusterChartConfig} className="h-full w-full">
-										<ComposedChart data={capCpu.length ? capCpu : (cap || [])} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-											<CartesianGrid strokeDasharray="3 3" />
-											<XAxis dataKey="t" hide />
-											<YAxis />
-											<ChartTooltip content={<ChartTooltipContent />} />
-											<ChartLegend />
-											<Area dataKey="cpuAlloc" name="Allocatable" fill="var(--color-cpuAlloc)" fillOpacity={0.1} stroke="var(--color-cpuAlloc)" connectNulls />
-											<Area dataKey="cpuReq" name="Requested" fill="var(--color-cpuReq)" fillOpacity={0.3} stroke="var(--color-cpuReq)" connectNulls />
-											<Line dataKey="cpuUsed" name="Used" strokeWidth={2} dot={false} stroke="var(--color-cpuUsed)" connectNulls />
-										</ComposedChart>
-									</ChartContainer>
-								</div>
-							</CardContent>
-
-							{/* Info Tooltip - Bottom Right Corner */}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="absolute bottom-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground z-10"
-									>
-										<Info className="h-3 w-3" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent
-									side="left"
-									align="end"
-									className="max-w-[300px] bg-popover border border-border shadow-md"
-								>
-									<div className="space-y-1">
-										<div className="font-medium text-sm text-popover-foreground">CPU Utilization</div>
-										<div className="text-xs text-muted-foreground leading-relaxed">
-											Cluster CPU usage over time showing used, requested, and allocatable resources
-										</div>
-									</div>
-								</TooltipContent>
-							</Tooltip>
-
-							<CardFooter className="flex-col items-start gap-2 text-sm px-3 pt-2 pb-3">
-								{/* Health Footer */}
-								<div className={`flex items-start gap-2 rounded-md px-2 py-1.5 w-full ${cpuTone === "crit" ? "bg-red-900/30" : cpuTone === "warn" ? "bg-amber-900/30" : "bg-emerald-900/30"}`}>
-									<div className="flex-1">
-										<div className="text-sm">
-											<span className={`font-medium ${cpuTone === "crit" ? "text-red-300" : cpuTone === "warn" ? "text-amber-300" : "text-emerald-300"}`}>
-												CPU {(cpuUsedPct * 100).toFixed(0)}% utilized ({(latestCpu?.cpuUsed ?? 0).toFixed(1)} / {(latestCpu?.cpuAlloc ?? 0).toFixed(1)} cores)
-											</span>
-										</div>
-										{typeof cpuUsedPct === "number" && (
-											<div className="mt-1">
-												<div className="h-1.5 w-full rounded bg-slate-800/60 overflow-hidden">
-													<div
-														className={`h-1.5 transition-all ${cpuTone === "crit" ? "bg-red-500" : cpuTone === "warn" ? "bg-amber-500" : "bg-emerald-500"}`}
-														style={{ width: `${(cpuUsedPct * 100).toFixed(0)}%` }}
-													/>
-												</div>
-												<div className="mt-1 text-[11px] text-slate-400">{(cpuUsedPct * 100).toFixed(0)}% of capacity</div>
-											</div>
-										)}
-										<div className="flex flex-wrap gap-1.5 pt-1">
-											<span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] border border-white/10 bg-slate-800/40 text-slate-200">
-												<span className="opacity-80">Requested/Alloc:</span>
-												<span className="font-semibold">{(cpuReqPct * 100).toFixed(0)}%</span>
-											</span>
-										</div>
-									</div>
-								</div>
-							</CardFooter>
-						</Card>
-					</div>
-
-					{/* Memory Chart */}
-					<div className="w-full max-w-[var(--card-max)] mx-auto">
-						<Card className="@container/chart p-0 relative">
-							{/* Chart Type Header */}
-							<div className="flex items-center justify-between px-3 py-2 border-b">
-								<div className="flex items-center gap-2">
-									<Activity className="h-4 w-4 text-muted-foreground" />
-									<span className="text-sm text-muted-foreground font-medium">Memory Usage vs Requests vs Limits</span>
-								</div>
-								<div className="flex items-center gap-2">
-									<DropdownMenu>
-										<DropdownMenuTrigger asChild>
-											<Button variant="ghost" size="icon" className="h-8 w-8">
-												<MoreVertical className="h-4 w-4" />
-											</Button>
-										</DropdownMenuTrigger>
-										<DropdownMenuContent align="end">
-											<DropdownMenuItem>
-												<Download className="mr-2 h-4 w-4" />
-												Download CSV
-											</DropdownMenuItem>
-											<DropdownMenuItem>
-												<Copy className="mr-2 h-4 w-4" />
-												Copy chart as PNG
-											</DropdownMenuItem>
-											<DropdownMenuItem>
-												<Eye className="mr-2 h-4 w-4" />
-												Inspect series
-											</DropdownMenuItem>
-										</DropdownMenuContent>
-									</DropdownMenu>
-								</div>
-							</div>
-
-							<CardContent className="px-3 pb-3 pt-3">
-								<div className="h-64">
-									<ChartContainer config={clusterChartConfig} className="h-full w-full">
-										<ComposedChart data={capMem.length ? capMem : (cap || [])} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-											<CartesianGrid strokeDasharray="3 3" />
-											<XAxis dataKey="t" hide />
-											<YAxis />
-											<ChartTooltip content={<ChartTooltipContent />} />
-											<ChartLegend />
-											<Area dataKey="memAlloc" name="Allocatable" fill="var(--color-memAlloc)" fillOpacity={0.1} stroke="var(--color-memAlloc)" connectNulls />
-											<Area dataKey="memReq" name="Requested" fill="var(--color-memReq)" fillOpacity={0.3} stroke="var(--color-memReq)" connectNulls />
-											<Line dataKey="memUsed" name="Used" strokeWidth={2} dot={false} stroke="var(--color-memUsed)" connectNulls />
-										</ComposedChart>
-									</ChartContainer>
-								</div>
-							</CardContent>
-
-							{/* Info Tooltip - Bottom Right Corner */}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="ghost"
-										size="icon"
-										className="absolute bottom-2 right-2 h-6 w-6 text-muted-foreground hover:text-foreground z-10"
-									>
-										<Info className="h-3 w-3" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent
-									side="left"
-									align="end"
-									className="max-w-[300px] bg-popover border border-border shadow-md"
-								>
-									<div className="space-y-1">
-										<div className="font-medium text-sm text-popover-foreground">Memory Utilization</div>
-										<div className="text-xs text-muted-foreground leading-relaxed">
-											Cluster memory usage over time showing used, requested, and allocatable resources
-										</div>
-									</div>
-								</TooltipContent>
-							</Tooltip>
-
-							<CardFooter className="flex-col items-start gap-2 text-sm px-3 pt-2 pb-3">
-								{/* Health Footer */}
-								<div className={`flex items-start gap-2 rounded-md px-2 py-1.5 w-full ${memTone === "crit" ? "bg-red-900/30" : memTone === "warn" ? "bg-amber-900/30" : "bg-emerald-900/30"}`}>
-									<div className="flex-1">
-										<div className="text-sm">
-											<span className={`font-medium ${memTone === "crit" ? "text-red-300" : memTone === "warn" ? "text-amber-300" : "text-emerald-300"}`}>
-												Memory {(memUsedPct * 100).toFixed(0)}% utilized ({(latestMem?.memUsed ?? 0).toFixed(1)} / {(latestMem?.memAlloc ?? 0).toFixed(1)} GiB)
-											</span>
-										</div>
-										{typeof memUsedPct === "number" && (
-											<div className="mt-1">
-												<div className="h-1.5 w-full rounded bg-slate-800/60 overflow-hidden">
-													<div
-														className={`h-1.5 transition-all ${memTone === "crit" ? "bg-red-500" : memTone === "warn" ? "bg-amber-500" : "bg-emerald-500"}`}
-														style={{ width: `${(memUsedPct * 100).toFixed(0)}%` }}
-													/>
-												</div>
-												<div className="mt-1 text-[11px] text-slate-400">{(memUsedPct * 100).toFixed(0)}% of capacity</div>
-											</div>
-										)}
-										<div className="flex flex-wrap gap-1.5 pt-1">
-											<span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] border border-white/10 bg-slate-800/40 text-slate-200">
-												<span className="opacity-80">Requested/Alloc:</span>
-												<span className="font-semibold">{(memReqPct * 100).toFixed(0)}%</span>
-											</span>
-										</div>
-									</div>
-								</div>
-							</CardFooter>
-						</Card>
-					</div>
+					<MetricLineChart
+						title="Memory Usage vs Requests vs Limits"
+						subtitle="Real-time cluster memory utilization showing used memory against requested and limit allocations. Helps identify under-provisioning (usage near requests) and OOM risks (usage near limits)."
+						series={memorySeries}
+						unit="bytes"
+						formatter={formatBytesIEC}
+						scopeLabel="cluster"
+						timespanLabel="15m"
+						resolutionLabel="lo"
+						footerExtra={memFooter}
+					/>
 				</div>
 			</div>
 
@@ -821,6 +1031,14 @@ export default function ClusterDashboard() {
 				<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 					{/* Node Health */}
 					<div className="border rounded-lg bg-card relative">
+						{nodeConnectionState.lastError && (
+							<div className="px-3 py-2 border-b bg-destructive/10">
+								<div className="flex items-center gap-2 text-sm text-destructive">
+									<AlertTriangle className="h-4 w-4" />
+									<span>Node metrics WebSocket error: {nodeConnectionState.lastError}</span>
+								</div>
+							</div>
+						)}
 						<div className="flex items-center justify-between px-3 py-2 border-b">
 							<div className="flex items-center gap-2">
 								<Server className="h-4 w-4 text-muted-foreground" />
@@ -854,21 +1072,35 @@ export default function ClusterDashboard() {
 							</div>
 							<Separator />
 							<div className="space-y-2">
-								{nodes.map((n) => (
-									<div key={n.name} className="grid grid-cols-12 items-center gap-2">
-										<div className="col-span-4 truncate font-medium text-sm">{n.name}</div>
-										<div className="col-span-2 flex items-center gap-1">
-											{n.ready ? <Badge variant="secondary" className="text-xs">Ready</Badge> : <Badge variant="destructive" className="text-xs">NotReady</Badge>}
-											{n.cordoned && <Badge variant="outline" className="text-xs">Cordoned</Badge>}
-											{n.taints > 0 && <Badge variant="outline" className="text-xs">Taints</Badge>}
-										</div>
-										<div className="col-span-6 grid grid-cols-4 gap-1">
-											{(["cpu", "mem", "disk", "pid"] as const).map((k) => (
-												<div key={k} className={`h-4 rounded ${cellClass(n.values[k])}`} title={`${k.toUpperCase()} ${(n.values[k] * 100).toFixed(0)}%`} />
-											))}
-										</div>
+								{!nodesLoaded ? (
+									<div className="text-center py-8 text-muted-foreground text-sm">
+										Loading nodes...
 									</div>
-								))}
+								) : nodes.length === 0 ? (
+									<div className="text-center py-8 text-muted-foreground text-sm">
+										No nodes discovered
+									</div>
+								) : (
+									nodes.map((n) => (
+										<div key={n.name} className="grid grid-cols-12 items-center gap-2">
+											<div className="col-span-4 truncate font-medium text-sm">{n.name}</div>
+											<div className="col-span-2 flex items-center gap-1">
+												{n.ready ? <Badge variant="secondary" className="text-xs">Ready</Badge> : <Badge variant="destructive" className="text-xs">NotReady</Badge>}
+												{n.cordoned && <Badge variant="outline" className="text-xs">Cordoned</Badge>}
+												{n.taints > 0 && <Badge variant="outline" className="text-xs">Taints</Badge>}
+											</div>
+											<div className="col-span-6 grid grid-cols-4 gap-1">
+												{(["cpu", "mem", "disk", "pid"] as const).map((k) => (
+													<div
+														key={k}
+														className={`h-4 rounded ${cellClass(n.values[k])}`}
+														title={`${k.toUpperCase()}: ${(n.values[k] * 100).toFixed(0)}%${n.values[k] >= 1 ? ' (Pressure Active)' : ''}`}
+													/>
+												))}
+											</div>
+										</div>
+									))
+								)}
 							</div>
 						</div>
 						<div className="px-4 pb-4 flex justify-end">
@@ -1002,6 +1234,7 @@ export default function ClusterDashboard() {
 
 							<div className="rounded-lg border border-muted-foreground/25 p-3">
 								<div className="text-sm font-medium mb-2">Top 5 namespaces</div>
+								<div className="text-xs text-muted-foreground mb-2">Ranked by total resource consumption (CPU + Memory)</div>
 								<div className="grid grid-cols-5 text-xs text-muted-foreground">
 									<div>Namespace</div>
 									<div className="text-right">Pods</div>

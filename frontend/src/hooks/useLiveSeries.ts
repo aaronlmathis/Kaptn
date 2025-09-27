@@ -206,27 +206,28 @@ export function useLiveSeriesSubscription(
 	const [isSubscribed, setIsSubscribed] = React.useState(false);
 	const [groupActive, setGroupActive] = React.useState(false); // ack/init seen for this group
 
-	// Use ref to store series to avoid dependency issues
-	const seriesRef = React.useRef(series);
-	seriesRef.current = series;
-
 	// Stable reference for series array
 	const seriesKey = series.join(',');
 
 	// Auto-connect and subscribe
 	React.useEffect(() => {
 		if (!autoConnect) return;
+		if (series.length === 0) {
+			console.log(`SKIPPING SUBSCRIPTION: ${groupId} - no series provided`);
+			return;
+		}
 
 		const setup = async () => {
 			try {
 				if (!liveSeries.isConnected) {
+					console.log(`CONNECTING for subscription: ${groupId}`);
 					await liveSeries.connect();
 				}
 
-				console.log(`SUBSCRIBING: ${groupId} with ${seriesRef.current.length} series`);
+				console.log(`SUBSCRIBING: ${groupId} with ${series.length} series`);
 				liveSeries.subscribe({
 					groupId,
-					series: seriesRef.current,
+					series,
 					res,
 					since,
 				});
@@ -240,13 +241,18 @@ export function useLiveSeriesSubscription(
 		setup();
 
 		// Mark group active when ack/init received
-		const onInit = () => setGroupActive(true);
+		const onInit = () => {
+			console.log(`GROUP ACTIVATED: ${groupId}`);
+			setGroupActive(true);
+		};
 		liveSeriesClient.on(`init:${groupId}`, onInit);
 
-		// Cleanup on unmount
+		// Cleanup on unmount or dependency change
 		return () => {
+			console.log(`UNSUBSCRIBING: ${groupId}`);
 			liveSeries.unsubscribe(groupId);
 			setIsSubscribed(false);
+			setGroupActive(false);
 			liveSeriesClient.off(`init:${groupId}`, onInit);
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -255,21 +261,21 @@ export function useLiveSeriesSubscription(
 	// Filter series data for this subscription
 	const subscriptionData = React.useMemo(() => {
 		const filtered: Record<string, LiveDataPoint[]> = {};
-		for (const key of seriesRef.current) {
+		for (const key of series) {
 			if (liveSeries.seriesData[key]) {
 				filtered[key] = liveSeries.seriesData[key];
 			}
 		}
 
 		// Only log when there's a mismatch after the group becomes active (ack/init received)
-		if (groupActive && Object.keys(filtered).length === 0 && seriesRef.current.length > 0) {
-			console.log(`❌ FILTER MISMATCH: ${groupId} - Requested ${seriesRef.current.length} series, got 0`);
+		if (groupActive && Object.keys(filtered).length === 0 && series.length > 0) {
+			console.log(`❌ FILTER MISMATCH: ${groupId} - Requested ${series.length} series, got 0`);
 			console.log(`❌ Available: [${Object.keys(liveSeries.seriesData).slice(0, 5).join(', ')}...]`);
-			console.log(`❌ Requested: [${seriesRef.current.slice(0, 5).join(', ')}...]`);
+			console.log(`❌ Requested: [${series.slice(0, 5).join(', ')}...]`);
 		}
 
 		return filtered;
-	}, [groupId, liveSeries.seriesData, groupActive]); // seriesKey not needed since we use seriesRef.current
+	}, [groupId, liveSeries.seriesData, groupActive, series]); // Now properly depend on series
 
 	return {
 		...liveSeries,

@@ -839,6 +839,7 @@ func (s *Server) initTimeSeries() error {
 		s.kubeClient,
 		metricsClient,
 		s.clientFactory.RESTConfig(),
+		s.analyticsService.GetPrometheusClient(),
 		aggregatorConfig,
 	)
 

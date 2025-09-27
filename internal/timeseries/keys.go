@@ -38,6 +38,14 @@ const (
 	ClusterPodsUnschedulable    = "cluster.pods.unschedulable"
 	ClusterFsImageUsedBytes     = "cluster.fs.image.used.bytes"
 	ClusterFsImageCapacityBytes = "cluster.fs.image.capacity.bytes"
+
+	// API Server and Control Plane metrics
+	ClusterAPIServerErrorsRate   = "cluster.apiserver.errors.rate"   // API server error rate (errors/sec)
+	ClusterAPIServerLatencyP50   = "cluster.apiserver.latency.p50"   // API server 50th percentile latency (ms)
+	ClusterAPIServerLatencyP95   = "cluster.apiserver.latency.p95"   // API server 95th percentile latency (ms)
+	ClusterAPIServerRequestsRate = "cluster.apiserver.requests.rate" // API server request rate (req/sec)
+	ClusterSchedulerQueueDepth   = "cluster.scheduler.queue.depth"   // Scheduler work queue depth
+	ClusterControllerQueueDepth  = "cluster.controller.queue.depth"  // Controller manager work queue depth
 )
 
 // Node-level metric base keys (will be combined with node names)
@@ -101,14 +109,14 @@ const (
 
 // Namespace-level metric base keys (will be combined with namespace names)
 const (
-	NamespaceCPUUsedBase          = "ns.cpu.used.cores"
-	NamespaceCPURequestBase       = "ns.cpu.request.cores"
-	NamespaceCPULimitBase         = "ns.cpu.limit.cores"
-	NamespaceMemUsedBase          = "ns.mem.used.bytes"
-	NamespaceMemRequestBase       = "ns.mem.request.bytes"
-	NamespaceMemLimitBase         = "ns.mem.limit.bytes"
-	NamespacePodsRunningBase      = "ns.pods.running"
-	NamespacePodsRestartsRateBase = "ns.pods.restarts.rate"
+	NamespaceCPUUsedBase           = "ns.cpu.used.cores"
+	NamespaceCPURequestBase        = "ns.cpu.request.cores"
+	NamespaceCPULimitBase          = "ns.cpu.limit.cores"
+	NamespaceMemUsedBase           = "ns.mem.used.bytes"
+	NamespaceMemRequestBase        = "ns.mem.request.bytes"
+	NamespaceMemLimitBase          = "ns.mem.limit.bytes"
+	NamespacePodsRunningBase       = "ns.pods.running"
+	NamespacePodsRestartsRateBase  = "ns.pods.restarts.rate"
 	NamespacePodsRestartsTotalBase = "ns.pods.restarts.total"
 	NamespacePodsRestarts1hBase    = "ns.pods.restarts.1h"
 )
@@ -123,10 +131,10 @@ const (
 
 // HPA-level metric base keys (combined with namespace and HPA name)
 const (
-    HPADesiredReplicasBase   = "hpa.desired.replicas"
-    HPACurrentReplicasBase   = "hpa.current.replicas"
-    HPAScaleEventsUpBase     = "hpa.scale.events.up"
-    HPAScaleEventsDownBase   = "hpa.scale.events.down"
+	HPADesiredReplicasBase = "hpa.desired.replicas"
+	HPACurrentReplicasBase = "hpa.current.replicas"
+	HPAScaleEventsUpBase   = "hpa.scale.events.up"
+	HPAScaleEventsDownBase = "hpa.scale.events.down"
 )
 
 // Legacy constants for backward compatibility - DEPRECATED
@@ -270,6 +278,13 @@ func AllSeriesKeys() []string {
 		ClusterPodsUnschedulable,
 		ClusterFsImageUsedBytes,
 		ClusterFsImageCapacityBytes,
+		// API Server and Control Plane metrics
+		ClusterAPIServerErrorsRate,
+		ClusterAPIServerLatencyP50,
+		ClusterAPIServerLatencyP95,
+		ClusterAPIServerRequestsRate,
+		ClusterSchedulerQueueDepth,
+		ClusterControllerQueueDepth,
 		// Namespace base keys
 		NamespaceCPUUsedBase,
 		NamespaceCPURequestBase,

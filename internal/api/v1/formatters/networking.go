@@ -295,12 +295,51 @@ func (f *NetworkingFormatter) EndpointSliceToResponse(endpointSlice interface{})
 		}
 	}
 
-	// Extract addressType from spec
-	spec, _ := endpointSliceMap["spec"].(map[string]interface{})
-	addressType, _ := spec["addressType"].(string)
+	// Support both top-level fields (current API) and legacy spec-nested fields
+	var addressType string
+	if at, ok := endpointSliceMap["addressType"].(string); ok && at != "" {
+		addressType = at
+	}
 
-	// Extract endpoints from spec
-	endpoints, _ := spec["endpoints"].([]interface{})
+	var endpoints []interface{}
+	if eps, ok := endpointSliceMap["endpoints"].([]interface{}); ok {
+		endpoints = eps
+	}
+
+	var ports []interface{}
+	if pts, ok := endpointSliceMap["ports"].([]interface{}); ok {
+		ports = pts
+	}
+
+	// Fallback to spec map if present (older formatter expectations)
+	if spec, ok := endpointSliceMap["spec"].(map[string]interface{}); ok {
+		if addressType == "" {
+			if at, ok := spec["addressType"].(string); ok {
+				addressType = at
+			}
+		}
+		if endpoints == nil {
+			if eps, ok := spec["endpoints"].([]interface{}); ok {
+				endpoints = eps
+			}
+		}
+		if ports == nil {
+			if pts, ok := spec["ports"].([]interface{}); ok {
+				ports = pts
+			}
+		}
+	}
+
+	if addressType == "" {
+		addressType = "Unknown"
+	}
+	if endpoints == nil {
+		endpoints = []interface{}{}
+	}
+	if ports == nil {
+		ports = []interface{}{}
+	}
+
 	endpointCount := len(endpoints)
 
 	// Count ready and not ready endpoints
@@ -309,52 +348,81 @@ func (f *NetworkingFormatter) EndpointSliceToResponse(endpointSlice interface{})
 	addresses := make([]string, 0) // Initialize as empty slice, not nil
 
 	for _, ep := range endpoints {
-		if epMap, ok := ep.(map[string]interface{}); ok {
-			// Check if endpoint is ready
-			conditions, _ := epMap["conditions"].(map[string]interface{})
-			ready, _ := conditions["ready"].(bool)
+		epMap, ok := ep.(map[string]interface{})
+		if !ok {
+			continue
+		}
 
-			if ready {
-				readyCount++
-			} else {
-				notReadyCount++
-			}
+		// Check if endpoint is ready; treat nil as not ready for display purposes
+		conditions, _ := epMap["conditions"].(map[string]interface{})
+		readyBool, readySet := conditions["ready"].(bool)
+		ready := readySet && readyBool
+		if ready {
+			readyCount++
+		} else {
+			notReadyCount++
+		}
 
-			// Extract addresses
-			if addressesSlice, ok := epMap["addresses"].([]interface{}); ok {
-				for _, addr := range addressesSlice {
-					if addrStr, ok := addr.(string); ok {
-						statusSuffix := ""
-						if !ready {
-							statusSuffix = " (not ready)"
-						}
-						addresses = append(addresses, addrStr+statusSuffix)
-					}
+		// Extract addresses
+		if addressesSlice, ok := epMap["addresses"].([]interface{}); ok {
+			for _, addr := range addressesSlice {
+				addrStr, ok := addr.(string)
+				if !ok {
+					continue
+				}
+				if ready {
+					addresses = append(addresses, addrStr)
+				} else {
+					addresses = append(addresses, addrStr+" (not ready)")
 				}
 			}
 		}
 	}
 
-	// Extract ports from spec
-	ports, _ := spec["ports"].([]interface{})
 	portCount := len(ports)
 	portStrings := make([]string, 0) // Initialize as empty slice, not nil
 
 	for _, port := range ports {
-		if portMap, ok := port.(map[string]interface{}); ok {
-			portNum, _ := portMap["port"].(float64) // JSON numbers are float64
-			portName, _ := portMap["name"].(string)
-			protocol, _ := portMap["protocol"].(string)
-
-			portStr := fmt.Sprintf("%.0f", portNum)
-			if portName != "" {
-				portStr = fmt.Sprintf("%s:%.0f", portName, portNum)
-			}
-			if protocol != "" {
-				portStr = fmt.Sprintf("%s/%s", portStr, protocol)
-			}
-			portStrings = append(portStrings, portStr)
+		portMap, ok := port.(map[string]interface{})
+		if !ok {
+			continue
 		}
+
+		var portVal string
+		if p, ok := portMap["port"]; ok {
+			switch val := p.(type) {
+			case float64:
+				portVal = fmt.Sprintf("%.0f", val)
+			case int:
+				portVal = fmt.Sprintf("%d", val)
+			case int32:
+				portVal = fmt.Sprintf("%d", val)
+			case int64:
+				portVal = fmt.Sprintf("%d", val)
+			case string:
+				portVal = val
+			}
+		}
+
+		portName, _ := portMap["name"].(string)
+		protocol := "TCP"
+		if proto, ok := portMap["protocol"].(string); ok && proto != "" {
+			protocol = proto
+		}
+
+		portStr := protocol
+		if portVal != "" {
+			portStr = fmt.Sprintf("%s/%s", portVal, protocol)
+		}
+		if portName != "" {
+			if portVal != "" {
+				portStr = fmt.Sprintf("%s:%s/%s", portName, portVal, protocol)
+			} else {
+				portStr = fmt.Sprintf("%s/%s", portName, protocol)
+			}
+		}
+
+		portStrings = append(portStrings, portStr)
 	}
 
 	// Format addresses display

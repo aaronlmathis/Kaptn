@@ -1,0 +1,145 @@
+server:
+  addr: "0.0.0.0:9999"
+  base_path: "/"
+  cookie_secret: "kaptn-development-secret-key-32-chars-minimum"  # At least 32 chars for OIDC
+  cors:
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+
+security:
+  auth_mode: "oidc"
+  session_ttl: "4m"  # Short TTL for testing token refresh behavior
+  refresh_token_ttl: "7d"  # How long refresh tokens last (7 days default)
+  username_format: "sub:{sub}"
+  oidc:
+    issuer: "https://integrator-3435951.okta.com/oauth2/default"
+    client_id: "0oau2bnwtd3HSnQfz697"
+    client_secret: "gkhZ78eIYI8fEpxkaRGch7s9xEhgHMMYvOFHb06nFe-EJEqhNGfe9Fgj3AmqXzpL"
+    redirect_url: "https://dev.deepthought.sh/api/v1/auth/callback"   
+    audience: "0oau2bnwtd3HSnQfz697"
+    jwks_url: ""
+    scopes: ["openid", "profile", "email"]
+  
+# Auth Keys Configuration (file paths for local development)
+  auth_keys:
+    oidc_state_hash_key_path: "keys/oidc_state_hash.key"
+    oidc_state_block_key_path: "keys/oidc_state_block.key"
+    jwt_private_key_path: "keys/kaptn_jwt_private.pem"
+    jwt_public_key_path: "keys/kaptn_jwt_public.pem"
+
+# Add authorization config for Phase 5
+authz:
+  mode: "idp_groups"
+  groups_prefix_allowlist: ["kaptn-"]
+  default_groups: [""]
+
+kubernetes:
+  mode: "kubeconfig"        # or "incluster"
+  kubeconfig_path: ""       # used if mode=kubeconfig, defaults to $KUBECONFIG
+  namespace_default: "default"
+  insecure_tls: false       # skip TLS verification for development environments
+  qps: 100                  # queries per second allowed to Kubernetes API server
+  burst: 200                # maximum burst for throttle
+  # Separate client used by background log collector to avoid starving interactive traffic
+  logs_qps: 20
+  logs_burst: 40
+
+features:
+  enable_apply: true
+  enable_nodes_actions: true
+  enable_overview: true
+  enable_prometheus_analytics: true
+
+rate_limits:
+  apply_per_minute: 30     # Higher limits for production
+  actions_per_minute: 60
+
+logging:
+  level: "debug"      # debug, info, warn, error
+  file: "kaptn.log"           # e.g., /var/log/kaptn/kaptn.log. Leave empty to disable file logging.
+  format: "console"     # "json" or "console" for human-readable logs
+
+integrations:
+  prometheus:
+    url: "http://prometheus-server.monitoring.svc:80"
+    timeout: "10s"
+    enabled: true
+
+caching:
+  overview_ttl: "5s"       # Slightly higher for production
+  analytics_ttl: "120s"
+  summary_ttl: "60s"
+  search_cache_ttl: "300s"
+  search_cache_max_size: 100000
+  
+ # Logs cache (in-memory ring + pub/sub)
+  logs_cache:
+    # Retention window and capacities (tune per cluster size)
+    ttl: "24h"                  # Keep 24 hours of logs in memory
+    max_global: 500000          # Global ring capacity (entries)
+    max_per_scope: 40000        # Per-scope ring capacity
+    max_subscribers: 1000       # Max WS/log streams
+    buffer_size: 1000           # Per-subscriber channel buffer
+
+    # Eviction/cleanup cadence
+    eviction_interval: "10m"
+    cleanup_interval: "5m"
+
+    # Background log collection
+    background_collection_enabled: true
+    background_collection_retention: "1h"
+    background_collection_mode: "stream"             # follow live logs (recommended)
+    background_collection_poll_interval: "15s"       # used if mode="poll"
+    background_collection_tail_lines: 200
+
+    # Safety/robustness
+    max_log_line_bytes: 262144   # 256KB per-line cap
+    informer_resync: "0s"        # disable periodic resync bursts
+
+    # Operational limits
+    max_streams_per_user: 100
+    max_query_limit: 20000
+    max_export_size: 209715200   # 200MB
+    max_concurrent_queries: 50
+    rate_limit_per_second: 2000
+    backpressure_threshold: 80   # Percentage
+    degraded_mode_timeout: "2m"
+
+jobs:
+  persistence_enabled: true
+  store_path: "/data/jobs"
+  cleanup_interval: "30m"
+  max_age: "7d"           # Keep jobs longer in production
+
+# OPTIMIZED FOR OPSVIEW SCALE
+timeseries:
+  enabled: true
+  window: "4h"            # Longer window for production charts
+  tick_interval: "500ms"  # Slightly slower tick for efficiency
+  capacity_refresh_interval: "15s"
+  resource_poll_interval: "10s"
+  summary_poll_interval: "15s"
+  state_reconcile_interval: "30s"
+  prune_interval: "60s"
+  disable_network_if_unavailable: true
+  
+  # SCALED FOR 20+ OPSVIEW SECTIONS
+  max_series: 1000000              # 1M series (20 sections × 200 metrics × 50 users × 5x safety)
+  max_points_per_series: 10000000  # 10M points per series (scales with available memory)
+  max_ws_clients: 2000             # Support many concurrent dashboard users
+  ws_read_limit: 131072            # 128KB - handles massive subscription messages
+  ws_write_buffer_size: 8192       # 8K message buffer per client (high-frequency updates)
+  
+  hi_res:
+    step: "1s"            # Keep 1s for real-time dashboards
+  lo_res:
+    step: "10s"           # Increase to 10s for efficiency over longer windows
+
+actions:
+  idempotency_ttl: "10m"
+  default_concurrency: 8
+  max_concurrency: 32
+  denied_namespaces: []
+  denied_labels: {}
+  action_allowlist: []
+  action_denylist: []

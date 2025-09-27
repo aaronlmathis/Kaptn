@@ -1,95 +1,95 @@
-name: Build and Deploy to Local Kubernetes
+# name: Build and Deploy to Local Kubernetes
 
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'internal/**'
-      - 'frontend/**'
-      - 'cmd/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Dockerfile'
-      - 'Makefile'
+# on:
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - 'internal/**'
+#       - 'frontend/**'
+#       - 'cmd/**'
+#       - 'go.mod'
+#       - 'go.sum'
+#       - 'Dockerfile'
+#       - 'Makefile'
 
-jobs:
-  build-and-deploy:
-    runs-on: self-hosted
-    environment: development
+# jobs:
+#   build-and-deploy:
+#     runs-on: self-hosted
+#     environment: development
  
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3 
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v3 
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2 
+#       - name: Set up Docker Buildx
+#         uses: docker/setup-buildx-action@v2 
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+#       - name: Login to Docker Hub
+#         uses: docker/login-action@v2
+#         with:
+#           username: ${{ secrets.DOCKERHUB_USERNAME }}
+#           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push Debug Image
-        run: make push-debug
+#       - name: Build and Push Debug Image
+#         run: make push-debug
 
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p "$HOME/.kube"
-          printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+#       - name: Configure kubeconfig
+#         run: |
+#           mkdir -p "$HOME/.kube"
+#           printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
 
-      - name: Verify kubeconfig
-        run: |
-          echo "Testing Kubernetes config..."
-          kubectl config view --minify --output 'jsonpath={..cluster.server}'
-          echo ""
-          echo "Cluster should be reachable:"
-          kubectl get nodes
+#       - name: Verify kubeconfig
+#         run: |
+#           echo "Testing Kubernetes config..."
+#           kubectl config view --minify --output 'jsonpath={..cluster.server}'
+#           echo ""
+#           echo "Cluster should be reachable:"
+#           kubectl get nodes
 
-      - name: Deploy or Restart Kaptn
-        run: |
-          # Check if Kaptn deployment exists
-          if kubectl get deployment kaptn -n kaptn >/dev/null 2>&1; then
-            echo "Kaptn deployment exists - performing rolling restart..."
-            kubectl rollout restart deployment/kaptn -n kaptn
-            kubectl rollout status deployment/kaptn -n kaptn --timeout=300s
-          else
-            echo "Kaptn deployment not found - performing fresh deployment..."
+#       - name: Deploy or Restart Kaptn
+#         run: |
+#           # Check if Kaptn deployment exists
+#           if kubectl get deployment kaptn -n kaptn >/dev/null 2>&1; then
+#             echo "Kaptn deployment exists - performing rolling restart..."
+#             kubectl rollout restart deployment/kaptn -n kaptn
+#             kubectl rollout status deployment/kaptn -n kaptn --timeout=300s
+#           else
+#             echo "Kaptn deployment not found - performing fresh deployment..."
             
-            # Check if complete deployment file exists
-            if [ -f "deploy/updated/kaptn-complete-deployment.yaml" ]; then
-              echo "Using complete deployment file..."
+#             # Check if complete deployment file exists
+#             if [ -f "deploy/updated/kaptn-complete-deployment.yaml" ]; then
+#               echo "Using complete deployment file..."
               
-              # Substitute secrets in deployment file
-              sed -e "s|\${GOOGLE_CLIENT_ID}|${{ secrets.GOOGLE_CLIENT_ID }}|g" \
-                  -e "s|\${GOOGLE_CLIENT_SECRET}|${{ secrets.GOOGLE_CLIENT_SECRET }}|g" \
-                  -e "s|\${GOOGLE_REDIRECT_URI}|${{ secrets.GOOGLE_REDIRECT_URI }}|g" \
-                  deploy/updated/kaptn-complete-deployment.yaml | kubectl apply -f -
-            else
-              echo "ERROR: Complete deployment file not found at deploy/updated/kaptn-complete-deployment.yaml"
-              echo "Available files in deploy/updated/:"
-              ls -la deploy/updated/ || echo "deploy/updated/ directory not found"
-              exit 1
-            fi
+#               # Substitute secrets in deployment file
+#               sed -e "s|\${GOOGLE_CLIENT_ID}|${{ secrets.GOOGLE_CLIENT_ID }}|g" \
+#                   -e "s|\${GOOGLE_CLIENT_SECRET}|${{ secrets.GOOGLE_CLIENT_SECRET }}|g" \
+#                   -e "s|\${GOOGLE_REDIRECT_URI}|${{ secrets.GOOGLE_REDIRECT_URI }}|g" \
+#                   deploy/updated/kaptn-complete-deployment.yaml | kubectl apply -f -
+#             else
+#               echo "ERROR: Complete deployment file not found at deploy/updated/kaptn-complete-deployment.yaml"
+#               echo "Available files in deploy/updated/:"
+#               ls -la deploy/updated/ || echo "deploy/updated/ directory not found"
+#               exit 1
+#             fi
             
-            # Wait for deployment to be ready
-            echo "Waiting for fresh deployment to be ready..."
-            kubectl rollout status deployment/kaptn -n kaptn --timeout=300s
-          fi
+#             # Wait for deployment to be ready
+#             echo "Waiting for fresh deployment to be ready..."
+#             kubectl rollout status deployment/kaptn -n kaptn --timeout=300s
+#           fi
           
-          # Show final status
-          echo "Deployment complete!"
-          kubectl get pods -n kaptn
+#           # Show final status
+#           echo "Deployment complete!"
+#           kubectl get pods -n kaptn
 
-      - name: Clean up Docker
-        if: always()
-        run: |
-          docker system prune -af --volumes
+#       - name: Clean up Docker
+#         if: always()
+#         run: |
+#           docker system prune -af --volumes
           
-      - name: Deployment Summary
-        run: |
-          echo "## Kaptn Deployment" >> $GITHUB_STEP_SUMMARY
-          echo "* **Image:** aaronlmathis/kaptn:debug" >> $GITHUB_STEP_SUMMARY
-          echo "* **Namespace:** kaptn" >> $GITHUB_STEP_SUMMARY
-          echo "* **Status:** Deployment triggered" >> $GITHUB_STEP_SUMMARY
+#       - name: Deployment Summary
+#         run: |
+#           echo "## Kaptn Deployment" >> $GITHUB_STEP_SUMMARY
+#           echo "* **Image:** aaronlmathis/kaptn:debug" >> $GITHUB_STEP_SUMMARY
+#           echo "* **Namespace:** kaptn" >> $GITHUB_STEP_SUMMARY
+#           echo "* **Status:** Deployment triggered" >> $GITHUB_STEP_SUMMARY

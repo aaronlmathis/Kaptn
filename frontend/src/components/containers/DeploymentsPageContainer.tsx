@@ -37,17 +37,18 @@ function DeploymentsContent() {
 	const { isAllowed } = useAuthzCapabilitiesInContext(['deployments.get', 'deployments.patch', 'deployments.delete', 'deployments.restart', 'deployments.scale.update'])
 	const [detailDrawerOpen, setDetailDrawerOpen] = React.useState(false)
 	const [selectedDeploymentForDetails, setSelectedDeploymentForDetails] = React.useState<DashboardDeployment | null>(null)
+
 	const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
 	const [isConfirmExecuting, setIsConfirmExecuting] = React.useState(false)
 	const [confirmWarnings, setConfirmWarnings] = React.useState<string[]>([])
 	const [pendingAction, setPendingAction] = React.useState<null | { type: 'delete' | 'restart' | 'scale', deployments: DashboardDeployment[] }>(null)
 	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
-    const requireTextConfirm = React.useMemo(() => pendingAction?.type === 'delete' && (pendingAction?.deployments?.length || 0) > 0, [pendingAction])
-    const confirmValue = React.useMemo(() => {
-        if (!pendingAction || pendingAction.type !== 'delete') return ''
-        const count = pendingAction.deployments.length
-        return count === 1 ? pendingAction.deployments[0].name : 'DELETE'
-    }, [pendingAction])
+	const requireTextConfirm = React.useMemo(() => pendingAction?.type === 'delete' && (pendingAction?.deployments?.length || 0) > 0, [pendingAction])
+	const confirmValue = React.useMemo(() => {
+		if (!pendingAction || pendingAction.type !== 'delete') return ''
+		const count = pendingAction.deployments.length
+		return count === 1 ? pendingAction.deployments[0].name : 'DELETE'
+	}, [pendingAction])
 
 	// Ensure deployment-specific action capabilities are requested (default is conservative)
 	React.useEffect(() => {
@@ -442,9 +443,9 @@ function DeploymentsContent() {
 				resources={(pendingAction?.deployments || []).map(d => ({ name: d.name, namespace: d.namespace }))}
 				safetyViolations={[]}
 				warnings={confirmWarnings}
-                requireTextConfirm={requireTextConfirm}
-                confirmPrompt={pendingAction?.deployments?.length === 1 ? 'Type the deployment name to confirm' : 'Type DELETE to confirm'}
-                confirmValue={confirmValue}
+				requireTextConfirm={requireTextConfirm}
+				confirmPrompt={pendingAction?.deployments?.length === 1 ? 'Type the deployment name to confirm' : 'Type DELETE to confirm'}
+				confirmValue={confirmValue}
 			/>
 
 			{selectedDeploymentForDetails && (
