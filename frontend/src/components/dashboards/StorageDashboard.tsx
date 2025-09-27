@@ -28,11 +28,12 @@ import {
 import {
 	MetricLineChart,
 	MetricBarChart,
+	MetricRadialChart,
 	type ChartSeries,
 } from "@/components/opsview/charts"
 import { SectionHealthFooter } from "@/components/opsview/SectionHealthFooter"
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries"
-import { formatBytesIEC } from "@/lib/metric-utils"
+import { formatBytesIEC, getChartColor } from "@/lib/metric-utils"
 
 interface DataPoint { t: number; v: number }
 type SeriesMap = Record<string, DataPoint[]>
@@ -52,6 +53,9 @@ const POD_STORAGE_BASES = [
 	"pod.ephemeral.used.percent",
 	"pod.ephemeral.used.bytes",
 ]
+
+const NODE_LINE_LIMIT = 6
+const POD_LINE_LIMIT = 5
 
 async function fetchJson<T = any>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
 	const res = await fetch(input, init)
@@ -316,53 +320,108 @@ export function StorageDashboard() {
 		return nodeStats
 			.filter(ns => Number.isFinite(ns.rootPct))
 			.sort((a, b) => (b.rootPct ?? 0) - (a.rootPct ?? 0))
-			.slice(0, 3)
+			.slice(0, NODE_LINE_LIMIT)
 	}, [nodeStats])
 
-	const topImageNodes = React.useMemo(() => {
+	const nodeImageRadialNodes = React.useMemo(() => {
 		return nodeStats
 			.filter(ns => Number.isFinite(ns.imagePct))
 			.sort((a, b) => (b.imagePct ?? 0) - (a.imagePct ?? 0))
-			.slice(0, 3)
+			.slice(0, Math.max(NODE_LINE_LIMIT, 6))
 	}, [nodeStats])
 
-	const nodeRootSeries: ChartSeries[] = React.useMemo(() => topRootNodes.map(ns => ({
+	const topImageNodes = React.useMemo(() => nodeImageRadialNodes.slice(0, NODE_LINE_LIMIT), [nodeImageRadialNodes])
+
+	const nodeRootSeries: ChartSeries[] = React.useMemo(() => topRootNodes.map((ns, index) => ({
 		key: `node.fs.used.percent.${ns.node}`,
 		name: `${ns.node} rootfs%`,
-		color: "hsl(var(--chart-2))",
+		color: getChartColor(`node-root-${index}`, index),
 		data: ns.rootSeries.map(p => [p.t, p.v]),
 	})), [topRootNodes])
 
-	const nodeImageSeries: ChartSeries[] = React.useMemo(() => topImageNodes.map(ns => ({
+	const nodeImageSeries: ChartSeries[] = React.useMemo(() => topImageNodes.map((ns, index) => ({
 		key: `node.imagefs.used.percent.${ns.node}`,
 		name: `${ns.node} imagefs%`,
-		color: "hsl(var(--chart-4))",
+		color: getChartColor(`node-image-${index}`, index),
 		data: ns.imageSeries.map(p => [p.t, p.v]),
 	})), [topImageNodes])
 
-	const topPodSeries: ChartSeries[] = React.useMemo(() => podStats
-		.filter(ps => Number.isFinite(ps.ephemeralPct))
-		.sort((a, b) => (b.ephemeralPct ?? 0) - (a.ephemeralPct ?? 0))
-		.slice(0, 3)
-		.map(ps => ({
-			key: `pod.ephemeral.used.percent.${ps.namespace}.${ps.pod}`,
-			name: `${ps.namespace}/${ps.pod}`,
-			color: "hsl(var(--chart-6))",
-			data: ps.percentSeries.map(p => [p.t, p.v]),
-		})), [podStats])
-
-	const podBarSeries: ChartSeries[] = React.useMemo(() => {
-		const timestamp = Date.now()
+	const podEphemeralRanked = React.useMemo(() => {
 		return podStats
 			.filter(ps => Number.isFinite(ps.ephemeralPct))
 			.sort((a, b) => (b.ephemeralPct ?? 0) - (a.ephemeralPct ?? 0))
+	}, [podStats])
+
+	const topPodSeries: ChartSeries[] = React.useMemo(() => podEphemeralRanked
+		.slice(0, POD_LINE_LIMIT)
+		.map((ps, index) => ({
+			key: `pod.ephemeral.used.percent.${ps.namespace}.${ps.pod}`,
+			name: `${ps.namespace}/${ps.pod}`,
+			color: getChartColor(`pod-ephemeral-${index}`, index),
+			data: ps.percentSeries.map(p => [p.t, p.v]),
+		})), [podEphemeralRanked])
+
+	const podBarSeries: ChartSeries[] = React.useMemo(() => {
+		const timestamp = Date.now()
+		return podEphemeralRanked
 			.slice(0, 6)
 			.map(ps => ({
 				key: `pod-ephemeral-${ps.namespace}-${ps.pod}`,
 				name: `${ps.namespace}/${ps.pod}`,
 				data: [[timestamp, ps.ephemeralPct ?? 0]],
 			}))
-	}, [podStats])
+	}, [podEphemeralRanked])
+
+	const clusterImageRadialSeries: ChartSeries[] = React.useMemo(() => {
+		if (!Number.isFinite(imageUsed) && !Number.isFinite(imageCapacity)) return []
+		const safeUsed = Number.isFinite(imageUsed) ? imageUsed : 0
+		const safeCapacity = Number.isFinite(imageCapacity) && imageCapacity > 0 ? imageCapacity : Math.max(safeUsed, 1)
+		const timestamp = Date.now()
+		const free = Math.max(safeCapacity - safeUsed, 0)
+		return [
+			{
+				key: "cluster.image.used",
+				name: "Used",
+				color: "hsl(var(--chart-5))",
+				data: [[timestamp, safeUsed]],
+			},
+			{
+				key: "cluster.image.free",
+				name: "Free",
+				color: "hsl(var(--chart-2))",
+				data: [[timestamp, free]],
+			},
+		]
+	}, [imageUsed, imageCapacity])
+
+	const nodeImageRadialSeries: ChartSeries[] = React.useMemo(() => {
+		const timestamp = Date.now()
+		return nodeImageRadialNodes.map((node, index) => ({
+			key: `node.image.radial.${node.node}.${index}`,
+			name: node.node,
+			color: getChartColor(`node-image-radial-${index}`, index),
+			data: [[timestamp, Math.max(0, node.imagePct ?? 0)]],
+		}))
+	}, [nodeImageRadialNodes])
+
+	const podEphemeralRadialSeries: ChartSeries[] = React.useMemo(() => {
+		const timestamp = Date.now()
+		return podEphemeralRanked.slice(0, 6).map((ps, index) => ({
+			key: `pod.ephemeral.radial.${ps.namespace}.${ps.pod}.${index}`,
+			name: `${ps.namespace}/${ps.pod}`,
+			color: getChartColor(`pod-ephemeral-radial-${index}`, index),
+			data: [[timestamp, Math.max(0, ps.ephemeralPct ?? 0)]],
+		}))
+	}, [podEphemeralRanked])
+
+	const clusterImageRadialMax = React.useMemo(() => {
+		if (Number.isFinite(imageCapacity) && imageCapacity > 0) return imageCapacity
+		if (Number.isFinite(imageUsed) && imageUsed > 0) return imageUsed
+		return undefined
+	}, [imageCapacity, imageUsed])
+
+	const nodeImagePeak = nodeImageRadialNodes[0]?.imagePct ?? 0
+	const podEphemeralPeak = podEphemeralRanked[0]?.ephemeralPct ?? 0
 
 	const isConnected = clusterLive.isConnected
 
@@ -509,6 +568,47 @@ export function StorageDashboard() {
 							</div>
 						</CardContent>
 					</Card>
+				</div>
+			</div>
+
+			<div className="px-4 lg:px-6">
+				<div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+					<MetricRadialChart
+						title="ImageFS utilization"
+						subtitle="Used vs free capacity"
+						series={clusterImageRadialSeries}
+						formatter={value => formatBytesIEC(value)}
+						centerLabel="Used"
+						centerValue={Number.isFinite(imageUsed) ? imageUsed : 0}
+						centerFormatter={value => formatBytesIEC(value)}
+						maxValue={clusterImageRadialMax}
+						emptyMessage="No cluster image filesystem data"
+						className="border-border"
+					/>
+					<MetricRadialChart
+						title="Node image pressure"
+						subtitle="Top nodes by image filesystem usage"
+						series={nodeImageRadialSeries}
+						formatter={value => `${value.toFixed(0)}%`}
+						centerLabel="Peak"
+						centerValue={nodeImagePeak}
+						centerFormatter={value => `${value.toFixed(0)}%`}
+						maxValue={100}
+						emptyMessage="No node image filesystem data"
+						className="border-border"
+					/>
+					<MetricRadialChart
+						title="Pod ephemeral risk"
+						subtitle="Pods with highest ephemeral usage"
+						series={podEphemeralRadialSeries}
+						formatter={value => `${value.toFixed(0)}%`}
+						centerLabel="Peak"
+						centerValue={podEphemeralPeak}
+						centerFormatter={value => `${value.toFixed(0)}%`}
+						maxValue={100}
+						emptyMessage="No pod ephemeral usage data"
+						className="border-border"
+					/>
 				</div>
 			</div>
 

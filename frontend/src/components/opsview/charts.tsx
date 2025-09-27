@@ -202,6 +202,37 @@ function prepareChartData(series: ChartSeries[]): ChartDataPoint[] {
 }
 
 /**
+ * Helper to get the most recent numeric value from a series
+ */
+function getLatestValue(series: ChartSeries): number {
+  for (let i = series.data.length - 1; i >= 0; i--) {
+    const value = series.data[i]?.[1];
+    if (Number.isFinite(value)) {
+      return value as number;
+    }
+  }
+  return 0;
+}
+
+interface RadialSegment {
+  key: string;
+  name: string;
+  value: number;
+  color: string;
+  fill: string;
+}
+
+function buildRadialSegments(series: ChartSeries[]): RadialSegment[] {
+  return series.map((s, index) => ({
+    key: s.key,
+    name: s.name,
+    value: getLatestValue(s),
+    color: s.color || getChartColor(s.key, index),
+    fill: s.color || getChartColor(s.key, index),
+  }));
+}
+
+/**
  * Generate chart config from series
  */
 function generateChartConfig(series: ChartSeries[]): ChartConfig {
@@ -1214,7 +1245,6 @@ export function MetricRadialChart({
   error,
   emptyMessage = "No data available",
   className,
-  // height = 250, // Not used with fixed chart height
   capabilities,
   insight,
   badges,
@@ -1222,22 +1252,19 @@ export function MetricRadialChart({
   timespanLabel,
   resolutionLabel,
   footerExtra,
+  maxValue,
+  centerLabel,
+  centerValue,
+  centerFormatter,
   ...actions
-}: BaseChartProps & ChartActions) {
-  const chartData = React.useMemo(() => {
-    if (series.length === 0) return [];
-
-    return series.map(s => {
-      const values = s.data.map(([, value]) => value).filter(Number.isFinite);
-      const latestValue = values.length > 0 ? values[values.length - 1] : 0;
-
-      return {
-        name: s.name,
-        value: latestValue,
-        fill: s.color || getChartColor(s.key, 0),
-      };
-    });
-  }, [series]);
+}: BaseChartProps & ChartActions & {
+  maxValue?: number;
+  centerLabel?: string;
+  centerValue?: number;
+  centerFormatter?: (value: number) => string;
+}) {
+  const chartConfig = React.useMemo(() => generateChartConfig(series), [series]);
+  const chartData = React.useMemo(() => buildRadialSegments(series), [series]);
 
   const valueFormatter = React.useMemo(() => {
     if (formatter) return formatter;
@@ -1246,6 +1273,34 @@ export function MetricRadialChart({
     }
     return (value: number) => value.toString();
   }, [formatter, unit]);
+
+  const primaryValue = React.useMemo(() => {
+    if (Number.isFinite(centerValue)) return centerValue as number;
+    return chartData[0]?.value ?? 0;
+  }, [centerValue, chartData]);
+
+  const primaryLabel = React.useMemo(() => {
+    if (centerLabel) return centerLabel;
+    return chartData[0]?.name ?? "";
+  }, [centerLabel, chartData]);
+
+  const primaryDisplay = React.useMemo(() => {
+    if (centerFormatter) return centerFormatter(primaryValue);
+    return valueFormatter(primaryValue);
+  }, [centerFormatter, primaryValue, valueFormatter]);
+
+  const resolvedMax = React.useMemo(() => {
+    if (Number.isFinite(maxValue) && (maxValue as number) > 0) {
+      return maxValue as number;
+    }
+    const maxSegment = Math.max(...chartData.map(item => item.value));
+    return maxSegment > 0 ? maxSegment : 1;
+  }, [maxValue, chartData]);
+
+  const legendItems = React.useMemo(
+    () => chartData.map(item => ({ key: item.key, name: item.name, color: item.color })),
+    [chartData]
+  );
 
   const content = React.useMemo(() => {
     if (isLoading) {
@@ -1281,22 +1336,61 @@ export function MetricRadialChart({
     }
 
     return (
-      <ChartContainer config={{}} className="h-[250px] w-full">
-        <RadialBarChart data={chartData} innerRadius={60} outerRadius={120}>
-          <PolarGrid gridType="circle" />
-          <RadialBar dataKey="value" cornerRadius={8} />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value) => valueFormatter(Number(value))}
-                labelKey="name"
+      <div className="flex h-[280px] flex-col items-center justify-center gap-4">
+        <div className="relative h-[220px] w-full">
+          <ChartContainer config={chartConfig} className="h-full w-full">
+            <RadialBarChart
+              data={chartData}
+              innerRadius={60}
+              outerRadius={120}
+              startAngle={90}
+              endAngle={450}
+            >
+              <PolarGrid gridType="circle" />
+              <PolarAngleAxis type="number" domain={[0, resolvedMax]} tick={false} />
+            <RadialBar dataKey="value" background cornerRadius={8} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => valueFormatter(Number(value))}
+                    labelKey="name"
+                  />
+                }
               />
-            }
-          />
-        </RadialBarChart>
-      </ChartContainer>
+          </RadialBarChart>
+          </ChartContainer>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            {primaryLabel && (
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">{primaryLabel}</span>
+            )}
+            <span className="text-2xl font-semibold text-foreground">{primaryDisplay}</span>
+          </div>
+        </div>
+        {legendItems.length > 1 && (
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            {legendItems.map(item => (
+              <div key={item.key} className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                <span>{item.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     );
-  }, [isLoading, error, chartData, valueFormatter, unit, emptyMessage]);
+  }, [
+    isLoading,
+    error,
+    chartData,
+    valueFormatter,
+    unit,
+    emptyMessage,
+    chartConfig,
+    resolvedMax,
+    legendItems,
+    primaryLabel,
+    primaryDisplay,
+  ]);
 
   return (
     <ChartCard
