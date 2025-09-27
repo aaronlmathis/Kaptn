@@ -575,18 +575,25 @@ export function MetricBarChart({
   // For bar charts, we typically want aggregated data, not time series
   const { chartData, composedData, overlayDefs } = React.useMemo(() => {
     if (series.length === 0) {
-      return { chartData: [] as Array<{ name: string; value: number; key: string }>, composedData: [] as Record<string, any>[], overlayDefs: [] as Array<OverlaySeries & { color: string; map: Map<string, number> }> };
+      return {
+        chartData: [] as Array<{ name: string; value: number; key: string; color: string }>,
+        composedData: [] as Record<string, any>[],
+        overlayDefs: [] as Array<OverlaySeries & { color: string; map: Map<string, number> }>,
+      };
     }
 
-    const base = series.map(s => {
-      const values = s.data.map(([, value]) => value).filter(Number.isFinite);
-      const aggregatedValue = values.length > 0 ? values[values.length - 1] : 0;
-      return {
-        name: s.name,
-        value: aggregatedValue,
-        key: s.key,
-      };
-    }).sort((a, b) => b.value - a.value);
+    const base = series
+      .map((s, index) => {
+        const values = s.data.map(([, value]) => value).filter(Number.isFinite);
+        const aggregatedValue = values.length > 0 ? values[values.length - 1] : 0;
+        return {
+          name: s.name,
+          value: aggregatedValue,
+          key: s.key,
+          color: s.color || getChartColor(s.key, index),
+        };
+      })
+      .sort((a, b) => b.value - a.value);
 
     const overlayDefs = (overlaySeries ?? []).map((ov, idx) => ({
       ...ov,
@@ -657,6 +664,15 @@ export function MetricBarChart({
       );
     }
 
+    const legendItems = [
+      ...chartData.map(item => ({
+        key: item.key,
+        name: item.name,
+        color: chartConfig[item.key]?.color || item.color || `var(--color-${item.key})`,
+      })),
+      ...overlayDefs.map(def => ({ key: def.key, name: def.name, color: def.color })),
+    ];
+
     return (
       <ChartContainer config={chartConfig} className="h-[250px] w-full">
         {overlayDefs.length > 0 ? (
@@ -688,11 +704,29 @@ export function MetricBarChart({
               }
             />
 
+            <ChartLegend
+              content={() => (
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
+                  {legendItems.map(item => (
+                    <div key={item.key} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: item.color }} />
+                      <span className="text-xs text-muted-foreground">{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              verticalAlign="bottom"
+            />
+
             <Bar
               dataKey="value"
               fill="hsl(var(--chart-1))"
               radius={layout === "horizontal" ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-            />
+            >
+              {chartData.map(item => (
+                <Cell key={item.key} fill={`var(--color-${item.key})`} />
+              ))}
+            </Bar>
 
             {overlayDefs.map(def => (
               <Line
@@ -734,11 +768,29 @@ export function MetricBarChart({
               }
             />
 
+            <ChartLegend
+              content={() => (
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
+                  {legendItems.map(item => (
+                    <div key={item.key} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: item.color }} />
+                      <span className="text-xs text-muted-foreground">{item.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              verticalAlign="bottom"
+            />
+
             <Bar
               dataKey="value"
               fill="hsl(var(--chart-1))"
               radius={layout === "horizontal" ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-            />
+            >
+              {chartData.map(item => (
+                <Cell key={item.key} fill={`var(--color-${item.key})`} />
+              ))}
+            </Bar>
           </BarChart>
         )}
       </ChartContainer>
