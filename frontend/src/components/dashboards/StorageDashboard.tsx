@@ -365,11 +365,16 @@ export function StorageDashboard() {
 		const timestamp = Date.now()
 		return podEphemeralRanked
 			.slice(0, 6)
-			.map(ps => ({
-				key: `pod-ephemeral-${ps.namespace}-${ps.pod}`,
-				name: `${ps.namespace}/${ps.pod}`,
-				data: [[timestamp, ps.ephemeralPct ?? 0]],
-			}))
+			.map((ps, index) => {
+				const pctLabel = Number.isFinite(ps.ephemeralPct) ? `${Math.max(0, ps.ephemeralPct ?? 0).toFixed(0)}%` : "0%"
+				const bytesLabel = Number.isFinite(ps.ephemeralBytes) ? formatBytesIEC(ps.ephemeralBytes ?? 0) : "0 B"
+				return {
+					key: `pod-ephemeral-${ps.namespace}-${ps.pod}`,
+					name: `${ps.namespace}/${ps.pod} • ${pctLabel} (${bytesLabel})`,
+					color: getChartColor(`pod-ephemeral-bar-${index}`, index),
+					data: [[timestamp, ps.ephemeralPct ?? 0]],
+				}
+			})
 	}, [podEphemeralRanked])
 
 	const clusterImageRadialSeries: ChartSeries[] = React.useMemo(() => {
