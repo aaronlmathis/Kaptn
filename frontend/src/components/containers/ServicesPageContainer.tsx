@@ -35,6 +35,9 @@ import { z } from "zod"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
+import { MetricLineChart, type ChartSeries } from "@/components/opsview/charts"
+import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries"
+import { formatBytesIEC, getChartColor } from "@/lib/metric-utils"
 
 // Inner component that can access the namespace context
 function ServicesContent() {

@@ -286,19 +286,19 @@ export function AccessDashboard() {
 							</div>
 						</div>
 						<div className="px-6 pb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-							<div className="flex items-center gap-2">
-								<Input className="w-72" placeholder="Search roles, bindings, groups…" disabled />
+							<div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+								<Input className="w-full sm:w-72 md:w-80" placeholder="Search roles, bindings, groups…" disabled />
 							</div>
-							<div className="flex items-center gap-2">
-								<Button size="sm" variant="outline" asChild>
+							<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+								<Button size="sm" variant="outline" asChild className="w-full sm:w-auto">
 									<a href="/access/rbac">Open RBAC builder</a>
 								</Button>
-								<Button size="sm" variant="outline" onClick={handleManualRefresh} disabled={isRefreshing}>
+								<Button size="sm" variant="outline" onClick={handleManualRefresh} disabled={isRefreshing} className="w-full sm:w-auto">
 									<RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} /> Refresh data
 								</Button>
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<Button size="sm" variant="outline" className="gap-2">
+										<Button size="sm" variant="outline" className="gap-2 w-full sm:w-auto">
 											<MoreVertical className="h-4 w-4" />
 										</Button>
 									</DropdownMenuTrigger>

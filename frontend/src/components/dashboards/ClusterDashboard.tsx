@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
-import { ChevronUp, ChevronDown, AlertTriangle, Server, Blocks, Activity, Info, MoreVertical, Eye, Check } from "lucide-react"
+import { ChevronUp, ChevronDown, AlertTriangle, Server, Blocks, Activity, Info, MoreVertical, Eye, Check, Pause, Play } from "lucide-react"
 import {
 	Card,
 	CardContent,
@@ -202,6 +202,14 @@ export default function ClusterDashboard() {
 	}, [initialSeriesData, live.seriesData, live.isConnected, initialDataLoaded])
 
 	const isConnected = live.isConnected
+
+	const handleToggleLive = React.useCallback(() => {
+		if (live.isConnected) {
+			live.disconnect()
+		} else {
+			live.connect().catch(err => console.error("ClusterDashboard: failed to reconnect WebSocket", err))
+		}
+	}, [live])
 
 	// Helper: get latest value for a series key
 	const latest = React.useCallback((key: string): number | null => {
@@ -669,38 +677,57 @@ export default function ClusterDashboard() {
 	const crds = { summary: { total: 0, groups: 0, versions: 0 }, top: [] }
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6 pb-16">
 			{/* Page Controls */}
 			<div className="px-4 lg:px-6">
-				<div className="border rounded-lg bg-card">
-					<div className="px-4 py-3 border-b border-border">
-						<h2 className="text-lg font-semibold">Cluster Overview</h2>
-						<p className="text-sm text-muted-foreground">Monitor cluster health, capacity, and workload distribution</p>
-					</div>
-					<div className="px-4 py-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-						<div className="flex gap-2 items-center">
-							<Badge variant="outline" className="gap-1 text-foreground border-border"><Server className="h-4 w-4" /> Cluster</Badge>
-							<Badge variant="outline" className="text-muted-foreground border-border">All Namespaces</Badge>
-							<Badge variant="outline" className="text-muted-foreground border-border">Resolution: Low</Badge>
-							{isConnected ? (
-								<Badge variant="outline" className="gap-1 text-green-600 border-border">
-									<span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-									Live
+				<div className="rounded-3xl border border-border bg-gradient-to-br from-background via-background to-muted shadow-sm overflow-hidden">
+					<div className="px-6 py-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+						<div className="space-y-2">
+							<div className="flex flex-wrap items-center gap-2">
+								<Badge variant="outline" className="gap-1 border-border text-foreground">
+									<Server className="h-4 w-4" /> Cluster overview
 								</Badge>
-							) : (
-								<Badge variant="outline" className="gap-1 text-amber-600 border-border">
-									<span className="h-2 w-2 rounded-full bg-amber-500" />
-									Paused
-								</Badge>
-							)}
+								<Badge variant="outline" className="border-border text-muted-foreground">All namespaces</Badge>
+								<Badge variant="outline" className="border-border text-muted-foreground">Resolution: Low</Badge>
+								{isConnected ? (
+									<Badge variant="outline" className="gap-1 border-border text-green-600">
+										<span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" /> Live
+									</Badge>
+								) : (
+									<Badge variant="outline" className="gap-1 border-border text-amber-600">
+										<span className="h-2 w-2 rounded-full bg-amber-500" /> Paused
+									</Badge>
+								)}
+							</div>
+							<div>
+								<h1 className="text-xl font-semibold tracking-tight">Cluster health & capacity</h1>
+								<p className="text-sm text-muted-foreground max-w-2xl">
+									Track control plane condition, workload readiness, and capacity headroom. Metrics live-update from the cluster timeseries feed.
+								</p>
+							</div>
 						</div>
-						<div className="flex gap-2 items-center">
-							<Input placeholder="Filter operations data and sections…" className="w-72" />
-							{isConnected ? (
-								<Button size="sm" variant="outline" onClick={() => live.disconnect()}>Pause Live</Button>
-							) : (
-								<Button size="sm" variant="default" onClick={() => live.connect()}>Resume Live</Button>
-							)}
+						<div className="px-6 pb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+							<div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+								<Input placeholder="Filter cluster data…" className="w-full sm:w-72 md:w-80" />
+							</div>
+							<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+								<Button
+									size="sm"
+									variant="outline"
+									onClick={handleToggleLive}
+									className="w-full sm:w-auto"
+								>
+									{isConnected ? (
+										<>
+											<Pause className="mr-2 h-4 w-4" /> Pause live
+										</>
+									) : (
+										<>
+											<Play className="mr-2 h-4 w-4" /> Resume live
+										</>
+									)}
+								</Button>
+							</div>
 						</div>
 					</div>
 				</div>
