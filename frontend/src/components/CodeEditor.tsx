@@ -11,10 +11,13 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertTriangle, CheckCircle, FileText, Upload, X, Plus } from "lucide-react"
+import { AlertTriangle, CheckCircle, FileText, Upload, X, Plus, Diff, AlertOctagon } from "lucide-react"
 import { useNamespace } from "@/contexts/namespace-context"
 import { useApplyYaml } from "@/hooks/useApplyYaml"
 import { toast } from "sonner"
+import * as yaml from "js-yaml"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Separator } from "@/components/ui/separator"
 
 interface ConfigFile {
 	id: string
@@ -196,8 +199,16 @@ data:
 		setUploadDialogOpen(false)
 	}
 
+	const diffResources = React.useMemo(() => {
+		if (!applyOptions.showDiff) return []
+		return response?.resources?.filter(res => res.diff) ?? []
+	}, [response, applyOptions.showDiff])
+
+	const validationErrors = React.useMemo(() => response?.errors ?? [], [response])
+	const warnings = React.useMemo(() => response?.warnings ?? [], [response])
+
 	return (
-		<div className="min-h-screen w-full flex flex-col p-2 sm:p-4 space-y-4">
+		<div className="px-4 lg:px-6 space-y-4">
 			{/* Error Alert */}
 			{error && (
 				<Alert variant="destructive">
