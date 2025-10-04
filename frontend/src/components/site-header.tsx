@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { IconCloudUpload } from "@tabler/icons-react"
 import { useNavigation } from "@/contexts/navigation-context"
 import { getRouteMeta } from "@/routeMeta"
+import { QuickApplyModal } from "@/components/QuickApplyModal"
 
 
 export function SiteHeader() {
@@ -55,12 +56,14 @@ export function SiteHeader() {
 
           {/* <SiteSearch /> */}
           {/* <SessionDebugPopover /> */}
-          <Button variant="ghost" size="sm" className="flex items-center gap-2" asChild>
-            <a href="/apply">
-              <IconCloudUpload className="h-4 w-4" />
-              <span className="hidden sm:inline">Apply Config</span>
-            </a>
-          </Button>
+          <QuickApplyModal
+            trigger={
+              <Button variant="ghost" size="sm" className="flex items-center gap-2">
+                <IconCloudUpload className="h-4 w-4" />
+                <span className="hidden sm:inline">Apply Config</span>
+              </Button>
+            }
+          />
           <Button variant="ghost" asChild size="sm" className="hidden sm:flex">
             <a
               href="https://github.com/aaronlmathis/kaptn"

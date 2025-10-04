@@ -39,6 +39,28 @@ import { MetricLineChart, type ChartSeries } from "@/components/opsview/charts"
 import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries"
 import { formatBytesIEC, getChartColor } from "@/lib/metric-utils"
 
+interface DataPoint { t: number; v: number }
+type SeriesMap = Record<string, DataPoint[]>
+
+async function fetchJson<T>(url: string): Promise<T> {
+	const res = await fetch(url)
+	if (!res.ok) {
+		throw new Error(`Request failed: ${res.status}`)
+	}
+	return res.json() as Promise<T>
+}
+
+function mergeSeries(base: SeriesMap, live: SeriesMap): SeriesMap {
+	if (!live || Object.keys(live).length === 0) return base
+	const merged: SeriesMap = { ...base }
+	for (const [key, value] of Object.entries(live)) {
+		if (value && value.length > 0) {
+			merged[key] = value
+		}
+	}
+	return merged
+}
+
 // Inner component that can access the namespace context
 function ServicesContent() {
 	const { data: services, loading: isLoading, error, isConnected } = useServicesWithWebSocket(true)
@@ -65,6 +87,8 @@ function ServicesContent() {
 	}, [pendingAction])
 
 	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+	const [initialNetworkSeries, setInitialNetworkSeries] = React.useState<SeriesMap>({})
+	const [initialNamespaceSeries, setInitialNamespaceSeries] = React.useState<SeriesMap>({})
 
 	// Ensure service-specific capabilities are requested
 	React.useEffect(() => {
@@ -97,6 +121,24 @@ function ServicesContent() {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [services])
+
+	React.useEffect(() => {
+		let cancelled = false
+		const load = async () => {
+			try {
+				const res = await fetchJson<{ series?: SeriesMap }>(
+					"/api/v1/timeseries/cluster?series=cluster.net.rx.bps,cluster.net.tx.bps&since=60m&res=lo"
+				)
+				if (!cancelled) setInitialNetworkSeries(res.series ?? {})
+			} catch (err) {
+				console.error("ServicesDashboard: failed to preload cluster network timeseries", err)
+			}
+		}
+		load()
+		return () => {
+			cancelled = true
+		}
+	}, [])
 
 	// Filters
 	const [globalFilter, setGlobalFilter] = React.useState("")
@@ -166,6 +208,29 @@ function ServicesContent() {
 	}, [services])
 
 	const topNamespaceNames = React.useMemo(() => topServiceNamespaces.map(([namespace]) => namespace), [topServiceNamespaces])
+	const topNamespaceKey = React.useMemo(() => topNamespaceNames.join(','), [topNamespaceNames])
+
+	React.useEffect(() => {
+		if (topNamespaceNames.length === 0) return
+		let cancelled = false
+		const load = async () => {
+			try {
+				const params = new URLSearchParams({
+					series: "ns.pods.restarts.rate",
+					since: "60m",
+					res: "lo",
+				})
+				const res = await fetchJson<{ series?: SeriesMap }>(`/api/v1/timeseries/namespaces?${params.toString()}`)
+				if (!cancelled) setInitialNamespaceSeries(res.series ?? {})
+			} catch (err) {
+				console.error("ServicesDashboard: failed to preload namespace timeseries", err)
+			}
+		}
+			load()
+		return () => {
+			cancelled = true
+		}
+	}, [topNamespaceKey])
 
 	const networkSeriesKeys = React.useMemo(() => [
 		"cluster.net.rx.bps",
@@ -178,20 +243,25 @@ function ServicesContent() {
 		autoConnect: true,
 	})
 
+	const mergedNetworkSeries = React.useMemo(
+		() => mergeSeries(initialNetworkSeries, clusterNetworkLive.seriesData),
+		[initialNetworkSeries, clusterNetworkLive.seriesData]
+	)
+
 	const networkTrafficSeries = React.useMemo<ChartSeries[]>(() => [
 		{
 			key: "cluster.net.rx.bps",
 			name: "Inbound (rx)",
 			color: "hsl(var(--chart-3))",
-			data: (clusterNetworkLive.seriesData["cluster.net.rx.bps"] ?? []).map(p => [p.t, p.v]),
+			data: (mergedNetworkSeries["cluster.net.rx.bps"] ?? []).map(p => [p.t, p.v]),
 		},
 		{
 			key: "cluster.net.tx.bps",
 			name: "Outbound (tx)",
 			color: "hsl(var(--chart-5))",
-			data: (clusterNetworkLive.seriesData["cluster.net.tx.bps"] ?? []).map(p => [p.t, p.v]),
+			data: (mergedNetworkSeries["cluster.net.tx.bps"] ?? []).map(p => [p.t, p.v]),
 		},
-	], [clusterNetworkLive.seriesData])
+	], [mergedNetworkSeries])
 
 	const namespaceSeriesKeys = React.useMemo(
 		() => topNamespaceNames.map(namespace => `ns.pods.restarts.rate.${namespace}`),
@@ -204,6 +274,11 @@ function ServicesContent() {
 		autoConnect: namespaceSeriesKeys.length > 0,
 	})
 
+	const mergedNamespaceSeries = React.useMemo(
+		() => mergeSeries(initialNamespaceSeries, namespaceLive.seriesData),
+		[initialNamespaceSeries, namespaceLive.seriesData]
+	)
+
 	const namespaceRestartSeries = React.useMemo<ChartSeries[]>(
 		() => topNamespaceNames.map((namespace, index) => {
 			const key = `ns.pods.restarts.rate.${namespace}`
@@ -211,10 +286,10 @@ function ServicesContent() {
 				key,
 				name: namespace,
 				color: getChartColor(`services-namespace-${index}`, index),
-				data: (namespaceLive.seriesData[key] ?? []).map(p => [p.t, p.v]),
+				data: (mergedNamespaceSeries[key] ?? []).map(p => [p.t, p.v]),
 			}
 		}),
-		[namespaceLive.seriesData, topNamespaceNames]
+		[mergedNamespaceSeries, topNamespaceNames]
 	)
 
 	const filtered = React.useMemo(() => {
