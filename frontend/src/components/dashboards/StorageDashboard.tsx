@@ -365,11 +365,16 @@ export function StorageDashboard() {
 		const timestamp = Date.now()
 		return podEphemeralRanked
 			.slice(0, 6)
-			.map(ps => ({
-				key: `pod-ephemeral-${ps.namespace}-${ps.pod}`,
-				name: `${ps.namespace}/${ps.pod}`,
-				data: [[timestamp, ps.ephemeralPct ?? 0]],
-			}))
+			.map((ps, index) => {
+				const pctLabel = Number.isFinite(ps.ephemeralPct) ? `${Math.max(0, ps.ephemeralPct ?? 0).toFixed(0)}%` : "0%"
+				const bytesLabel = Number.isFinite(ps.ephemeralBytes) ? formatBytesIEC(ps.ephemeralBytes ?? 0) : "0 B"
+				return {
+					key: `pod-ephemeral-${ps.namespace}-${ps.pod}`,
+					name: `${ps.namespace}/${ps.pod} • ${pctLabel} (${bytesLabel})`,
+					color: getChartColor(`pod-ephemeral-bar-${index}`, index),
+					data: [[timestamp, ps.ephemeralPct ?? 0]],
+				}
+			})
 	}, [podEphemeralRanked])
 
 	const clusterImageRadialSeries: ChartSeries[] = React.useMemo(() => {
@@ -463,16 +468,16 @@ export function StorageDashboard() {
 							</div>
 						</div>
 						<div className="px-6 pb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-							<div className="flex items-center gap-2">
-								<Input className="w-72" placeholder="Filter pods, nodes…" />
+							<div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+								<Input className="w-full sm:w-72 md:w-80" placeholder="Filter pods, nodes…" />
 							</div>
-							<div className="flex items-center gap-2">
-								<Button size="sm" variant="outline" onClick={handleToggleLive}>
+							<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+								<Button size="sm" variant="outline" onClick={handleToggleLive} className="w-full sm:w-auto">
 									{isConnected ? (<><Pause className="mr-2 h-4 w-4" />Pause live</>) : (<><Play className="mr-2 h-4 w-4" />Resume live</>)}
 								</Button>
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<Button size="sm" variant="outline" className="gap-2">
+										<Button size="sm" variant="outline" className="gap-2 w-full sm:w-auto">
 											<MoreVertical className="h-4 w-4" />
 										</Button>
 									</DropdownMenuTrigger>

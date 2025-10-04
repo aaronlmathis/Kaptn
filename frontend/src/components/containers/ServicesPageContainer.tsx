@@ -35,6 +35,31 @@ import { z } from "zod"
 import { ActionConfirmationDialog } from "@/components/ui/action-confirmation-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { bulkActionsApi } from "@/lib/api/bulk-actions"
+import { MetricLineChart, type ChartSeries } from "@/components/opsview/charts"
+import { useLiveSeriesSubscription } from "@/hooks/useLiveSeries"
+import { formatBytesIEC, getChartColor } from "@/lib/metric-utils"
+
+interface DataPoint { t: number; v: number }
+type SeriesMap = Record<string, DataPoint[]>
+
+async function fetchJson<T>(url: string): Promise<T> {
+	const res = await fetch(url)
+	if (!res.ok) {
+		throw new Error(`Request failed: ${res.status}`)
+	}
+	return res.json() as Promise<T>
+}
+
+function mergeSeries(base: SeriesMap, live: SeriesMap): SeriesMap {
+	if (!live || Object.keys(live).length === 0) return base
+	const merged: SeriesMap = { ...base }
+	for (const [key, value] of Object.entries(live)) {
+		if (value && value.length > 0) {
+			merged[key] = value
+		}
+	}
+	return merged
+}
 
 // Inner component that can access the namespace context
 function ServicesContent() {
@@ -62,6 +87,8 @@ function ServicesContent() {
 	}, [pendingAction])
 
 	const [alert, setAlert] = React.useState<null | { variant: 'success' | 'error', title: string, description?: string }>(null)
+	const [initialNetworkSeries, setInitialNetworkSeries] = React.useState<SeriesMap>({})
+	const [initialNamespaceSeries, setInitialNamespaceSeries] = React.useState<SeriesMap>({})
 
 	// Ensure service-specific capabilities are requested
 	React.useEffect(() => {
@@ -94,6 +121,24 @@ function ServicesContent() {
 			setLastUpdated(new Date().toISOString())
 		}
 	}, [services])
+
+	React.useEffect(() => {
+		let cancelled = false
+		const load = async () => {
+			try {
+				const res = await fetchJson<{ series?: SeriesMap }>(
+					"/api/v1/timeseries/cluster?series=cluster.net.rx.bps,cluster.net.tx.bps&since=60m&res=lo"
+				)
+				if (!cancelled) setInitialNetworkSeries(res.series ?? {})
+			} catch (err) {
+				console.error("ServicesDashboard: failed to preload cluster network timeseries", err)
+			}
+		}
+		load()
+		return () => {
+			cancelled = true
+		}
+	}, [])
 
 	// Filters
 	const [globalFilter, setGlobalFilter] = React.useState("")
@@ -139,7 +184,6 @@ function ServicesContent() {
 		}
 	}
 
-	// Type filter options
 	const typeOptions: FilterOption[] = React.useMemo(() => {
 		const types = new Set<string>()
 		services.forEach(service => {
@@ -151,6 +195,102 @@ function ServicesContent() {
 			badge: getServiceTypeDisplayBadge(type)
 		}))
 	}, [services])
+
+	const topServiceNamespaces = React.useMemo(() => {
+		const counts = new Map<string, number>()
+		services.forEach(service => {
+			const current = counts.get(service.namespace) ?? 0
+			counts.set(service.namespace, current + 1)
+		})
+		return Array.from(counts.entries())
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 5)
+	}, [services])
+
+	const topNamespaceNames = React.useMemo(() => topServiceNamespaces.map(([namespace]) => namespace), [topServiceNamespaces])
+	const topNamespaceKey = React.useMemo(() => topNamespaceNames.join(','), [topNamespaceNames])
+
+	React.useEffect(() => {
+		if (topNamespaceNames.length === 0) return
+		let cancelled = false
+		const load = async () => {
+			try {
+				const params = new URLSearchParams({
+					series: "ns.pods.restarts.rate",
+					since: "60m",
+					res: "lo",
+				})
+				const res = await fetchJson<{ series?: SeriesMap }>(`/api/v1/timeseries/namespaces?${params.toString()}`)
+				if (!cancelled) setInitialNamespaceSeries(res.series ?? {})
+			} catch (err) {
+				console.error("ServicesDashboard: failed to preload namespace timeseries", err)
+			}
+		}
+			load()
+		return () => {
+			cancelled = true
+		}
+	}, [topNamespaceKey])
+
+	const networkSeriesKeys = React.useMemo(() => [
+		"cluster.net.rx.bps",
+		"cluster.net.tx.bps",
+	], [])
+
+	const clusterNetworkLive = useLiveSeriesSubscription("services-cluster-network", networkSeriesKeys, {
+		res: "lo",
+		since: "60m",
+		autoConnect: true,
+	})
+
+	const mergedNetworkSeries = React.useMemo(
+		() => mergeSeries(initialNetworkSeries, clusterNetworkLive.seriesData),
+		[initialNetworkSeries, clusterNetworkLive.seriesData]
+	)
+
+	const networkTrafficSeries = React.useMemo<ChartSeries[]>(() => [
+		{
+			key: "cluster.net.rx.bps",
+			name: "Inbound (rx)",
+			color: "hsl(var(--chart-3))",
+			data: (mergedNetworkSeries["cluster.net.rx.bps"] ?? []).map(p => [p.t, p.v]),
+		},
+		{
+			key: "cluster.net.tx.bps",
+			name: "Outbound (tx)",
+			color: "hsl(var(--chart-5))",
+			data: (mergedNetworkSeries["cluster.net.tx.bps"] ?? []).map(p => [p.t, p.v]),
+		},
+	], [mergedNetworkSeries])
+
+	const namespaceSeriesKeys = React.useMemo(
+		() => topNamespaceNames.map(namespace => `ns.pods.restarts.rate.${namespace}`),
+		[topNamespaceNames]
+	)
+
+	const namespaceLive = useLiveSeriesSubscription("services-namespace-restarts", namespaceSeriesKeys, {
+		res: "lo",
+		since: "60m",
+		autoConnect: namespaceSeriesKeys.length > 0,
+	})
+
+	const mergedNamespaceSeries = React.useMemo(
+		() => mergeSeries(initialNamespaceSeries, namespaceLive.seriesData),
+		[initialNamespaceSeries, namespaceLive.seriesData]
+	)
+
+	const namespaceRestartSeries = React.useMemo<ChartSeries[]>(
+		() => topNamespaceNames.map((namespace, index) => {
+			const key = `ns.pods.restarts.rate.${namespace}`
+			return {
+				key,
+				name: namespace,
+				color: getChartColor(`services-namespace-${index}`, index),
+				data: (mergedNamespaceSeries[key] ?? []).map(p => [p.t, p.v]),
+			}
+		}),
+		[mergedNamespaceSeries, topNamespaceNames]
+	)
 
 	const filtered = React.useMemo(() => {
 		let result = services
@@ -440,8 +580,21 @@ function ServicesContent() {
 		]
 	}, [services])
 
+	const namespaceRestartSubtitle = React.useMemo(() => {
+		if (topServiceNamespaces.length === 0) {
+			return "No service namespaces discovered yet"
+		}
+		const preview = topServiceNamespaces
+			.slice(0, 3)
+			.map(([namespace, count]) => `${namespace} (${count})`)
+			.join(", ")
+		const remaining = topServiceNamespaces.length - 3
+		const suffix = remaining > 0 ? `, +${remaining} more` : ""
+		return `Restart rate for top service namespaces: ${preview}${suffix}`
+	}, [topServiceNamespaces])
+
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6 pb-16">
 
 
 			{/* Summary Cards */}
@@ -451,6 +604,35 @@ function ServicesContent() {
 				error={error}
 				lastUpdated={lastUpdated}
 			/>
+
+			<div className="px-4 lg:px-6 space-y-4">
+				<div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+					<MetricLineChart
+						title="Cluster service traffic"
+						subtitle="Inbound vs outbound bytes per second across Kubernetes services"
+						series={networkTrafficSeries}
+						formatter={value => `${formatBytesIEC(value)}/s`}
+						emptyMessage="No network traffic data"
+						showGrid
+						scopeLabel="cluster"
+						timespanLabel="60m"
+						resolutionLabel="lo"
+						className="border-border"
+					/>
+					<MetricLineChart
+						title="Service namespace restarts"
+						subtitle={namespaceRestartSubtitle}
+						series={namespaceRestartSeries}
+						formatter={value => `${value.toFixed(2)} pods/min`}
+						emptyMessage="No restart activity for service namespaces"
+						showGrid
+						scopeLabel="namespaces"
+						timespanLabel="60m"
+						resolutionLabel="lo"
+						className="border-border"
+					/>
+				</div>
+			</div>
 
 			<div className="px-4 lg:px-6 space-y-3">
 				{alert && (

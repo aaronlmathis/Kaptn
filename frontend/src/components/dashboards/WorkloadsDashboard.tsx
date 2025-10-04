@@ -508,11 +508,16 @@ export function WorkloadsDashboard() {
 							</div>
 						</div>
 						<div className="px-6 pb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-							<div className="flex items-center gap-2">
-								<Input className="w-72" placeholder="Filter workloads, namespaces…" />
+							<div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+								<Input className="w-full sm:w-72 md:w-80" placeholder="Filter workloads, namespaces…" />
 							</div>
-							<div className="flex items-center gap-2">
-								<Button size="sm" variant="outline" onClick={handleToggleLive}>
+							<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+								<Button
+									size="sm"
+									variant="outline"
+									onClick={handleToggleLive}
+									className="w-full sm:w-auto"
+								>
 									{isConnected ? (<><Pause className="mr-2 h-4 w-4" />Pause live</>) : (<><Play className="mr-2 h-4 w-4" />Resume live</>)}
 								</Button>
 							</div>

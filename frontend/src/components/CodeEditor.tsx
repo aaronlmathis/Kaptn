@@ -11,10 +11,12 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertTriangle, CheckCircle, FileText, Upload, X, Plus } from "lucide-react"
+import { AlertTriangle, CheckCircle, FileText, Upload, X, Plus, Diff, AlertOctagon } from "lucide-react"
 import { useNamespace } from "@/contexts/namespace-context"
 import { useApplyYaml } from "@/hooks/useApplyYaml"
 import { toast } from "sonner"
+import * as yaml from "js-yaml"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 interface ConfigFile {
 	id: string
@@ -80,6 +82,13 @@ data:
 		serverSideApply: false,
 		namespace: selectedNamespace === 'all' ? 'default' : selectedNamespace
 	})
+
+	React.useEffect(() => {
+		setApplyOptions(prev => ({
+			...prev,
+			namespace: selectedNamespace === 'all' ? 'default' : selectedNamespace
+		}))
+	}, [selectedNamespace])
 
 	const activeFile = configFiles.find(file => file.id === activeFileId)
 
@@ -196,8 +205,16 @@ data:
 		setUploadDialogOpen(false)
 	}
 
+	const diffResources = React.useMemo(() => {
+		if (!applyOptions.showDiff) return []
+		return response?.resources?.filter(res => res.diff) ?? []
+	}, [response, applyOptions.showDiff])
+
+	const validationErrors = React.useMemo(() => response?.errors ?? [], [response])
+	const warnings = React.useMemo(() => response?.warnings ?? [], [response])
+
 	return (
-		<div className="min-h-screen w-full flex flex-col p-2 sm:p-4 space-y-4">
+		<div className="space-y-4 w-full">
 			{/* Error Alert */}
 			{error && (
 				<Alert variant="destructive">
@@ -275,7 +292,7 @@ data:
 			)}
 
 			{/* Main Content */}
-			<div className="flex flex-col lg:flex-row gap-4">
+			<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
 				{/* Left Side - Code Editor */}
 				<div className="flex-1 flex flex-col">
 					{/* File Tabs */}
@@ -303,7 +320,7 @@ data:
 									))}
 								</TabsList>
 								<div className="flex gap-2 flex-shrink-0">
-									<Button onClick={handleAddFile} size="sm" variant="outline">
+									<Button onClick={handleAddFile} size="sm" variant="outline" className="w-full sm:w-auto">
 										<Plus className="h-4 w-4 mr-1" />
 										<span className="hidden sm:inline">Add File</span>
 									</Button>
@@ -366,7 +383,7 @@ data:
 					</div>
 
 					{/* Code Editor */}
-					<div className="border rounded-lg overflow-hidden">
+					<div className="border rounded-lg overflow-hidden bg-card">
 						{activeFile && (
 							<YamlEditor
 								value={activeFile.content}
@@ -379,7 +396,7 @@ data:
 				</div>
 
 				{/* Right Side - Options & Summary */}
-				<div className="w-full lg:w-80 flex flex-col gap-4">
+				<div className="flex flex-col gap-4">
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 lg:space-y-0 sm:space-y-0 lg:space-y-4">
 						{/* Apply Options */}
 						<Card>
@@ -493,20 +510,108 @@ data:
 								</div>
 							</CardContent>
 						</Card>
-					</div>
+						{/* Validation & Warnings */}
+						{(validationErrors.length > 0 || warnings.length > 0) && (
+							<Card>
+								<CardHeader className="space-y-1">
+									<CardTitle className="flex items-center gap-2">
+										<AlertOctagon className="h-4 w-4 text-destructive" />
+										Validation & warnings
+									</CardTitle>
+									<CardDescription>Review issues detected by the API server before applying</CardDescription>
+								</CardHeader>
+								<CardContent className="space-y-4">
+									{validationErrors.length > 0 && (
+										<div className="space-y-2">
+											<p className="text-sm font-medium text-destructive">Errors</p>
+											<div className="space-y-2 text-xs">
+												{validationErrors.map((err, index) => (
+													<div key={index} className="rounded border border-destructive/40 bg-destructive/5 p-2">
+														<p className="font-medium text-destructive">{err.message}</p>
+														{(err.resource || err.field || err.line !== undefined) && (
+															<p className="text-muted-foreground">{[err.resource, err.field ? `field ${err.field}` : null, err.line !== undefined ? `line ${err.line}` : null].filter(Boolean).join(' • ')}</p>
+														)}
+														{err.suggestion && <p className="text-muted-foreground">Suggestion: {err.suggestion}</p>}
+													</div>
+												))}
+											</div>
+										</div>
+									)}
+									{warnings.length > 0 && (
+										<div className="space-y-2">
+											<p className="text-sm font-medium text-amber-600">Warnings</p>
+											<ul className="space-y-2 text-xs text-amber-700">
+												{warnings.map((warning, index) => (
+													<li key={index} className="rounded border border-amber-200 bg-amber-50 p-2">
+														{warning}
+													</li>
+												))}
+											</ul>
+										</div>
+									)}
+								</CardContent>
+							</Card>
+						)}
 
-					{/* Apply Button */}
-					<Button
-						onClick={handleApplyConfiguration}
-						className="w-full"
-						size="lg"
-						disabled={isLoading || !configFiles.some(f => f.content.trim())}
-					>
-						{isLoading
-							? (applyOptions.dryRun ? 'Running Dry Run...' : 'Applying...')
-							: (applyOptions.dryRun ? 'Run Dry Run' : 'Apply Configuration')
-						}
-					</Button>
+						{/* Diff viewer */}
+						{applyOptions.showDiff && (
+							<Card>
+								<CardHeader>
+									<CardTitle className="flex items-center gap-2">
+										<Diff className="h-4 w-4" />
+										Configuration diff
+									</CardTitle>
+									<CardDescription>Compare planned changes before applying</CardDescription>
+								</CardHeader>
+								<CardContent>
+									{diffResources.length > 0 ? (
+										<Accordion type="single" collapsible className="w-full space-y-2">
+											{diffResources.map((resource, idx) => {
+												let renderedDiff = ''
+												try {
+													renderedDiff = yaml.dump(resource.diff ?? {})
+												} catch {
+													renderedDiff = JSON.stringify(resource.diff, null, 2)
+												}
+												return (
+													<AccordionItem key={`${resource.name}-${idx}`} value={`${resource.name}-${idx}`} className="border border-border/60 rounded-md">
+														<AccordionTrigger className="px-3 py-2 text-sm font-medium">
+															{resource.kind}/{resource.name}
+															{resource.action && (
+																<Badge className="ml-2" variant={resource.action.includes('delete') ? 'destructive' : resource.action.includes('update') ? 'secondary' : 'default'}>
+																	{resource.action}
+																</Badge>
+															)}
+														</AccordionTrigger>
+														<AccordionContent className="px-3 pb-3">
+															<pre className="bg-muted rounded-md p-3 text-xs overflow-auto max-h-64 border border-border/60">
+																{renderedDiff || 'No diff produced'}
+															</pre>
+														</AccordionContent>
+													</AccordionItem>
+												)
+											})}
+										</Accordion>
+									) : (
+										<p className="text-sm text-muted-foreground">{response ? 'No differences detected for the submitted resources.' : 'Run a dry run to preview diffs.'}</p>
+									)}
+								</CardContent>
+							</Card>
+						)}
+
+						{/* Apply Button */}
+						<Button
+							onClick={handleApplyConfiguration}
+							className="w-full"
+							size="lg"
+							disabled={isLoading || !configFiles.some(f => f.content.trim())}
+						>
+							{isLoading
+								? (applyOptions.dryRun ? 'Running Dry Run...' : 'Applying...')
+								: (applyOptions.dryRun ? 'Run Dry Run' : 'Apply Configuration')
+							}
+						</Button>
+					</div>
 				</div>
 			</div>
 		</div>
