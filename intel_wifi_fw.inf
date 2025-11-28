@@ -1,3 +1,4 @@
 [PART]
 file="intel_wifi_fw.tar.bz2"
-version="1.1"
+version="1.4"
+InitAction="./init.sh"
